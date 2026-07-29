@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.1.0 — 2026-07-28
+
+- Hardened the request contract: schema 1.1 rejects unknown fields, requires
+  `company_query` for every request, validates dates as YYYY-MM-DD, and forbids
+  legacy explicit-entity requests that bypass identity verification.
+- Added deep handle validation: required fields, path containment inside the
+  company-wiki `companies/` subtree, lowercase SHA-256, HTTPS URLs, byte-size
+  consistency, file content hashes, and published-date ≤ as-of-date.
+- Added an overall monotonic deadline with `--timeout-seconds`; each subprocess
+  only receives the remaining time.
+- Structured error taxonomy (`FilingFetchError.code`) with `retryable` flag and
+  machine-consumable error JSON (`error_code`, `retryable`).
+- Extracted `filing_contracts.py` (version constants, error class, request/handle
+  validation) from the CLI module.
+- Increased test coverage from 76 % (13 tests) to 86 % (42 tests).
+
 ## v1.0.0 — 2026-07-22
 
 - Extracted the on-demand, market-routed filing fetch out of `revenue-forecast` (`company_wiki_source.py`) into a standalone, reusable skill.

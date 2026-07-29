@@ -17,23 +17,29 @@ Run directly:
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 from typing import Any
 
 
-CONFIG_TOKEN_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
-COMPANY_WIKI_CONFIG_SCHEMA_VERSION = "1.0"
-COMPANY_WIKI_IDENTITY_SCHEMA_VERSION = "1.0"
+from filing_contracts import (  # noqa: E402  re-export
+    FILING_RESPONSE_SCHEMA_VERSION,
+    CONFIG_TOKEN_RE,
+    COMPANY_WIKI_CONFIG_SCHEMA_VERSION,
+    COMPANY_WIKI_IDENTITY_SCHEMA_VERSION,
+    FilingFetchError,
+    validate_handle,
+    validate_request,
+    _required_text,
+)
+
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
-
-
-class FilingFetchError(RuntimeError):
-    """Raised when a capture-ready filing cannot be resolved or downloaded."""
 
 
 def _validate_company_wiki_root(root: Path) -> Path:
@@ -108,12 +114,6 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
     if not root.is_absolute():
         root = selected.parent / root
     return _validate_company_wiki_root(root)
-
-
-def _required_text(value: Any, field_name: str) -> str:
-    if not isinstance(value, str) or not value.strip() or value != value.strip():
-        raise FilingFetchError(f"{field_name} must be non-empty trimmed text")
-    return value
 
 
 def _command_arguments(request: dict[str, Any]) -> list[str]:
@@ -265,6 +265,8 @@ def resolve_filing(
         raise TypeError("allow_download must be boolean")
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be positive")
+    validate_request(request)
+    deadline = time.monotonic() + timeout_seconds
     root = (
         _validate_company_wiki_root(company_wiki_root)
         if company_wiki_root is not None
@@ -279,7 +281,18 @@ def resolve_filing(
     ]
     normalized_request = request
     company_identity = None
+    # Every request must pass through verified/active identity before source
+    # resolution.  Legacy explicit-identity requests are rejected; callers must
+    # provide a ``company_query`` so the identity is independently verified.
+    if "company_query" not in request:
+        raise FilingFetchError(
+            "explicit entity/security_id request is unsupported in schema 1.1; "
+            "provide a company_query instead"
+        )
     if "company_query" in request:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise FilingFetchError("overall deadline exceeded before identity", code="upstream_error")
         identity_payload = _run_company_wiki_json(
             command=[
                 *command_prefix,
@@ -287,7 +300,7 @@ def resolve_filing(
                 *_identity_arguments(request),
             ],
             root=root,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=remaining,
             action="identify",
         )
         company_identity = _resolved_company_identity(identity_payload)
@@ -323,10 +336,13 @@ def resolve_filing(
                 str(root / "config" / "source_acquisition.yaml"),
             )
         )
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise FilingFetchError(f"overall deadline exceeded before {action}", code="upstream_error")
     payload = _run_company_wiki_json(
         command=command,
         root=root,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=remaining,
         action=action,
     )
     resolution = payload.get("resolution") if allow_download else payload
@@ -346,6 +362,7 @@ def resolve_filing(
             + ", ".join(str(item) for item in handle.get("missing_capture_fields", []))
         )
     handle["request_id"] = resolution.get("request_id")
+    validate_handle(handle, request, root)
     if company_identity is not None:
         handle["company_identity"] = company_identity
     return handle
@@ -370,7 +387,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--config", type=Path, default=None, help="path to company_wiki.json config")
     parser.add_argument("--request-file", type=Path, default=None, help="read JSON request from file instead of stdin")
+    parser.add_argument("--timeout-seconds", type=float, default=900.0, help="overall deadline for the entire request (default: 900)")
     args = parser.parse_args(argv)
+
+    if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
+        print("error: timeout-seconds must be positive and finite", file=sys.stderr)
+        return 2
 
     try:
         if hasattr(sys.stdout, "reconfigure"):
@@ -385,9 +407,10 @@ def main(argv: list[str] | None = None) -> int:
             request=request,
             config_path=args.config,
             allow_download=args.allow_download,
+            timeout_seconds=args.timeout_seconds,
         )
         output = {
-            "schema_version": "1.0",
+            "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
             "status": "capture_ready",
             "handle": handle,
         }
@@ -395,11 +418,18 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 0
     except FilingFetchError as exc:
-        json.dump({"schema_version": "1.0", "status": "error", "error": str(exc)}, sys.stdout, ensure_ascii=False, indent=2)
+        error_response: dict[str, Any] = {
+            "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
+            "status": exc.code,
+            "error": str(exc),
+            "error_code": exc.code,
+            "retryable": exc.retryable,
+        }
+        json.dump(error_response, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 2
     except Exception as exc:
-        json.dump({"schema_version": "1.0", "status": "fatal", "error": str(exc)}, sys.stdout, ensure_ascii=False, indent=2)
+        json.dump({"schema_version": FILING_RESPONSE_SCHEMA_VERSION, "status": "fatal", "error": str(exc), "error_code": "fatal", "retryable": False}, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 1
 
