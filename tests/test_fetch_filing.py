@@ -1070,5 +1070,92 @@ class FilingFetchTests(unittest.TestCase):
                 sys.stdin, sys.stdout = original_stdin, original_stdout
 
 
+    # --- conformance: upstream contract hardening (Phase 9.10) ---
+
+    def test_upstream_unknown_schema_fails_closed(self) -> None:
+        """An upstream response with an unsupported schema must be rejected."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            bad_identity = self._identity_response()
+            bad_identity["schema_version"] = "999.0"
+            with patch("fetch_filing.subprocess.run",
+                       return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(bad_identity), stderr="")):
+                with self.assertRaisesRegex(FilingFetchError, "schema_version"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+    def test_ensure_response_missing_resolution_key_fails(self) -> None:
+        """An ensure response without a 'resolution' key must be rejected."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            identity = self._identity_response()
+            bad_ensure = {"status": "reused_exact", "matches": [self._handle(root)]}
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(bad_ensure), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "resolution"):
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
+
+    def test_upstream_subprocess_oserror_fails(self) -> None:
+        """A subprocess OSError must be wrapped in FilingFetchError."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            with patch("fetch_filing.subprocess.run", side_effect=OSError("spawn failed")):
+                with self.assertRaisesRegex(FilingFetchError, "failed"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+    def test_resolve_non_dict_response_fails(self) -> None:
+        """A resolve response that is not a dict must be rejected."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            identity = self._identity_response()
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout='"just a string"', stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "must be an object"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+    def test_ensure_status_not_reusable_is_rejected(self) -> None:
+        """An ensure response with status not in {reused_exact, reused_equivalent} is rejected."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            identity = self._identity_response()
+            ensure = {"resolution": {"status": "not_found", "reason": "no match"}}
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(ensure), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "not reusable"):
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
+
+    def test_resolve_multi_match_with_different_hashes_fails(self) -> None:
+        """Multiple non-identical matches must be rejected (no silent pick)."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            identity = self._identity_response()
+            a = self._handle(root)
+            a["snapshot_sha256"] = "a" * 64
+            b = self._handle(root)
+            b["snapshot_sha256"] = "b" * 64
+            response = {"status": "reused_exact", "request_id": "urn:multi", "matches": [a, b]}
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "exactly one"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+
 if __name__ == "__main__":
     unittest.main()
