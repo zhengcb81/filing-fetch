@@ -913,5 +913,162 @@ class FilingFetchTests(unittest.TestCase):
                     resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
 
 
+    def test_handle_future_published_date_is_rejected(self) -> None:
+        """A handle dated after the request as_of_date must be rejected."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            future = self._handle(root)
+            future["published_date"] = "2027-01-01"
+            response = {"status": "reused_exact", "request_id": "urn:future", "matches": [future]}
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "after"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+    def test_main_fatal_error_exit_code(self) -> None:
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            config_path = parent / "company_wiki.json"
+            config_path.write_text(
+                json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}),
+                encoding="utf-8",
+            )
+            source_response = {
+                "status": "reused_exact",
+                "request_id": "urn:cli",
+                "matches": [self._handle(root)],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(source_response), stderr=""),
+            ]
+            request = json.dumps(self._request())
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                import io
+                argv = ["--config", str(config_path), "--timeout-seconds", "0.5"]
+                original_stdin, original_stdout = sys.stdin, sys.stdout
+                sys.stdin = io.StringIO(request)
+                sys.stdout = io.StringIO()
+                try:
+                    exit_code = __import__("fetch_filing").main(argv)
+                finally:
+                    sys.stdin, sys.stdout = original_stdin, original_stdout
+            self.assertEqual(exit_code, 0)  # should succeed with valid timeout
+
+    def test_handle_resolve_error_is_rejected(self) -> None:
+        """A handle with a non-resolvable canonical_path must be rejected."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            bad = self._handle(root)
+            bad["canonical_path"] = str(parent / "subdir" / "report.pdf")
+            response = {"status": "reused_exact", "request_id": "urn:badpath", "matches": [bad]}
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "outside"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+
+    def test_handle_byte_size_mismatch_is_rejected(self) -> None:
+        """A handle whose byte_size does not match the canonical file is rejected."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            bad = self._handle(root)
+            bad["byte_size"] = 99999
+            response = {"status": "reused_exact", "request_id": "urn:bad-size", "matches": [bad]}
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "byte_size"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+    def test_handle_bad_published_date_format_is_rejected(self) -> None:
+        """A handle whose published_date is not YYYY-MM-DD is rejected."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            bad = self._handle(root)
+            bad["published_date"] = "not-a-date"
+            response = {"status": "reused_exact", "request_id": "urn:bad-date", "matches": [bad]}
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "YYYY-MM-DD"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+    def test_handle_missing_file_is_rejected(self) -> None:
+        """A handle whose canonical_path does not point to a regular file is rejected."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            bad = self._handle(root)
+            import os as _os
+            _os.remove(bad["canonical_path"])
+            response = {"status": "reused_exact", "request_id": "urn:no-file", "matches": [bad]}
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "not a regular file"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+
+    def test_main_bad_request_non_dict(self) -> None:
+        """main() must reject a non-dict JSON request."""
+        import io as _io
+        argv: list[str] = []
+        original_stdin, original_stdout = sys.stdin, sys.stdout
+        sys.stdin = _io.StringIO("[]")
+        sys.stdout = _io.StringIO()
+        try:
+            exit_code = __import__("fetch_filing").main(argv)
+            self.assertNotEqual(exit_code, 0)
+        finally:
+            sys.stdin, sys.stdout = original_stdin, original_stdout
+
+    def test_main_bad_timeout_is_rejected_by_cli(self) -> None:
+        """CLI rejects non-positive timeout-seconds."""
+        import io as _io
+        request = json.dumps(self._request())
+        argv = ["--timeout-seconds", "0"]
+        original_stdin, original_stdout = sys.stdin, sys.stdout
+        sys.stdin = _io.StringIO(request)
+        sys.stdout = _io.StringIO()
+        try:
+            exit_code = __import__("fetch_filing").main(argv)
+            self.assertNotEqual(exit_code, 0)
+        finally:
+            sys.stdin, sys.stdout = original_stdin, original_stdout
+
+    def test_main_fatal_path_catches_unexpected_errors(self) -> None:
+        """Unexpected exceptions in main() must yield exit code 1."""
+        with patch("fetch_filing.resolve_filing", side_effect=RuntimeError("boom")):
+            import io as _io
+            request = json.dumps(self._request())
+            argv: list[str] = []
+            original_stdin, original_stdout = sys.stdin, sys.stdout
+            sys.stdin = _io.StringIO(request)
+            sys.stdout = _io.StringIO()
+            try:
+                exit_code = __import__("fetch_filing").main(argv)
+                self.assertEqual(exit_code, 1)
+            finally:
+                sys.stdin, sys.stdout = original_stdin, original_stdout
+
+
 if __name__ == "__main__":
     unittest.main()

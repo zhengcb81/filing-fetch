@@ -2,58 +2,113 @@
 name: filing-fetch
 description: Fetch a company financial filing into company-wiki on demand. Reuses an existing filing if one is already indexed; otherwise, only when explicitly authorized, downloads via the correct market tool — A-shares (CN) via StockInfoDLSimple/cninfo, HK and US via dayu-agent — and stores the new file under company-wiki's companies/{entity}/raw/ with immutable provenance. Use when any skill (revenue-forecast, invest-*, industry-research) needs an annual/quarterly/semi-annual report or regulatory filing and must not blindly re-download.
 ---
-
 # Filing Fetch
 
-On-demand, market-routed fetch of a company financial filing into the shared
-`company-wiki` catalog, with **reuse-first** semantics so the same filing is
-never downloaded twice.
+v1.1.0 — on-demand, market-routed fetch of a company financial filing into the
+shared `company-wiki` catalog, with **reuse-first** semantics so the same
+filing is never downloaded twice.
 
-## What it does
+## Required workflow
 
-1. **Identify** the company (fuzzy name / brand / ticker) to one verified,
-   active security with a canonical `market` + `security_id`.
-2. **Resolve (reuse)**: query company-wiki for an already-indexed, capture-ready
-   filing. If found, return it — no download.
-3. **Ensure (download) — only with `--allow-download`**: if missing and
-   authorized, company-wiki routes by market and writes the new bytes into
+1. **Validate request** — schema 1.1 rejects unknown fields, requires
+   `company_query` (legacy explicit-entity requests are forbidden), and
+   validates dates as `YYYY-MM-DD`.
+2. **Identify** the company (fuzzy name / brand / ticker) to **one verified,
+   active security** with a canonical `market` + `security_id`.
+3. **Resolve (reuse)** — query company-wiki for an already-indexed, capture-ready
+   filing. If found, validate the handle and return it — no download.
+4. **Ensure (download) — only with `--allow-download`** — if missing and
+   authorized, company-wiki routes by market. New bytes are written into
    `companies/{entity}/raw/{kind}/` with a `.source.json` provenance sidecar.
+5. **Validate handle** — before returning, the handle is deeply validated:
+   required fields, path containment inside `companies/`, lowercase SHA-256,
+   HTTPS URL, byte-size consistency, file content hash, published-date ≤
+   as-of-date.
 
-Market routing (owned by company-wiki's acquisition config):
-- **CN (A股)** → StockInfoDLSimple → cninfo (Chromium).
-- **HK (港股)** → dayu-agent → HKEX.
-- **US (美股)** → dayu-agent → SEC.
+## Hard failure gates
 
-This skill is a thin client over company-wiki's acquisition engine; it does
-**not** reimplement routing, storage, hashing, or dedup.
+- Unknown request fields are rejected (callers cannot silently depend on
+  ineffective modifiers).
+- An explicit `entity`/`security_id` without `company_query` is rejected —
+  every request must go through verified-active identity.
+- `capture_ready` without every required field (canonical_path, snapshot_sha256,
+  https_url, published_date, provider, …) is rejected.
+- A handle whose `canonical_path` escapes the `companies/` subtree, whose
+  SHA-256 does not match the canonical file, whose URL is not HTTPS, or whose
+  `published_date` is after the request `as_of_date` is rejected.
+- The overall deadline is enforced with `--timeout-seconds`; each subprocess
+  only receives the remaining time.
+- Unknown upstream response schemas, non-JSON stdout, or non-object responses
+  fail closed.
 
 ## Command
 
-Read the request from stdin (or `--request-file`). Default is **read-only reuse**;
-add `--allow-download` only when a missing filing should actually be fetched.
+Read the request from stdin (or `--request-file`). Default is **read-only
+reuse**; add `--allow-download` only when a missing filing should actually be
+fetched.  Use `--timeout-seconds` to set an overall deadline (default 900).
 
 ```bash
-# Reuse-only (no download): returns the handle if the filing exists, else exit 2.
-echo '{"company_query":"AMD","document_kind":"annual_report","fiscal_year":2025,"as_of_date":"2026-07-18"}' \
-  | python scripts/fetch_filing.py
+# Reuse-only: returns the handle if the filing exists, else exit 2.
+echo '{"schema_version":"1.1","company_query":"AMD","document_kind":"annual_report","fiscal_year":2025,"as_of_date":"2026-07-18"}' \
+  | python scripts/fetch_filing.py --timeout-seconds 300
 
-# Reuse, else download by market into company-wiki (authorized):
-echo '{"company_query":"贵州茅台","market":"CN","document_kind":"annual_report","fiscal_year":2024,"as_of_date":"2026-07-18"}' \
-  | python scripts/fetch_filing.py --allow-download
+# Authorized download:
+echo '{"schema_version":"1.1","company_query":"贵州茅台","market":"CN","document_kind":"annual_report","fiscal_year":2024,"as_of_date":"2026-07-18"}' \
+  | python scripts/fetch_filing.py --allow-download --timeout-seconds 600
 ```
 
-Request fields:
-- `company_query` (fuzzy) **or** explicit `entity` + `market` + `security_id`.
-- `document_kind`: `annual_report` | `semi_annual_report` | `quarterly_report` | ...
-- `fiscal_year` (int), `as_of_date` (`YYYY-MM-DD`); optional `form_type`,
-  `fiscal_period`, `language`, `provider`, `provider_document_id`.
+### Request (schema 1.1)
 
-Output (stdout JSON): `{schema_version, status:"capture_ready", handle:{...}}`
-— the handle carries `canonical_path`, `snapshot_sha256`, `https_url`,
-`capture_ready`, and the resolved `company_identity`.
+Precise fields. Unknown fields are rejected.
 
-Exit codes: `0` capture-ready; `2` not reusable / not found / config-identity
-problem; `1` fatal error.
+| Field | Required | Notes |
+|---|---|---|
+| `schema_version` | yes | Must be `"1.1"` |
+| `company_query` | yes | Fuzzy name / brand / ticker; `entity` + `security_id` are *forbidden* |
+| `document_kind` | yes | `annual_report`, `semi_annual_report`, `quarterly_report`, … |
+| `as_of_date` | yes | `YYYY-MM-DD` |
+| `fiscal_year` | no | Integer (reject bool) |
+| `market` | no | Hint only — does not override verified identity |
+| `exchange` | no | Hint only |
+| `form_type` | no | |
+| `fiscal_period` | no | |
+| `language` | no | |
+| `provider` | no | |
+| `provider_document_id` | no | |
+
+### Response (schema 1.1)
+
+Success: `{schema_version:"1.1", status:"capture_ready", handle:{…}}`
+
+Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>", retryable:bool}`
+
+| Status code | Meaning | Retryable |
+|---|---|---|
+| `capture_ready` | Filing found / reused | — |
+| `request_error` | Invalid request | no |
+| `config_error` | Config missing / invalid | no |
+| `identity_error` | Ambiguous / inactive identity | no |
+| `not_found` | No matching filing | no |
+| `upstream_error` | company-wiki subprocess failure | yes |
+| `fatal` | Unexpected error | no |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | capture-ready |
+| 2 | request / identity / not-found / config error |
+| 1 | fatal |
+
+## Owner / trust boundary
+
+- **Identity, catalog lookup, market routing, download, dedup, and canonical
+  write** are owned by `company-wiki`'s source catalog.
+- **Cross-skill request, authorization, upstream schema compatibility, and
+  handle validation** are owned by `filing-fetch`.
+- **Consumer-specific source/capture records** (e.g. revenue-forecast) are
+  owned by the consuming skill — they call `filing-fetch` and convert the
+  returned handle.
 
 ## Notes
 
@@ -61,4 +116,5 @@ problem; `1` fatal error.
 - An ambiguous request (multiple filings match) never auto-picks; refine
   `fiscal_year` / `form_type`.
 - Consuming skills convert the returned handle into their own capture schema
-  (e.g., revenue-forecast builds its schema-3.4 source record from it).
+  (e.g., revenue-forecast builds its revenue source record from it).
+- Language: Python; request: JSON stdin or `--request-file`; response: JSON stdout.
