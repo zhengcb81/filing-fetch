@@ -447,6 +447,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
+        if hasattr(sys.stdin, "reconfigure"):
+            # Phase 16.4: Windows pipes decode stdin with the locale codepage
+            # (GBK), corrupting UTF-8 Chinese queries. Force UTF-8 so piped
+            # requests behave like --request-file.
+            sys.stdin.reconfigure(encoding="utf-8", errors="strict")
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8", errors="strict")
         if args.request_file:

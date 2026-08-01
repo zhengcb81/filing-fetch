@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -1156,6 +1157,39 @@ class FilingFetchTests(unittest.TestCase):
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "exactly one"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
+
+    # --- Phase 16.4: stdin accepts UTF-8 Chinese queries ---
+
+    def test_cli_stdin_accepts_utf8_chinese_query(self):
+        """A UTF-8 Chinese company query piped via stdin must reach the
+        identity resolver intact: Windows pipes are decoded with the locale
+        codepage (GBK) by default, corrupting the query (Phase 16.4)."""
+        script = SKILL_ROOT / "scripts" / "fetch_filing.py"
+        request = json.dumps(
+            {
+                "schema_version": "1.1",
+                "company_query": "紫金矿业",
+                "market": "CN",
+                "document_kind": "annual_report",
+                "fiscal_year": 2024,
+                "as_of_date": "2026-07-31",
+            },
+            ensure_ascii=False,
+        )
+        env = dict(os.environ)
+        env.pop("PYTHONUTF8", None)
+        proc = subprocess.run(
+            [sys.executable, str(script), "--timeout-seconds", "180"],
+            input=request.encode("utf-8"),
+            capture_output=True,
+            cwd=str(SKILL_ROOT / "scripts"),
+            env=env,
+            timeout=240,
+        )
+        payload = json.loads(proc.stdout.decode("utf-8"))
+        # FY2024 was downloaded in Phase 15.6: reuse-first must be capture_ready.
+        # A GBK-corrupted query fails earlier with an identity error.
+        assert payload["status"] == "capture_ready", payload.get("error")
 
     # --- Phase 15.2: catalog lock contention is retryable ---
 
