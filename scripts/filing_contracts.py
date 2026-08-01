@@ -13,7 +13,7 @@ from typing import Any
 # Versions
 # ---------------------------------------------------------------------------
 
-SKILL_VERSION = "1.1.0"
+SKILL_VERSION = "1.2.0"
 FILING_REQUEST_SCHEMA_VERSION = "1.1"
 FILING_RESPONSE_SCHEMA_VERSION = "1.1"
 GAP_RECEIPT_SCHEMA_VERSION = "1.0"
@@ -43,7 +43,7 @@ class FilingFetchError(RuntimeError):
     def __init__(self, message: str, code: str = "fatal") -> None:
         super().__init__(message)
         self.code = code
-        self.retryable = code in {"upstream_error", "worker_paused"}
+        self.retryable = code in {"upstream_error", "worker_paused", "catalog_locked"}
 
 
 # ---------------------------------------------------------------------------

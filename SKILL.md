@@ -90,6 +90,7 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
 | `identity_error` | Ambiguous / inactive identity | no |
 | `not_found` | No matching filing | no |
 | `upstream_error` | company-wiki subprocess failure | yes |
+| `catalog_locked` | company-wiki catalog locked by another operation; auto-retried with backoff | yes |
 | `fatal` | Unexpected error | no |
 
 ### Exit codes

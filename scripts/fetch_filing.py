@@ -41,6 +41,10 @@ from filing_contracts import (  # noqa: E402  re-export
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
 
+# Exponential backoff for transient catalog lock contention (Phase 15.2).
+CATALOG_LOCKED_BACKOFF_SECONDS = 5.0
+CATALOG_LOCKED_BACKOFF_MULTIPLIER = 2.0
+
 
 def _validate_company_wiki_root(root: Path) -> Path:
     if not isinstance(root, Path):
@@ -193,8 +197,19 @@ def _run_company_wiki_json(
         raise FilingFetchError(f"company-wiki {action} failed: {exc}") from exc
     if completed.returncode != 0:
         detail = completed.stderr.strip()[-2000:] or "no stderr"
+        code = "fatal"
+        try:
+            structured = json.loads(completed.stderr.strip())
+        except json.JSONDecodeError:
+            structured = None
+        if (
+            isinstance(structured, dict)
+            and structured.get("error_type") == "CatalogOperationLockedError"
+        ):
+            code = "catalog_locked"
         raise FilingFetchError(
-            f"company-wiki {action} exited {completed.returncode}: {detail}"
+            f"company-wiki {action} exited {completed.returncode}: {detail}",
+            code=code,
         )
     try:
         payload = json.loads(completed.stdout)
@@ -203,6 +218,49 @@ def _run_company_wiki_json(
     if not isinstance(payload, dict):
         raise FilingFetchError(f"company-wiki {action} response must be an object")
     return payload
+
+
+def _run_company_wiki_json_retry(
+    *,
+    command: list[str],
+    root: Path,
+    action: str,
+    deadline: float,
+) -> dict[str, Any]:
+    """Run a company-wiki CLI call, retrying transient catalog lock
+    contention with exponential backoff bounded by the overall deadline."""
+    attempt = 1
+    backoff = CATALOG_LOCKED_BACKOFF_SECONDS
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise FilingFetchError(
+                f"overall deadline exceeded before {action}", code="upstream_error"
+            )
+        try:
+            return _run_company_wiki_json(
+                command=command,
+                root=root,
+                timeout_seconds=remaining,
+                action=action,
+            )
+        except FilingFetchError as exc:
+            if exc.code != "catalog_locked":
+                raise
+            wait = min(backoff, remaining)
+            if wait <= 0:
+                raise FilingFetchError(
+                    f"overall deadline exceeded retrying {action}: {exc}",
+                    code="upstream_error",
+                ) from exc
+            print(
+                f"[filing-fetch] {action} blocked by a running catalog operation "
+                f"(attempt {attempt}); retrying in {wait:.1f}s: {exc}",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+            attempt += 1
+            backoff *= CATALOG_LOCKED_BACKOFF_MULTIPLIER
 
 
 def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
@@ -290,18 +348,15 @@ def resolve_filing(
             "provide a company_query instead"
         )
     if "company_query" in request:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise FilingFetchError("overall deadline exceeded before identity", code="upstream_error")
-        identity_payload = _run_company_wiki_json(
+        identity_payload = _run_company_wiki_json_retry(
             command=[
                 *command_prefix,
                 "identify",
                 *_identity_arguments(request),
             ],
             root=root,
-            timeout_seconds=remaining,
             action="identify",
+            deadline=deadline,
         )
         company_identity = _resolved_company_identity(identity_payload)
         normalized_request = {
@@ -336,14 +391,11 @@ def resolve_filing(
                 str(root / "config" / "source_acquisition.yaml"),
             )
         )
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise FilingFetchError(f"overall deadline exceeded before {action}", code="upstream_error")
-    payload = _run_company_wiki_json(
+    payload = _run_company_wiki_json_retry(
         command=command,
         root=root,
-        timeout_seconds=remaining,
         action=action,
+        deadline=deadline,
     )
     resolution = payload.get("resolution") if allow_download else payload
     if not isinstance(resolution, dict):

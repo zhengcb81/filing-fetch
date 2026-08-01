@@ -9,7 +9,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +17,7 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from fetch_filing import (  # noqa: E402
     FilingFetchError,
+    _run_company_wiki_json,
     load_company_wiki_root,
     resolve_filing,
 )
@@ -1155,6 +1156,82 @@ class FilingFetchTests(unittest.TestCase):
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "exactly one"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
+
+    # --- Phase 15.2: catalog lock contention is retryable ---
+
+    def test_catalog_lock_error_is_classified_retryable(self) -> None:
+        """A company-wiki CatalogOperationLockedError must be classified as
+        catalog_locked / retryable, not fatal; other upstream errors must stay
+        fail-closed (fatal / not retryable)."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            for error_type, expected_code, expected_retryable in (
+                ("CatalogOperationLockedError", "catalog_locked", True),
+                ("SomeOtherUpstreamError", "fatal", False),
+            ):
+                with self.subTest(error_type=error_type):
+                    failed = subprocess.CompletedProcess(
+                        args=[],
+                        returncode=1,
+                        stdout="",
+                        stderr=json.dumps(
+                            {
+                                "status": "failed",
+                                "error_type": error_type,
+                                "error": "catalog operation already running: pid=15536",
+                            }
+                        ),
+                    )
+                    with patch("fetch_filing.subprocess.run", return_value=failed):
+                        with self.assertRaises(FilingFetchError) as ctx:
+                            _run_company_wiki_json(
+                                command=["company_wiki.source_catalog.cli"],
+                                root=root,
+                                timeout_seconds=30,
+                                action="resolve",
+                            )
+                    self.assertEqual(ctx.exception.code, expected_code)
+                    self.assertEqual(ctx.exception.retryable, expected_retryable)
+
+    def test_catalog_lock_retries_with_backoff_then_succeeds(self) -> None:
+        """Lock contention is retried with exponential backoff (5s, 10s) and
+        recovers once the catalog is free, within the overall deadline."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            locked = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "CatalogOperationLockedError",
+                        "error": "catalog operation already running: pid=15536",
+                    }
+                ),
+            )
+            ok_identity = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            )
+            source_response = {
+                "status": "reused_exact",
+                "request_id": "urn:company-wiki:request:after-lock",
+                "matches": [self._handle(root)],
+            }
+            ok_source = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(source_response), stderr=""
+            )
+            completed = [ok_identity, locked, locked, ok_source]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                with patch("fetch_filing.time.sleep") as sleep:
+                    handle = resolve_filing(
+                        request=self._request(),
+                        company_wiki_root=root,
+                    )
+            self.assertEqual(run.call_count, 4)  # identify + 3 resolve attempts
+            self.assertEqual(sleep.call_args_list, [call(5.0), call(10.0)])
+            self.assertEqual(handle["request_id"], source_response["request_id"])
 
 
 if __name__ == "__main__":

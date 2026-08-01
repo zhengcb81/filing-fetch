@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.0 — 2026-07-31
+
+- Catalog lock contention (`CatalogOperationLockedError`) is now classified as
+  retryable (`catalog_locked` status instead of `fatal`). The CLI retries locked
+  calls with exponential backoff (5 s, ×2) bounded by the overall
+  `--timeout-seconds` deadline, so interactive fetches self-heal while the
+  background worker holds the catalog lock.
+- Non-lock upstream errors remain fail-closed (`fatal`, not retryable).
+
 ## v1.1.0 — 2026-07-28
 
 - Hardened the request contract: schema 1.1 rejects unknown fields, requires
