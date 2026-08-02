@@ -485,6 +485,72 @@ class FilingFetchTests(unittest.TestCase):
             self.assertIn("hint", response)
             self.assertTrue(response["hint"].strip())
 
+    def test_resolve_not_found_carries_debug_trace_on_error(self) -> None:
+        # Phase 19.6: when company-wiki resolve returns not_found, the
+        # per-candidate exclusion trace must ride on the FilingFetchError so
+        # the caller can explain the miss (today the trace is dropped).
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            trace = [
+                "entity_gate_rejected: 12",
+                "Alphabet 2025 Annual Report: identity_conflict_market_or_security_id",
+            ]
+            response = {
+                "schema_version": "1.0",
+                "status": "not_found",
+                "reason": "no_existing_source_satisfies_request",
+                "debug_trace": trace,
+            }
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
+                ),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "not_found")
+            self.assertEqual(ctx.exception.debug_trace, trace)
+
+    def test_main_debug_flag_emits_debug_trace(self) -> None:
+        # Phase 19.6: with --debug, the CLI error response carries the
+        # per-candidate exclusion trace from the resolve step.
+        trace = [
+            "entity_gate_rejected: 12",
+            "Alphabet 2025 Annual Report: identity_conflict_market_or_security_id",
+        ]
+        with TemporaryDirectory() as temporary:
+            request_path = Path(temporary) / "request.json"
+            request_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.1",
+                        "company_query": "Alphabet",
+                        "document_kind": "annual_report",
+                        "as_of_date": "2026-07-18",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def _raise(**_kwargs):
+                raise FilingFetchError(
+                    "source is not reusable: not_found",
+                    code="not_found",
+                    debug_trace=trace,
+                )
+
+            buffer = StringIO()
+            with patch("fetch_filing.resolve_filing", side_effect=_raise):
+                with contextlib.redirect_stdout(buffer):
+                    rc = main(["--debug", "--request-file", str(request_path)])
+            self.assertEqual(rc, 2)
+            response = json.loads(buffer.getvalue())
+            self.assertEqual(response["debug_trace"], trace)
+
     def test_unverified_or_inactive_identity_stops_before_source_resolution(self) -> None:
         with TemporaryDirectory() as temporary:
             root = self._wiki_root(Path(temporary), "company-wiki")

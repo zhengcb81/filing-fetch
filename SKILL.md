@@ -48,6 +48,8 @@ filing is never downloaded twice.
 Read the request from stdin (or `--request-file`). Default is **read-only
 reuse**; add `--allow-download` only when a missing filing should actually be
 fetched.  Use `--timeout-seconds` to set an overall deadline (default 900).
+Add `--debug` to include the per-candidate exclusion trace in a `not_found`
+error response (see Notes).
 
 ```bash
 # Reuse-only: returns the handle if the filing exists, else exit 2.
@@ -122,6 +124,9 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
   refine `company_query` to a specific ticker or add `market`/`exchange`, then
   re-run. An ambiguous **filing** (one identity, several documents) is resolved
   with `fiscal_year` / `form_type`.
+- `--debug` adds a `debug_trace` to a `not_found` error response: the
+  per-candidate exclusion reasons (entity-gate count, identity / year / form /
+  capture steps) from company-wiki's resolve step, so a miss explains itself.
 - Consuming skills convert the returned handle into their own capture schema
   (e.g., revenue-forecast builds its revenue source record from it).
 - Language: Python; request: JSON stdin or `--request-file`; response: JSON stdout.

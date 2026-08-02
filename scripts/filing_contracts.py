@@ -38,7 +38,11 @@ class FilingFetchError(RuntimeError):
     """Raised when a capture-ready filing cannot be resolved or downloaded."""
 
     def __init__(
-        self, message: str, code: str = "fatal", candidates: list | None = None
+        self,
+        message: str,
+        code: str = "fatal",
+        candidates: list | None = None,
+        debug_trace: list | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -46,6 +50,9 @@ class FilingFetchError(RuntimeError):
         # Candidate identities surfaced by company-wiki when the query is
         # ambiguous, so callers can disambiguate from the error response alone.
         self.candidates = candidates
+        # Per-candidate exclusion trace from the company-wiki resolve step,
+        # surfaced with --debug so a not_found explains itself (Phase 19.6).
+        self.debug_trace = debug_trace
 
 
 # ---------------------------------------------------------------------------

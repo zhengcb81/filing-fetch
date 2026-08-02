@@ -455,6 +455,7 @@ def resolve_filing(
         raise FilingFetchError(
             f"source is not reusable: {resolution.get('status')} / {resolution.get('reason')}",
             code="not_found",
+            debug_trace=resolution.get("debug_trace"),
         )
     matches = resolution.get("matches")
     if not isinstance(matches, list) or len(matches) != 1 or not isinstance(matches[0], dict):
@@ -495,6 +496,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", type=Path, default=None, help="path to company_wiki.json config")
     parser.add_argument("--request-file", type=Path, default=None, help="read JSON request from file instead of stdin")
     parser.add_argument("--timeout-seconds", type=float, default=900.0, help="overall deadline for the entire request (default: 900)")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="include the per-candidate exclusion trace in the error response",
+    )
     args = parser.parse_args(argv)
 
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
@@ -550,6 +556,8 @@ def main(argv: list[str] | None = None) -> int:
                 "identity is ambiguous; disambiguate by adding market/exchange "
                 "or by using a specific ticker in company_query"
             )
+        if args.debug and exc.debug_trace:
+            error_response["debug_trace"] = exc.debug_trace
         json.dump(error_response, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 2
