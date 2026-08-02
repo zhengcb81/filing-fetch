@@ -32,6 +32,7 @@ from filing_contracts import (  # noqa: E402  re-export
     CONFIG_TOKEN_RE,
     COMPANY_WIKI_CONFIG_SCHEMA_VERSION,
     COMPANY_WIKI_IDENTITY_SCHEMA_VERSION,
+    SUPPORTED_COMPANY_WIKI_CONTRACTS,
     FilingFetchError,
     validate_handle,
     validate_request,
@@ -53,14 +54,18 @@ def _validate_company_wiki_root(root: Path) -> Path:
         resolved = root.expanduser().resolve(strict=True)
     except OSError as exc:
         raise FilingFetchError(
-            f"configured company_wiki_root does not exist: {root}"
+            f"configured company_wiki_root does not exist: {root}",
+            code="config_error",
         ) from exc
     if not resolved.is_dir():
-        raise FilingFetchError("configured company_wiki_root must be a directory")
+        raise FilingFetchError(
+            "configured company_wiki_root must be a directory", code="config_error"
+        )
     catalog_config = resolved / "config" / "source_catalog.yaml"
     if not catalog_config.is_file():
         raise FilingFetchError(
-            "configured company_wiki_root lacks config/source_catalog.yaml"
+            "configured company_wiki_root lacks config/source_catalog.yaml",
+            code="config_error",
         )
     return resolved
 
@@ -75,23 +80,31 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
         selected = selected.expanduser().resolve(strict=True)
     except OSError as exc:
         raise FilingFetchError(
-            f"company-wiki config does not exist: {selected}"
+            f"company-wiki config does not exist: {selected}", code="config_error"
         ) from exc
     if not selected.is_file():
-        raise FilingFetchError("company-wiki config must be a file")
+        raise FilingFetchError(
+            "company-wiki config must be a file", code="config_error"
+        )
     try:
         payload = json.loads(selected.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise FilingFetchError(f"invalid company-wiki config: {exc}") from exc
+        raise FilingFetchError(
+            f"invalid company-wiki config: {exc}", code="config_error"
+        ) from exc
     if not isinstance(payload, dict):
-        raise FilingFetchError("company-wiki config must be an object")
+        raise FilingFetchError(
+            "company-wiki config must be an object", code="config_error"
+        )
     if set(payload) != {"schema_version", "company_wiki_root"}:
         raise FilingFetchError(
-            "company-wiki config must contain exact schema_version/company_wiki_root fields"
+            "company-wiki config must contain exact schema_version/company_wiki_root fields",
+            code="config_error",
         )
     if payload["schema_version"] != COMPANY_WIKI_CONFIG_SCHEMA_VERSION:
         raise FilingFetchError(
-            f"company-wiki config schema_version must be {COMPANY_WIKI_CONFIG_SCHEMA_VERSION}"
+            f"company-wiki config schema_version must be {COMPANY_WIKI_CONFIG_SCHEMA_VERSION}",
+            code="config_error",
         )
     configured = payload["company_wiki_root"]
     if (
@@ -100,7 +113,8 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
         or configured != configured.strip()
     ):
         raise FilingFetchError(
-            "company-wiki config company_wiki_root must be non-empty trimmed text"
+            "company-wiki config company_wiki_root must be non-empty trimmed text",
+            code="config_error",
         )
     tokens = {
         "SKILL_ROOT": str(SKILL_ROOT),
@@ -110,7 +124,9 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
     def replace_token(match: re.Match[str]) -> str:
         name = match.group(1)
         if name not in tokens:
-            raise FilingFetchError(f"unsupported token in company_wiki_root: {name}")
+            raise FilingFetchError(
+                f"unsupported token in company_wiki_root: {name}", code="config_error"
+            )
         return tokens[name]
 
     expanded = CONFIG_TOKEN_RE.sub(replace_token, configured)
@@ -155,10 +171,6 @@ def _command_arguments(request: dict[str, Any]) -> list[str]:
 
 def _identity_arguments(request: dict[str, Any]) -> list[str]:
     query = _required_text(request.get("company_query"), "company_query")
-    if "entity" in request or "security_id" in request:
-        raise FilingFetchError(
-            "company_query cannot be combined with entity or security_id"
-        )
     for name in ("document_kind", "as_of_date"):
         _required_text(request.get(name), name)
     arguments = ["--query", query]
@@ -193,7 +205,13 @@ def _run_company_wiki_json(
             shell=False,
             creationflags=creationflags,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
+        # A subprocess timeout means the attempt outlived the remaining
+        # deadline budget: classify as upstream_error (retryable), not fatal.
+        raise FilingFetchError(
+            f"company-wiki {action} failed: {exc}", code="upstream_error"
+        ) from exc
+    except OSError as exc:
         raise FilingFetchError(f"company-wiki {action} failed: {exc}") from exc
     if completed.returncode != 0:
         detail = completed.stderr.strip()[-2000:] or "no stderr"
@@ -207,6 +225,12 @@ def _run_company_wiki_json(
             and structured.get("error_type") == "CatalogOperationLockedError"
         ):
             code = "catalog_locked"
+        elif (
+            isinstance(structured, dict)
+            and structured.get("error_type") == "RuntimeError"
+            and "paused" in structured.get("error", "")
+        ):
+            code = "worker_paused"
         raise FilingFetchError(
             f"company-wiki {action} exited {completed.returncode}: {detail}",
             code=code,
@@ -267,14 +291,26 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
     status = payload.get("status")
     reason = payload.get("reason")
     if status != "resolved":
+        # Surface any candidate identities company-wiki returned so the caller
+        # can disambiguate (e.g. dual-class tickers GOOGL/GOOG) instead of
+        # seeing a bare identity_error.
+        raw_candidates = payload.get("candidates")
+        candidates = raw_candidates if isinstance(raw_candidates, list) else None
         raise FilingFetchError(
-            f"company identity is not uniquely resolved: {status} / {reason}"
+            f"company identity is not uniquely resolved: {status} / {reason}",
+            code="identity_error",
+            candidates=candidates,
         )
     if payload.get("schema_version") != COMPANY_WIKI_IDENTITY_SCHEMA_VERSION:
-        raise FilingFetchError("company identity schema_version is unsupported")
+        raise FilingFetchError(
+            "company identity schema_version is unsupported",
+            code="identity_error",
+        )
     resolved = payload.get("resolved")
     if not isinstance(resolved, dict):
-        raise FilingFetchError("resolved company identity is missing")
+        raise FilingFetchError(
+            "resolved company identity is missing", code="identity_error"
+        )
     for name in (
         "canonical_name",
         "market",
@@ -287,13 +323,25 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
         "source_url",
         "source_record_id",
     ):
-        _required_text(resolved.get(name), f"company_identity.{name}")
+        value = resolved.get(name)
+        if (
+            not isinstance(value, str)
+            or not value.strip()
+            or value != value.strip()
+        ):
+            raise FilingFetchError(
+                f"company_identity.{name} must be non-empty trimmed text",
+                code="identity_error",
+            )
     if resolved.get("verified") is not True or resolved.get("active") is not True:
         raise FilingFetchError(
-            "company identity must be verified and active before source resolution"
+            "company identity must be verified and active before source resolution",
+            code="identity_error",
         )
     if resolved["market"] not in {"CN", "HK", "US"}:
-        raise FilingFetchError("company identity market is unsupported")
+        raise FilingFetchError(
+            "company identity market is unsupported", code="identity_error"
+        )
     return dict(resolved)
 
 
@@ -321,8 +369,8 @@ def resolve_filing(
         raise TypeError("request must be a dict")
     if not isinstance(allow_download, bool):
         raise TypeError("allow_download must be boolean")
-    if timeout_seconds <= 0:
-        raise ValueError("timeout_seconds must be positive")
+    if timeout_seconds <= 0 or not math.isfinite(timeout_seconds):
+        raise ValueError("timeout_seconds must be positive and finite")
     validate_request(request)
     deadline = time.monotonic() + timeout_seconds
     root = (
@@ -337,40 +385,31 @@ def resolve_filing(
         "--config",
         str(root / "config" / "source_catalog.yaml"),
     ]
-    normalized_request = request
-    company_identity = None
-    # Every request must pass through verified/active identity before source
-    # resolution.  Legacy explicit-identity requests are rejected; callers must
-    # provide a ``company_query`` so the identity is independently verified.
-    if "company_query" not in request:
-        raise FilingFetchError(
-            "explicit entity/security_id request is unsupported in schema 1.1; "
-            "provide a company_query instead"
-        )
-    if "company_query" in request:
-        identity_payload = _run_company_wiki_json_retry(
-            command=[
-                *command_prefix,
-                "identify",
-                *_identity_arguments(request),
-            ],
-            root=root,
-            action="identify",
-            deadline=deadline,
-        )
-        company_identity = _resolved_company_identity(identity_payload)
-        normalized_request = {
-            key: value
-            for key, value in request.items()
-            if key not in {"company_query", "exchange"}
+    # Every request passes through verified/active identity before source
+    # resolution; validate_request guarantees company_query is present.
+    identity_payload = _run_company_wiki_json_retry(
+        command=[
+            *command_prefix,
+            "identify",
+            *_identity_arguments(request),
+        ],
+        root=root,
+        action="identify",
+        deadline=deadline,
+    )
+    company_identity = _resolved_company_identity(identity_payload)
+    normalized_request = {
+        key: value
+        for key, value in request.items()
+        if key not in {"company_query", "exchange"}
+    }
+    normalized_request.update(
+        {
+            "entity": company_identity["canonical_name"],
+            "market": company_identity["market"],
+            "security_id": company_identity["security_id"],
         }
-        normalized_request.update(
-            {
-                "entity": company_identity["canonical_name"],
-                "market": company_identity["market"],
-                "security_id": company_identity["security_id"],
-            }
-        )
+    )
     action = "ensure" if allow_download else "resolve"
     command = [
         *command_prefix,
@@ -399,24 +438,40 @@ def resolve_filing(
     )
     resolution = payload.get("resolution") if allow_download else payload
     if not isinstance(resolution, dict):
-        raise FilingFetchError("company-wiki resolution is missing")
+        raise FilingFetchError(
+            "company-wiki resolution is missing", code="upstream_error"
+        )
+    expected_schema = (
+        SUPPORTED_COMPANY_WIKI_CONTRACTS["ensure_schema_version"]
+        if allow_download
+        else SUPPORTED_COMPANY_WIKI_CONTRACTS["resolve_schema_version"]
+    )
+    if resolution.get("schema_version") != expected_schema:
+        raise FilingFetchError(
+            "company-wiki resolution schema_version is unsupported",
+            code="upstream_error",
+        )
     if resolution.get("status") not in {"reused_exact", "reused_equivalent"}:
         raise FilingFetchError(
-            f"source is not reusable: {resolution.get('status')} / {resolution.get('reason')}"
+            f"source is not reusable: {resolution.get('status')} / {resolution.get('reason')}",
+            code="not_found",
         )
     matches = resolution.get("matches")
     if not isinstance(matches, list) or len(matches) != 1 or not isinstance(matches[0], dict):
-        raise FilingFetchError("company-wiki did not return exactly one source handle")
+        raise FilingFetchError(
+            "company-wiki did not return exactly one source handle",
+            code="upstream_error",
+        )
     handle = dict(matches[0])
     if handle.get("capture_ready") is not True:
         raise FilingFetchError(
             "source lacks capture provenance: "
-            + ", ".join(str(item) for item in handle.get("missing_capture_fields", []))
+            + ", ".join(str(item) for item in handle.get("missing_capture_fields", [])),
+            code="not_found",
         )
     handle["request_id"] = resolution.get("request_id")
     validate_handle(handle, request, root)
-    if company_identity is not None:
-        handle["company_identity"] = company_identity
+    handle["company_identity"] = company_identity
     return handle
 
 
@@ -454,12 +509,19 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdin.reconfigure(encoding="utf-8", errors="strict")
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8", errors="strict")
-        if args.request_file:
-            request = json.loads(args.request_file.read_text(encoding="utf-8"))
-        else:
-            request = json.loads(sys.stdin.read())
+        try:
+            if args.request_file:
+                request = json.loads(args.request_file.read_text(encoding="utf-8"))
+            else:
+                request = json.loads(sys.stdin.read())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise FilingFetchError(
+                f"invalid request: {exc}", code="request_error"
+            ) from exc
         if not isinstance(request, dict):
-            raise ValueError("request must be a JSON object")
+            raise FilingFetchError(
+                "request must be a JSON object", code="request_error"
+            )
         handle = resolve_filing(
             request=request,
             config_path=args.config,
@@ -482,6 +544,12 @@ def main(argv: list[str] | None = None) -> int:
             "error_code": exc.code,
             "retryable": exc.retryable,
         }
+        if exc.candidates:
+            error_response["candidates"] = exc.candidates
+            error_response["hint"] = (
+                "identity is ambiguous; disambiguate by adding market/exchange "
+                "or by using a specific ticker in company_query"
+            )
         json.dump(error_response, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 2

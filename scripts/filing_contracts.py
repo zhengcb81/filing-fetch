@@ -16,20 +16,17 @@ from typing import Any
 SKILL_VERSION = "1.2.0"
 FILING_REQUEST_SCHEMA_VERSION = "1.1"
 FILING_RESPONSE_SCHEMA_VERSION = "1.1"
-GAP_RECEIPT_SCHEMA_VERSION = "1.0"
-DOWNLOAD_AUTHORIZATION_SCHEMA_VERSION = "1.0"
-
 COMPANY_WIKI_CONFIG_SCHEMA_VERSION = "1.0"
 COMPANY_WIKI_IDENTITY_SCHEMA_VERSION = "1.0"
 
 CONFIG_TOKEN_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
 
-SUPPORTED_COMPANY_WIKI_CONTRACTS = frozenset({
+SUPPORTED_COMPANY_WIKI_CONTRACTS = {
     "resolve_schema_version": "1.0",
     "ensure_schema_version": "1.0",
     "identity_schema_version": COMPANY_WIKI_IDENTITY_SCHEMA_VERSION,
     "config_schema_version": COMPANY_WIKI_CONFIG_SCHEMA_VERSION,
-})
+}
 
 
 # ---------------------------------------------------------------------------
@@ -40,10 +37,15 @@ SUPPORTED_COMPANY_WIKI_CONTRACTS = frozenset({
 class FilingFetchError(RuntimeError):
     """Raised when a capture-ready filing cannot be resolved or downloaded."""
 
-    def __init__(self, message: str, code: str = "fatal") -> None:
+    def __init__(
+        self, message: str, code: str = "fatal", candidates: list | None = None
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.retryable = code in {"upstream_error", "worker_paused", "catalog_locked"}
+        # Candidate identities surfaced by company-wiki when the query is
+        # ambiguous, so callers can disambiguate from the error response alone.
+        self.candidates = candidates
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +88,12 @@ def validate_request(request: dict[str, Any]) -> None:
             f"unknown request field(s): {', '.join(sorted(unknown))}",
             code="request_error",
         )
+    _required_text(request.get("company_query"), "company_query")
+    market = request.get("market")
+    if market is not None and market not in {"CN", "HK", "US"}:
+        raise FilingFetchError(
+            f"market must be one of CN, HK, US: {market!r}", code="request_error"
+        )
     _required_text(request.get("document_kind"), "document_kind")
     _required_text(request.get("as_of_date"), "as_of_date")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", request["as_of_date"]):
@@ -115,6 +123,15 @@ def validate_handle(handle: dict[str, Any], request: dict[str, Any], wiki_root: 
     missing = _HANDLE_REQUIRED_FIELDS - set(handle)
     if missing:
         raise FilingFetchError(f"handle missing required field(s): {', '.join(sorted(missing))}", code="upstream_error")
+    request_id = handle.get("request_id")
+    if (
+        not isinstance(request_id, str)
+        or not request_id.strip()
+        or request_id != request_id.strip()
+    ):
+        raise FilingFetchError(
+            "handle request_id must be non-empty trimmed text", code="upstream_error"
+        )
     if handle.get("capture_ready") is not True:
         raise FilingFetchError("handle capture_ready is not True", code="upstream_error")
     canonical = Path(handle["canonical_path"])

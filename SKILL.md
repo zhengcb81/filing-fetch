@@ -1,10 +1,10 @@
 ---
 name: filing-fetch
-description: Fetch a company financial filing into company-wiki on demand. Reuses an existing filing if one is already indexed; otherwise, only when explicitly authorized, downloads via the correct market tool — A-shares (CN) via StockInfoDLSimple/cninfo, HK and US via dayu-agent — and stores the new file under company-wiki's companies/{entity}/raw/ with immutable provenance. Use when any skill (revenue-forecast, invest-*, industry-research) needs an annual/quarterly/semi-annual report or regulatory filing and must not blindly re-download.
+description: Fetch a company financial filing into company-wiki on demand. Reuses an existing filing if one is already indexed; otherwise, only when explicitly authorized, downloads via the correct market tool — A-shares (CN) via StockInfoDLSimple/cninfo, HK and US via dayu-agent — and stores the new file under company-wiki's companies/{entity}/raw/financial_reports/{kind}/ with immutable provenance. Use when any skill (revenue-forecast, invest-*, industry-research) needs an annual/quarterly/semi-annual report or regulatory filing and must not blindly re-download.
 ---
 # Filing Fetch
 
-v1.1.0 — on-demand, market-routed fetch of a company financial filing into the
+v1.3.0 — on-demand, market-routed fetch of a company financial filing into the
 shared `company-wiki` catalog, with **reuse-first** semantics so the same
 filing is never downloaded twice.
 
@@ -19,7 +19,9 @@ filing is never downloaded twice.
    filing. If found, validate the handle and return it — no download.
 4. **Ensure (download) — only with `--allow-download`** — if missing and
    authorized, company-wiki routes by market. New bytes are written into
-   `companies/{entity}/raw/{kind}/` with a `.source.json` provenance sidecar.
+   `companies/{entity}/raw/financial_reports/{annual|semi_annual|quarterly}/`
+   (kind-to-subdirectory mapping; other kinds use their own subdirectory) with
+   a `<file>.source.json` provenance sidecar.
 5. **Validate handle** — before returning, the handle is deeply validated:
    required fields, path containment inside `companies/`, lowercase SHA-256,
    HTTPS URL, byte-size consistency, file content hash, published-date ≤
@@ -68,8 +70,8 @@ Precise fields. Unknown fields are rejected.
 | `document_kind` | yes | `annual_report`, `semi_annual_report`, `quarterly_report`, … |
 | `as_of_date` | yes | `YYYY-MM-DD` |
 | `fiscal_year` | no | Integer (reject bool) |
-| `market` | no | Hint only — does not override verified identity |
-| `exchange` | no | Hint only |
+| `market` | no | Hint only — must be `CN`/`HK`/`US` if provided; does not override verified identity |
+| `exchange` | no | Hint only — used during the identity stage; silently ignored by the upstream `--entity` source commands and discarded by filing-fetch |
 | `form_type` | no | |
 | `fiscal_period` | no | |
 | `language` | no | |
@@ -80,17 +82,18 @@ Precise fields. Unknown fields are rejected.
 
 Success: `{schema_version:"1.1", status:"capture_ready", handle:{…}}`
 
-Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>", retryable:bool}`
+Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>", retryable:bool}` (an `identity_error` for an ambiguous query also includes `candidates[]` and a `hint`)
 
 | Status code | Meaning | Retryable |
 |---|---|---|
 | `capture_ready` | Filing found / reused | — |
 | `request_error` | Invalid request | no |
 | `config_error` | Config missing / invalid | no |
-| `identity_error` | Ambiguous / inactive identity | no |
+| `identity_error` | Ambiguous or inactive identity. When ambiguous, the response also carries `candidates[]` (`ticker` / `canonical_name` / `market` / `exchange`) and a `hint` — disambiguate by adding `market`/`exchange` or using a specific ticker in `company_query` | no |
 | `not_found` | No matching filing | no |
-| `upstream_error` | company-wiki subprocess failure | yes |
-| `catalog_locked` | company-wiki catalog locked by another operation; auto-retried with backoff | yes |
+| `upstream_error` | company-wiki subprocess failure (including deadline exhaustion) | yes |
+| `catalog_locked` | company-wiki catalog locked by another operation; auto-retried with backoff until the deadline | yes |
+| `worker_paused` | downloads blocked because the company-wiki worker is paused — resume the worker, then retry | yes |
 | `fatal` | Unexpected error | no |
 
 ### Exit codes
@@ -98,8 +101,8 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
 | Code | Meaning |
 |---|---|
 | 0 | capture-ready |
-| 2 | request / identity / not-found / config error |
-| 1 | fatal |
+| 2 | **every** structured error — `request_error`, `config_error`, `identity_error`, `not_found`, `upstream_error`, `catalog_locked` (deadline exhausted), `worker_paused` |
+| 1 | only an unexpected, non-`FilingFetchError` exception |
 
 ## Owner / trust boundary
 
@@ -114,8 +117,11 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
 ## Notes
 
 - Downloads are blocked while the company-wiki worker is **paused** — resume it first.
-- An ambiguous request (multiple filings match) never auto-picks; refine
-  `fiscal_year` / `form_type`.
+- An ambiguous **identity** (multiple candidate securities, e.g. dual-class
+  tickers GOOGL/GOOG) never auto-picks; the response lists `candidates[]` —
+  refine `company_query` to a specific ticker or add `market`/`exchange`, then
+  re-run. An ambiguous **filing** (one identity, several documents) is resolved
+  with `fiscal_year` / `form_type`.
 - Consuming skills convert the returned handle into their own capture schema
   (e.g., revenue-forecast builds its revenue source record from it).
 - Language: Python; request: JSON stdin or `--request-file`; response: JSON stdout.

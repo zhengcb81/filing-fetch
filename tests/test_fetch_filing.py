@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import subprocess
 import sys
 import unittest
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import call, patch
@@ -20,6 +22,7 @@ from fetch_filing import (  # noqa: E402
     FilingFetchError,
     _run_company_wiki_json,
     load_company_wiki_root,
+    main,
     resolve_filing,
 )
 
@@ -143,6 +146,7 @@ class FilingFetchTests(unittest.TestCase):
                 encoding="utf-8",
             )
             source_response = {
+                "schema_version": "1.0",
                 "status": "reused_exact",
                 "request_id": "urn:company-wiki:request:1",
                 "matches": [self._handle(root)],
@@ -177,6 +181,7 @@ class FilingFetchTests(unittest.TestCase):
                 "as_of_date": "2026-07-18",
             }
             source_response = {
+                "schema_version": "1.0",
                 "status": "reused_exact",
                 "request_id": "urn:company-wiki:request:query",
                 "matches": [self._handle(root)],
@@ -236,6 +241,7 @@ class FilingFetchTests(unittest.TestCase):
             }
             ensured = {
                 "resolution": {
+                    "schema_version": "1.0",
                     "status": "reused_equivalent",
                     "request_id": "urn:company-wiki:request:ensure-query",
                     "matches": [self._handle(root)],
@@ -310,6 +316,7 @@ class FilingFetchTests(unittest.TestCase):
                         }
                     )
                     source_response = {
+                        "schema_version": "1.0",
                         "status": "reused_exact",
                         "request_id": f"urn:company-wiki:request:{market}",
                         "matches": [self._handle(root)],
@@ -381,9 +388,7 @@ class FilingFetchTests(unittest.TestCase):
             with patch(
                 "fetch_filing.subprocess.run", return_value=completed
             ) as run:
-                with self.assertRaisesRegex(
-                    FilingFetchError, "not uniquely resolved: ambiguous"
-                ):
+                with self.assertRaises(FilingFetchError) as ctx:
                     resolve_filing(
                         request={
                             "schema_version": "1.1",
@@ -395,6 +400,90 @@ class FilingFetchTests(unittest.TestCase):
                     )
 
             self.assertEqual(run.call_count, 1)
+            self.assertIn("not uniquely resolved: ambiguous", str(ctx.exception))
+            self.assertEqual(ctx.exception.code, "identity_error")
+
+    def test_ambiguous_identity_surfaces_candidates_on_exception(self) -> None:
+        # G7: when identify returns multiple candidates, filing-fetch must
+        # forward them on the error so callers can disambiguate. Today the
+        # candidates field is dropped and only a bare identity_error is raised.
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            base = self._identity_response()
+            candidate_a = dict(base["resolved"])
+            candidate_a.update(
+                {"ticker": "GOOGL", "security_id": "GOOGL", "canonical_name": "Alphabet Inc."}
+            )
+            candidate_b = dict(base["resolved"])
+            candidate_b.update(
+                {"ticker": "GOOG", "security_id": "GOOG", "canonical_name": "Alphabet Inc."}
+            )
+            ambiguous = dict(base)
+            ambiguous.update(
+                {
+                    "status": "ambiguous",
+                    "reason": "multiple exact candidates",
+                    "resolved": None,
+                    "candidates": [candidate_a, candidate_b],
+                }
+            )
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(ambiguous), stderr=""
+            )
+            with patch("fetch_filing.subprocess.run", return_value=completed):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(
+                        request={
+                            "schema_version": "1.1",
+                            "company_query": "Alphabet",
+                            "document_kind": "annual_report",
+                            "as_of_date": "2026-07-18",
+                        },
+                        company_wiki_root=root,
+                    )
+            candidates = ctx.exception.candidates
+            self.assertIsInstance(candidates, list)
+            self.assertEqual(len(candidates), 2)
+            self.assertEqual([c["ticker"] for c in candidates], ["GOOGL", "GOOG"])
+
+    def test_main_emits_candidates_and_hint_on_ambiguous_identity(self) -> None:
+        # The CLI error response must carry candidates plus a disambiguation
+        # hint so a user can resolve the ambiguity from the response alone.
+        candidates = [
+            {"ticker": "GOOGL", "canonical_name": "Alphabet Inc.", "market": "US", "exchange": "NASDAQ"},
+            {"ticker": "GOOG", "canonical_name": "Alphabet Inc.", "market": "US", "exchange": "NASDAQ"},
+        ]
+        with TemporaryDirectory() as temporary:
+            request_path = Path(temporary) / "request.json"
+            request_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.1",
+                        "company_query": "Alphabet",
+                        "document_kind": "annual_report",
+                        "as_of_date": "2026-07-18",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def _raise(**_kwargs):
+                raise FilingFetchError(
+                    "company identity is not uniquely resolved: ambiguous",
+                    code="identity_error",
+                    candidates=candidates,
+                )
+
+            buffer = StringIO()
+            with patch("fetch_filing.resolve_filing", side_effect=_raise):
+                with contextlib.redirect_stdout(buffer):
+                    rc = main(["--request-file", str(request_path)])
+            self.assertEqual(rc, 2)
+            response = json.loads(buffer.getvalue())
+            self.assertEqual(response["error_code"], "identity_error")
+            self.assertEqual(response["candidates"], candidates)
+            self.assertIn("hint", response)
+            self.assertTrue(response["hint"].strip())
 
     def test_unverified_or_inactive_identity_stops_before_source_resolution(self) -> None:
         with TemporaryDirectory() as temporary:
@@ -541,6 +630,7 @@ class FilingFetchTests(unittest.TestCase):
                 encoding="utf-8",
             )
             source_response = {
+                "schema_version": "1.0",
                 "status": "reused_exact",
                 "request_id": "urn:company-wiki:request:cli",
                 "matches": [self._handle(root)],
@@ -629,6 +719,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bare_handle = {"capture_ready": True, "missing_capture_fields": []}
             response = {
+                "schema_version": "1.0",
                 "status": "reused_exact",
                 "request_id": "urn:company-wiki:request:bare",
                 "matches": [bare_handle],
@@ -653,6 +744,7 @@ class FilingFetchTests(unittest.TestCase):
             escaped = self._handle(root)
             escaped["canonical_path"] = str(parent / "outside.pdf")
             response = {
+                "schema_version": "1.0",
                 "status": "reused_exact",
                 "request_id": "urn:company-wiki:request:outside",
                 "matches": [escaped],
@@ -676,7 +768,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["snapshot_sha256"] = "a" * 64
-            response = {"status": "reused_exact", "request_id": "urn:bad-hash", "matches": [bad]}
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-hash", "matches": [bad]}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -692,7 +784,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["snapshot_sha256"] = "NOT-A-HEX-DIGEST!@#$%^&*()"
-            response = {"status": "reused_exact", "request_id": "urn:bad-digest", "matches": [bad]}
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-digest", "matches": [bad]}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -708,7 +800,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["https_url"] = "http://insecure.example/report.pdf"
-            response = {"status": "reused_exact", "request_id": "urn:bad-url", "matches": [bad]}
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-url", "matches": [bad]}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -852,7 +944,7 @@ class FilingFetchTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             parent = Path(temporary)
             root = self._wiki_root(parent, "company-wiki")
-            response = {"status": "not_found", "reason": "no matching filing"}
+            response = {"schema_version": "1.0", "status": "not_found", "reason": "no matching filing"}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -870,18 +962,6 @@ class FilingFetchTests(unittest.TestCase):
                 with self.assertRaisesRegex(FilingFetchError, "must be an object"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
 
-
-    def test_identity_response_not_resolved_is_rejected(self) -> None:
-        """An identity response with status != 'resolved' must be rejected."""
-        with TemporaryDirectory() as temporary:
-            root = self._wiki_root(Path(temporary), "company-wiki")
-            bad_identity = self._identity_response()
-            bad_identity["status"] = "ambiguous"
-            bad_identity["reason"] = "multiple matches"
-            bad_identity["resolved"] = None
-            with patch("fetch_filing.subprocess.run", return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(bad_identity), stderr="")):
-                with self.assertRaisesRegex(FilingFetchError, "not uniquely resolved"):
-                    resolve_filing(request=self._request(), company_wiki_root=root)
 
     def test_identity_response_bad_schema_is_rejected(self) -> None:
         """An identity response with an unsupported schema_version must be rejected."""
@@ -922,7 +1002,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             future = self._handle(root)
             future["published_date"] = "2027-01-01"
-            response = {"status": "reused_exact", "request_id": "urn:future", "matches": [future]}
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:future", "matches": [future]}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -931,7 +1011,7 @@ class FilingFetchTests(unittest.TestCase):
                 with self.assertRaisesRegex(FilingFetchError, "after"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
 
-    def test_main_fatal_error_exit_code(self) -> None:
+    def test_main_cli_accepts_fractional_timeout(self) -> None:
         with TemporaryDirectory() as temporary:
             parent = Path(temporary)
             root = self._wiki_root(parent, "company-wiki")
@@ -941,6 +1021,7 @@ class FilingFetchTests(unittest.TestCase):
                 encoding="utf-8",
             )
             source_response = {
+                "schema_version": "1.0",
                 "status": "reused_exact",
                 "request_id": "urn:cli",
                 "matches": [self._handle(root)],
@@ -969,7 +1050,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["canonical_path"] = str(parent / "subdir" / "report.pdf")
-            response = {"status": "reused_exact", "request_id": "urn:badpath", "matches": [bad]}
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:badpath", "matches": [bad]}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -986,7 +1067,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["byte_size"] = 99999
-            response = {"status": "reused_exact", "request_id": "urn:bad-size", "matches": [bad]}
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-size", "matches": [bad]}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -1002,7 +1083,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["published_date"] = "not-a-date"
-            response = {"status": "reused_exact", "request_id": "urn:bad-date", "matches": [bad]}
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-date", "matches": [bad]}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -1019,7 +1100,7 @@ class FilingFetchTests(unittest.TestCase):
             bad = self._handle(root)
             import os as _os
             _os.remove(bad["canonical_path"])
-            response = {"status": "reused_exact", "request_id": "urn:no-file", "matches": [bad]}
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:no-file", "matches": [bad]}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -1074,18 +1155,6 @@ class FilingFetchTests(unittest.TestCase):
 
     # --- conformance: upstream contract hardening (Phase 9.10) ---
 
-    def test_upstream_unknown_schema_fails_closed(self) -> None:
-        """An upstream response with an unsupported schema must be rejected."""
-        with TemporaryDirectory() as temporary:
-            parent = Path(temporary)
-            root = self._wiki_root(parent, "company-wiki")
-            bad_identity = self._identity_response()
-            bad_identity["schema_version"] = "999.0"
-            with patch("fetch_filing.subprocess.run",
-                       return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(bad_identity), stderr="")):
-                with self.assertRaisesRegex(FilingFetchError, "schema_version"):
-                    resolve_filing(request=self._request(), company_wiki_root=root)
-
     def test_ensure_response_missing_resolution_key_fails(self) -> None:
         """An ensure response without a 'resolution' key must be rejected."""
         with TemporaryDirectory() as temporary:
@@ -1130,7 +1199,7 @@ class FilingFetchTests(unittest.TestCase):
             parent = Path(temporary)
             root = self._wiki_root(parent, "company-wiki")
             identity = self._identity_response()
-            ensure = {"resolution": {"status": "not_found", "reason": "no match"}}
+            ensure = {"resolution": {"schema_version": "1.0", "status": "not_found", "reason": "no match"}}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(ensure), stderr=""),
@@ -1149,7 +1218,7 @@ class FilingFetchTests(unittest.TestCase):
             a["snapshot_sha256"] = "a" * 64
             b = self._handle(root)
             b["snapshot_sha256"] = "b" * 64
-            response = {"status": "reused_exact", "request_id": "urn:multi", "matches": [a, b]}
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:multi", "matches": [a, b]}
             completed = [
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
@@ -1249,6 +1318,7 @@ class FilingFetchTests(unittest.TestCase):
                 args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
             )
             source_response = {
+                "schema_version": "1.0",
                 "status": "reused_exact",
                 "request_id": "urn:company-wiki:request:after-lock",
                 "matches": [self._handle(root)],
@@ -1266,6 +1336,626 @@ class FilingFetchTests(unittest.TestCase):
             self.assertEqual(run.call_count, 4)  # identify + 3 resolve attempts
             self.assertEqual(sleep.call_args_list, [call(5.0), call(10.0)])
             self.assertEqual(handle["request_id"], source_response["request_id"])
+
+
+    # --- Phase 2: request validation boundaries ---
+
+    def test_missing_company_query_is_request_error(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            request = self._request()
+            del request["company_query"]
+            with self.assertRaises(FilingFetchError) as ctx:
+                resolve_filing(request=request, company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "request_error")
+            self.assertIn("company_query", str(ctx.exception))
+
+    def test_blank_company_query_is_request_error(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            for query in ("  ", " AMD "):
+                with self.subTest(query=query):
+                    request = self._request()
+                    request["company_query"] = query
+                    with self.assertRaises(FilingFetchError) as ctx:
+                        resolve_filing(request=request, company_wiki_root=root)
+                    self.assertEqual(ctx.exception.code, "request_error")
+
+    def test_invalid_market_hint_is_request_error(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            request = self._request()
+            request["market"] = "XX"
+            with self.assertRaises(FilingFetchError) as ctx:
+                resolve_filing(request=request, company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "request_error")
+            self.assertIn("market", str(ctx.exception))
+
+    def test_float_fiscal_year_is_request_error(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            request = self._request()
+            request["fiscal_year"] = 2026.0
+            with self.assertRaises(FilingFetchError) as ctx:
+                resolve_filing(request=request, company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "request_error")
+
+    def test_non_padded_as_of_date_is_request_error(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            request = self._request()
+            request["as_of_date"] = "2026-7-18"
+            with self.assertRaises(FilingFetchError) as ctx:
+                resolve_filing(request=request, company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "request_error")
+
+    # --- Phase 2: error classification codes ---
+
+    def test_config_errors_carry_config_error_code(self) -> None:
+        with TemporaryDirectory() as temporary:
+            tmp = Path(temporary)
+            cases = []
+            missing = tmp / "missing.json"
+            cases.append((missing, "does not exist"))
+            bad_json = tmp / "bad.json"
+            bad_json.write_text("not json", encoding="utf-8")
+            cases.append((bad_json, "invalid"))
+            empty = tmp / "empty"
+            empty.mkdir()
+            no_catalog = tmp / "no-catalog.json"
+            no_catalog.write_text(
+                json.dumps({"schema_version": "1.0", "company_wiki_root": str(empty)}),
+                encoding="utf-8",
+            )
+            cases.append((no_catalog, "source_catalog.yaml"))
+            not_dir = tmp / "not-a-dir"
+            not_dir.write_text("x", encoding="utf-8")
+            not_dir_cfg = tmp / "not-dir.json"
+            not_dir_cfg.write_text(
+                json.dumps({"schema_version": "1.0", "company_wiki_root": str(not_dir)}),
+                encoding="utf-8",
+            )
+            cases.append((not_dir_cfg, "must be a directory"))
+            for config_path, needle in cases:
+                with self.subTest(config=config_path.name):
+                    with self.assertRaises(FilingFetchError) as ctx:
+                        load_company_wiki_root(config_path=config_path)
+                    self.assertEqual(ctx.exception.code, "config_error")
+                    self.assertIn(needle, str(ctx.exception))
+
+    def test_identity_failures_carry_identity_error_code(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            ambiguous = self._identity_response()
+            ambiguous["status"] = "ambiguous"
+            ambiguous["reason"] = "multiple exact candidates"
+            ambiguous["resolved"] = None
+            unverified = self._identity_response()
+            unverified["resolved"]["verified"] = False
+            inactive = self._identity_response()
+            inactive["resolved"]["active"] = False
+            bad_schema = self._identity_response()
+            bad_schema["schema_version"] = "9.9"
+            unsupported_market = self._identity_response()
+            unsupported_market["resolved"]["market"] = "ZZ"
+            for identity in (ambiguous, unverified, inactive, bad_schema, unsupported_market):
+                with self.subTest(status=identity["status"]):
+                    completed = subprocess.CompletedProcess(
+                        args=[], returncode=0, stdout=json.dumps(identity), stderr=""
+                    )
+                    with patch("fetch_filing.subprocess.run", return_value=completed):
+                        with self.assertRaises(FilingFetchError) as ctx:
+                            resolve_filing(request=self._request(), company_wiki_root=root)
+                    self.assertEqual(ctx.exception.code, "identity_error")
+
+    def test_missing_source_carries_not_found_code(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            for status in ("missing", "ambiguous", "identity_conflict"):
+                with self.subTest(status=status):
+                    response = {
+                        "schema_version": "1.0",
+                        "status": status,
+                        "reason": f"why-{status}",
+                    }
+                    completed = [
+                        subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                        subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+                    ]
+                    with patch("fetch_filing.subprocess.run", side_effect=completed):
+                        with self.assertRaises(FilingFetchError) as ctx:
+                            resolve_filing(request=self._request(), company_wiki_root=root)
+                    self.assertEqual(ctx.exception.code, "not_found")
+
+    def test_ensure_missing_carries_not_found_code(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            ensure = {
+                "resolution": {"schema_version": "1.0", "status": "missing", "reason": "no filing"}
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(ensure), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
+            self.assertEqual(ctx.exception.code, "not_found")
+
+    def test_capture_not_ready_carries_not_found_code(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            not_ready = self._handle(root)
+            not_ready["capture_ready"] = False
+            not_ready["missing_capture_fields"] = ["https_url", "capture_trace"]
+            response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:not-ready",
+                "matches": [not_ready],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "not_found")
+            self.assertIn("https_url", str(ctx.exception))
+            self.assertIn("capture_trace", str(ctx.exception))
+
+    def test_multi_match_carries_upstream_error_code(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:multi",
+                "matches": [self._handle(root), self._handle(root)],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "upstream_error")
+
+    def test_worker_paused_maps_to_retryable_worker_paused(self) -> None:
+        """A paused-worker upstream failure maps to worker_paused (retryable)
+        and is NOT auto-retried like catalog_locked; exit code stays 2."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            config_path = parent / "company_wiki.json"
+            config_path.write_text(
+                json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}),
+                encoding="utf-8",
+            )
+            paused = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "RuntimeError",
+                        "error": "source acquisition is paused; start the worker to resume",
+                    }
+                ),
+            )
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                paused,
+            ]
+            import io as _io
+
+            request = json.dumps(self._request())
+            original_stdin, original_stdout = sys.stdin, sys.stdout
+            sys.stdin = _io.StringIO(request)
+            sys.stdout = _io.StringIO()
+            try:
+                with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                    exit_code = __import__("fetch_filing").main(["--config", str(config_path)])
+                output = sys.stdout.getvalue()
+            finally:
+                sys.stdin, sys.stdout = original_stdin, original_stdout
+            self.assertEqual(exit_code, 2)
+            payload = json.loads(output)
+            self.assertEqual(payload["status"], "worker_paused")
+            self.assertEqual(payload["error_code"], "worker_paused")
+            self.assertTrue(payload["retryable"])
+            self.assertEqual(run.call_count, 2)  # identify + one resolve: no retry
+
+    def test_resolve_schema_version_mismatch_is_upstream_error(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            response = {
+                "schema_version": "9.9",
+                "status": "reused_exact",
+                "request_id": "urn:schema",
+                "matches": [self._handle(root)],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "upstream_error")
+            self.assertIn("schema_version", str(ctx.exception))
+
+    def test_ensure_resolution_schema_version_mismatch_is_upstream_error(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            ensure = {
+                "resolution": {
+                    "schema_version": "9.9",
+                    "status": "reused_exact",
+                    "request_id": "urn:schema",
+                    "matches": [self._handle(root)],
+                }
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(ensure), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
+            self.assertEqual(ctx.exception.code, "upstream_error")
+            self.assertIn("schema_version", str(ctx.exception))
+
+    # --- Phase 2: deadline and timeout propagation ---
+
+    def test_timeout_seconds_must_be_finite(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            for bad in (float("inf"), float("nan")):
+                with self.subTest(timeout=bad):
+                    with self.assertRaisesRegex(ValueError, "finite"):
+                        resolve_filing(
+                            request=self._request(), company_wiki_root=root, timeout_seconds=bad
+                        )
+
+    def test_subprocess_receives_remaining_deadline(self) -> None:
+        """The deadline budget, not the full timeout, is passed to each
+        subprocess.run as its timeout kwarg."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            source_response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:deadline",
+                "matches": [self._handle(root)],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(source_response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                with patch("fetch_filing.time.monotonic", side_effect=[100.0, 100.0, 100.0]):
+                    resolve_filing(request=self._request(), company_wiki_root=root, timeout_seconds=30)
+            self.assertEqual(run.call_count, 2)
+            for call_args in run.call_args_list:
+                self.assertEqual(call_args.kwargs["timeout"], 30.0)
+
+    def test_deadline_exhausted_before_resolve_is_upstream_error(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            with patch("fetch_filing.subprocess.run") as run:
+                with patch("fetch_filing.time.monotonic", side_effect=[100.0, 131.0]):
+                    with self.assertRaises(FilingFetchError) as ctx:
+                        resolve_filing(request=self._request(), company_wiki_root=root, timeout_seconds=30)
+            self.assertEqual(ctx.exception.code, "upstream_error")
+            run.assert_not_called()
+
+    def test_catalog_locked_until_deadline_is_upstream_error(self) -> None:
+        """Constantly locked catalog: backoff retries exhaust the deadline and
+        the failure surfaces as upstream_error, not a hang."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            locked = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "CatalogOperationLockedError",
+                        "error": "catalog operation already running: pid=15536",
+                    }
+                ),
+            )
+            with patch("fetch_filing.subprocess.run", return_value=locked) as run:
+                with patch("fetch_filing.time.sleep") as sleep:
+                    with patch(
+                        "fetch_filing.time.monotonic", side_effect=[100.0, 100.0, 105.0, 108.0]
+                    ):
+                        with self.assertRaises(FilingFetchError) as ctx:
+                            resolve_filing(
+                                request=self._request(), company_wiki_root=root, timeout_seconds=8
+                            )
+            self.assertEqual(ctx.exception.code, "upstream_error")
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(sleep.call_args_list, [call(5.0), call(3.0)])
+
+    def test_upstream_subprocess_timeout_is_upstream_error(self) -> None:
+        """A subprocess timeout (attempt outlived the deadline budget) must
+        classify as upstream_error, not fatal (Phase 3 E2E scenario 12)."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            with patch(
+                "fetch_filing.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd=["x"], timeout=8),
+            ):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "upstream_error")
+
+    def test_worker_paused_is_not_auto_retried(self) -> None:
+        """worker_paused is retryable by the caller but filing-fetch itself
+        must not spin on it (unlike catalog_locked backoff)."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            paused = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "RuntimeError",
+                        "error": "source acquisition is paused; ...",
+                    }
+                ),
+            )
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                paused,
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                with patch("fetch_filing.time.sleep") as sleep:
+                    with self.assertRaises(FilingFetchError) as ctx:
+                        resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "worker_paused")
+            self.assertEqual(run.call_count, 2)  # identify + one resolve, no retry
+            sleep.assert_not_called()
+
+    # --- Phase 2: handle boundaries ---
+
+    def test_published_date_equal_as_of_date_is_accepted(self) -> None:
+        """published_date == as_of_date is the inclusive boundary and must pass."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            handle = self._handle(root)
+            handle["published_date"] = "2026-07-18"
+            response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:edge",
+                "matches": [handle],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                result = resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(result["published_date"], "2026-07-18")
+
+    def test_relative_canonical_path_is_resolved_against_wiki_root(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            handle = self._handle(root)
+            handle["canonical_path"] = "companies/report.pdf"
+            response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:relative",
+                "matches": [handle],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                result = resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(result["canonical_path"], "companies/report.pdf")
+
+    def test_bool_byte_size_is_rejected(self) -> None:
+        """bool is an int subclass and must not pass as byte_size."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            bad = self._handle(root)
+            bad["byte_size"] = True
+            response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:bool-size",
+                "matches": [bad],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "byte_size"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+    def test_single_non_dict_match_is_rejected(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:non-dict",
+                "matches": ["x"],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "upstream_error")
+            self.assertIn("exactly one", str(ctx.exception))
+
+    def test_missing_request_id_in_resolution_is_rejected(self) -> None:
+        """A resolution without request_id injects None into the handle and
+        must be rejected by the new non-empty check."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "matches": [self._handle(root)],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "upstream_error")
+            self.assertIn("request_id", str(ctx.exception))
+
+    def test_handle_extra_fields_are_tolerated(self) -> None:
+        """Forward compatibility: unknown handle fields must not be rejected."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            handle = self._handle(root)
+            handle["future_field"] = "future value"
+            response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:extra",
+                "matches": [handle],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                result = resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(result["future_field"], "future value")
+
+    # --- Phase 2: CLI main() boundaries ---
+
+    def test_main_request_file_happy_path(self) -> None:
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            config_path = parent / "company_wiki.json"
+            config_path.write_text(
+                json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}),
+                encoding="utf-8",
+            )
+            request_file = parent / "request.json"
+            request_file.write_text(json.dumps(self._request()), encoding="utf-8")
+            source_response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:file",
+                "matches": [self._handle(root)],
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(source_response), stderr=""),
+            ]
+            import io as _io
+
+            original_stdin, original_stdout = sys.stdin, sys.stdout
+            sys.stdin = _io.StringIO("")  # must be ignored when --request-file is given
+            sys.stdout = _io.StringIO()
+            try:
+                with patch("fetch_filing.subprocess.run", side_effect=completed):
+                    exit_code = __import__("fetch_filing").main(
+                        ["--config", str(config_path), "--request-file", str(request_file)]
+                    )
+                output = sys.stdout.getvalue()
+            finally:
+                sys.stdin, sys.stdout = original_stdin, original_stdout
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(json.loads(output)["handle"]["request_id"], "urn:file")
+
+    def test_main_request_file_invalid_json_is_request_error_exit_2(self) -> None:
+        with TemporaryDirectory() as temporary:
+            request_file = Path(temporary) / "request.json"
+            request_file.write_text("not json", encoding="utf-8")
+            import io as _io
+
+            original_stdin, original_stdout = sys.stdin, sys.stdout
+            sys.stdin = _io.StringIO("")
+            sys.stdout = _io.StringIO()
+            try:
+                exit_code = __import__("fetch_filing").main(
+                    ["--request-file", str(request_file)]
+                )
+                output = sys.stdout.getvalue()
+            finally:
+                sys.stdin, sys.stdout = original_stdin, original_stdout
+            self.assertEqual(exit_code, 2)
+            payload = json.loads(output)
+            self.assertEqual(payload["status"], "request_error")
+            self.assertFalse(payload["retryable"])
+
+    def test_main_empty_stdin_is_request_error_exit_2(self) -> None:
+        import io as _io
+
+        original_stdin, original_stdout = sys.stdin, sys.stdout
+        sys.stdin = _io.StringIO("")
+        sys.stdout = _io.StringIO()
+        try:
+            exit_code = __import__("fetch_filing").main([])
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdin, sys.stdout = original_stdin, original_stdout
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(json.loads(output)["status"], "request_error")
+
+    def test_main_allow_download_flag_builds_ensure_command(self) -> None:
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            config_path = parent / "company_wiki.json"
+            config_path.write_text(
+                json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}),
+                encoding="utf-8",
+            )
+            ensure = {
+                "resolution": {
+                    "schema_version": "1.0",
+                    "status": "reused_exact",
+                    "request_id": "urn:ensure",
+                    "matches": [self._handle(root)],
+                }
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(ensure), stderr=""),
+            ]
+            import io as _io
+
+            original_stdin, original_stdout = sys.stdin, sys.stdout
+            sys.stdin = _io.StringIO(json.dumps(self._request()))
+            sys.stdout = _io.StringIO()
+            try:
+                with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                    exit_code = __import__("fetch_filing").main(
+                        ["--config", str(config_path), "--allow-download"]
+                    )
+            finally:
+                sys.stdin, sys.stdout = original_stdin, original_stdout
+            self.assertEqual(exit_code, 0)
+            ensure_command = run.call_args_list[1].args[0]
+            self.assertIn("ensure", ensure_command)
+            self.assertIn("--allow-download", ensure_command)
 
 
 if __name__ == "__main__":
