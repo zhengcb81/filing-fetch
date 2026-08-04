@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.3.0 — 2026-08-01
+
+- Error classification aligned with the documented contract: config failures
+  now carry `config_error`, identity failures `identity_error`, unreusable
+  sources `not_found` (missing / ambiguous / identity_conflict / incomplete
+  provenance), and contract violations `upstream_error`. The response
+  `schema_version` of resolve/ensure/identity is now validated against
+  `SUPPORTED_COMPANY_WIKI_CONTRACTS` (which is now a real table, not a
+  frozenset) and mismatches fail closed as `upstream_error`.
+- A paused company-wiki worker is now detected: the upstream
+  `RuntimeError("source acquisition is paused; …")` envelope maps to
+  `worker_paused` (retryable, exit 2) instead of `fatal`; it is never
+  auto-retried (unlike `catalog_locked`).
+- Subprocess timeouts (an attempt outliving the remaining deadline budget)
+  classify as `upstream_error` instead of `fatal`.
+- Request validation tightened: `company_query` is required non-empty trimmed
+  text, the `market` hint must be `CN`/`HK`/`US` when provided, `fiscal_year`
+  rejects floats, and the handle `request_id` must be non-empty trimmed text.
+- `main()` now maps stdin / `--request-file` parse failures, non-object JSON,
+  and unreadable files to `request_error` (exit 2) instead of a generic fatal.
+- `exchange` hints are documented as identity-stage-only: the upstream
+  `--entity` source commands silently ignore them and filing-fetch discards
+  them after identify.
+- Three-layer test matrix: mock contract tests (89), real-code isolated-wiki
+  E2E (13 offline scenarios: reuse, missing, partial provenance, corruption,
+  identity, catalog-lock retry/deadline, worker pause), and opt-in real
+  download E2E (CN/US verified live; HK blocked by a dayu-agent RapidOCR
+  native crash on this machine), plus a rewritten live conformance suite
+  against the production wiki (incl. a production round-trip).
+
 ## v1.2.0 — 2026-07-31
 
 - Catalog lock contention (`CatalogOperationLockedError`) is now classified as

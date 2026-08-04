@@ -4,3 +4,5 @@ __pycache__/
 .ruff_cache/
 .coverage
 .benchmarks/
+# Windows reserved device name: guards against redirect accidents (e.g. `> nul`).
+nul
