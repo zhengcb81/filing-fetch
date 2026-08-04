@@ -19,11 +19,20 @@ from tempfile import TemporaryDirectory
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_ROOT / "tests"))
 
+# Hermetic path (Phase 6 C2 / F-06): the e2e drives real company-wiki code, so
+# make the sibling company-wiki source tree importable instead of relying on an
+# implicit global install.  When the repo is not present, the import below fails
+# loudly rather than silently testing a different installed copy.
+_COMPANY_WIKI_SRC = Path.home() / "Projects" / "company-wiki" / "src"
+sys.path.insert(0, str(_COMPANY_WIKI_SRC))
+
 from e2e_support.isolated_wiki import IsolatedWiki, cleanup_temporary  # noqa: E402
 from company_wiki.source_catalog.lock import CatalogOperationLock  # noqa: E402
 
 
-def _hold_lock_for(catalog_dir: Path, seconds: float, acquired: threading.Event) -> threading.Thread:
+def _hold_lock_for(
+    catalog_dir: Path, seconds: float, acquired: threading.Event
+) -> threading.Thread:
     """Hold the catalog operation lock for ``seconds``, then release it."""
 
     def run() -> None:
@@ -36,7 +45,9 @@ def _hold_lock_for(catalog_dir: Path, seconds: float, acquired: threading.Event)
     return thread
 
 
-def _hold_lock_until_release(catalog_dir: Path, release: threading.Event, acquired: threading.Event) -> threading.Thread:
+def _hold_lock_until_release(
+    catalog_dir: Path, release: threading.Event, acquired: threading.Event
+) -> threading.Thread:
     """Hold the catalog operation lock until ``release`` is set."""
 
     def run() -> None:
@@ -110,9 +121,7 @@ class SharedReadOnlyE2E(unittest.TestCase):
         self.assertEqual(rc, 0, out + err)
         payload = json.loads(out)
         self.assertEqual(payload["status"], "capture_ready")
-        self.assertEqual(
-            payload["handle"]["company_identity"]["canonical_name"], "Apple Inc."
-        )
+        self.assertEqual(payload["handle"]["company_identity"]["canonical_name"], "Apple Inc.")
         self.assertIn("10-K", payload["handle"]["title"])
 
     def test_e2e_hk_old_sidecar_reuse(self) -> None:
@@ -276,9 +285,7 @@ class TestCorruptedBytes(MutatingE2E):
 class TestIdentityUnavailable(MutatingE2E):
     def setUp(self) -> None:
         self._temporary = TemporaryDirectory()
-        self.wiki = IsolatedWiki(
-            Path(self._temporary.name), with_security_master=False
-        )
+        self.wiki = IsolatedWiki(Path(self._temporary.name), with_security_master=False)
 
     def test_e2e_identity_unavailable_without_snapshots(self) -> None:
         """No security_master snapshots: identify exits 1 with

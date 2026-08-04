@@ -83,19 +83,13 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
             f"company-wiki config does not exist: {selected}", code="config_error"
         ) from exc
     if not selected.is_file():
-        raise FilingFetchError(
-            "company-wiki config must be a file", code="config_error"
-        )
+        raise FilingFetchError("company-wiki config must be a file", code="config_error")
     try:
         payload = json.loads(selected.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise FilingFetchError(
-            f"invalid company-wiki config: {exc}", code="config_error"
-        ) from exc
+        raise FilingFetchError(f"invalid company-wiki config: {exc}", code="config_error") from exc
     if not isinstance(payload, dict):
-        raise FilingFetchError(
-            "company-wiki config must be an object", code="config_error"
-        )
+        raise FilingFetchError("company-wiki config must be an object", code="config_error")
     if set(payload) != {"schema_version", "company_wiki_root"}:
         raise FilingFetchError(
             "company-wiki config must contain exact schema_version/company_wiki_root fields",
@@ -308,9 +302,7 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
         )
     resolved = payload.get("resolved")
     if not isinstance(resolved, dict):
-        raise FilingFetchError(
-            "resolved company identity is missing", code="identity_error"
-        )
+        raise FilingFetchError("resolved company identity is missing", code="identity_error")
     for name in (
         "canonical_name",
         "market",
@@ -324,11 +316,7 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
         "source_record_id",
     ):
         value = resolved.get(name)
-        if (
-            not isinstance(value, str)
-            or not value.strip()
-            or value != value.strip()
-        ):
+        if not isinstance(value, str) or not value.strip() or value != value.strip():
             raise FilingFetchError(
                 f"company_identity.{name} must be non-empty trimmed text",
                 code="identity_error",
@@ -339,9 +327,7 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
             code="identity_error",
         )
     if resolved["market"] not in {"CN", "HK", "US"}:
-        raise FilingFetchError(
-            "company identity market is unsupported", code="identity_error"
-        )
+        raise FilingFetchError("company identity market is unsupported", code="identity_error")
     return dict(resolved)
 
 
@@ -399,9 +385,7 @@ def resolve_filing(
     )
     company_identity = _resolved_company_identity(identity_payload)
     normalized_request = {
-        key: value
-        for key, value in request.items()
-        if key not in {"company_query", "exchange"}
+        key: value for key, value in request.items() if key not in {"company_query", "exchange"}
     }
     normalized_request.update(
         {
@@ -417,12 +401,8 @@ def resolve_filing(
         *_command_arguments(normalized_request),
     ]
     if allow_download:
-        if not normalized_request.get("market") or not normalized_request.get(
-            "security_id"
-        ):
-            raise FilingFetchError(
-                "explicit download requires market and security_id"
-            )
+        if not normalized_request.get("market") or not normalized_request.get("security_id"):
+            raise FilingFetchError("explicit download requires market and security_id")
         command.extend(
             (
                 "--allow-download",
@@ -438,9 +418,7 @@ def resolve_filing(
     )
     resolution = payload.get("resolution") if allow_download else payload
     if not isinstance(resolution, dict):
-        raise FilingFetchError(
-            "company-wiki resolution is missing", code="upstream_error"
-        )
+        raise FilingFetchError("company-wiki resolution is missing", code="upstream_error")
     expected_schema = (
         SUPPORTED_COMPANY_WIKI_CONTRACTS["ensure_schema_version"]
         if allow_download
@@ -473,6 +451,13 @@ def resolve_filing(
     handle["request_id"] = resolution.get("request_id")
     validate_handle(handle, request, root)
     handle["company_identity"] = company_identity
+    # Phase 6 D1 (F-14): record the acquisition mode and whether an explicit
+    # download authorization was exercised, so consumers can audit that this
+    # handle was obtained through the authorized reuse/ensure path rather than
+    # an out-of-band download.
+    handle["acquisition_mode"] = "ensure" if allow_download else "resolve"
+    handle["authorization_requested"] = bool(allow_download)
+    handle["request_id"] = resolution.get("request_id")
     return handle
 
 
@@ -493,9 +478,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="allow a market-routed download if the filing is missing (default: read-only reuse)",
     )
-    parser.add_argument("--config", type=Path, default=None, help="path to company_wiki.json config")
-    parser.add_argument("--request-file", type=Path, default=None, help="read JSON request from file instead of stdin")
-    parser.add_argument("--timeout-seconds", type=float, default=900.0, help="overall deadline for the entire request (default: 900)")
+    parser.add_argument(
+        "--config", type=Path, default=None, help="path to company_wiki.json config"
+    )
+    parser.add_argument(
+        "--request-file",
+        type=Path,
+        default=None,
+        help="read JSON request from file instead of stdin",
+    )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=900.0,
+        help="overall deadline for the entire request (default: 900)",
+    )
     parser.add_argument(
         "--debug",
         action="store_true",
@@ -521,13 +518,9 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 request = json.loads(sys.stdin.read())
         except (OSError, json.JSONDecodeError) as exc:
-            raise FilingFetchError(
-                f"invalid request: {exc}", code="request_error"
-            ) from exc
+            raise FilingFetchError(f"invalid request: {exc}", code="request_error") from exc
         if not isinstance(request, dict):
-            raise FilingFetchError(
-                "request must be a JSON object", code="request_error"
-            )
+            raise FilingFetchError("request must be a JSON object", code="request_error")
         handle = resolve_filing(
             request=request,
             config_path=args.config,
@@ -562,7 +555,18 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 2
     except Exception as exc:
-        json.dump({"schema_version": FILING_RESPONSE_SCHEMA_VERSION, "status": "fatal", "error": str(exc), "error_code": "fatal", "retryable": False}, sys.stdout, ensure_ascii=False, indent=2)
+        json.dump(
+            {
+                "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
+                "status": "fatal",
+                "error": str(exc),
+                "error_code": "fatal",
+                "retryable": False,
+            },
+            sys.stdout,
+            ensure_ascii=False,
+            indent=2,
+        )
         sys.stdout.write("\n")
         return 1
 

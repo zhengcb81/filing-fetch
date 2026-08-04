@@ -6,3 +6,9 @@ __pycache__/
 .benchmarks/
 # Windows reserved device name: guards against redirect accidents (e.g. `> nul`).
 nul
+# CodeGraph structural index (regenerable).
+.codegraph/
+# Audit / planning working notes (not part of the skill).
+findings.md
+progress.md
+task_plan.md

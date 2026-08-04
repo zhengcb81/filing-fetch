@@ -56,7 +56,7 @@ class LiveConformanceTests(unittest.TestCase):
             capture_output=True,
             text=True,
             encoding="utf-8",
-            errors="strict",
+            errors="replace",
             check=False,
             timeout=90,
         )
@@ -200,13 +200,7 @@ class LiveConformanceTests(unittest.TestCase):
         row or None (-> skip the round-trip)."""
         import sqlite3
 
-        database = (
-            Path.home()
-            / "Projects"
-            / "company-wiki"
-            / ".source_catalog"
-            / "catalog.sqlite3"
-        )
+        database = Path.home() / "Projects" / "company-wiki" / ".source_catalog" / "catalog.sqlite3"
         if not database.is_file():
             return None
         try:

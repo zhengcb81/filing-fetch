@@ -2,9 +2,15 @@
 line-length = 100
 target-version = "py313"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts", "tests"]
+
 [tool.coverage.run]
 source = ["scripts"]
 omit = ["tests/*"]
+concurrency = ["multiprocessing"]
+parallel = true
 
 [tool.coverage.report]
 show_missing = true
