@@ -21,6 +21,10 @@ jobs:
       - name: Diagnose environment
         run: |
           echo "HOME=$HOME"
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          echo "company_wiki src exists at HOME: $(ls $HOME/Projects/company-wiki/src/company_wiki/__init__.py 2>&1 || echo NO)"
+          echo "company_wiki src exists at GITHUB_WORKSPACE/..: $(ls $GITHUB_WORKSPACE/../company-wiki/src/company_wiki/__init__.py 2>&1 || echo NO)"
+          echo "PYTHONPATH will be: $HOME/Projects/company-wiki/src"
           ls "$HOME/Projects/company-wiki/src/company_wiki/__init__.py" 2>&1 || echo "company_wiki not found"
           python -c "import sys; sys.path.insert(0, '$HOME/Projects/company-wiki/src'); import company_wiki; print('company_wiki OK:', company_wiki.__file__)"
       - name: Collect tests only
@@ -29,10 +33,10 @@ jobs:
           python -m pytest tests --collect-only -q --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py 2>&1 | head -50
           echo "collection exit: $?"
       - name: Run hermetic test suite
-        env:
-          PYTHONPATH: "${{ github.workspace }}/../company-wiki/src"
-        run: python -m pytest tests -v --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py -x 2>&1 | tail -80
+        run: |
+          export PYTHONPATH="$(cd ../company-wiki && pwd)/src"
+          python -m pytest tests -v --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py -x 2>&1 | tail -80
       - name: Run full-chain E2E
-        env:
-          PYTHONPATH: "${{ github.workspace }}/../company-wiki/src"
-        run: python e2e/run_filing_fetch_e2e.py
+        run: |
+          export PYTHONPATH="$(cd ../company-wiki && pwd)/src"
+          python e2e/run_filing_fetch_e2e.py
