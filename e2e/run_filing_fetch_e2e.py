@@ -162,7 +162,9 @@ def main() -> int:
                 "request_id": (r["payload"].get("handle") or {}).get("request_id"),
                 "snapshot_sha256": (r["payload"].get("handle") or {}).get("snapshot_sha256"),
                 "https_url": (r["payload"].get("handle") or {}).get("https_url"),
-                "canonical_tail": (r["payload"].get("handle") or {}).get("canonical_path", "")[-30:],
+                # Normalize separators: the golden must be byte-stable across
+                # OSes (backslash on Windows vs slash on Linux runners).
+                "canonical_tail": (r["payload"].get("handle") or {}).get("canonical_path", "")[-30:].replace("\\", "/"),
                 "missing": (r["payload"].get("handle") or {}).get("missing_capture_fields"),
             }
             for m, r in market_results.items()

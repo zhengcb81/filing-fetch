@@ -6,7 +6,7 @@
       "request_id": "urn:company-wiki:source-request:sha256:4a99bf85135124249f8cf2c11084ffb1732c5f46c461e7d6ba78d1a91034fcfc",
       "snapshot_sha256": "8e316909f69ac3a6e54948163e9c952dbcfacdfb648ca4619fd51251f8c82d63",
       "https_url": "https://www.cninfo.com.cn/new/disclosure/detail?stockCode=300750",
-      "canonical_tail": "nual\\synthetic_2024_annual.pdf",
+      "canonical_tail": "nual/synthetic_2024_annual.pdf",
       "missing": []
     },
     "US": {
@@ -14,7 +14,7 @@
       "request_id": "urn:company-wiki:source-request:sha256:882f6d11e1cd577eea7e6eda93a2371eda4c890dc38cbd90ee81884994c3b1a8",
       "snapshot_sha256": "1badfe897596187aef9f4aa3b36408e621143b2d0f8ca6d252dd89bbefd72065",
       "https_url": "https://www.sec.gov/Archives/edgar/data/0000320193/syn-10k.htm",
-      "canonical_tail": "nual\\synthetic_2025_annual.pdf",
+      "canonical_tail": "nual/synthetic_2025_annual.pdf",
       "missing": []
     },
     "HK": {
@@ -22,9 +22,9 @@
       "request_id": "urn:company-wiki:source-request:sha256:6ad96be34d1357ab5f4d63c110537059927b396429556064189aefbed196f530",
       "snapshot_sha256": "4b082902b3353bcdfb847a89b719a1ad4a893c9ba081ffb9906a230b02da8d5c",
       "https_url": "https://www1.hkexnews.hk/listedco/listconews/sehk/syn-annual.pdf",
-      "canonical_tail": "nual\\synthetic_2024_annual.pdf",
+      "canonical_tail": "nual/synthetic_2024_annual.pdf",
       "missing": []
     }
   },
-  "repo_head": "8038f23842d00c825626b6aa269c775aeb87b765"
+  "repo_head": "13a4b56382999b58efc5703456c748776a58d3f4"
 }
