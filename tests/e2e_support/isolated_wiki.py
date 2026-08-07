@@ -32,29 +32,52 @@ from pathlib import Path
 
 PRODUCTION_WIKI = Path.home() / "Projects" / "company-wiki"
 
-# (target_entity_dir, source_entity_dir, relative_path).  The HK target
-# directory is the identity canonical name "騰訊控股" (traditional), not the
-# production directory "腾讯" (simplified): entity matching compares the
-# request canonical_name against directory names / sidecar company_name, and
-# the old 4-field HK sidecar has no company_name — so the production layout
-# would miss (observed as D15).  Placing it under the canonical name keeps
-# the old-sidecar capture_ready case testable.
-SEEDS = {
-    "CN": (
-        "宁德时代",
-        "宁德时代",
-        "raw/financial_reports/annual/2025-03-14_cninfo_1222806982_2024年年度报告.pdf",
-    ),
-    "US": (
-        "Apple Inc",
-        "Apple Inc",
-        "raw/financial_reports/annual/2025-10-31_sec_0000320193-25-000079_Apple Inc. 10-K 2025-09-27.htm",
-    ),
-    "HK": (
-        "騰訊控股",
-        "腾讯",
-        "raw/financial_reports/annual/腾讯：2024年年度报告.pdf",
-    ),
+# Synthetic seeds: the isolated-wiki E2E must be fully hermetic — it cannot
+# depend on production wiki files (the catalog-space-remediation may delete
+# or retire them, and CI clones a clean company-wiki with no companies/).
+# The HK target directory is the identity canonical name "騰訊控股"
+# (traditional): entity matching compares the request canonical_name against
+# directory names / sidecar company_name, and the old-style HK sidecar has no
+# company_name — placing it under the canonical name keeps the old-sidecar
+# capture_ready case testable (D15). The HK sidecar deliberately stays
+# minimal (no provider/fiscal_year/form_type) to exercise the old-sidecar
+# path; fiscal_year is derived from the title.
+SYNTHETIC_SEEDS = {
+    "CN": {
+        "entity": "宁德时代",
+        "filename": "synthetic_cn_2024_annual.pdf",
+        "bytes": b"%PDF-1.4 synthetic cn annual fixture 0123456789",
+        "sidecar": {
+            "market": "CN", "security_id": "300750",
+            "source_title": "宁德时代2024年年度报告",
+            "provider": "cninfo", "provider_document_id": "syn-cn-0001",
+            "source_url": "https://www.cninfo.com.cn/new/disclosure/detail?stockCode=300750",
+            "published_date": "2025-03-14", "fiscal_year": 2024, "form_type": "FY",
+        },
+    },
+    "US": {
+        "entity": "Apple Inc",
+        "filename": "synthetic_us_2025_10k.pdf",
+        "bytes": b"%PDF-1.4 synthetic us 10k fixture 9876543210",
+        "sidecar": {
+            "market": "US", "security_id": "AAPL",
+            "source_title": "Apple Inc. 10-K FY2025",
+            "provider": "sec", "provider_document_id": "syn-us-0001",
+            "source_url": "https://www.sec.gov/Archives/edgar/data/0000320193/syn-10k.htm",
+            "published_date": "2025-10-31", "fiscal_year": 2025, "form_type": "FY",
+        },
+    },
+    "HK": {
+        "entity": "騰訊控股",
+        "filename": "synthetic_hk_2024_annual.pdf",
+        "bytes": b"%PDF-1.4 synthetic hk annual fixture abcdef",
+        "sidecar": {
+            "market": "HK", "security_id": "00700",
+            "source_title": "腾讯：2024年年度报告",
+            "published_date": "2025-04-08",
+            "source_url": "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0408/2025040800668_c.pdf",
+        },
+    },
 }
 
 _CATALOG_YAML = """schema_version: "1.0"
@@ -239,15 +262,16 @@ class IsolatedWiki:
         )
 
     def seed_market(self, market: str) -> Path:
-        """Copy a production seed document + sidecar into the instance."""
-        target_entity, source_entity, relative = SEEDS[market]
-        source = PRODUCTION_WIKI / "companies" / source_entity / relative
-        target = self.root / "companies" / target_entity / relative
+        """Write the synthetic seed document + sidecar into the instance."""
+        spec = SYNTHETIC_SEEDS[market]
+        target = (
+            self.root / "companies" / spec["entity"] / "raw"
+            / "financial_reports" / "annual" / spec["filename"]
+        )
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-        shutil.copy2(
-            PRODUCTION_WIKI / "companies" / source_entity / (relative + ".source.json"),
-            target.parent / (target.name + ".source.json"),
+        target.write_bytes(spec["bytes"])
+        (target.parent / (target.name + ".source.json")).write_text(
+            json.dumps(spec["sidecar"], ensure_ascii=False), encoding="utf-8"
         )
         return target
 

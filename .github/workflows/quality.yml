@@ -12,11 +12,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install test dependency
+        run: python -m pip install pytest
       - name: Fetch company-wiki runtime
         run: |
           mkdir -p "$HOME/Projects"
           git clone --depth 1 https://github.com/zhengcb81/company-wiki.git "$HOME/Projects/company-wiki"
-      - name: Run test suite
-        run: python -m pytest tests -q
+      - name: Run hermetic test suite (excludes live conformance / real downloads)
+        run: python -m pytest tests -q --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
       - name: Run full-chain E2E
         run: python e2e/run_filing_fetch_e2e.py

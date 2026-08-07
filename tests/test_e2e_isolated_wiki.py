@@ -19,7 +19,7 @@ from tempfile import TemporaryDirectory
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_ROOT / "tests"))
 
-from e2e_support.isolated_wiki import IsolatedWiki, cleanup_temporary  # noqa: E402
+from e2e_support.isolated_wiki import IsolatedWiki, SYNTHETIC_SEEDS, cleanup_temporary  # noqa: E402
 from company_wiki.source_catalog.lock import CatalogOperationLock  # noqa: E402
 
 
@@ -217,7 +217,7 @@ class TestPartialProvenance(MutatingE2E):
         mock test test_capture_not_ready_carries_not_found_code pins it)."""
         self.wiki.seed_market("CN")
         target = self.wiki.root / "companies" / "宁德时代" / "raw" / "financial_reports" / "annual"
-        sidecar = target / "2025-03-14_cninfo_1222806982_2024年年度报告.pdf.source.json"
+        sidecar = target / (SYNTHETIC_SEEDS["CN"]["filename"] + ".source.json")
         sidecar.write_text(
             json.dumps(
                 {
@@ -253,7 +253,7 @@ class TestCorruptedBytes(MutatingE2E):
         self.wiki.seed_market("CN")
         self.wiki.scan()
         target = self.wiki.root / "companies" / "宁德时代" / "raw" / "financial_reports" / "annual"
-        source = target / "2025-03-14_cninfo_1222806982_2024年年度报告.pdf"
+        source = target / SYNTHETIC_SEEDS["CN"]["filename"]
         raw = bytearray(source.read_bytes())
         raw[0] ^= 0xFF  # same length, different bytes
         source.write_bytes(bytes(raw))
