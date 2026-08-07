@@ -33,6 +33,66 @@ from pathlib import Path
 
 PRODUCTION_WIKI = Path.home() / "Projects" / "company-wiki"
 
+PRODUCTION_MASTER_AVAILABLE = all(
+    (PRODUCTION_WIKI / ".source_catalog" / "security_master" / f"{market}.json").is_file()
+    for market in ("cn", "hk", "us")
+)
+
+# Fixed timestamp: the synthetic master must be byte-stable across runs
+# (double-run determinism), so it cannot use the runtime clock.
+_SYNTHETIC_MASTER_RETRIEVED_AT = "2000-01-01T00:00:00Z"
+
+# Aliases mirror the production snapshots' shape (e.g. the HK record carries
+# the simplified "腾讯控股" form; the E2E queries it in simplified Chinese).
+_SYNTHETIC_MASTER_ALIASES = {
+    "CN": ["CATL"],
+    "US": ["AAPL", "APPLE"],
+    "HK": ["TENCENT", "腾讯", "腾讯控股", "騰訊"],
+}
+
+# Canonical names mirror the production snapshots, NOT the seed directory
+# names (US dir is "Apple Inc" while the master canonical is "Apple Inc.";
+# test_e2e_reuse_us_annual_report pins the deliberate mismatch).
+_SYNTHETIC_MASTER_CANONICALS = {
+    "CN": "宁德时代",
+    "US": "Apple Inc.",
+    "HK": "騰訊控股",
+}
+
+
+def _synthetic_security_master(market: str) -> dict:
+    """Deterministic minimal security_master built from SYNTHETIC_SEEDS.
+
+    Used when the production snapshot is unavailable (CI clones a clean
+    company-wiki with no .source_catalog/).  Schema mirrors the production
+    snapshot: {market, record_count, records, retrieved_at, schema_version}.
+    """
+    upper = market.upper()
+    spec = SYNTHETIC_SEEDS[upper]
+    provider = spec["sidecar"].get("provider", {"CN": "cninfo", "US": "sec", "HK": "hkexnews"}[upper])
+    record = {
+        "active": True,
+        "aliases": _SYNTHETIC_MASTER_ALIASES[upper],
+        "canonical_name": _SYNTHETIC_MASTER_CANONICALS[upper],
+        "exchange": {"CN": "SZSE", "US": "NASDAQ", "HK": "HKEX"}[upper],
+        "identifiers": {"org_id": f"syn-{market}-0001"},
+        "market": upper,
+        "schema_version": "1.0",
+        "security_id": spec["sidecar"]["security_id"],
+        "source_name": provider,
+        "source_record_id": f"syn-{market}-0001",
+        "source_url": spec["sidecar"]["source_url"],
+        "ticker": spec["sidecar"]["security_id"],
+    }
+    return {
+        "schema_version": "1.0",
+        "market": upper,
+        "retrieved_at": _SYNTHETIC_MASTER_RETRIEVED_AT,
+        "sources": [spec["sidecar"]["source_url"]],
+        "record_count": 1,
+        "records": [record],
+    }
+
 # Synthetic seeds: the isolated-wiki E2E must be fully hermetic — it cannot
 # depend on production wiki files (the catalog-space-remediation may delete
 # or retire them, and CI clones a clean company-wiki with no companies/).
@@ -214,13 +274,19 @@ class IsolatedWiki:
             master = self.catalog_dir / "security_master"
             master.mkdir(parents=True, exist_ok=True)
             for market in ("cn", "hk", "us"):
-                shutil.copy2(
+                production = (
                     PRODUCTION_WIKI
                     / ".source_catalog"
                     / "security_master"
-                    / f"{market}.json",
-                    master / f"{market}.json",
+                    / f"{market}.json"
                 )
+                if production.is_file():
+                    shutil.copy2(production, master / f"{market}.json")
+                else:
+                    (master / f"{market}.json").write_text(
+                        json.dumps(_synthetic_security_master(market), ensure_ascii=False),
+                        encoding="utf-8",
+                    )
         if paused:
             self.catalog_dir.mkdir(parents=True, exist_ok=True)
             (self.catalog_dir / "worker_control.json").write_text(

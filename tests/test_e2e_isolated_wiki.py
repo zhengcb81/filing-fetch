@@ -19,7 +19,12 @@ from tempfile import TemporaryDirectory
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_ROOT / "tests"))
 
-from e2e_support.isolated_wiki import IsolatedWiki, SYNTHETIC_SEEDS, cleanup_temporary  # noqa: E402
+from e2e_support.isolated_wiki import (  # noqa: E402
+    IsolatedWiki,
+    PRODUCTION_MASTER_AVAILABLE,
+    SYNTHETIC_SEEDS,
+    cleanup_temporary,
+)
 
 
 def _hold_lock_for(catalog_dir: Path, seconds: float, acquired: threading.Event) -> threading.Thread:
@@ -181,6 +186,11 @@ class SharedReadOnlyE2E(unittest.TestCase):
         self.assertEqual(rc, 2, out + err)
         self.assertEqual(json.loads(out)["status"], "not_found")
 
+    @unittest.skipUnless(
+        PRODUCTION_MASTER_AVAILABLE,
+        "requires production security_master snapshot (CI clone has no .source_catalog/); "
+        "ambiguity behavior is pinned by the mock tests in test_fetch_filing.py",
+    )
     def test_e2e_ambiguous_identity(self) -> None:
         """万科 resolves ambiguous against the production snapshot."""
         rc, out, err = self.wiki.run_fetch(
