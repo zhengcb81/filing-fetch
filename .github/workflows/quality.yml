@@ -29,10 +29,10 @@ jobs:
           python -m pytest tests --collect-only -q --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py 2>&1 | head -50
           echo "collection exit: $?"
       - name: Run hermetic test suite
-        run: |
-          export PYTHONPATH="$HOME/Projects/company-wiki/src"
-          python -m pytest tests -v --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py -x 2>&1 | tail -80
+        env:
+          PYTHONPATH: "${{ github.workspace }}/../company-wiki/src"
+        run: python -m pytest tests -v --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py -x 2>&1 | tail -80
       - name: Run full-chain E2E
-        run: |
-          export PYTHONPATH="$HOME/Projects/company-wiki/src"
-          python e2e/run_filing_fetch_e2e.py
+        env:
+          PYTHONPATH: "${{ github.workspace }}/../company-wiki/src"
+        run: python e2e/run_filing_fetch_e2e.py
