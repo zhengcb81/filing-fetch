@@ -20,11 +20,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
-import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -188,7 +185,8 @@ def main() -> int:
                 f"{m}: https_url invalid")
 
     # ---- STEP 5: resolve missing (fiscal year not in the synthetic wiki) ----
-    missing_spec = dict(SYNTHETIC_SEEDS["CN"]); missing_spec["fiscal_year"] = 2023
+    missing_spec = dict(SYNTHETIC_SEEDS["CN"])
+    missing_spec["fiscal_year"] = 2023
     wiki_root = run_root / f"run-{seq + 1}"
     missing_wiki = build_wiki(wiki_root)
     r_missing = fetch(missing_wiki, missing_spec)
@@ -216,7 +214,8 @@ def main() -> int:
         diffs = []
         for m in SYNTHETIC_SEEDS:
             for k in ("status", "request_id", "snapshot_sha256", "https_url", "canonical_tail", "missing"):
-                a = r1[m].get(k); g = (golden.get("market_results") or {}).get(m, {}).get(k)
+                a = r1[m].get(k)
+                g = (golden.get("market_results") or {}).get(m, {}).get(k)
                 if a != g:
                     diffs.append(f"{m}.{k}: expected {g} got {a}")
         if diffs:

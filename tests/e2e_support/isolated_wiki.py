@@ -278,6 +278,8 @@ class IsolatedWiki:
 
     def scan(self) -> None:
         """Run the real ``scan`` CLI (acquires and releases the catalog lock)."""
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
         proc = subprocess.run(
             [
                 sys.executable,
@@ -291,7 +293,7 @@ class IsolatedWiki:
             text=True,
             encoding="utf-8",
             errors="replace",
-            env={**os.environ, "PYTHONUTF8": "1"},
+            env=env,
             timeout=300,
         )
         if proc.returncode != 0:
@@ -322,6 +324,8 @@ class IsolatedWiki:
             command.append("--allow-download")
         if extra_args:
             command.extend(extra_args)
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
         proc = subprocess.run(
             command,
             input=json.dumps(request, ensure_ascii=False),
@@ -329,7 +333,7 @@ class IsolatedWiki:
             text=True,
             encoding="utf-8",
             errors="replace",
-            env={**os.environ, "PYTHONUTF8": "1"},
+            env=env,
             timeout=timeout + 60,
         )
         return proc.returncode, proc.stdout, proc.stderr
