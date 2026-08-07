@@ -123,6 +123,15 @@ def fetch(wiki, spec: dict) -> dict:
 
 
 def main() -> int:
+    """Entry point."""
+    # Quick diagnostic: verify key paths exist (shown in CI output)
+    import sys as _sys
+    print(f"[e2e] sys.executable={_sys.executable}", flush=True)
+    print(f"[e2e] python version={_sys.version.split()[0]}", flush=True)
+    print(f"[e2e] REPO={REPO} exists={REPO.is_dir()}", flush=True)
+    print(f"[e2e] cwd={Path.cwd()}", flush=True)
+    print("[e2e] environment diagnostics done", flush=True)
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--update-golden", action="store_true")
     parser.add_argument("--keep-runs", action="store_true")
