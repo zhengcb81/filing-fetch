@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# filing-fetch pre-commit gate: test suite + full-chain E2E.
+# Installed via: git config core.hooksPath .githooks
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+echo "[pre-commit] running test suite..."
+python -m pytest "$ROOT/tests" -q
+
+echo "[pre-commit] running full-chain E2E..."
+python "$ROOT/e2e/run_filing_fetch_e2e.py"

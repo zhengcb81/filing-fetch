@@ -12,3 +12,6 @@ nul
 findings.md
 progress.md
 task_plan.md
+
+# E2E run artifacts (regenerable)
+e2e/.runs/
