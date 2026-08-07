@@ -7,6 +7,8 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ~/Projects/company-wiki/src
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -16,15 +18,9 @@ jobs:
         run: python -m pip install pytest pyyaml requests
       - name: Fetch company-wiki runtime
         run: |
-          mkdir -p "$HOME/Projects"
-          git clone --depth 1 https://github.com/zhengcb81/company-wiki.git "$HOME/Projects/company-wiki"
-      - name: Verify company_wiki importable
-        run: python -c "import sys; sys.path.insert(0, '$HOME/Projects/company-wiki/src'); import company_wiki; print('OK:', company_wiki.__file__)"
+          mkdir -p ~/Projects
+          git clone --depth 1 https://github.com/zhengcb81/company-wiki.git ~/Projects/company-wiki
       - name: Run hermetic test suite
-        run: |
-          export PYTHONPATH="$HOME/Projects/company-wiki/src"
-          python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
+        run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
       - name: Run full-chain E2E
-        run: |
-          export PYTHONPATH="$HOME/Projects/company-wiki/src"
-          python e2e/run_filing_fetch_e2e.py
+        run: python e2e/run_filing_fetch_e2e.py
