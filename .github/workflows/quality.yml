@@ -33,4 +33,6 @@ jobs:
           export PYTHONPATH="$HOME/Projects/company-wiki/src"
           python -m pytest tests -v --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py -x 2>&1 | tail -80
       - name: Run full-chain E2E
-        run: python e2e/run_filing_fetch_e2e.py
+        run: |
+          export PYTHONPATH="$HOME/Projects/company-wiki/src"
+          python e2e/run_filing_fetch_e2e.py
