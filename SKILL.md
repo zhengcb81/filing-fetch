@@ -4,7 +4,7 @@ description: Fetch a company financial filing into company-wiki on demand. Reuse
 ---
 # Filing Fetch
 
-v1.3.0 — on-demand, market-routed fetch of a company financial filing into the
+v1.4.0 — on-demand, market-routed fetch of a company financial filing into the
 shared `company-wiki` catalog, with **reuse-first** semantics so the same
 filing is never downloaded twice.
 
@@ -17,12 +17,24 @@ filing is never downloaded twice.
    active security** with a canonical `market` + `security_id`.
 3. **Resolve (reuse)** — query company-wiki for an already-indexed, capture-ready
    filing. If found, validate the handle and return it — no download.
-4. **Ensure (download) — only with `--allow-download`** — if missing and
+4. **Pause around downloads (worker)** — before an authorized download, the
+   company-wiki background worker is paused if it is running and enabled. The
+   worker's long batches (e.g. `backfill_text_fingerprints` over 20k+ documents)
+   hold the global catalog `operation.lock`, which would otherwise block the
+   download until a 900-second retry deadline; pausing releases the lock and the
+   stale lock is auto-reclaimed. After the download the worker is resumed so its
+   pending batch continues (batches are pending-driven and idempotent). A worker
+   that is already stopped, or paused by the user, is left untouched — a
+   user-initiated pause is **never** resumed. Pass `--no-pause-worker` for the
+   legacy behavior.
+5. **Ensure (download) — only with `--allow-download`** — if missing and
    authorized, company-wiki routes by market. New bytes are written into
    `companies/{entity}/raw/financial_reports/{annual|semi_annual|quarterly}/`
    (kind-to-subdirectory mapping; other kinds use their own subdirectory) with
-   a `<file>.source.json` provenance sidecar.
-5. **Validate handle** — before returning, the handle is deeply validated:
+   a `<file>.source.json` provenance sidecar. The download runs with the
+   company-wiki `--allow-acquisition-while-paused` opt-in so the deliberate
+   pause-around does not trip the paused-acquisition guard.
+6. **Validate handle** — before returning, the handle is deeply validated:
    required fields, path containment inside `companies/`, lowercase SHA-256,
    HTTPS URL, byte-size consistency, file content hash, published-date ≤
    as-of-date.
@@ -48,6 +60,12 @@ filing is never downloaded twice.
 Read the request from stdin (or `--request-file`). Default is **read-only
 reuse**; add `--allow-download` only when a missing filing should actually be
 fetched.  Use `--timeout-seconds` to set an overall deadline (default 900).
+Downloads pause the company-wiki background worker around the fetch and resume
+it afterwards; `--no-pause-worker` restores the legacy behavior (downloads can
+then be blocked by the worker's catalog lock for up to the deadline).
+`--worker-graceful-timeout-seconds` (default 5) is the graceful stop window
+before `worker-pause` force-kills, and `--worker-resume-wait-seconds` (default 5)
+is how long `worker-resume` waits for the worker to come back.
 Add `--debug` to include the per-candidate exclusion trace in a `not_found`
 error response (see Notes).
 
@@ -118,7 +136,19 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
 
 ## Notes
 
-- Downloads are blocked while the company-wiki worker is **paused** — resume it first.
+- **Read-only reuse is config-driven (ADR-008 Strategy B)**: any root kind
+  listed in company-wiki's `reusable_root_kinds` (`source_catalog.yaml`) whose
+  directory is listed in filing-fetch's `allowed_handle_roots`
+  (`config/company_wiki.json`) serves its already-indexed documents directly —
+  e.g. `dayu_portfolio` reuses filings dayu already downloaded, zero download.
+  Adding a directory to the whitelist = one line in each config, no code.
+- By default, filing-fetch **pauses the background worker itself** around
+  downloads and resumes it afterwards, so a worker mid-batch no longer blocks
+  fetches. Only with `--no-pause-worker` are downloads blocked while the worker
+  is paused (legacy behavior) — resume it first in that case.
+- `worker_pause_failed` / `worker_resume_failed` error codes surface pause /
+  resume failures; a resume failure never loses the download (the handle is
+  returned) but leaves the worker paused — resume it manually.
 - An ambiguous **identity** (multiple candidate securities, e.g. dual-class
   tickers GOOGL/GOOG) never auto-picks; the response lists `candidates[]` —
   refine `company_query` to a specific ticker or add `market`/`exchange`, then

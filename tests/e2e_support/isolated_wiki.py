@@ -278,6 +278,7 @@ class IsolatedWiki:
         *,
         allow_download: bool = False,
         timeout: float = 120,
+        extra_args: list[str] | None = None,
     ) -> tuple[int, str, str]:
         """Run the real filing-fetch CLI as a subprocess; returns
         (exit_code, stdout_json, stderr)."""
@@ -292,6 +293,8 @@ class IsolatedWiki:
         ]
         if allow_download:
             command.append("--allow-download")
+        if extra_args:
+            command.extend(extra_args)
         proc = subprocess.run(
             command,
             input=json.dumps(request, ensure_ascii=False),

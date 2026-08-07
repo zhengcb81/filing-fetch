@@ -1,4 +1,8 @@
 {
   "schema_version": "1.0",
-  "company_wiki_root": "${USER_PROFILE}/Projects/company-wiki"
+  "company_wiki_root": "${USER_PROFILE}/Projects/company-wiki",
+  "allowed_handle_roots": [
+    "${COMPANY_WIKI_ROOT}/companies",
+    "${USER_PROFILE}/Projects/dayu-agent/workspace/portfolio"
+  ]
 }

@@ -6,7 +6,7 @@ import hashlib
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 
 # ---------------------------------------------------------------------------
@@ -125,8 +125,18 @@ _HANDLE_REQUIRED_FIELDS = frozenset({
 })
 
 
-def validate_handle(handle: dict[str, Any], request: dict[str, Any], wiki_root: Path) -> None:
-    """Deep-validate a capture-ready handle returned by company-wiki."""
+def validate_handle(
+    handle: dict[str, Any],
+    request: dict[str, Any],
+    wiki_root: Path,
+    allowed_roots: Sequence[Path] | None = None,
+) -> None:
+    """Deep-validate a capture-ready handle returned by company-wiki.
+
+    ``allowed_roots`` is the config-driven path allowance: handle
+    ``canonical_path`` must live under one of these directories. When omitted,
+    the legacy allowance applies (``<wiki_root>/companies``).
+    """
     missing = _HANDLE_REQUIRED_FIELDS - set(handle)
     if missing:
         raise FilingFetchError(f"handle missing required field(s): {', '.join(sorted(missing))}", code="upstream_error")
@@ -148,11 +158,17 @@ def validate_handle(handle: dict[str, Any], request: dict[str, Any], wiki_root: 
         canonical.resolve(strict=False)
     except (OSError, ValueError) as exc:
         raise FilingFetchError(f"handle canonical_path is invalid: {canonical}", code="upstream_error") from exc
-    companies = (wiki_root / "companies").resolve()
+    if allowed_roots is None:
+        allowance = ((wiki_root / "companies").resolve(),)
+    else:
+        allowance = tuple(Path(item).resolve() for item in allowed_roots)
     resolved = canonical.resolve()
-    if not str(resolved).startswith(str(companies) + os.sep):
+    if not any(
+        str(resolved) == str(root) or str(resolved).startswith(str(root) + os.sep)
+        for root in allowance
+    ):
         raise FilingFetchError(
-            "handle canonical_path is outside the company-wiki companies/ subtree",
+            "handle canonical_path is outside the configured handle allowance",
             code="upstream_error",
         )
     digest = handle.get("snapshot_sha256", "")

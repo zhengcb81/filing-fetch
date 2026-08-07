@@ -103,6 +103,23 @@ class FilingFetchTests(unittest.TestCase):
             "candidates": [],
         }
 
+    @staticmethod
+    def _worker_status_response(
+        *, desired: str = "enabled", runtime: str = "stopped"
+    ) -> subprocess.CompletedProcess:
+        """A worker-status response that makes the pause scope a no-op.
+
+        ``runtime == "stopped"`` keeps mock-based tests at three subprocess
+        calls (identity, worker-status, ensure); pause/resume paths are covered
+        by dedicated tests.
+        """
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=json.dumps({"desired_state": desired, "runtime_state": runtime}),
+            stderr="",
+        )
+
     def test_default_config_resolves_an_existing_company_wiki_root(self) -> None:
         root = load_company_wiki_root()
 
@@ -116,13 +133,17 @@ class FilingFetchTests(unittest.TestCase):
             second = self._wiki_root(parent, "wiki-two")
             config_path = parent / "company_wiki.json"
             config_path.write_text(
-                json.dumps({"schema_version": "1.0", "company_wiki_root": "wiki-one"}),
+                json.dumps(
+                    {"schema_version": "1.0", "company_wiki_root": "wiki-one"}
+                ),
                 encoding="utf-8",
             )
             self.assertEqual(load_company_wiki_root(config_path=config_path), first)
 
             config_path.write_text(
-                json.dumps({"schema_version": "1.0", "company_wiki_root": "wiki-two"}),
+                json.dumps(
+                    {"schema_version": "1.0", "company_wiki_root": "wiki-two"}
+                ),
                 encoding="utf-8",
             )
             self.assertEqual(load_company_wiki_root(config_path=config_path), second)
@@ -148,12 +169,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [self._handle(root)],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(source_response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(source_response), stderr=""),
             ]
 
             with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
@@ -201,7 +218,9 @@ class FilingFetchTests(unittest.TestCase):
                 ),
             ]
 
-            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+            with patch(
+                "fetch_filing.subprocess.run", side_effect=completed
+            ) as run:
                 handle = resolve_filing(
                     request=request,
                     company_wiki_root=root,
@@ -220,7 +239,9 @@ class FilingFetchTests(unittest.TestCase):
                 resolve_command[resolve_command.index("--entity") + 1],
                 "Advanced Micro Devices, Inc.",
             )
-            self.assertEqual(resolve_command[resolve_command.index("--security-id") + 1], "AMD")
+            self.assertEqual(
+                resolve_command[resolve_command.index("--security-id") + 1], "AMD"
+            )
             self.assertNotIn("Advanced Micro Device", resolve_command)
             self.assertEqual(handle["company_identity"]["security_id"], "AMD")
 
@@ -250,6 +271,7 @@ class FilingFetchTests(unittest.TestCase):
                     stdout=json.dumps(self._identity_response()),
                     stderr="",
                 ),
+                self._worker_status_response(),
                 subprocess.CompletedProcess(
                     args=[],
                     returncode=0,
@@ -258,18 +280,25 @@ class FilingFetchTests(unittest.TestCase):
                 ),
             ]
 
-            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+            with patch(
+                "fetch_filing.subprocess.run", side_effect=completed
+            ) as run:
                 resolve_filing(
                     request=request,
                     company_wiki_root=root,
                     allow_download=True,
                 )
 
-            ensure_command = run.call_args_list[1].args[0]
+            ensure_command = run.call_args_list[2].args[0]
             self.assertIn("ensure", ensure_command)
             self.assertIn("--allow-download", ensure_command)
-            self.assertEqual(ensure_command[ensure_command.index("--market") + 1], "US")
-            self.assertEqual(ensure_command[ensure_command.index("--security-id") + 1], "AMD")
+            self.assertIn("--allow-acquisition-while-paused", ensure_command)
+            self.assertEqual(
+                ensure_command[ensure_command.index("--market") + 1], "US"
+            )
+            self.assertEqual(
+                ensure_command[ensure_command.index("--security-id") + 1], "AMD"
+            )
 
     def test_verified_cn_and_hk_queries_build_canonical_source_requests(self) -> None:
         cases = (
@@ -326,7 +355,9 @@ class FilingFetchTests(unittest.TestCase):
                         ),
                     ]
 
-                    with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                    with patch(
+                        "fetch_filing.subprocess.run", side_effect=completed
+                    ) as run:
                         handle = resolve_filing(
                             request={
                                 "schema_version": "1.1",
@@ -343,12 +374,16 @@ class FilingFetchTests(unittest.TestCase):
                         source_command[source_command.index("--entity") + 1],
                         canonical_name,
                     )
-                    self.assertEqual(source_command[source_command.index("--market") + 1], market)
+                    self.assertEqual(
+                        source_command[source_command.index("--market") + 1], market
+                    )
                     self.assertEqual(
                         source_command[source_command.index("--security-id") + 1],
                         security_id,
                     )
-                    self.assertEqual(handle["company_identity"]["exchange"], exchange)
+                    self.assertEqual(
+                        handle["company_identity"]["exchange"], exchange
+                    )
 
     def test_ambiguous_company_query_stops_before_source_resolution(self) -> None:
         with TemporaryDirectory() as temporary:
@@ -369,7 +404,9 @@ class FilingFetchTests(unittest.TestCase):
                 stderr="",
             )
 
-            with patch("fetch_filing.subprocess.run", return_value=completed) as run:
+            with patch(
+                "fetch_filing.subprocess.run", return_value=completed
+            ) as run:
                 with self.assertRaises(FilingFetchError) as ctx:
                     resolve_filing(
                         request={
@@ -432,18 +469,8 @@ class FilingFetchTests(unittest.TestCase):
         # The CLI error response must carry candidates plus a disambiguation
         # hint so a user can resolve the ambiguity from the response alone.
         candidates = [
-            {
-                "ticker": "GOOGL",
-                "canonical_name": "Alphabet Inc.",
-                "market": "US",
-                "exchange": "NASDAQ",
-            },
-            {
-                "ticker": "GOOG",
-                "canonical_name": "Alphabet Inc.",
-                "market": "US",
-                "exchange": "NASDAQ",
-            },
+            {"ticker": "GOOGL", "canonical_name": "Alphabet Inc.", "market": "US", "exchange": "NASDAQ"},
+            {"ticker": "GOOG", "canonical_name": "Alphabet Inc.", "market": "US", "exchange": "NASDAQ"},
         ]
         with TemporaryDirectory() as temporary:
             request_path = Path(temporary) / "request.json"
@@ -556,8 +583,12 @@ class FilingFetchTests(unittest.TestCase):
                         stdout=json.dumps(identity),
                         stderr="",
                     )
-                    with patch("fetch_filing.subprocess.run", return_value=completed) as run:
-                        with self.assertRaisesRegex(FilingFetchError, "verified and active"):
+                    with patch(
+                        "fetch_filing.subprocess.run", return_value=completed
+                    ) as run:
+                        with self.assertRaisesRegex(
+                            FilingFetchError, "verified and active"
+                        ):
                             resolve_filing(
                                 request={
                                     "schema_version": "1.1",
@@ -596,8 +627,12 @@ class FilingFetchTests(unittest.TestCase):
                         stdout=json.dumps(identity),
                         stderr="",
                     )
-                    with patch("fetch_filing.subprocess.run", return_value=completed) as run:
-                        with self.assertRaisesRegex(FilingFetchError, "not uniquely resolved"):
+                    with patch(
+                        "fetch_filing.subprocess.run", return_value=completed
+                    ) as run:
+                        with self.assertRaisesRegex(
+                            FilingFetchError, "not uniquely resolved"
+                        ):
                             resolve_filing(
                                 request={
                                     "schema_version": "1.1",
@@ -619,7 +654,9 @@ class FilingFetchTests(unittest.TestCase):
             ):
                 with self.subTest(conflicting=conflicting):
                     with patch("fetch_filing.subprocess.run") as run:
-                        with self.assertRaisesRegex(FilingFetchError, "unknown request field"):
+                        with self.assertRaisesRegex(
+                            FilingFetchError, "unknown request field"
+                        ):
                             resolve_filing(
                                 request={
                                     "schema_version": "1.1",
@@ -638,7 +675,9 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "explicit-company-wiki")
             config_path = parent / "company_wiki.json"
             config_path.write_text(
-                json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}),
+                json.dumps(
+                    {"schema_version": "1.0", "company_wiki_root": str(root)}
+                ),
                 encoding="utf-8",
             )
 
@@ -682,12 +721,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [self._handle(root)],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(source_response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(source_response), stderr=""),
             ]
             request = json.dumps(self._request())
             with patch("fetch_filing.subprocess.run", side_effect=completed):
@@ -705,7 +740,10 @@ class FilingFetchTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             payload = json.loads(output)
             self.assertEqual(payload["status"], "capture_ready")
-            self.assertEqual(payload["handle"]["request_id"], "urn:company-wiki:request:cli")
+            self.assertEqual(
+                payload["handle"]["request_id"], "urn:company-wiki:request:cli"
+            )
+
 
     def test_unknown_request_field_is_rejected(self) -> None:
         """Schema 1.1 rejects unknown request fields so callers cannot depend on
@@ -772,12 +810,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [bare_handle],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "required"):
@@ -801,12 +835,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [escaped],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "outside"):
@@ -815,6 +845,7 @@ class FilingFetchTests(unittest.TestCase):
                         company_wiki_root=root,
                     )
 
+
     def test_handle_hash_mismatch_is_rejected(self) -> None:
         """A handle whose snapshot_sha256 does not match the file bytes is rejected."""
         with TemporaryDirectory() as temporary:
@@ -822,19 +853,10 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["snapshot_sha256"] = "a" * 64
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:bad-hash",
-                "matches": [bad],
-            }
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-hash", "matches": [bad]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "not match"):
@@ -847,19 +869,10 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["snapshot_sha256"] = "NOT-A-HEX-DIGEST!@#$%^&*()"
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:bad-digest",
-                "matches": [bad],
-            }
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-digest", "matches": [bad]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "valid lowercase SHA"):
@@ -872,19 +885,10 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["https_url"] = "http://insecure.example/report.pdf"
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:bad-url",
-                "matches": [bad],
-            }
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-url", "matches": [bad]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "HTTPS"):
@@ -895,9 +899,7 @@ class FilingFetchTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             parent = Path(temporary)
             root = self._wiki_root(parent, "company-wiki")
-            completed = subprocess.CompletedProcess(
-                args=[], returncode=1, stdout="", stderr="source_catalog: missing"
-            )
+            completed = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="source_catalog: missing")
             with patch("fetch_filing.subprocess.run", return_value=completed):
                 with self.assertRaisesRegex(FilingFetchError, "exited 1"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
@@ -907,12 +909,11 @@ class FilingFetchTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             parent = Path(temporary)
             root = self._wiki_root(parent, "company-wiki")
-            completed = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="not json", stderr=""
-            )
+            completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
             with patch("fetch_filing.subprocess.run", return_value=completed):
                 with self.assertRaisesRegex(FilingFetchError, "not JSON"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
+
 
     def test_bad_request_schema_version_is_rejected(self) -> None:
         """A request with an unsupported schema_version must be rejected immediately."""
@@ -920,12 +921,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(Path(temporary), "company-wiki")
             with self.assertRaisesRegex(FilingFetchError, "unsupported request schema"):
                 resolve_filing(
-                    request={
-                        "schema_version": "9.9",
-                        "company_query": "AMD",
-                        "document_kind": "annual_report",
-                        "as_of_date": "2026-07-18",
-                    },
+                    request={"schema_version": "9.9", "company_query": "AMD", "document_kind": "annual_report", "as_of_date": "2026-07-18"},
                     company_wiki_root=root,
                 )
 
@@ -934,11 +930,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(Path(temporary), "company-wiki")
             with self.assertRaisesRegex(FilingFetchError, "as_of_date"):
                 resolve_filing(
-                    request={
-                        "schema_version": "1.1",
-                        "company_query": "AMD",
-                        "document_kind": "annual_report",
-                    },
+                    request={"schema_version": "1.1", "company_query": "AMD", "document_kind": "annual_report"},
                     company_wiki_root=root,
                 )
 
@@ -947,12 +939,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(Path(temporary), "company-wiki")
             with self.assertRaisesRegex(FilingFetchError, "YYYY-MM-DD"):
                 resolve_filing(
-                    request={
-                        "schema_version": "1.1",
-                        "company_query": "AMD",
-                        "document_kind": "annual_report",
-                        "as_of_date": "not-a-date",
-                    },
+                    request={"schema_version": "1.1", "company_query": "AMD", "document_kind": "annual_report", "as_of_date": "not-a-date"},
                     company_wiki_root=root,
                 )
 
@@ -971,13 +958,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(Path(temporary), "company-wiki")
             with self.assertRaisesRegex(FilingFetchError, "out of range"):
                 resolve_filing(
-                    request={
-                        "schema_version": "1.1",
-                        "company_query": "AMD",
-                        "document_kind": "annual_report",
-                        "fiscal_year": 1800,
-                        "as_of_date": "2026-07-18",
-                    },
+                    request={"schema_version": "1.1", "company_query": "AMD", "document_kind": "annual_report", "fiscal_year": 1800, "as_of_date": "2026-07-18"},
                     company_wiki_root=root,
                 )
 
@@ -995,35 +976,26 @@ class FilingFetchTests(unittest.TestCase):
             with self.assertRaisesRegex(FilingFetchError, "must be an object"):
                 load_company_wiki_root(config_path=config)
 
+
     def test_config_wrong_fields_is_rejected(self) -> None:
         """A config dict with extra/missing fields must be rejected."""
         with TemporaryDirectory() as temporary:
             config = Path(temporary) / "bad.json"
-            config.write_text(
-                json.dumps({"schema_version": "1.0", "company_wiki_root": "/tmp", "extra": "nope"}),
-                encoding="utf-8",
-            )
-            with self.assertRaisesRegex(FilingFetchError, "exact schema_version"):
+            config.write_text(json.dumps({"schema_version": "1.0", "company_wiki_root": "/tmp", "extra": "nope"}), encoding="utf-8")
+            with self.assertRaisesRegex(FilingFetchError, "schema_version/company_wiki_root"):
                 load_company_wiki_root(config_path=config)
 
     def test_config_bad_schema_version_is_rejected(self) -> None:
         with TemporaryDirectory() as temporary:
             config = Path(temporary) / "bad.json"
-            config.write_text(
-                json.dumps({"schema_version": "9.9", "company_wiki_root": "/tmp"}), encoding="utf-8"
-            )
+            config.write_text(json.dumps({"schema_version": "9.9", "company_wiki_root": "/tmp"}), encoding="utf-8")
             with self.assertRaisesRegex(FilingFetchError, "schema_version must be"):
                 load_company_wiki_root(config_path=config)
 
     def test_config_root_not_exist_is_rejected(self) -> None:
         with TemporaryDirectory() as temporary:
             config = Path(temporary) / "cfg.json"
-            config.write_text(
-                json.dumps(
-                    {"schema_version": "1.0", "company_wiki_root": temporary + "/no-such-dir"}
-                ),
-                encoding="utf-8",
-            )
+            config.write_text(json.dumps({"schema_version": "1.0", "company_wiki_root": temporary + "/no-such-dir"}), encoding="utf-8")
             with self.assertRaisesRegex(FilingFetchError, "does not exist"):
                 load_company_wiki_root(config_path=config)
 
@@ -1032,10 +1004,7 @@ class FilingFetchTests(unittest.TestCase):
             tmp = Path(temporary)
             (tmp / "not-a-dir").write_text("x", encoding="utf-8")
             config = tmp / "cfg.json"
-            config.write_text(
-                json.dumps({"schema_version": "1.0", "company_wiki_root": str(tmp / "not-a-dir")}),
-                encoding="utf-8",
-            )
+            config.write_text(json.dumps({"schema_version": "1.0", "company_wiki_root": str(tmp / "not-a-dir")}), encoding="utf-8")
             with self.assertRaisesRegex(FilingFetchError, "must be a directory"):
                 load_company_wiki_root(config_path=config)
 
@@ -1044,19 +1013,14 @@ class FilingFetchTests(unittest.TestCase):
             tmp = Path(temporary)
             (tmp / "empty").mkdir()
             config = tmp / "cfg.json"
-            config.write_text(
-                json.dumps({"schema_version": "1.0", "company_wiki_root": str(tmp / "empty")}),
-                encoding="utf-8",
-            )
+            config.write_text(json.dumps({"schema_version": "1.0", "company_wiki_root": str(tmp / "empty")}), encoding="utf-8")
             with self.assertRaisesRegex(FilingFetchError, "source_catalog.yaml"):
                 load_company_wiki_root(config_path=config)
 
     def test_config_empty_root_is_rejected(self) -> None:
         with TemporaryDirectory() as temporary:
             config = Path(temporary) / "cfg.json"
-            config.write_text(
-                json.dumps({"schema_version": "1.0", "company_wiki_root": "  "}), encoding="utf-8"
-            )
+            config.write_text(json.dumps({"schema_version": "1.0", "company_wiki_root": "  "}), encoding="utf-8")
             with self.assertRaisesRegex(FilingFetchError, "non-empty"):
                 load_company_wiki_root(config_path=config)
 
@@ -1065,18 +1029,10 @@ class FilingFetchTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             parent = Path(temporary)
             root = self._wiki_root(parent, "company-wiki")
-            response = {
-                "schema_version": "1.0",
-                "status": "not_found",
-                "reason": "no matching filing",
-            }
+            response = {"schema_version": "1.0", "status": "not_found", "reason": "no matching filing"}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "not reusable"):
@@ -1091,18 +1047,14 @@ class FilingFetchTests(unittest.TestCase):
                 with self.assertRaisesRegex(FilingFetchError, "must be an object"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
 
+
     def test_identity_response_bad_schema_is_rejected(self) -> None:
         """An identity response with an unsupported schema_version must be rejected."""
         with TemporaryDirectory() as temporary:
             root = self._wiki_root(Path(temporary), "company-wiki")
             bad = self._identity_response()
             bad["schema_version"] = "9.9"
-            with patch(
-                "fetch_filing.subprocess.run",
-                return_value=subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(bad), stderr=""
-                ),
-            ):
+            with patch("fetch_filing.subprocess.run", return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(bad), stderr="")):
                 with self.assertRaisesRegex(FilingFetchError, "schema_version"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
 
@@ -1111,12 +1063,7 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(Path(temporary), "company-wiki")
             bad = self._identity_response()
             bad.pop("resolved")
-            with patch(
-                "fetch_filing.subprocess.run",
-                return_value=subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(bad), stderr=""
-                ),
-            ):
+            with patch("fetch_filing.subprocess.run", return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(bad), stderr="")):
                 with self.assertRaisesRegex(FilingFetchError, "identity is missing"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
 
@@ -1128,16 +1075,10 @@ class FilingFetchTests(unittest.TestCase):
             identity = self._identity_response()
             identity["resolved"]["market"] = "ZZ"  # unsupported market
             identity["resolved"]["security_id"] = ""  # empty
-            with patch(
-                "fetch_filing.subprocess.run",
-                return_value=subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(identity), stderr=""
-                ),
-            ):
+            with patch("fetch_filing.subprocess.run", return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr="")):
                 with self.assertRaisesRegex(FilingFetchError, "non-empty"):
-                    resolve_filing(
-                        request=self._request(), company_wiki_root=root, allow_download=True
-                    )
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
+
 
     def test_handle_future_published_date_is_rejected(self) -> None:
         """A handle dated after the request as_of_date must be rejected."""
@@ -1146,19 +1087,10 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             future = self._handle(root)
             future["published_date"] = "2027-01-01"
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:future",
-                "matches": [future],
-            }
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:future", "matches": [future]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "after"):
@@ -1180,17 +1112,12 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [self._handle(root)],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(source_response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(source_response), stderr=""),
             ]
             request = json.dumps(self._request())
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 import io
-
                 argv = ["--config", str(config_path), "--timeout-seconds", "0.5"]
                 original_stdin, original_stdout = sys.stdin, sys.stdout
                 sys.stdin = io.StringIO(request)
@@ -1208,23 +1135,15 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["canonical_path"] = str(parent / "subdir" / "report.pdf")
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:badpath",
-                "matches": [bad],
-            }
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:badpath", "matches": [bad]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "outside"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
+
 
     def test_handle_byte_size_mismatch_is_rejected(self) -> None:
         """A handle whose byte_size does not match the canonical file is rejected."""
@@ -1233,19 +1152,10 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["byte_size"] = 99999
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:bad-size",
-                "matches": [bad],
-            }
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-size", "matches": [bad]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "byte_size"):
@@ -1258,19 +1168,10 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             bad["published_date"] = "not-a-date"
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:bad-date",
-                "matches": [bad],
-            }
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:bad-date", "matches": [bad]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "YYYY-MM-DD"):
@@ -1283,30 +1184,20 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             bad = self._handle(root)
             import os as _os
-
             _os.remove(bad["canonical_path"])
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:no-file",
-                "matches": [bad],
-            }
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:no-file", "matches": [bad]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "not a regular file"):
                     resolve_filing(request=self._request(), company_wiki_root=root)
 
+
     def test_main_bad_request_non_dict(self) -> None:
         """main() must reject a non-dict JSON request."""
         import io as _io
-
         argv: list[str] = []
         original_stdin, original_stdout = sys.stdin, sys.stdout
         sys.stdin = _io.StringIO("[]")
@@ -1320,7 +1211,6 @@ class FilingFetchTests(unittest.TestCase):
     def test_main_bad_timeout_is_rejected_by_cli(self) -> None:
         """CLI rejects non-positive timeout-seconds."""
         import io as _io
-
         request = json.dumps(self._request())
         argv = ["--timeout-seconds", "0"]
         original_stdin, original_stdout = sys.stdin, sys.stdout
@@ -1336,7 +1226,6 @@ class FilingFetchTests(unittest.TestCase):
         """Unexpected exceptions in main() must yield exit code 1."""
         with patch("fetch_filing.resolve_filing", side_effect=RuntimeError("boom")):
             import io as _io
-
             request = json.dumps(self._request())
             argv: list[str] = []
             original_stdin, original_stdout = sys.stdin, sys.stdout
@@ -1348,6 +1237,7 @@ class FilingFetchTests(unittest.TestCase):
             finally:
                 sys.stdin, sys.stdout = original_stdin, original_stdout
 
+
     # --- conformance: upstream contract hardening (Phase 9.10) ---
 
     def test_ensure_response_missing_resolution_key_fails(self) -> None:
@@ -1358,18 +1248,13 @@ class FilingFetchTests(unittest.TestCase):
             identity = self._identity_response()
             bad_ensure = {"status": "reused_exact", "matches": [self._handle(root)]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(identity), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(bad_ensure), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
+                self._worker_status_response(),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(bad_ensure), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "resolution"):
-                    resolve_filing(
-                        request=self._request(), company_wiki_root=root, allow_download=True
-                    )
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
 
     def test_upstream_subprocess_oserror_fails(self) -> None:
         """A subprocess OSError must be wrapped in FilingFetchError."""
@@ -1387,12 +1272,8 @@ class FilingFetchTests(unittest.TestCase):
             root = self._wiki_root(parent, "company-wiki")
             identity = self._identity_response()
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(identity), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout='"just a string"', stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout='"just a string"', stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "must be an object"):
@@ -1404,22 +1285,15 @@ class FilingFetchTests(unittest.TestCase):
             parent = Path(temporary)
             root = self._wiki_root(parent, "company-wiki")
             identity = self._identity_response()
-            ensure = {
-                "resolution": {"schema_version": "1.0", "status": "not_found", "reason": "no match"}
-            }
+            ensure = {"resolution": {"schema_version": "1.0", "status": "not_found", "reason": "no match"}}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(identity), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(ensure), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
+                self._worker_status_response(),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(ensure), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "not reusable"):
-                    resolve_filing(
-                        request=self._request(), company_wiki_root=root, allow_download=True
-                    )
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
 
     def test_resolve_multi_match_with_different_hashes_fails(self) -> None:
         """Multiple non-identical matches must be rejected (no silent pick)."""
@@ -1431,19 +1305,10 @@ class FilingFetchTests(unittest.TestCase):
             a["snapshot_sha256"] = "a" * 64
             b = self._handle(root)
             b["snapshot_sha256"] = "b" * 64
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:multi",
-                "matches": [a, b],
-            }
+            response = {"schema_version": "1.0", "status": "reused_exact", "request_id": "urn:multi", "matches": [a, b]}
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(identity), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(identity), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "exactly one"):
@@ -1558,6 +1423,7 @@ class FilingFetchTests(unittest.TestCase):
             self.assertEqual(run.call_count, 4)  # identify + 3 resolve attempts
             self.assertEqual(sleep.call_args_list, [call(5.0), call(10.0)])
             self.assertEqual(handle["request_id"], source_response["request_id"])
+
 
     # --- Phase 2: request validation boundaries ---
 
@@ -1680,15 +1546,8 @@ class FilingFetchTests(unittest.TestCase):
                         "reason": f"why-{status}",
                     }
                     completed = [
-                        subprocess.CompletedProcess(
-                            args=[],
-                            returncode=0,
-                            stdout=json.dumps(self._identity_response()),
-                            stderr="",
-                        ),
-                        subprocess.CompletedProcess(
-                            args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                        ),
+                        subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                        subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
                     ]
                     with patch("fetch_filing.subprocess.run", side_effect=completed):
                         with self.assertRaises(FilingFetchError) as ctx:
@@ -1702,18 +1561,13 @@ class FilingFetchTests(unittest.TestCase):
                 "resolution": {"schema_version": "1.0", "status": "missing", "reason": "no filing"}
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(ensure), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                self._worker_status_response(),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(ensure), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaises(FilingFetchError) as ctx:
-                    resolve_filing(
-                        request=self._request(), company_wiki_root=root, allow_download=True
-                    )
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
             self.assertEqual(ctx.exception.code, "not_found")
 
     def test_capture_not_ready_carries_not_found_code(self) -> None:
@@ -1729,12 +1583,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [not_ready],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaises(FilingFetchError) as ctx:
@@ -1753,12 +1603,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [self._handle(root), self._handle(root)],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaises(FilingFetchError) as ctx:
@@ -1789,9 +1635,7 @@ class FilingFetchTests(unittest.TestCase):
                 ),
             )
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 paused,
             ]
             import io as _io
@@ -1823,12 +1667,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [self._handle(root)],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaises(FilingFetchError) as ctx:
@@ -1848,18 +1688,13 @@ class FilingFetchTests(unittest.TestCase):
                 }
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(ensure), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                self._worker_status_response(),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(ensure), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaises(FilingFetchError) as ctx:
-                    resolve_filing(
-                        request=self._request(), company_wiki_root=root, allow_download=True
-                    )
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
             self.assertEqual(ctx.exception.code, "upstream_error")
             self.assertIn("schema_version", str(ctx.exception))
 
@@ -1887,18 +1722,12 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [self._handle(root)],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(source_response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(source_response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
                 with patch("fetch_filing.time.monotonic", side_effect=[100.0, 100.0, 100.0]):
-                    resolve_filing(
-                        request=self._request(), company_wiki_root=root, timeout_seconds=30
-                    )
+                    resolve_filing(request=self._request(), company_wiki_root=root, timeout_seconds=30)
             self.assertEqual(run.call_count, 2)
             for call_args in run.call_args_list:
                 self.assertEqual(call_args.kwargs["timeout"], 30.0)
@@ -1909,9 +1738,7 @@ class FilingFetchTests(unittest.TestCase):
             with patch("fetch_filing.subprocess.run") as run:
                 with patch("fetch_filing.time.monotonic", side_effect=[100.0, 131.0]):
                     with self.assertRaises(FilingFetchError) as ctx:
-                        resolve_filing(
-                            request=self._request(), company_wiki_root=root, timeout_seconds=30
-                        )
+                        resolve_filing(request=self._request(), company_wiki_root=root, timeout_seconds=30)
             self.assertEqual(ctx.exception.code, "upstream_error")
             run.assert_not_called()
 
@@ -1976,9 +1803,7 @@ class FilingFetchTests(unittest.TestCase):
                 ),
             )
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
                 paused,
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
@@ -2004,12 +1829,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [handle],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 result = resolve_filing(request=self._request(), company_wiki_root=root)
@@ -2027,12 +1848,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [handle],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 result = resolve_filing(request=self._request(), company_wiki_root=root)
@@ -2051,12 +1868,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [bad],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaisesRegex(FilingFetchError, "byte_size"):
@@ -2072,12 +1885,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": ["x"],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaises(FilingFetchError) as ctx:
@@ -2096,12 +1905,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [self._handle(root)],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 with self.assertRaises(FilingFetchError) as ctx:
@@ -2122,67 +1927,12 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [handle],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(response), stderr=""),
             ]
             with patch("fetch_filing.subprocess.run", side_effect=completed):
                 result = resolve_filing(request=self._request(), company_wiki_root=root)
             self.assertEqual(result["future_field"], "future value")
-
-    def test_handle_records_acquisition_mode_and_authorization(self) -> None:
-        # Phase 6 D1 (F-14): the handle must expose whether the acquisition was
-        # a reuse-first resolve or an authorized ensure, so consumers can audit
-        # the download authorization path.
-        with TemporaryDirectory() as temporary:
-            root = self._wiki_root(Path(temporary), "company-wiki")
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_exact",
-                "request_id": "urn:acq-mode",
-                "matches": [self._handle(root)],
-            }
-            completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(response), stderr=""
-                ),
-            ]
-            with patch("fetch_filing.subprocess.run", side_effect=completed):
-                result = resolve_filing(request=self._request(), company_wiki_root=root)
-            self.assertEqual(result["acquisition_mode"], "resolve")
-            self.assertIs(result["authorization_requested"], False)
-
-    def test_handle_records_authorized_ensure_mode(self) -> None:
-        # Phase 6 D1: an explicit allow_download=True call is recorded as an
-        # authorized ensure on the returned handle.
-        with TemporaryDirectory() as temporary:
-            root = self._wiki_root(Path(temporary), "company-wiki")
-            response = {
-                "schema_version": "1.0",
-                "status": "reused_equivalent",
-                "request_id": "urn:acq-ensure",
-                "matches": [self._handle(root)],
-            }
-            completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps({"resolution": response}), stderr=""
-                ),
-            ]
-            with patch("fetch_filing.subprocess.run", side_effect=completed):
-                result = resolve_filing(
-                    request=self._request(), company_wiki_root=root, allow_download=True
-                )
-            self.assertEqual(result["acquisition_mode"], "ensure")
-            self.assertIs(result["authorization_requested"], True)
 
     # --- Phase 2: CLI main() boundaries ---
 
@@ -2204,12 +1954,8 @@ class FilingFetchTests(unittest.TestCase):
                 "matches": [self._handle(root)],
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(source_response), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(source_response), stderr=""),
             ]
             import io as _io
 
@@ -2237,7 +1983,9 @@ class FilingFetchTests(unittest.TestCase):
             sys.stdin = _io.StringIO("")
             sys.stdout = _io.StringIO()
             try:
-                exit_code = __import__("fetch_filing").main(["--request-file", str(request_file)])
+                exit_code = __import__("fetch_filing").main(
+                    ["--request-file", str(request_file)]
+                )
                 output = sys.stdout.getvalue()
             finally:
                 sys.stdin, sys.stdout = original_stdin, original_stdout
@@ -2278,12 +2026,9 @@ class FilingFetchTests(unittest.TestCase):
                 }
             }
             completed = [
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout=json.dumps(ensure), stderr=""
-                ),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                self._worker_status_response(),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(ensure), stderr=""),
             ]
             import io as _io
 
@@ -2298,9 +2043,269 @@ class FilingFetchTests(unittest.TestCase):
             finally:
                 sys.stdin, sys.stdout = original_stdin, original_stdout
             self.assertEqual(exit_code, 0)
-            ensure_command = run.call_args_list[1].args[0]
+            ensure_command = run.call_args_list[2].args[0]
             self.assertIn("ensure", ensure_command)
             self.assertIn("--allow-download", ensure_command)
+            self.assertIn("--allow-acquisition-while-paused", ensure_command)
+
+    # --- Worker pause-around orchestration ---
+
+    def test_allow_download_pauses_and_resumes_running_worker(self) -> None:
+        """A running, enabled worker is paused before the download and resumed
+        afterwards, so its batch continues once the fetch completes."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            ensure = {
+                "resolution": {
+                    "schema_version": "1.0",
+                    "status": "reused_exact",
+                    "request_id": "urn:ensure",
+                    "matches": [self._handle(root)],
+                }
+            }
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+                ),
+                self._worker_status_response(desired="enabled", runtime="running"),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps({"desired_state": "paused", "runtime_state": "stopped"}),
+                    stderr="",
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(ensure), stderr=""
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps({"desired_state": "enabled", "runtime_state": "running"}),
+                    stderr="",
+                ),
+            ]
+            with patch("fetch_filing._pid_is_alive", return_value=True):
+                with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                    resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
+            calls = [c.args[0] for c in run.call_args_list]
+            self.assertIn("worker-status", calls[1])
+            self.assertIn("worker-pause", calls[2])
+            self.assertIn("ensure", calls[3])
+            self.assertIn("--allow-acquisition-while-paused", calls[3])
+            self.assertIn("worker-resume", calls[4])
+            # refcount and owner marker are cleaned up after the resume
+            self.assertFalse((root / ".source_catalog" / "filing_fetch_pause.owner").exists())
+            self.assertFalse((root / ".source_catalog" / "filing_fetch_pause.refcount").exists())
+
+    def test_user_paused_worker_is_respected_and_never_resumed(self) -> None:
+        """A worker paused by the user (no filing-fetch owner marker) is not
+        resumed; the download still proceeds via the explicit opt-in flag."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            ensure = {
+                "resolution": {
+                    "schema_version": "1.0",
+                    "status": "reused_exact",
+                    "request_id": "urn:ensure",
+                    "matches": [self._handle(root)],
+                }
+            }
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+                ),
+                self._worker_status_response(desired="paused", runtime="stopped"),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(ensure), stderr=""
+                ),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
+            calls = [c.args[0] for c in run.call_args_list]
+            self.assertEqual(len(calls), 3)  # identify, worker-status, ensure
+            self.assertNotIn("worker-pause", calls[2])
+            self.assertIn("--allow-acquisition-while-paused", calls[2])
+            # no resume, no refcount/marker artifacts
+            self.assertFalse((root / ".source_catalog" / "filing_fetch_pause.owner").exists())
+            self.assertFalse((root / ".source_catalog" / "filing_fetch_pause.refcount").exists())
+
+    def test_stopped_worker_skips_pause_and_resume(self) -> None:
+        """A worker that is not running needs no pause; the download proceeds."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            ensure = {
+                "resolution": {
+                    "schema_version": "1.0",
+                    "status": "reused_exact",
+                    "request_id": "urn:ensure",
+                    "matches": [self._handle(root)],
+                }
+            }
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+                ),
+                self._worker_status_response(desired="enabled", runtime="stopped"),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(ensure), stderr=""
+                ),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                resolve_filing(request=self._request(), company_wiki_root=root, allow_download=True)
+            calls = [c.args[0] for c in run.call_args_list]
+            self.assertEqual(len(calls), 3)
+            self.assertNotIn("worker-pause", calls[2])
+            self.assertIn("--allow-acquisition-while-paused", calls[2])
+
+    def test_ensure_failure_still_resumes_worker(self) -> None:
+        """An ensure failure inside the pause scope must not leave the worker
+        paused: __exit__ runs on the exception path and resumes it."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+                ),
+                self._worker_status_response(desired="enabled", runtime="running"),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps({"desired_state": "paused", "runtime_state": "stopped"}),
+                    stderr="",
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout="",
+                    stderr='{"error_type": "RuntimeError", "error": "boom"}',
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps({"desired_state": "enabled", "runtime_state": "running"}),
+                    stderr="",
+                ),
+            ]
+            with patch("fetch_filing._pid_is_alive", return_value=True):
+                with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                    with self.assertRaises(FilingFetchError):
+                        resolve_filing(
+                            request=self._request(), company_wiki_root=root,
+                            allow_download=True,
+                        )
+            calls = [c.args[0] for c in run.call_args_list]
+            self.assertIn("worker-resume", calls[4])
+            self.assertFalse((root / ".source_catalog" / "filing_fetch_pause.owner").exists())
+            self.assertFalse((root / ".source_catalog" / "filing_fetch_pause.refcount").exists())
+
+    def test_no_pause_worker_restores_legacy_command(self) -> None:
+        """--no-pause-worker keeps the legacy behavior: no worker-status call
+        and no paused-guard opt-in flag."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            ensure = {
+                "resolution": {
+                    "schema_version": "1.0",
+                    "status": "reused_exact",
+                    "request_id": "urn:ensure",
+                    "matches": [self._handle(root)],
+                }
+            }
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(ensure), stderr=""
+                ),
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                resolve_filing(
+                    request=self._request(), company_wiki_root=root,
+                    allow_download=True, pause_worker=False,
+                )
+            calls = [c.args[0] for c in run.call_args_list]
+            self.assertEqual(len(calls), 2)
+            self.assertNotIn("--allow-acquisition-while-paused", calls[1])
+
+    # --- Config-driven handle path allowance (ADR-008 Strategy B) ---
+
+    def test_validate_handle_accepts_configured_allowed_root(self) -> None:
+        """A handle inside a configured allowed root (e.g. the dayu portfolio)
+        passes the path fence."""
+        from filing_contracts import validate_handle
+
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            portfolio = parent / "portfolio"
+            portfolio.mkdir(parents=True)
+            payload = b"portfolio filing bytes"
+            target = portfolio / "6082" / "annual.pdf"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(payload)
+            handle = self._handle(root)
+            handle["canonical_path"] = str(target)
+            handle["snapshot_sha256"] = hashlib.sha256(payload).hexdigest()
+            handle["byte_size"] = len(payload)
+
+            validate_handle(
+                handle,
+                self._request(),
+                root,
+                allowed_roots=[portfolio],
+            )  # must not raise
+
+    def test_validate_handle_rejects_outside_configured_allowance(self) -> None:
+        """A handle outside every configured allowed root is rejected."""
+        from filing_contracts import validate_handle
+
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            portfolio = parent / "portfolio"
+            portfolio.mkdir(parents=True)
+            payload = b"portfolio filing bytes"
+            target = portfolio / "6082" / "annual.pdf"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(payload)
+            handle = self._handle(root)
+            handle["canonical_path"] = str(target)
+            handle["snapshot_sha256"] = hashlib.sha256(payload).hexdigest()
+            handle["byte_size"] = len(payload)
+
+            with self.assertRaisesRegex(FilingFetchError, "outside"):
+                validate_handle(
+                    handle,
+                    self._request(),
+                    root,
+                    allowed_roots=[root / "companies"],
+                )
+
+    def test_load_handle_allowance_reads_config(self) -> None:
+        """allowed_handle_roots from config/company_wiki.json drives the fence."""
+        from fetch_filing import load_handle_allowance
+
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            config = parent / "company_wiki.json"
+            config.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "company_wiki_root": str(root),
+                        "allowed_handle_roots": [
+                            "${COMPANY_WIKI_ROOT}/companies",
+                            str(parent / "portfolio"),
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            allowance = load_handle_allowance(config_path=config, wiki_root=root)
+            self.assertEqual(len(allowance), 2)
+            self.assertEqual(allowance[0], (root / "companies").resolve())
+            self.assertEqual(allowance[1], (parent / "portfolio").resolve())
 
 
 if __name__ == "__main__":

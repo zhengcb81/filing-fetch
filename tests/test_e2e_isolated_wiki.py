@@ -19,20 +19,11 @@ from tempfile import TemporaryDirectory
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_ROOT / "tests"))
 
-# Hermetic path (Phase 6 C2 / F-06): the e2e drives real company-wiki code, so
-# make the sibling company-wiki source tree importable instead of relying on an
-# implicit global install.  When the repo is not present, the import below fails
-# loudly rather than silently testing a different installed copy.
-_COMPANY_WIKI_SRC = Path.home() / "Projects" / "company-wiki" / "src"
-sys.path.insert(0, str(_COMPANY_WIKI_SRC))
-
 from e2e_support.isolated_wiki import IsolatedWiki, cleanup_temporary  # noqa: E402
 from company_wiki.source_catalog.lock import CatalogOperationLock  # noqa: E402
 
 
-def _hold_lock_for(
-    catalog_dir: Path, seconds: float, acquired: threading.Event
-) -> threading.Thread:
+def _hold_lock_for(catalog_dir: Path, seconds: float, acquired: threading.Event) -> threading.Thread:
     """Hold the catalog operation lock for ``seconds``, then release it."""
 
     def run() -> None:
@@ -45,9 +36,7 @@ def _hold_lock_for(
     return thread
 
 
-def _hold_lock_until_release(
-    catalog_dir: Path, release: threading.Event, acquired: threading.Event
-) -> threading.Thread:
+def _hold_lock_until_release(catalog_dir: Path, release: threading.Event, acquired: threading.Event) -> threading.Thread:
     """Hold the catalog operation lock until ``release`` is set."""
 
     def run() -> None:
@@ -121,7 +110,9 @@ class SharedReadOnlyE2E(unittest.TestCase):
         self.assertEqual(rc, 0, out + err)
         payload = json.loads(out)
         self.assertEqual(payload["status"], "capture_ready")
-        self.assertEqual(payload["handle"]["company_identity"]["canonical_name"], "Apple Inc.")
+        self.assertEqual(
+            payload["handle"]["company_identity"]["canonical_name"], "Apple Inc."
+        )
         self.assertIn("10-K", payload["handle"]["title"])
 
     def test_e2e_hk_old_sidecar_reuse(self) -> None:
@@ -285,7 +276,9 @@ class TestCorruptedBytes(MutatingE2E):
 class TestIdentityUnavailable(MutatingE2E):
     def setUp(self) -> None:
         self._temporary = TemporaryDirectory()
-        self.wiki = IsolatedWiki(Path(self._temporary.name), with_security_master=False)
+        self.wiki = IsolatedWiki(
+            Path(self._temporary.name), with_security_master=False
+        )
 
     def test_e2e_identity_unavailable_without_snapshots(self) -> None:
         """No security_master snapshots: identify exits 1 with
@@ -324,13 +317,15 @@ class TestCatalogLockContention(MutatingE2E):
         )
 
     def test_e2e_catalog_lock_retry_then_success(self) -> None:
-        """Lock held ~7s: filing-fetch backs off and succeeds after release."""
+        """Lock held ~7s: read-only reuse no longer contends on the catalog
+        lock (the acquisition journal uses a per-file mutex, not the global
+        operation lock), so the fetch succeeds immediately."""
         self.wiki.seed_market("CN")
         self.wiki.scan()
         acquired = threading.Event()
-        # The lock is released after 7s *during* the fetch; the final attempt
-        # then succeeds.  (resolve itself takes no lock — the contention the
-        # retry loop observes is the acquisition-journal record inside ensure.)
+        # resolve takes no lock and the journal no longer takes the global
+        # operation lock (ADR-008 lock decoupling), so holding it must not
+        # delay a reuse fetch at all.
         thread = _hold_lock_for(self.wiki.catalog_dir, 7.0, acquired)
         try:
             self.assertTrue(acquired.wait(10), "test thread never acquired the lock")
@@ -341,12 +336,16 @@ class TestCatalogLockContention(MutatingE2E):
         elapsed = time.monotonic() - started
         self.assertEqual(rc, 0, out + err)
         self.assertEqual(json.loads(out)["status"], "capture_ready")
-        self.assertIn("blocked by a running catalog operation", err)
-        self.assertGreaterEqual(elapsed, 5.0)  # at least one 5s backoff round
+        self.assertNotIn("blocked by a running catalog operation", err)
+        # No lock contention at all: the old retry path would have needed
+        # >= 15s (5s + 10s backoff rounds); allow machine variance (PowerShell
+        # worker-status inventory) under that bound.
+        self.assertLess(elapsed, 12.0)
 
     def test_e2e_catalog_lock_until_deadline(self) -> None:
-        """Lock held past the deadline: the retry loop exhausts it and the
-        fetch surfaces upstream_error instead of hanging."""
+        """Lock held past any deadline: read-only reuse is unaffected (the
+        journal no longer takes the global operation lock), so the fetch
+        succeeds instead of erroring or hanging."""
         self.wiki.seed_market("CN")
         self.wiki.scan()
         release = threading.Event()
@@ -354,21 +353,20 @@ class TestCatalogLockContention(MutatingE2E):
         thread = _hold_lock_until_release(self.wiki.catalog_dir, release, acquired)
         try:
             self.assertTrue(acquired.wait(10), "test thread never acquired the lock")
-            rc, out, err = self._fetch_existing_cn_annual(timeout=8)
+            rc, out, err = self._fetch_existing_cn_annual(timeout=15)
         finally:
             release.set()
             thread.join(10)
-        self.assertEqual(rc, 2, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "upstream_error")
-        self.assertTrue(payload["retryable"])
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(json.loads(out)["status"], "capture_ready")
 
 
 class TestWorkerPaused(MutatingE2E):
-    def test_e2e_worker_paused_blocks_download(self) -> None:
-        """paused + --allow-download -> worker_paused (retryable); after
-        re-enabling, the same request resolves MISSING -> not_found with no
-        network traffic (no-op adapters prove the gate passed)."""
+    def test_e2e_paused_worker_no_longer_blocks_download_by_default(self) -> None:
+        """Default (pause-around): a worker paused by the user is respected and
+        never resumed, but no longer blocks the download; the request resolves
+        MISSING -> not_found with no network traffic (no-op adapters prove the
+        guard was bypassed)."""
         self.wiki.seed_market("CN")
         self.wiki.set_worker_state("paused")
         self.wiki.scan()
@@ -382,10 +380,50 @@ class TestWorkerPaused(MutatingE2E):
         rc, out, err = self.wiki.run_fetch(request, allow_download=True, timeout=30)
         self.assertEqual(rc, 2, out + err)
         payload = json.loads(out)
+        self.assertEqual(payload["status"], "not_found")
+        self.assertFalse(payload["retryable"])
+        # the user pause is respected: still paused after the fetch
+        control = json.loads(
+            (self.wiki.catalog_dir / "worker_control.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(control["desired_state"], "paused")
+
+    def test_e2e_worker_paused_blocks_download_with_no_pause_worker(self) -> None:
+        """Legacy escape hatch: --no-pause-worker keeps the paused-acquisition
+        guard -> worker_paused (retryable)."""
+        self.wiki.seed_market("CN")
+        self.wiki.set_worker_state("paused")
+        self.wiki.scan()
+        request = {
+            "schema_version": "1.1",
+            "company_query": "宁德时代",
+            "market": "CN",
+            "document_kind": "quarterly_report",
+            "as_of_date": "2026-07-31",
+        }
+        rc, out, err = self.wiki.run_fetch(
+            request, allow_download=True, timeout=30, extra_args=["--no-pause-worker"]
+        )
+        self.assertEqual(rc, 2, out + err)
+        payload = json.loads(out)
         self.assertEqual(payload["status"], "worker_paused")
         self.assertTrue(payload["retryable"])
 
+    def test_e2e_worker_enabled_download_resolves_missing(self) -> None:
+        """Worker enabled + default: resolves MISSING -> not_found (no adapters
+        in the isolated wiki; no network traffic)."""
+        self.wiki.seed_market("CN")
         self.wiki.set_worker_state("enabled")
+        self.wiki.scan()
+        request = {
+            "schema_version": "1.1",
+            "company_query": "宁德时代",
+            "market": "CN",
+            "document_kind": "quarterly_report",
+            "as_of_date": "2026-07-31",
+        }
         rc, out, err = self.wiki.run_fetch(request, allow_download=True, timeout=30)
         self.assertEqual(rc, 2, out + err)
         payload = json.loads(out)

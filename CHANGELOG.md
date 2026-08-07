@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.4.0 — 2026-08-04
+
+- **Worker pause-around for downloads.** `ensure --allow-download` no longer
+  blocks behind the company-wiki background worker's long batches (e.g.
+  `backfill_text_fingerprints` over 20k+ documents), which hold the global
+  catalog `operation.lock` and previously turned every fetch into a 15-minute
+  silent retry. `resolve_filing()` now wraps the download in a
+  `PausedWorkerScope`: it pauses the worker (releasing the lock — the stale
+  `operation.lock` is auto-reclaimed once the holder pid is dead), runs the
+  download with the new company-wiki `--allow-acquisition-while-paused` opt-in,
+  and resumes the worker afterwards so its pending batch continues
+  (pending-driven, idempotent). A worker already stopped, or paused by the
+  user, is left untouched — a user-initiated pause is never resumed.
+- **Concurrency-safe.** A refcount file (`.source_catalog/filing_fetch_pause.refcount`,
+  pruned by pid liveness) with an owner marker ensures concurrent fetches share
+  one pause and only the last participant resumes; crashed fetches self-heal.
+- **New CLI flags** (fetch_filing.py): `--no-pause-worker` (legacy behavior),
+  `--worker-graceful-timeout-seconds` (default 5), `--worker-resume-wait-seconds`
+  (default 5). New error codes `worker_pause_failed` / `worker_resume_failed`;
+  a resume failure warns (the handle is still returned) and instructs a manual
+  `worker-resume`.
+- **filing_fetch_client.py** (revenue-forecast side) passes `--no-pause-worker`
+  through when `pause_worker=False`; default behavior is unchanged.
+- Requires company-wiki with the `ensure --allow-acquisition-while-paused`
+  flag (company-wiki CHANGELOG, 2026-08-04).
+- Tests: 4 new mock tests for the pause-around (pause+resume, user-paused
+  respect, stopped-worker no-op, legacy `--no-pause-worker`); 97 mock tests +
+  27 subtests pass. Live E2E verified against the production wiki: worker
+  paused during the 06082.HK download, capture-ready handle returned, worker
+  resumed and its batch continued from the same pending count.
+
 ## v1.3.0 — 2026-08-01
 
 - Error classification aligned with the documented contract: config failures
