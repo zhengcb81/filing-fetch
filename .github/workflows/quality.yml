@@ -18,14 +18,8 @@ jobs:
         run: |
           mkdir -p "$HOME/Projects"
           git clone --depth 1 https://github.com/zhengcb81/company-wiki.git "$HOME/Projects/company-wiki"
-          echo "COMPANY_WIKI_SRC=$HOME/Projects/company-wiki/src" >> "$GITHUB_ENV"
-      - name: Verify company_wiki importable
-        run: python -c "import sys; sys.path.insert(0, '$COMPANY_WIKI_SRC'); import company_wiki; print('OK:', company_wiki.__file__)"
+          echo "PYTHONPATH=$HOME/Projects/company-wiki/src" >> "$GITHUB_ENV"
       - name: Run hermetic test suite
         run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
-        env:
-          PYTHONPATH: ${{ env.COMPANY_WIKI_SRC }}
       - name: Run full-chain E2E
         run: python e2e/run_filing_fetch_e2e.py
-        env:
-          PYTHONPATH: ${{ env.COMPANY_WIKI_SRC }}
