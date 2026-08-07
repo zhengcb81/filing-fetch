@@ -20,11 +20,11 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_ROOT / "tests"))
 
 from e2e_support.isolated_wiki import IsolatedWiki, SYNTHETIC_SEEDS, cleanup_temporary  # noqa: E402
-from company_wiki.source_catalog.lock import CatalogOperationLock  # noqa: E402
 
 
 def _hold_lock_for(catalog_dir: Path, seconds: float, acquired: threading.Event) -> threading.Thread:
     """Hold the catalog operation lock for ``seconds``, then release it."""
+    from company_wiki.source_catalog.lock import CatalogOperationLock  # noqa: E402
 
     def run() -> None:
         with CatalogOperationLock(catalog_dir, operation="e2e-hold"):
@@ -38,6 +38,7 @@ def _hold_lock_for(catalog_dir: Path, seconds: float, acquired: threading.Event)
 
 def _hold_lock_until_release(catalog_dir: Path, release: threading.Event, acquired: threading.Event) -> threading.Thread:
     """Hold the catalog operation lock until ``release`` is set."""
+    from company_wiki.source_catalog.lock import CatalogOperationLock  # noqa: E402
 
     def run() -> None:
         with CatalogOperationLock(catalog_dir, operation="e2e-hold"):

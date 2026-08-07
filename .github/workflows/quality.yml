@@ -13,15 +13,14 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: python -m pip install pytest
+        run: python -m pip install pytest pyyaml requests
       - name: Fetch company-wiki runtime
         run: |
           mkdir -p "$HOME/Projects"
           git clone --depth 1 https://github.com/zhengcb81/company-wiki.git "$HOME/Projects/company-wiki"
-      - name: Validate pytest collection
-        continue-on-error: true
-        run: python -m pytest tests --collect-only --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py -v --tb=long
       - name: Run hermetic test suite
-        run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py -x
+        env:
+          PYTHONPATH: "$HOME/Projects/company-wiki/src"
+        run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
       - name: Run full-chain E2E
         run: python e2e/run_filing_fetch_e2e.py

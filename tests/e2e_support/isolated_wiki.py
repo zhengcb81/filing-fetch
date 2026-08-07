@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import os
 import subprocess
 import sys
 import tempfile
@@ -289,6 +290,8 @@ class IsolatedWiki:
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
+            env={**os.environ, "PYTHONUTF8": "1"},
             timeout=300,
         )
         if proc.returncode != 0:
@@ -325,7 +328,8 @@ class IsolatedWiki:
             capture_output=True,
             text=True,
             encoding="utf-8",
-            errors="strict",
+            errors="replace",
+            env={**os.environ, "PYTHONUTF8": "1"},
             timeout=timeout + 60,
         )
         return proc.returncode, proc.stdout, proc.stderr
