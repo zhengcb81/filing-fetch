@@ -1319,7 +1319,15 @@ class FilingFetchTests(unittest.TestCase):
     def test_cli_stdin_accepts_utf8_chinese_query(self):
         """A UTF-8 Chinese company query piped via stdin must reach the
         identity resolver intact: Windows pipes are decoded with the locale
-        codepage (GBK) by default, corrupting the query (Phase 16.4)."""
+        codepage (GBK) by default, corrupting the query (Phase 16.4).
+
+        Live-dependency guard: this runs against the production wiki (the
+        紫金矿业 FY2024 filing must be indexed); CI clones a clean company-wiki
+        with no production companies/, so it skips there."""
+        from e2e_support.isolated_wiki import PRODUCTION_WIKI
+        security_master = PRODUCTION_WIKI / "config" / ".source_catalog" / "security_master"
+        if not security_master.is_dir() or not any(security_master.iterdir()):
+            self.skipTest("production security-master snapshots not present")
         script = SKILL_ROOT / "scripts" / "fetch_filing.py"
         request = json.dumps(
             {
