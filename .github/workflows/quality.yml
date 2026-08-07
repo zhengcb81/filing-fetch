@@ -27,6 +27,6 @@ jobs:
       - name: Run hermetic test suite
         run: |
           export PYTHONPATH="$HOME/Projects/company-wiki/src"
-          python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
+          python -m pytest tests -v --tb=long --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py -x
       - name: Run full-chain E2E
         run: python e2e/run_filing_fetch_e2e.py
