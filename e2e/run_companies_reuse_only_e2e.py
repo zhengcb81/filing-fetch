@@ -1,4 +1,4 @@
-"""Repeatable, self-validating filing-fetch full-chain E2E harness.
+"""Repeatable, self-validating companies-reuse-only E2E harness (WU-6.3).
 
 Builds a HERMETIC company-wiki instance (synthetic seed documents, no
 dependency on production wiki files), then exercises the real filing-fetch
@@ -6,8 +6,10 @@ CLI: identify -> resolve reuse (CN/US/HK) -> resolve missing -> ensure
 missing -> handle validation, compares deterministic handle outputs against
 a golden, and verifies double-run reproducibility.
 
+SCOPE (WU-6.3): this harness covers ONLY the companies-root reuse path on a hermetic synthetic wiki. It is NOT a full-chain E2E: it does not cover dayu/Dropbox roots, latest_as_of gap plans, artifact bundles, or consumer parser/LLM zero-call reuse. Only tests covering user entry → catalog → adapter → bundle → consumer may claim 'full-chain'.
+
 Usage:
-    python e2e/run_filing_fetch_e2e.py [--update-golden] [--keep-runs]
+    python e2e/run_companies_reuse_only_e2e.py [--update-golden] [--keep-runs]
 
 Exit codes:
     0 = all green

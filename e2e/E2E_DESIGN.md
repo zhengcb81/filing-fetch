@@ -1,6 +1,6 @@
 # filing-fetch 全链路 E2E —— 对抗式审查与设计
 
-日期：2026-08-07 ｜ 状态：定稿，harness 已实现（`run_filing_fetch_e2e.py` + `expected/`）
+日期：2026-08-07 ｜ 状态：定稿，harness 已实现（`run_companies_reuse_only_e2e.py` + `expected/`）
 
 ## 对抗式审查
 
@@ -55,6 +55,6 @@ golden 不匹配时打印字段级 diff。
 
 ## 运行与自动运行
 
-- `python e2e/run_filing_fetch_e2e.py`（exit 0/1/2）
+- `python e2e/run_companies_reuse_only_e2e.py`（exit 0/1/2）
 - `.githooks/pre-commit`：pytest 套件 + 本 E2E（每次提交）
 - `.github/workflows/quality.yml`：clone company-wiki 到 $HOME/Projects + pytest + E2E（push/PR）

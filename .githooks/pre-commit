@@ -5,5 +5,5 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "[pre-commit] running hermetic test suite..."
 python -m pytest "$ROOT/tests" -q --ignore="$ROOT/tests/test_real_tool_conformance.py" --ignore="$ROOT/tests/test_e2e_download.py"
 
-echo "[pre-commit] running full-chain E2E..."
-python "$ROOT/e2e/run_filing_fetch_e2e.py"
+echo "[pre-commit] running companies-reuse-only E2E..."
+python "$ROOT/e2e/run_companies_reuse_only_e2e.py"
