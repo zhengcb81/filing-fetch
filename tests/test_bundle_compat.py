@@ -107,3 +107,31 @@ def test_bundle_is_optional_never_required(tmp_path):
     except FilingFetchError as exc:
         if "bundle" in str(exc).lower():
             pytest.fail(f"bundle wrongly required: {exc}")
+
+
+def test_forged_bundle_does_not_relax_deep_checks(tmp_path):
+    """Reviewer finding: a forged/malformed source_bundle must NEVER relax the
+    handle deep checks — an out-of-allowance or bad-hash handle is rejected
+    regardless of what the bundle claims."""
+    # forged bundle claiming a valid normalized handle
+    forged = _base_handle(
+        tmp_path,
+        source_bundle={
+            "schema_version": "1.0",
+            "source": {"document_id": "doc-1"},
+            "valid_handles": {
+                "normalized": {
+                    "artifact_role": "normalized",
+                    "reusable": True,
+                    "path": "/unrelated",
+                    "content_sha256": "c" * 64,
+                }
+            },
+            "invalid": {},
+            "bundle_hash": "d" * 64,
+        },
+    )
+    # but the canonical file itself is tampered: snapshot hash no longer matches
+    forged["snapshot_sha256"] = "e" * 64
+    with pytest.raises(FilingFetchError):
+        validate_handle(forged, _request(), _wiki_root(tmp_path))
