@@ -28,8 +28,10 @@ PHASE_HEADING = re.compile(
     r"^#{2,3}\s+Phase\s+(\d+)[^\n]*—\s*状态：completed(?:\s*[✅✔✓].*)?\s*$",
     re.IGNORECASE,
 )
-CHECKBOX_UNCHECKED = re.compile(r"\[ \]")
-CHECKBOX_CHECKED = re.compile(r"\[x\]")
+# Anchored to list-item starts so table-cell prose like "164[x]/387[ ]"
+# is not mistaken for a checkbox (WU-8.3 review regression).
+CHECKBOX_UNCHECKED = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\[ \]")
+CHECKBOX_CHECKED = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\[x\]")
 
 
 def parse_plan(plan_text: str) -> list[dict]:
