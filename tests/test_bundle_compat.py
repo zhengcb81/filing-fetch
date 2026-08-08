@@ -135,3 +135,30 @@ def test_forged_bundle_does_not_relax_deep_checks(tmp_path):
     forged["snapshot_sha256"] = "e" * 64
     with pytest.raises(FilingFetchError):
         validate_handle(forged, _request(), _wiki_root(tmp_path))
+
+
+def test_e2e_f04_symlink_outside_root_rejected(tmp_path):
+    """E2E-F04: a canonical_path that resolves (via symlink) outside the
+    configured allowance must be rejected by the path fence."""
+    import os
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "secret.pdf"
+    secret.write_bytes(b"%PDF-1.4 secret")
+    root = tmp_path / "companies"
+    acme = root / "ACME"
+    acme.mkdir(parents=True)
+    link = acme / "linked.pdf"
+    try:
+        os.symlink(secret, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink unsupported on this platform")
+    handle = _base_handle(tmp_path)
+    handle["canonical_path"] = str(link)
+    handle["byte_size"] = len(b"%PDF-1.4 secret")
+    import hashlib
+
+    handle["snapshot_sha256"] = hashlib.sha256(b"%PDF-1.4 secret").hexdigest()
+    with pytest.raises(FilingFetchError):
+        validate_handle(handle, _request(), _wiki_root(tmp_path))
