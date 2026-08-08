@@ -25,6 +25,33 @@ jobs:
           ruff check scripts tests tools e2e
           python -m compileall -q scripts tests tools e2e
           python -c "import sys; sys.path.insert(0, 'scripts'); import fetch_filing, filing_contracts"
+      - name: Unique test symbols gate (WU-7.1)
+        run: |
+          python - <<'PY'
+          import ast, sys
+          from pathlib import Path
+          problems = 0
+          for path in sorted(Path('tests').rglob('test_*.py')):
+              tree = ast.parse(path.read_text(encoding='utf-8'))
+              seen = {}
+              def visit(scope):
+                  global seen
+                  local_seen = {}
+                  for node in ast.iter_child_nodes(scope):
+                      if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith('test_'):
+                          if node.name in local_seen:
+                              print(f'DUPLICATE {path}:{node.lineno}')
+                              global problems
+                              problems += 1
+                          else:
+                              local_seen[node.name] = node.lineno
+                      elif isinstance(node, ast.ClassDef):
+                          visit(node)
+              visit(tree)
+          sys.exit(1 if problems else 0)
+          PY
+      - name: Mutation canaries (WU-7.1)
+        run: python -m pytest tests/test_latest_mode.py tests/test_dropbox_config_invariants.py tests/test_bundle_compat.py tests/e2e_support/test_spy_log.py -q
       - name: Run hermetic test suite
         run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
       - name: Run companies-reuse-only E2E
