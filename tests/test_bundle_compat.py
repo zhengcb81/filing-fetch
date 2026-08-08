@@ -162,3 +162,20 @@ def test_e2e_f04_symlink_outside_root_rejected(tmp_path):
     handle["snapshot_sha256"] = hashlib.sha256(b"%PDF-1.4 secret").hexdigest()
     with pytest.raises(FilingFetchError):
         validate_handle(handle, _request(), _wiki_root(tmp_path))
+
+
+def test_e2e_f04_plain_outside_path_rejected(tmp_path):
+    """E2E-F04 (non-symlink variant, runs on all platforms): a canonical
+    path outside the configured allowance is rejected by the path fence."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "secret.pdf"
+    secret.write_bytes(b"%PDF-1.4 secret")
+    handle = _base_handle(tmp_path)
+    handle["canonical_path"] = str(secret)
+    handle["byte_size"] = len(b"%PDF-1.4 secret")
+    import hashlib
+
+    handle["snapshot_sha256"] = hashlib.sha256(b"%PDF-1.4 secret").hexdigest()
+    with pytest.raises(FilingFetchError):
+        validate_handle(handle, _request(), _wiki_root(tmp_path))
