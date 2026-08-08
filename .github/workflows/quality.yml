@@ -14,11 +14,14 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: python -m pip install pytest pyyaml requests
-      - name: Fetch company-wiki runtime
+      - name: Fetch company-wiki runtime (pinned compat commit, WU-7.1)
         run: |
           mkdir -p "$HOME/Projects"
-          git clone --depth 1 https://github.com/zhengcb81/company-wiki.git "$HOME/Projects/company-wiki"
+          git clone https://github.com/zhengcb81/company-wiki.git "$HOME/Projects/company-wiki"
+          git -C "$HOME/Projects/company-wiki" checkout a42bb40
           echo "PYTHONPATH=$HOME/Projects/company-wiki/src" >> "$GITHUB_ENV"
+        # NOTE: bump the pinned commit when the compatibility matrix advances;
+        # do NOT clone floating main (WU-7.1 requirement).
       - name: Ruff + compileall + import smoke (WU-1.2)
         run: |
           python -m pip install ruff
@@ -54,6 +57,22 @@ jobs:
         run: python -m pytest tests/test_latest_mode.py tests/test_dropbox_config_invariants.py tests/test_bundle_compat.py tests/e2e_support/test_spy_log.py -q
       - name: Run hermetic test suite
         run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
+      - name: Config doctor (WU-7.1)
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          cfg = json.loads(Path('config/company_wiki.json').read_text(encoding='utf-8'))
+          roots = cfg.get('allowed_handle_roots') or []
+          required = ['${COMPANY_WIKI_ROOT}/companies',
+                      '${USER_PROFILE}/Projects/dayu-agent/workspace/portfolio',
+                      '${USER_PROFILE}/Dropbox/Stock']
+          missing = [r for r in required if r not in roots]
+          if missing:
+              print('CONFIG-PROBLEM: missing allowance', missing)
+              sys.exit(1)
+          print('OK: company_wiki.json healthy')
+          PY
       - name: Run companies-reuse-only E2E
         run: python e2e/run_companies_reuse_only_e2e.py
       - name: Installation sync check
