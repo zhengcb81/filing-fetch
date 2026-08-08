@@ -24,11 +24,31 @@ from fetch_filing import load_company_wiki_root  # noqa: E402
 
 
 def _wiki_available() -> bool:
+    """The production wiki is usable only when its config exists AND is healthy.
+
+    R4.1 (N-05): the file existing is not enough — it had been overwritten by
+    a single-line JSON fixture, which broke every live lookup.  Run company-wiki's
+    config_doctor as the gate so broken production configs skip instead of red.
+    """
     try:
         root = load_company_wiki_root()
     except Exception:
         return False
-    return (root / "config" / "source_catalog.yaml").is_file()
+    config = root / "config" / "source_catalog.yaml"
+    if not config.is_file():
+        return False
+    doctor = root / "scripts" / "config_doctor.py"
+    if not doctor.is_file():
+        return False
+    completed = subprocess.run(
+        [sys.executable, str(doctor)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+        check=False,
+    )
+    return completed.returncode == 0
 
 
 @unittest.skipUnless(_wiki_available(), "production company-wiki not available")

@@ -23,3 +23,5 @@ jobs:
         run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
       - name: Run full-chain E2E
         run: python e2e/run_filing_fetch_e2e.py
+      - name: Installation sync check
+        run: python tools/sync_installs_b3.py
