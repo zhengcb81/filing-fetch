@@ -14,10 +14,16 @@ from typing import Any, Sequence
 # ---------------------------------------------------------------------------
 
 SKILL_VERSION = "1.2.0"
-FILING_REQUEST_SCHEMA_VERSION = "1.1"
+FILING_REQUEST_SCHEMA_VERSION = "1.2"
 FILING_RESPONSE_SCHEMA_VERSION = "1.1"
 COMPANY_WIKI_CONFIG_SCHEMA_VERSION = "1.0"
 COMPANY_WIKI_IDENTITY_SCHEMA_VERSION = "1.0"
+# WU-4.1: explicit request mode. "exact" requires fiscal_year (a null year
+# used to silently mean "latest", producing AMBIGUOUS instead of a gap);
+# "latest_as_of" derives the latest period from as_of_date + document_kind
+# and forbids an explicit fiscal_year.
+REQUEST_MODES = frozenset({"exact", "latest_as_of"})
+LEGACY_REQUEST_SCHEMA_VERSIONS = frozenset({"1.1"})
 
 CONFIG_TOKEN_RE = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
 
@@ -74,6 +80,9 @@ _REQUEST_SCHEMA_1_1_FIELDS = frozenset({
     "provider_document_id",
 })
 
+# WU-4.1: 1.2 adds the explicit mode field.
+_REQUEST_SCHEMA_1_2_FIELDS = _REQUEST_SCHEMA_1_1_FIELDS | {"mode"}
+
 
 def _required_text(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip() or value != value.strip():
@@ -82,14 +91,26 @@ def _required_text(value: Any, field_name: str) -> str:
 
 
 def validate_request(request: dict[str, Any]) -> None:
-    """Validate a filing-fetch request against the 1.1 schema."""
+    """Validate a filing-fetch request against the 1.2 schema.
+
+    WU-4.1 semantics:
+    - ``mode="exact"`` (or a legacy 1.1 request without mode): fiscal_year
+      is REQUIRED — a null year must never silently mean "latest".
+    - ``mode="latest_as_of"``: fiscal_year is FORBIDDEN; the latest period
+      is derived from as_of_date + document_kind + provider calendar.
+    """
     version = request.get("schema_version")
-    if version != FILING_REQUEST_SCHEMA_VERSION:
+    if version == FILING_REQUEST_SCHEMA_VERSION:
+        allowed_fields = _REQUEST_SCHEMA_1_2_FIELDS
+    elif version in LEGACY_REQUEST_SCHEMA_VERSIONS:
+        allowed_fields = _REQUEST_SCHEMA_1_1_FIELDS
+    else:
         raise FilingFetchError(
-            f"unsupported request schema_version: {version} (expected {FILING_REQUEST_SCHEMA_VERSION})",
+            f"unsupported request schema_version: {version} "
+            f"(expected {FILING_REQUEST_SCHEMA_VERSION})",
             code="request_error",
         )
-    unknown = set(request) - _REQUEST_SCHEMA_1_1_FIELDS
+    unknown = set(request) - allowed_fields
     if unknown:
         raise FilingFetchError(
             f"unknown request field(s): {', '.join(sorted(unknown))}",
@@ -105,7 +126,31 @@ def validate_request(request: dict[str, Any]) -> None:
     _required_text(request.get("as_of_date"), "as_of_date")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", request["as_of_date"]):
         raise FilingFetchError("as_of_date must use YYYY-MM-DD format", code="request_error")
+    mode = request.get("mode")
+    if mode is not None and mode not in REQUEST_MODES:
+        raise FilingFetchError(
+            f"mode must be one of {', '.join(sorted(REQUEST_MODES))}: {mode!r}",
+            code="request_error",
+        )
     fiscal_year = request.get("fiscal_year")
+    if mode == "exact" or (mode is None and version == FILING_REQUEST_SCHEMA_VERSION):
+        # schema 1.2: explicit mode is expected; a missing mode defaults to
+        # exact and MUST carry fiscal_year (a null year must not silently
+        # mean "latest"). Legacy 1.1 requests keep the old exact-any-year
+        # behavior.
+        if fiscal_year is None:
+            raise FilingFetchError(
+                "schema 1.2 requests require mode or fiscal_year: pass "
+                "mode=exact with fiscal_year, or mode=latest_as_of",
+                code="request_error",
+            )
+    elif mode == "latest_as_of":
+        if fiscal_year is not None:
+            raise FilingFetchError(
+                "mode=latest_as_of forbids fiscal_year; the latest period is "
+                "derived from as_of_date + document_kind",
+                code="request_error",
+            )
     if fiscal_year is not None:
         if isinstance(fiscal_year, bool) or not isinstance(fiscal_year, int):
             raise FilingFetchError("fiscal_year must be an integer", code="request_error")

@@ -232,6 +232,9 @@ def _command_arguments(request: dict[str, Any]) -> list[str]:
         if isinstance(fiscal_year, bool) or not isinstance(fiscal_year, int):
             raise FilingFetchError("fiscal_year must be an integer")
         arguments.extend(("--fiscal-year", str(fiscal_year)))
+    mode = request.get("mode")
+    if mode is not None:
+        arguments.extend(("--mode", str(mode)))
     return arguments
 
 
