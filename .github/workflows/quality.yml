@@ -77,3 +77,6 @@ jobs:
         run: python e2e/run_companies_reuse_only_e2e.py
       - name: Installation sync check
         run: python tools/sync_installs_b3.py
+
+      - name: Plan claim verifier (WU-8.3)
+        run: python tools/verify_plan_claims.py --plan-dir .
