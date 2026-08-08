@@ -12,7 +12,7 @@ from pathlib import Path
 
 HOME = Path.home()
 SKILL = "filing-fetch"
-CANONICAL = Path(r"C:\Users\郑曾波\Projects\filing-fetch")
+CANONICAL = Path(__file__).resolve().parents[1]
 ROOT_FILES = (".gitignore", "CHANGELOG.md", "SKILL.md")
 ROOT_DIRS = ("config", "references", "scripts", "tests")
 IGNORED = {"__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".codegraph", ".codex"}
