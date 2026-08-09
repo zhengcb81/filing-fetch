@@ -148,7 +148,7 @@ def test_e2e_f04_symlink_outside_root_rejected(tmp_path):
     secret.write_bytes(b"%PDF-1.4 secret")
     root = tmp_path / "companies"
     acme = root / "ACME"
-    acme.mkdir(parents=True)
+    acme.mkdir(parents=True, exist_ok=True)  # _base_handle 也会建；Linux CI 首次真实执行暴露
     link = acme / "linked.pdf"
     try:
         os.symlink(secret, link)
