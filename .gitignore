@@ -8,10 +8,9 @@ __pycache__/
 nul
 # CodeGraph structural index (regenerable).
 .codegraph/
-# Audit / planning working notes (not part of the skill).
-findings.md
-progress.md
-task_plan.md
+# Audit / planning working notes (not part of the skill install surface —
+# tracked in git so the WU-8.3 plan verifier gate has them in CI).
+# findings.md / progress.md / task_plan.md are version-controlled.
 
 # E2E run artifacts (regenerable)
 e2e/.runs/
