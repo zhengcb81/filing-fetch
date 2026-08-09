@@ -160,3 +160,24 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
 - Consuming skills convert the returned handle into their own capture schema
   (e.g., revenue-forecast builds its revenue source record from it).
 - Language: Python; request: JSON stdin or `--request-file`; response: JSON stdout.
+- **Indexed ≠ reusable**: a catalog document being indexed (scanned,
+  parsed, fingerprinted) does not make it a reuse handle.  Only active,
+  capture-ready documents under a registered reusable root kind are
+  reused; everything else fails closed (`not_found` with a debug trace).
+- **exact vs latest**: an `exact` resolve matches identity+kind+period
+  deterministically; `latest_as_of` picks the most recent published
+  handle not after `as_of_date` (ties broken by provider_document_id,
+  never file mtime).  These are distinct resolution modes — a latest
+  match is never presented as an exact one.
+- **Artifact invalidation**: derived artifacts (normalized/summary) are
+  reusable only when their source hash and producer binding still match
+  the original document; a changed producer or document hash invalidates
+  only the dependent roles and schedules a minimal recompute — the
+  original bytes are never rewritten by a reuse path.
+- **Real-root canary limits**: read-only probes and canaries never write
+  to real roots (Dropbox/dayu/companies).  Production reuse of
+  Dropbox-only filings and binding-valid processed artifacts is NOT yet
+  proven: legacy evidence lacks strong identity/period/binding (see the
+  data-lake refactor audit receipts WU-1303/902/1304).  Fixture-level
+  E2E stays green; production claims stay unclaimed until the
+  observation period and remediation windows complete.
