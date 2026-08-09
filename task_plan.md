@@ -1,5 +1,7 @@
 # filing-fetch 全面审查与测试加固 — 实施计划
 
+> **2026-08-09 状态覆盖：`completed_historical_scope`。** 本文件的 v1.3.0 六阶段、75 项旧范围工作保持已完成；其测试数字和 live 证据是历史快照。最新要求增加了统一 resolver、Dropbox-only、latest 单次闭环、SourceBundle、current-triplet CI 和持续动态审核，统一由 revenue-forecast 的 [FCAP r2](../revenue-forecast/audit_review/2026-08-09_full_completion_assurance_plan/task_plan.md) 接管。本文件不再新增同类待办，也不能单独证明六项目标完成。
+
 ## 目标
 修复审查发现的契约漂移（错误分类、文档、失效测试），并建立覆盖
 『A股/港股/美股 × 文档已存在/不存在/部分存在』全场景矩阵的三层测试体系：
