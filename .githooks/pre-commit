@@ -7,3 +7,6 @@ python -m pytest "$ROOT/tests" -q --ignore="$ROOT/tests/test_real_tool_conforman
 
 echo "[pre-commit] running companies-reuse-only E2E..."
 python "$ROOT/e2e/run_companies_reuse_only_e2e.py"
+
+echo "[pre-commit] checking skill installation sync (R4.2)..."
+python "$ROOT/tools/sync_installs_b3.py" --check
