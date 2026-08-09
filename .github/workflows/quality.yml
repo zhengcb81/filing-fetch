@@ -24,7 +24,7 @@ jobs:
         # do NOT clone floating main (WU-7.1 requirement).
       - name: Ruff + compileall + import smoke (WU-1.2)
         run: |
-          python -m pip install ruff
+          python -m pip install "ruff==0.15.18"
           ruff check scripts tests tools e2e
           python -m compileall -q scripts tests tools e2e
           python -c "import sys; sys.path.insert(0, 'scripts'); import fetch_filing, filing_contracts"
