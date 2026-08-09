@@ -30,7 +30,7 @@ def _make_canonical_file(tmp_path: Path) -> tuple[Path, int, str]:
 
     root = tmp_path / "companies"
     acme = root / "ACME"
-    acme.mkdir(parents=True)
+    acme.mkdir(parents=True, exist_ok=True)  # E2E-F04 先建同目录（Linux CI 真实执行）
     path = acme / "1.pdf"
     body = b"%PDF-1.4 " + b"x" * 90
     path.write_bytes(body)
