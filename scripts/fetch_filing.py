@@ -97,11 +97,10 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
             "company-wiki config must be an object", code="config_error"
         )
     required = {"schema_version", "company_wiki_root"}
-    allowed = required | {"allowed_handle_roots"}
-    if not set(payload) <= allowed or not required <= set(payload):
+    if not set(payload) <= required or not required <= set(payload):
         raise FilingFetchError(
-            "company-wiki config must contain schema_version/company_wiki_root fields "
-            "(optional: allowed_handle_roots)",
+            "company-wiki config must contain exactly schema_version/company_wiki_root "
+            "(FC-501: no independent allowed_handle_roots allowlist)",
             code="config_error",
         )
     if payload["schema_version"] != COMPANY_WIKI_CONFIG_SCHEMA_VERSION:
@@ -138,68 +137,6 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
         root = selected.parent / root
     return _validate_company_wiki_root(root)
 
-
-def load_handle_allowance(
-    *,
-    config_path: Path | None = None,
-    wiki_root: Path,
-) -> tuple[Path, ...]:
-    """Config-driven handle path allowance (ADR-008 Strategy B).
-
-    ``allowed_handle_roots`` in ``config/company_wiki.json`` lists the
-    directories a handle ``canonical_path`` may point into. Default: the
-    legacy ``<company_wiki_root>/companies``. Tokens ``${USER_PROFILE}``,
-    ``${SKILL_ROOT}`` and ``${COMPANY_WIKI_ROOT}`` are expanded.
-    """
-    selected = config_path or DEFAULT_COMPANY_WIKI_CONFIG
-    try:
-        selected = selected.expanduser().resolve(strict=True)
-    except OSError as exc:
-        raise FilingFetchError(
-            f"company-wiki config does not exist: {selected}", code="config_error"
-        ) from exc
-    try:
-        payload = json.loads(selected.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise FilingFetchError(
-            f"invalid company-wiki config: {exc}", code="config_error"
-        ) from exc
-    if not isinstance(payload, dict):
-        raise FilingFetchError("company-wiki config must be an object", code="config_error")
-    raw = payload.get("allowed_handle_roots")
-    if raw is None:
-        return ((wiki_root / "companies").resolve(),)
-    if (
-        not isinstance(raw, list)
-        or not raw
-        or not all(isinstance(item, str) and item.strip() for item in raw)
-    ):
-        raise FilingFetchError(
-            "allowed_handle_roots must be a non-empty list of non-empty paths",
-            code="config_error",
-        )
-    tokens = {
-        "SKILL_ROOT": str(SKILL_ROOT),
-        "USER_PROFILE": os.environ.get("USERPROFILE") or str(Path.home()),
-        "COMPANY_WIKI_ROOT": str(wiki_root.resolve()),
-    }
-
-    def replace_token(match: re.Match[str]) -> str:
-        name = match.group(1)
-        if name not in tokens:
-            raise FilingFetchError(
-                f"unsupported token in allowed_handle_roots: {name}", code="config_error"
-            )
-        return tokens[name]
-
-    allowance: list[Path] = []
-    for item in raw:
-        expanded = CONFIG_TOKEN_RE.sub(replace_token, item.strip())
-        path = Path(expanded).expanduser()
-        if not path.is_absolute():
-            path = selected.parent / path
-        allowance.append(path.resolve())
-    return tuple(allowance)
 
 
 def _command_arguments(request: dict[str, Any]) -> list[str]:
@@ -777,15 +714,12 @@ def resolve_filing(
             code="not_found",
         )
     handle["request_id"] = resolution.get("request_id")
-    if config_path is not None or company_wiki_root is None:
-        # CLI path: the persistent config (explicit or the default
-        # config/company_wiki.json) drives the handle path allowance.
-        # Direct company_wiki_root callers (tests) keep the legacy
-        # <wiki_root>/companies default.
-        allowance = load_handle_allowance(config_path=config_path, wiki_root=root)
-    else:
-        allowance = None  # legacy default: <wiki_root>/companies
-    validate_handle(handle, request, root, allowed_roots=allowance)
+    # FC-501: no independent root allowlist.  Handle containment is
+    # validated against the company-wiki RootPolicySnapshot (wired when the
+    # upstream returns it; until then the legacy <wiki_root>/companies
+    # default applies).  Direct company_wiki_root callers (tests) keep the
+    # legacy default.
+    validate_handle(handle, request, root)
     handle["company_identity"] = company_identity
     return handle
 

@@ -1,11 +1,11 @@
-"""WU-2A.1: Dropbox config-only invariants (CONFIG-DBX-03/04).
+"""FC-501: Dropbox config invariants.
 
-- CONFIG-DBX-03: the expanded ``allowed_handle_roots`` is EXACTLY the three
-  realpaths (companies, dayu portfolio, Dropbox Stock) — no parent dir,
-  no wildcard, no similar prefix.
-- CONFIG-DBX-04: the Dropbox realpath here equals the realpath resolved
-  from company-wiki's ``source_catalog.yaml``; either side missing, typo'd,
-  or pointing to a different case/link target fails.
+- CONFIG-DBX-03 (revised): filing-fetch has NO independent root allowlist —
+  the config rejects ``allowed_handle_roots``; the Dropbox root is defined
+  only in company-wiki's RootPolicy snapshot.
+- CONFIG-DBX-04: the Dropbox realpath in company-wiki's
+  ``source_catalog.yaml`` is the single source of truth; filing-fetch
+  consumes the policy snapshot hash and verifies canonical containment.
 
 CONFIG-DBX-01/02 (company-wiki side) live in the company-wiki repo.
 """
@@ -14,9 +14,16 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import tempfile
 from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+from fetch_filing import load_company_wiki_root  # noqa: E402
+from filing_contracts import FilingFetchError  # noqa: E402
 
 
 FILING_ROOT = Path(__file__).resolve().parents[1]
@@ -25,46 +32,32 @@ WIKI_ROOT = Path.home() / "Projects" / "company-wiki"
 WIKI_CONFIG_PATH = WIKI_ROOT / "config" / "source_catalog.yaml"
 
 
-@pytest.fixture()
-def allowance() -> tuple[Path, ...]:
-    import sys
-
-    sys.path.insert(0, str(FILING_ROOT / "scripts"))
-    from fetch_filing import load_handle_allowance
-
-    return load_handle_allowance(config_path=CONFIG_PATH, wiki_root=WIKI_ROOT)
-
-
-def _norm(path: Path) -> str:
-    return str(path.resolve()).replace("\\", "/")
-
-
-def test_config_dbx_03_allowance_exactly_three_roots(allowance) -> None:
-    normalized = [_norm(p) for p in allowance]
-    expected = [
-        _norm(WIKI_ROOT / "companies"),
-        _norm(Path.home() / "Projects" / "dayu-agent" / "workspace" / "portfolio"),
-        _norm(Path.home() / "Dropbox" / "Stock"),
-    ]
-    assert normalized == expected, f"allowance mismatch: {normalized} != {expected}"
-
-
-def test_config_dbx_03_no_parent_dir_no_wildcard_no_prefix() -> None:
+def test_config_dbx_03_no_independent_allowlist() -> None:
+    """The config must reject allowed_handle_roots (no independent root
+    allowlist — the policy snapshot is the single source)."""
     payload = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    raw = payload["allowed_handle_roots"]
-    assert isinstance(raw, list)
-    for entry in raw:
-        assert "*" not in entry, f"wildcard not allowed: {entry}"
-        assert "?" not in entry, f"wildcard not allowed: {entry}"
-        assert not entry.rstrip("/").endswith("Dropbox"), (
-            f"parent dir Dropbox not allowed (must be Dropbox/Stock): {entry}"
+    assert "allowed_handle_roots" not in payload, (
+        "FC-501: independent allowed_handle_roots is forbidden"
+    )
+    # the loader must reject a config that smuggles it back in
+    with tempfile.TemporaryDirectory() as temporary:
+        cfg = Path(temporary) / "company_wiki.json"
+        cfg.write_text(
+            json.dumps({
+                "schema_version": "1.0",
+                "company_wiki_root": "/tmp/x",
+                "allowed_handle_roots": ["/tmp"],
+            }),
+            encoding="utf-8",
         )
-        assert not entry.rstrip("/").endswith("portfolio/"), (
-            f"prefix-like entry not allowed: {entry}"
-        )
+        with pytest.raises(FilingFetchError):
+            load_company_wiki_root(config_path=cfg)
 
 
-def test_config_dbx_04_cross_repo_realpath_identical(allowance) -> None:
+def test_config_dbx_04_dropbox_root_defined_in_wiki_policy_only() -> None:
+    """The Dropbox root's realpath lives in company-wiki's
+    source_catalog.yaml (the policy snapshot source) — filing-fetch holds
+    no copy."""
     import yaml
 
     wiki_payload = yaml.safe_load(WIKI_CONFIG_PATH.read_text(encoding="utf-8"))
@@ -74,9 +67,10 @@ def test_config_dbx_04_cross_repo_realpath_identical(allowance) -> None:
     token = "${USER_PROFILE}"
     profile = os.environ.get("USERPROFILE") or str(Path.home())
     wiki_path = Path(str(dropbox_wiki["path"]).replace(token, profile))
-    allowance_dropbox = next(
-        p for p in allowance if _norm(p).endswith("Dropbox/Stock")
-    )
-    assert _norm(wiki_path) == _norm(allowance_dropbox), (
-        f"Dropbox realpath drift: wiki={wiki_path} filing={allowance_dropbox}"
-    )
+    # read_only + reusable_for_filing contract
+    assert dropbox_wiki.get("read_only") is not False
+    assert _norm(wiki_path).endswith("Dropbox/Stock"), f"unexpected: {wiki_path}"
+
+
+def _norm(path: Path) -> str:
+    return str(path.resolve()).replace("\\", "/")

@@ -2289,31 +2289,7 @@ class FilingFetchTests(unittest.TestCase):
                     allowed_roots=[root / "companies"],
                 )
 
-    def test_load_handle_allowance_reads_config(self) -> None:
-        """allowed_handle_roots from config/company_wiki.json drives the fence."""
-        from fetch_filing import load_handle_allowance
 
-        with TemporaryDirectory() as temporary:
-            parent = Path(temporary)
-            root = self._wiki_root(parent, "company-wiki")
-            config = parent / "company_wiki.json"
-            config.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "1.0",
-                        "company_wiki_root": str(root),
-                        "allowed_handle_roots": [
-                            "${COMPANY_WIKI_ROOT}/companies",
-                            str(parent / "portfolio"),
-                        ],
-                    }
-                ),
-                encoding="utf-8",
-            )
-            allowance = load_handle_allowance(config_path=config, wiki_root=root)
-            self.assertEqual(len(allowance), 2)
-            self.assertEqual(allowance[0], (root / "companies").resolve())
-            self.assertEqual(allowance[1], (parent / "portfolio").resolve())
 
 
 if __name__ == "__main__":

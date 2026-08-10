@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from pathlib import Path
@@ -175,12 +176,18 @@ def validate_handle(
     request: dict[str, Any],
     wiki_root: Path,
     allowed_roots: Sequence[Path] | None = None,
+    policy_snapshot: dict[str, Any] | None = None,
+    expected_policy_hash: str | None = None,
 ) -> None:
     """Deep-validate a capture-ready handle returned by company-wiki.
 
-    ``allowed_roots`` is the config-driven path allowance: handle
-    ``canonical_path`` must live under one of these directories. When omitted,
-    the legacy allowance applies (``<wiki_root>/companies``).
+    FC-501: containment is verified against the RootPolicySnapshot from
+    company-wiki — a handle's canonical_path must live under a root the
+    snapshot marks ``reusable_for_filing``, and the snapshot's hash must
+    match the pinned ``expected_policy_hash``.  The legacy
+    ``allowed_roots`` allowance is DEPRECATED (kept only for N/N-1
+    compat); a policy snapshot, when supplied, takes precedence and no
+    independent allowlist is consulted.
     """
     missing = _HANDLE_REQUIRED_FIELDS - set(handle)
     if missing:
@@ -203,7 +210,38 @@ def validate_handle(
         canonical.resolve(strict=False)
     except (OSError, ValueError) as exc:
         raise FilingFetchError(f"handle canonical_path is invalid: {canonical}", code="upstream_error") from exc
-    if allowed_roots is None:
+    if policy_snapshot is not None:
+        # FC-501: policy snapshot is the single containment source.
+        if expected_policy_hash is None:
+            raise FilingFetchError(
+                "policy_snapshot supplied without expected_policy_hash",
+                code="upstream_error",
+            )
+        payload = json.dumps(policy_snapshot, sort_keys=True, ensure_ascii=False)
+        actual = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        if actual != expected_policy_hash:
+            raise FilingFetchError(
+                f"policy snapshot hash mismatch: {actual[:12]}... != "
+                f"{expected_policy_hash[:12]}...",
+                code="upstream_error",
+            )
+        def _expand_path_ref(ref: str) -> Path:
+            expanded = re.sub(
+                r"\$\{PROJECT_ROOT\}",
+                lambda _match: str(wiki_root).replace("\\", "/"),
+                ref,
+            )
+            path = Path(expanded).expanduser()
+            if not path.is_absolute():
+                path = wiki_root / path
+            return path.resolve(strict=False)
+
+        allowance = tuple(
+            _expand_path_ref(str(root.get("path_ref", "")))
+            for root in policy_snapshot.get("roots", [])
+            if root.get("reusable_for_filing") is True
+        )
+    elif allowed_roots is None:
         allowance = ((wiki_root / "companies").resolve(),)
     else:
         allowance = tuple(Path(item).resolve() for item in allowed_roots)
@@ -213,7 +251,7 @@ def validate_handle(
         for root in allowance
     ):
         raise FilingFetchError(
-            "handle canonical_path is outside the configured handle allowance",
+            "handle canonical_path is outside the policy snapshot's reusable roots",
             code="upstream_error",
         )
     digest = handle.get("snapshot_sha256", "")
