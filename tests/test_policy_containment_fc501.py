@@ -185,14 +185,23 @@ def test_no_independent_allowlist_in_config_schema(tmp_path):
     from fetch_filing import load_company_wiki_root
     from filing_contracts import FilingFetchError
 
+    # a REAL temp wiki root so only the schema rejection can fire
+    root = tmp_path / "company-wiki"
+    (root / "config").mkdir(parents=True)
+    (root / "config" / "source_catalog.yaml").write_text(
+        "schema_version: '1.0'\n"
+        "catalog_dir: x\n"
+        "roots: []\n",
+        encoding="utf-8",
+    )
     cfg = tmp_path / "company_wiki.json"
     cfg.write_text(
         _json.dumps({
             "schema_version": "1.0",
-            "company_wiki_root": "/tmp/x",
+            "company_wiki_root": str(root),
             "allowed_handle_roots": ["/tmp"],
         }),
         encoding="utf-8",
     )
-    with pytest.raises(FilingFetchError):
+    with pytest.raises(FilingFetchError, match="exactly schema_version"):
         load_company_wiki_root(config_path=cfg)

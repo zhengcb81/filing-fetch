@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -39,18 +38,29 @@ def test_config_dbx_03_no_independent_allowlist() -> None:
     assert "allowed_handle_roots" not in payload, (
         "FC-501: independent allowed_handle_roots is forbidden"
     )
-    # the loader must reject a config that smuggles it back in
-    with tempfile.TemporaryDirectory() as temporary:
+    # the loader must reject a config that smuggles it back in — with a
+    # REAL temp wiki root so only the schema rejection can fire
+    import tempfile as _tempfile
+
+    with _tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary) / "company-wiki"
+        (root / "config").mkdir(parents=True)
+        (root / "config" / "source_catalog.yaml").write_text(
+            "schema_version: '1.0'\n"
+            "catalog_dir: x\n"
+            "roots: []\n",
+            encoding="utf-8",
+        )
         cfg = Path(temporary) / "company_wiki.json"
         cfg.write_text(
             json.dumps({
                 "schema_version": "1.0",
-                "company_wiki_root": "/tmp/x",
+                "company_wiki_root": str(root),
                 "allowed_handle_roots": ["/tmp"],
             }),
             encoding="utf-8",
         )
-        with pytest.raises(FilingFetchError):
+        with pytest.raises(FilingFetchError, match="exactly schema_version"):
             load_company_wiki_root(config_path=cfg)
 
 
