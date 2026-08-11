@@ -250,9 +250,11 @@ class Fc803MinimalDownloadTests(unittest.TestCase):
         """LT-07: a candidate filed after as_of is excluded from the gap —
         nothing to fetch, nothing downloaded."""
         self.wiki.seed_market("CN")
-        # FY2026 filed 2027-03-15 is after as_of 2026-07-31 -> future
+        # the discovery is scoped to the derived latest year (2025); a
+        # FY2025 filing dated 2027-03-15 (after as_of 2026-07-31) is future
         self.fixture.write_text(json.dumps({
-            "CN": [_candidate("acc-2026", 2026, filing_date="2027-03-15")],
+            "CN": [_candidate("acc-2025-future", 2025,
+                              filing_date="2027-03-15")],
         }), encoding="utf-8")
         rc, out, err = self.wiki.run_fetch(self._authorized_latest(),
                                            allow_download=True)
