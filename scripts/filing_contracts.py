@@ -160,6 +160,72 @@ def validate_request(request: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Resolution envelope validation (FC-704)
+# ---------------------------------------------------------------------------
+
+RESOLUTION_ENVELOPE_SCHEMA_VERSION = "1.0"
+RESOLUTION_ENVELOPE_OUTCOMES = frozenset({
+    "reused_existing", "reused_after_discovery", "downloaded_new", "gap",
+    "ambiguous", "rejected", "missing", "failed",
+})
+RESOLUTION_ENVELOPE_BUNDLE_STATUSES = frozenset({"unavailable", "available"})
+
+
+def validate_resolution_envelope(envelope: dict[str, Any]) -> None:
+    """Deep-validate the company-wiki resolution envelope (FC-704).
+
+    The envelope carries the journal-reconciled acquisition outcome and the
+    download event count — the evidence the revenue receipt derives from.
+    Anything outside the taxonomy or an impossible event count is an
+    upstream error: fabricated evidence must never reach a consumer.
+    """
+    if not isinstance(envelope, dict):
+        raise FilingFetchError(
+            "resolution_envelope must be an object", code="upstream_error")
+    if envelope.get("envelope_schema_version") != RESOLUTION_ENVELOPE_SCHEMA_VERSION:
+        raise FilingFetchError(
+            f"resolution_envelope schema_version must be "
+            f"{RESOLUTION_ENVELOPE_SCHEMA_VERSION}",
+            code="upstream_error",
+        )
+    outcome = envelope.get("outcome")
+    if outcome not in RESOLUTION_ENVELOPE_OUTCOMES:
+        raise FilingFetchError(
+            f"resolution_envelope outcome is outside the taxonomy: {outcome!r}",
+            code="upstream_error",
+        )
+    events = envelope.get("download_events")
+    if isinstance(events, bool) or events not in (0, 1):
+        raise FilingFetchError(
+            f"resolution_envelope download_events must be 0 or 1: {events!r}",
+            code="upstream_error",
+        )
+    policy_hash = envelope.get("policy_hash")
+    if policy_hash is not None and not (
+        isinstance(policy_hash, str)
+        and re.fullmatch(r"[0-9a-f]{64}", policy_hash)
+    ):
+        raise FilingFetchError(
+            "resolution_envelope policy_hash must be a lowercase SHA-256 or null",
+            code="upstream_error",
+        )
+    epoch = envelope.get("activation_epoch")
+    if epoch is not None and not (
+        isinstance(epoch, str) and epoch.strip()
+    ):
+        raise FilingFetchError(
+            "resolution_envelope activation_epoch must be text or null",
+            code="upstream_error",
+        )
+    if envelope.get("bundle_status") not in RESOLUTION_ENVELOPE_BUNDLE_STATUSES:
+        raise FilingFetchError(
+            "resolution_envelope bundle_status is outside the enum: "
+            f"{envelope.get('bundle_status')!r}",
+            code="upstream_error",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Handle validation
 # ---------------------------------------------------------------------------
 

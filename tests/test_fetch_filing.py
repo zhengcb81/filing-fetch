@@ -245,6 +245,101 @@ class FilingFetchTests(unittest.TestCase):
             self.assertNotIn("Advanced Micro Device", resolve_command)
             self.assertEqual(handle["company_identity"]["security_id"], "AMD")
 
+    @staticmethod
+    def _envelope(**overrides: object) -> dict:
+        envelope = {
+            "envelope_schema_version": "1.0",
+            "outcome": "reused_existing",
+            "download_events": 0,
+            "policy_hash": "a" * 64,
+            "activation_epoch": "epoch-1",
+            "bundle_status": "unavailable",
+        }
+        envelope.update(overrides)
+        return envelope
+
+    def test_resolve_forwards_validated_resolution_envelope(self) -> None:
+        """FC-704: the resolution envelope rides the handle — deep-validated
+        by filing-fetch, forwarded verbatim (no independent re-derivation of
+        download evidence)."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            source_response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:company-wiki:request:1",
+                "matches": [self._handle(root)],
+                "resolution_envelope": self._envelope(),
+            }
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps(source_response), stderr=""),
+            ]
+
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                handle = resolve_filing(
+                    request=self._request(), company_wiki_root=root,
+                )
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(
+                handle["resolution_envelope"], source_response["resolution_envelope"])
+
+    def test_resolve_rejects_invalid_resolution_envelope(self) -> None:
+        """FC-704: an envelope with an impossible download_events count is an
+        upstream error — the consumer must never see fabricated evidence."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            source_response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:company-wiki:request:1",
+                "matches": [self._handle(root)],
+                "resolution_envelope": self._envelope(download_events=2),
+            }
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps(source_response), stderr=""),
+            ]
+
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                with self.assertRaisesRegex(FilingFetchError, "download_events"):
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+
+    def test_resolve_without_envelope_is_n_minus_one_compatible(self) -> None:
+        """FC-704 N/N-1: an old company-wiki without an envelope still
+        resolves; the handle simply carries no envelope (revenue then fails
+        closed instead of fabricating download evidence)."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            source_response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:company-wiki:request:1",
+                "matches": [self._handle(root)],
+            }
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps(self._identity_response()), stderr=""),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0,
+                    stdout=json.dumps(source_response), stderr=""),
+            ]
+
+            with patch("fetch_filing.subprocess.run", side_effect=completed):
+                handle = resolve_filing(
+                    request=self._request(), company_wiki_root=root,
+                )
+            self.assertNotIn("resolution_envelope", handle)
+
     def test_company_query_builds_an_explicit_canonical_ensure_request(self) -> None:
         with TemporaryDirectory() as temporary:
             parent = Path(temporary)

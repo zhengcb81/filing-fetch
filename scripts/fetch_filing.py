@@ -36,6 +36,7 @@ from filing_contracts import (  # noqa: E402  re-export
     FilingFetchError,
     validate_handle,
     validate_request,
+    validate_resolution_envelope,
     _required_text,
 )
 
@@ -720,6 +721,15 @@ def resolve_filing(
     # default applies).  Direct company_wiki_root callers (tests) keep the
     # legacy default.
     validate_handle(handle, request, root)
+    # FC-704: deep-validate and forward the resolution envelope verbatim —
+    # the journal-reconciled outcome + download event evidence the revenue
+    # receipt derives from.  N/N-1: an old company-wiki without an envelope
+    # resolves normally; the handle simply carries no envelope (revenue then
+    # fails closed instead of fabricating evidence).
+    envelope = resolution.get("resolution_envelope")
+    if envelope is not None:
+        validate_resolution_envelope(envelope)
+        handle["resolution_envelope"] = dict(envelope)
     handle["company_identity"] = company_identity
     return handle
 
