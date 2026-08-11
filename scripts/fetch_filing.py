@@ -690,7 +690,13 @@ def resolve_filing(
         if payload.get("status") == "gap":
             gap_plan = (payload.get("acquisition") or {}).get("gap_plan")
             authorization = request.get("authorization")
-            if allow_download and authorization is not None:
+            # FC-803: the close-gap transaction only runs when the plan is
+            # ACTIONABLE (missing items).  An empty plan stays a structured
+            # gap so the caller sees the details — reuse handles
+            # (LT-01), provider_unavailable retryability (LT-05), future
+            # exclusions (LT-07) — never a silently downgraded handle.
+            has_missing = bool(gap_plan and gap_plan.get("missing"))
+            if allow_download and authorization is not None and has_missing:
                 return _close_gap_and_return_handle(
                     payload=payload,
                     gap_plan=gap_plan,
