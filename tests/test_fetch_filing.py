@@ -254,6 +254,10 @@ class FilingFetchTests(unittest.TestCase):
             "policy_hash": "a" * 64,
             "activation_epoch": "epoch-1",
             "bundle_status": "unavailable",
+            # FC-905-b: trusted capture/safety evidence (N envelope shape)
+            "prompt_injection_status": "not_detected",
+            "parser_calls": 0,
+            "llm_calls": 0,
         }
         envelope.update(overrides)
         return envelope

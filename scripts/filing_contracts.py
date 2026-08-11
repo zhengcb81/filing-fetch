@@ -206,6 +206,10 @@ RESOLUTION_ENVELOPE_OUTCOMES = frozenset({
     "ambiguous", "rejected", "missing", "failed",
 })
 RESOLUTION_ENVELOPE_BUNDLE_STATUSES = frozenset({"unavailable", "available"})
+# FC-905-a: trusted capture/safety evidence.  not_reviewed = the document has
+# no review receipt (consumers block per policy — never assumed clean).
+RESOLUTION_ENVELOPE_PROMPT_INJECTION_STATUSES = frozenset(
+    {"not_detected", "detected_and_ignored", "not_reviewed"})
 
 
 def validate_resolution_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
@@ -296,6 +300,36 @@ def validate_resolution_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         if bundle.get("schema_version") != "1.0":
             raise FilingFetchError(
                 "bundle schema_version must be '1.0'",
+                code="upstream_error",
+            )
+    # FC-905-b N-1: normalize missing trusted-evidence fields to their
+    # explicit honest defaults on a COPY (never faked, never clobbered).
+    changed = False
+    if "prompt_injection_status" not in envelope:
+        envelope = dict(envelope)
+        changed = True
+        envelope["prompt_injection_status"] = "not_reviewed"
+    for count_key in ("parser_calls", "llm_calls"):
+        if count_key not in envelope:
+            if not changed:
+                envelope = dict(envelope)
+                changed = True
+            envelope[count_key] = None
+    prompt_injection_status = envelope.get("prompt_injection_status")
+    if prompt_injection_status not in RESOLUTION_ENVELOPE_PROMPT_INJECTION_STATUSES:
+        raise FilingFetchError(
+            "resolution_envelope prompt_injection_status is outside the enum: "
+            f"{prompt_injection_status!r}",
+            code="upstream_error",
+        )
+    for count_key in ("parser_calls", "llm_calls"):
+        value = envelope.get(count_key)
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+        ):
+            raise FilingFetchError(
+                f"resolution_envelope {count_key} must be a non-negative "
+                f"integer or null: {value!r}",
                 code="upstream_error",
             )
     return envelope
