@@ -81,8 +81,13 @@ _REQUEST_SCHEMA_1_1_FIELDS = frozenset({
     "provider_document_id",
 })
 
-# WU-4.1: 1.2 adds the explicit mode field.
-_REQUEST_SCHEMA_1_2_FIELDS = _REQUEST_SCHEMA_1_1_FIELDS | {"mode"}
+# WU-4.1: 1.2 adds the explicit mode field; FC-802 adds the optional
+# authorization block (close-gap input: provider/accessions/caps/expiry).
+_REQUEST_SCHEMA_1_2_FIELDS = _REQUEST_SCHEMA_1_1_FIELDS | {"mode", "authorization"}
+
+_AUTHORIZATION_REQUIRED_FIELDS = frozenset({
+    "provider", "allowed_accessions", "max_items", "max_bytes", "expires_at",
+})
 
 
 def _required_text(value: Any, field_name: str) -> str:
@@ -133,6 +138,38 @@ def validate_request(request: dict[str, Any]) -> None:
             f"mode must be one of {', '.join(sorted(REQUEST_MODES))}: {mode!r}",
             code="request_error",
         )
+    authorization = request.get("authorization")
+    if authorization is not None:
+        # FC-802: the close-gap input — provider + accessions + caps +
+        # expiry. Anything missing is a request error (never ignored).
+        if not isinstance(authorization, dict):
+            raise FilingFetchError(
+                "authorization must be an object", code="request_error")
+        missing = _AUTHORIZATION_REQUIRED_FIELDS - set(authorization)
+        if missing:
+            raise FilingFetchError(
+                f"authorization missing field(s): {', '.join(sorted(missing))}",
+                code="request_error",
+            )
+        _required_text(authorization.get("provider"), "authorization.provider")
+        accessions = authorization.get("allowed_accessions")
+        if not isinstance(accessions, list) or not accessions or not all(
+            isinstance(a, str) and a.strip() for a in accessions
+        ):
+            raise FilingFetchError(
+                "authorization.allowed_accessions must be a non-empty list of "
+                "non-empty strings",
+                code="request_error",
+            )
+        for name in ("max_items", "max_bytes"):
+            value = authorization.get(name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise FilingFetchError(
+                    f"authorization.{name} must be a positive integer",
+                    code="request_error",
+                )
+        _required_text(
+            authorization.get("expires_at"), "authorization.expires_at")
     fiscal_year = request.get("fiscal_year")
     if mode == "exact" or (mode is None and version == FILING_REQUEST_SCHEMA_VERSION):
         # schema 1.2: explicit mode is expected; a missing mode defaults to

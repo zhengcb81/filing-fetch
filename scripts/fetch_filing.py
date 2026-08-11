@@ -633,7 +633,11 @@ def resolve_filing(
             "security_id": company_identity["security_id"],
         }
     )
-    action = "ensure" if allow_download else "resolve"
+    # FC-802: latest_as_of always consults the provider through the ensure
+    # path — the metadata-only gap plan comes back even without download.
+    mode = str(request.get("mode") or "").strip().lower()
+    is_latest = mode == "latest_as_of"
+    action = "ensure" if (allow_download or is_latest) else "resolve"
     command = [
         *command_prefix,
         action,
@@ -680,7 +684,35 @@ def resolve_filing(
             action=action,
             deadline=deadline,
         )
-    resolution = payload.get("resolution") if allow_download else payload
+    if action == "ensure":
+        # FC-802: the ensure payload carries the top-level status; GAP is a
+        # STRUCTURED result (metadata-only plan), never a not_found error.
+        if payload.get("status") == "gap":
+            gap_plan = (payload.get("acquisition") or {}).get("gap_plan")
+            authorization = request.get("authorization")
+            if allow_download and authorization is not None:
+                return _close_gap_and_return_handle(
+                    payload=payload,
+                    gap_plan=gap_plan,
+                    authorization=authorization,
+                    company_identity=company_identity,
+                    command_prefix=command_prefix,
+                    normalized_request=normalized_request,
+                    root=root,
+                    request=request,
+                    deadline=deadline,
+                    pause_worker=pause_worker,
+                    worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
+                    worker_resume_wait_seconds=worker_resume_wait_seconds,
+                )
+            return {
+                "status": "gap",
+                "gap_plan": gap_plan,
+                "resolution": payload.get("resolution"),
+            }
+        resolution = payload.get("resolution")
+    else:
+        resolution = payload
     if not isinstance(resolution, dict):
         raise FilingFetchError(
             "company-wiki resolution is missing", code="upstream_error"
@@ -701,6 +733,24 @@ def resolve_filing(
             code="not_found",
             debug_trace=resolution.get("debug_trace"),
         )
+    handle = _handle_from_resolution(resolution, request, root)
+    handle["company_identity"] = company_identity
+    return handle
+
+
+def _handle_from_resolution(
+    resolution: dict,
+    request: dict,
+    root: Path,
+    *,
+    envelope: dict | None = None,
+) -> dict:
+    """Build + deep-validate the handle from a reused resolution.
+
+    Shared by the reuse path and the FC-802 close-gap path so the handle
+    contract (exactly-one match, capture provenance, policy containment,
+    FC-704 envelope forwarding) stays single-sourced.
+    """
     matches = resolution.get("matches")
     if not isinstance(matches, list) or len(matches) != 1 or not isinstance(matches[0], dict):
         raise FilingFetchError(
@@ -726,10 +776,93 @@ def resolve_filing(
     # receipt derives from.  N/N-1: an old company-wiki without an envelope
     # resolves normally; the handle simply carries no envelope (revenue then
     # fails closed instead of fabricating evidence).
-    envelope = resolution.get("resolution_envelope")
+    if envelope is None:
+        envelope = resolution.get("resolution_envelope")
     if envelope is not None:
         validate_resolution_envelope(envelope)
         handle["resolution_envelope"] = dict(envelope)
+    return handle
+
+
+def _close_gap_and_return_handle(
+    *,
+    payload: dict,
+    gap_plan: dict,
+    authorization: dict,
+    company_identity: dict,
+    command_prefix: list[str],
+    normalized_request: dict,
+    root: Path,
+    request: dict,
+    deadline: float,
+    pause_worker: bool,
+    worker_graceful_timeout_seconds: float,
+    worker_resume_wait_seconds: float,
+) -> dict:
+    """FC-802: execute the authorized close-gap transaction and return the
+    final handle.  filing-fetch stays thin: the binding is assembled from
+    evidence company-wiki already provided (plan hash, envelope policy
+    hash) plus the caller's authorization — no provider/root/identity
+    rules are re-derived here."""
+    resolution = payload.get("resolution") or {}
+    envelope = resolution.get("resolution_envelope") or {}
+    binding = {
+        "request_id": (gap_plan or {}).get("request_id"),
+        "gap_plan_hash": (gap_plan or {}).get("gap_hash"),
+        "policy_hash": envelope.get("policy_hash"),
+        "provider": authorization["provider"],
+        "allowed_accessions": authorization["allowed_accessions"],
+        "max_items": authorization["max_items"],
+        "max_bytes": authorization["max_bytes"],
+        "expires_at": authorization["expires_at"],
+    }
+    import tempfile
+
+    binding_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8")
+    try:
+        json.dump(binding, binding_file, ensure_ascii=False)
+        binding_file.close()
+        command = [
+            *command_prefix,
+            "close-gap",
+            "--binding-file",
+            str(binding_file.name),
+            *_command_arguments(normalized_request),
+            "--acquisition-config",
+            str(root / "config" / "source_acquisition.yaml"),
+        ]
+        if pause_worker:
+            command.append("--allow-acquisition-while-paused")
+        scope = PausedWorkerScope(
+            root=root,
+            command_prefix=command_prefix,
+            enabled=pause_worker,
+            graceful_timeout_seconds=worker_graceful_timeout_seconds,
+            resume_wait_seconds=worker_resume_wait_seconds,
+            deadline=deadline,
+        )
+        with scope:
+            closed = _run_company_wiki_json_retry(
+                command=command,
+                root=root,
+                action="close-gap",
+                deadline=deadline,
+            )
+    finally:
+        Path(binding_file.name).unlink(missing_ok=True)
+    if closed.get("status") != "completed":
+        raise FilingFetchError(
+            f"close-gap did not complete: {closed.get('status')} / "
+            f"{closed.get('reason')}",
+            code="gap_not_closed",
+        )
+    closed_resolution = closed.get("resolution")
+    if not isinstance(closed_resolution, dict):
+        raise FilingFetchError(
+            "close-gap resolution is missing", code="upstream_error")
+    handle = _handle_from_resolution(
+        closed_resolution, request, root, envelope=closed.get("envelope"))
     handle["company_identity"] = company_identity
     return handle
 
