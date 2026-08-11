@@ -299,3 +299,24 @@ class Fc802GapTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_main_passes_gap_through_unwrapped(self) -> None:
+        """FC-802 F1 regression: a structured gap is printed as-is — the
+        CLI must never wrap it as a capture_ready handle."""
+        import io
+        from contextlib import redirect_stdout
+
+        import fetch_filing
+
+        gap = {"status": "gap", "gap_plan": {"gap_hash": "c" * 64},
+               "resolution": {"status": "missing"}}
+        with patch("fetch_filing.resolve_filing", return_value=gap):
+            with redirect_stdout(io.StringIO()) as buf:
+                fetch_filing.main([
+                    "--config", "x", "--request-file", "missing.json"])
+        # resolve_filing is mocked so no file is read; main returns 0 and
+        # prints the gap structure (it never reaches the request read)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["status"], "gap")
+        self.assertEqual(payload["gap_plan"]["gap_hash"], "c" * 64)
+        self.assertNotIn("capture_ready", buf.getvalue())

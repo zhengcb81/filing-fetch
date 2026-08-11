@@ -949,11 +949,16 @@ def main(argv: list[str] | None = None) -> int:
             worker_graceful_timeout_seconds=args.worker_graceful_timeout_seconds,
             worker_resume_wait_seconds=args.worker_resume_wait_seconds,
         )
-        output = {
-            "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
-            "status": "capture_ready",
-            "handle": handle,
-        }
+        if isinstance(handle, dict) and handle.get("status") == "gap":
+            # FC-802: a structured gap passes through unwrapped — it is NOT
+            # a capture-ready handle and must never be wrapped as one.
+            output = handle
+        else:
+            output = {
+                "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
+                "status": "capture_ready",
+                "handle": handle,
+            }
         json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 0
