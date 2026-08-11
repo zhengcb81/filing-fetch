@@ -785,7 +785,10 @@ def _handle_from_resolution(
     if envelope is None:
         envelope = resolution.get("resolution_envelope")
     if envelope is not None:
-        validate_resolution_envelope(envelope)
+        # FC-903: validate + normalize (an N-1 company-wiki envelope gains
+        # the explicit honest bundle_status='unavailable') and forward the
+        # result — never a faked empty-green.
+        envelope = validate_resolution_envelope(envelope)
         handle["resolution_envelope"] = dict(envelope)
     return handle
 

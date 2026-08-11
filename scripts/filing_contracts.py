@@ -208,13 +208,21 @@ RESOLUTION_ENVELOPE_OUTCOMES = frozenset({
 RESOLUTION_ENVELOPE_BUNDLE_STATUSES = frozenset({"unavailable", "available"})
 
 
-def validate_resolution_envelope(envelope: dict[str, Any]) -> None:
-    """Deep-validate the company-wiki resolution envelope (FC-704).
+def validate_resolution_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
+    """Deep-validate the company-wiki resolution envelope (FC-704 + FC-903).
 
     The envelope carries the journal-reconciled acquisition outcome and the
     download event count — the evidence the revenue receipt derives from.
     Anything outside the taxonomy or an impossible event count is an
     upstream error: fabricated evidence must never reach a consumer.
+
+    FC-903 (N/N-1): returns the envelope dict, possibly a normalized copy —
+    a pre-FC-902 company-wiki envelope that omits ``bundle_status`` gains the
+    explicit honest ``bundle_status="unavailable"`` (never a faked
+    empty-green ``available``).  ``bundle_status="available"`` requires a
+    SHA-256 ``bundle_hash`` and a bundle dict whose hash matches — fail
+    closed.  Artifact validity is NOT re-decided: valid/invalid handles are
+    forwarded verbatim.
     """
     if not isinstance(envelope, dict):
         raise FilingFetchError(
@@ -254,12 +262,43 @@ def validate_resolution_envelope(envelope: dict[str, Any]) -> None:
             "resolution_envelope activation_epoch must be text or null",
             code="upstream_error",
         )
-    if envelope.get("bundle_status") not in RESOLUTION_ENVELOPE_BUNDLE_STATUSES:
+    bundle_status = envelope.get("bundle_status")
+    if bundle_status is None:
+        # FC-903 N-1: a pre-FC-902 company-wiki envelope carries no bundle
+        # status.  Normalize a COPY to the explicit honest 'unavailable' —
+        # never a faked green — and leave the caller's dict untouched.
+        envelope = dict(envelope)
+        envelope["bundle_status"] = "unavailable"
+        bundle_status = "unavailable"
+    if bundle_status not in RESOLUTION_ENVELOPE_BUNDLE_STATUSES:
         raise FilingFetchError(
             "resolution_envelope bundle_status is outside the enum: "
-            f"{envelope.get('bundle_status')!r}",
+            f"{bundle_status!r}",
             code="upstream_error",
         )
+    if bundle_status == "available":
+        bundle_hash = envelope.get("bundle_hash")
+        if not (
+            isinstance(bundle_hash, str)
+            and re.fullmatch(r"[0-9a-f]{64}", bundle_hash)
+        ):
+            raise FilingFetchError(
+                "bundle_status=available requires a SHA-256 bundle_hash",
+                code="upstream_error",
+            )
+        bundle = envelope.get("bundle")
+        if not isinstance(bundle, dict) or bundle.get("bundle_hash") != bundle_hash:
+            raise FilingFetchError(
+                "bundle_status=available requires a bundle dict whose "
+                "bundle_hash matches the envelope's",
+                code="upstream_error",
+            )
+        if bundle.get("schema_version") != "1.0":
+            raise FilingFetchError(
+                "bundle schema_version must be '1.0'",
+                code="upstream_error",
+            )
+    return envelope
 
 
 # ---------------------------------------------------------------------------
