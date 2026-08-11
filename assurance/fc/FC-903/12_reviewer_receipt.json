@@ -1,0 +1,79 @@
+{
+  "schema_version": "2.0",
+  "fc_id": "FC-903",
+  "implementer_receipt_sha256": "010d0b9e9f4547ef2a71d9e7b47a90eb768744c8dca4825fe6b32ea157bdb3df",
+  "reviewer_identity": "reviewer-fc903-independent",
+  "clean_checkout": true,
+  "base_triplet": {
+    "revenue": "1c5f12782de4c5603e2641009ae72c6b31a37bca",
+    "filing": "81d9cd98c6c6a680c859b20917fd9d47db707564",
+    "wiki": "fd4f50b7566bf26997062404594bc78209246a1f"
+  },
+  "result_triplet": {
+    "revenue": "1c5f12782de4c5603e2641009ae72c6b31a37bca",
+    "filing": "2e47089a3564263c00d59d5c872fc7e76c689064",
+    "wiki": "fd4f50b7566bf26997062404594bc78209246a1f"
+  },
+  "replayed_command_ids": [
+    "fc-903.focused.bundle_contract_9tests",
+    "fc-903.sibling.envelope_bundle_latest_4files",
+    "fc-903.full_suite_all_tests",
+    "fc-903.ruff.3files",
+    "fc-903.red_replay.base_no_return_gate"
+  ],
+  "scenario_results": [
+    {
+      "id": "BUNDLE-N1-NORMALIZE",
+      "status": "passed",
+      "note": "test_fc903_01/02 green on clean checkout: an N-1 envelope WITHOUT bundle_status is accepted and normalized to explicit 'unavailable' on a COPY (result is not old; 'bundle_status' never added to the input dict). Normalization code reads: envelope = dict(envelope); envelope['bundle_status']='unavailable' — never 'available'."
+    },
+    {
+      "id": "BUNDLE-N-VALIDATE",
+      "status": "passed",
+      "note": "test_fc903_03/09 green: an FC-902 envelope with bundle_status='available', SHA-256 bundle_hash (regex [0-9a-f]{64}), bundle dict whose bundle_hash matches, schema_version='1.0' validates and is returned (result == envelope verbatim)."
+    },
+    {
+      "id": "BUNDLE-FAIL-CLOSED",
+      "status": "passed",
+      "note": "test_fc903_04..07 green: available without bundle_hash, with malformed/placeholder hash, without bundle dict, or with mismatched bundle_hash are all FilingFetchError code='upstream_error' — fabricated evidence never passes."
+    },
+    {
+      "id": "BUNDLE-N1-UNCHANGED",
+      "status": "passed",
+      "note": "test_fc903_08/09 green: FC-704-era 'unavailable' without bundle fields stays valid; artifact validity NOT re-decided — valid_handles/invalid forwarded verbatim (no validity logic exists in the changed path)."
+    }
+  ],
+  "mutation_results": [
+    {
+      "id": "FC-903-M1",
+      "killed": true,
+      "note": "'if bundle_status is None:' -> 'if False and bundle_status is None:' — test_fc903_01 FAILS (N-1 envelope rejected as upstream_error); reverted, focused suite restored to 9 passed."
+    },
+    {
+      "id": "FC-903-M2",
+      "killed": true,
+      "note": "'if bundle_status == \"available\":' -> 'if False and bundle_status == \"available\":' — test_fc903_04 FAILS (fabricated available claim passes); reverted, focused suite restored to 9 passed."
+    },
+    {
+      "id": "FC-903-M3",
+      "killed": true,
+      "note": "'return envelope' -> 'return None' — test_fc903_03 FAILS (None != envelope); reverted, restored blob byte-identical (git hash-object b3bccaf matches HEAD), focused suite 9 passed, worktree clean."
+    }
+  ],
+  "side_effect_reconciliation": {
+    "passed": true,
+    "note": "Changed paths are pure dict validation/normalization (filing_contracts.py) and a handle-dict assignment (fetch_filing.py _handle_from_resolution). No open()/write/remove/unlink/requests/download/subprocess in the diff (only false positives: change-contract markdown prose and a test fixture field 'download_events': 0). No catalog/root writes, deletions, or network calls."
+  },
+  "codegraph_reachability": {
+    "passed": true,
+    "note": "CodeGraph index for filing-fetch returned 'symbol not found' (index lags the fresh commit), so literal AST-level gates were used per protocol: validate_resolution_envelope has exactly ONE production call site, fetch_filing.py:791 (plus its import at :39) — unchanged vs base (base had :788 call). No 'close-gap binding path' caller exists in the current tree, a minor inaccuracy in the implementer receipt's caller count (2 vs 1 call site) that does not affect acceptance — the function is production-reachable, not a test island, and the caller consumes the return value. No new production symbol introduced."
+  },
+  "rollback": {
+    "required": false,
+    "passed": true,
+    "note": "Additive contract behavior (normalization + return value); revert = revert commit 2e47089. Zero writes performed, nothing to unwind."
+  },
+  "unresolved_findings": [],
+  "verdict": "accepted",
+  "reviewed_at": "2026-08-11T09:40:00Z"
+}

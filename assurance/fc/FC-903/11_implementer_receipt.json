@@ -1,0 +1,120 @@
+{
+  "schema_version": "2.0",
+  "fc_id": "FC-903",
+  "status": "independent_review",
+  "mode": "honest-implementer",
+  "base_triplet": {
+    "revenue": "1c5f12782de4c5603e2641009ae72c6b31a37bca",
+    "filing": "81d9cd98c6c6a680c859b20917fd9d47db707564",
+    "wiki": "fd4f50b7566bf26997062404594bc78209246a1f"
+  },
+  "result_triplet": {
+    "revenue": "1c5f12782de4c5603e2641009ae72c6b31a37bca",
+    "filing": "2e47089a3564263c00d59d5c872fc7e76c689064",
+    "wiki": "fd4f50b7566bf26997062404594bc78209246a1f"
+  },
+  "plan_sha256": "0bc6b9f7d6707e470e55c22759d37c18404172081ecd176d2883e184c61fafaa",
+  "policy_sha256": "not-applicable",
+  "allowed_files": [
+    "filing-fetch/scripts/filing_contracts.py",
+    "filing-fetch/scripts/fetch_filing.py",
+    "filing-fetch/tests/test_fc903_bundle_contract.py",
+    "filing-fetch/assurance/fc/FC-903/03_change_contract.md",
+    "filing-fetch/assurance/fc/FC-903/11_implementer_receipt.json"
+  ],
+  "changed_files": [
+    "filing-fetch/scripts/filing_contracts.py",
+    "filing-fetch/scripts/fetch_filing.py",
+    "filing-fetch/tests/test_fc903_bundle_contract.py",
+    "filing-fetch/assurance/fc/FC-903/03_change_contract.md"
+  ],
+  "dependency_receipts": [
+    "company-wiki/assurance/fc/FC-902/12_reviewer_receipt.json (accepted 2026-08-11)"
+  ],
+  "command_registry_sha256": "215b8077169126b2c4a5eca9d8d6237f291757c2559f6ae6e0ae8ff1c806b089",
+  "scenario_results": [
+    {
+      "id": "BUNDLE-N1-NORMALIZE",
+      "status": "passed",
+      "note": "an N-1 company-wiki envelope without bundle_status is accepted and normalized to the explicit honest 'unavailable' — never faked green; the caller's dict is left untouched (test_fc903_01, test_fc903_02)."
+    },
+    {
+      "id": "BUNDLE-N-VALIDATE",
+      "status": "passed",
+      "note": "an FC-902 envelope with a well-formed available bundle (sha256 bundle_hash + matching bundle dict + schema_version 1.0) validates and is returned verbatim (test_fc903_03, test_fc903_09)."
+    },
+    {
+      "id": "BUNDLE-FAIL-CLOSED",
+      "status": "passed",
+      "note": "available without a SHA-256 bundle_hash, with a malformed hash, without a bundle dict, or with a mismatched bundle_hash are all upstream_error — fabricated evidence never passes (test_fc903_04..07)."
+    },
+    {
+      "id": "BUNDLE-N1-UNCHANGED",
+      "status": "passed",
+      "note": "the FC-704-era unavailable-without-bundle-fields shape stays valid; artifact validity is NOT re-decided — valid/invalid handles forward verbatim (test_fc903_08, test_fc903_09)."
+    }
+  ],
+  "commands": [
+    {
+      "command": "python -B -m pytest tests/test_fc903_bundle_contract.py -q",
+      "exit_code": 0,
+      "result": "9 passed (RED: N-1 rejected + available unvalidated + None return before implementation)",
+      "cwd": "filing-fetch"
+    },
+    {
+      "command": "python -B -m pytest tests/test_fc802_gap_orchestration.py tests/test_bundle_compat.py tests/test_bundle_fidelity.py tests/test_latest_mode.py -q",
+      "exit_code": 0,
+      "result": "127 passed, 2 skipped, 27 subtests (envelope/bundle/latest regressions unbroken)",
+      "cwd": "filing-fetch"
+    },
+    {
+      "command": "python -B -m pytest tests/ -q (full filing suite)",
+      "exit_code": 0,
+      "result": "276 passed, 11 skipped (3 T3 without FC805_REAL_DOWNLOAD env), 54 subtests — zero failures",
+      "cwd": "filing-fetch"
+    },
+    {
+      "command": "pre-commit gates (hermetic suite + companies-reuse-only E2E + R4.2 install-sync)",
+      "exit_code": 0,
+      "result": "hermetic 270 passed / 6 skipped / 54 subtests; E2E PASS golden identical (biren-e2e-v1-9fb7f4276ba1); install-sync MATCH 26 files x3 skill dirs",
+      "cwd": "filing-fetch"
+    },
+    {
+      "command": "python -B -m ruff check scripts/filing_contracts.py scripts/fetch_filing.py tests/test_fc903_bundle_contract.py",
+      "exit_code": 0,
+      "result": "All checks passed",
+      "cwd": "filing-fetch"
+    }
+  ],
+  "side_effect_counts": {
+    "downloads": 0,
+    "external_root_writes": 0,
+    "catalog_mutations": 0,
+    "llm_calls": 0,
+    "parser_calls": 0,
+    "note": "contract-validation only; no catalog/root writes. E2E ran in the existing companies-only harness (zero new downloads)."
+  },
+  "codegraph": {
+    "production_callers_before": 2,
+    "production_callers_after": 2,
+    "note": "validate_resolution_envelope keeps its callers (fetch_filing handle builder + close-gap binding path); signature unchanged, return-value contract added."
+  },
+  "mutation": {
+    "id": "FC-903-M1-M2-M3",
+    "killed": true,
+    "details": "M1: N-1 normalization disabled -> test_01 FAILS (N-1 envelope rejected). M2: available-bundle validation disabled -> test_04 FAILS (fabricated available passes). M3: return None instead of the envelope -> test_03 FAILS. All three reverted; 9 passed restored."
+  },
+  "rollback": {
+    "required": false,
+    "proved": true,
+    "note": "additive contract behavior; revert = revert commits."
+  },
+  "review": {
+    "reviewer": "reviewer-fc903-independent",
+    "reviewer_receipt_sha256": "bcfb14e30b2f82ae1520b929f87a8fb732653f992eed35ef360a55c5589334d3",
+    "decision": "accepted",
+    "reviewed_at": "2026-08-11T09:40:00Z",
+    "note": "independent reviewer replayed commands + 3 mutations from clean worktree 2e47089; verdict accepted; 2 non-blocking observations (call-site count in codegraph note, diff-budget wording) documented in REVIEWER_REPORT.md; unresolved_findings=[]"
+  },
+  "provisional_note": "result_triplet sealed at filing 2e47089 (revenue/wiki unchanged). FC-904 (revenue source_preparation selector consumption) next."
+}
