@@ -14,14 +14,11 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: python -m pip install pytest pyyaml requests
-      - name: Fetch company-wiki runtime (pinned compat commit, WU-7.1)
+      - name: Fetch company-wiki runtime (FC-1101: manifest-driven current triplet)
         run: |
-          mkdir -p "$HOME/Projects"
-          git clone https://github.com/zhengcb81/company-wiki.git "$HOME/Projects/company-wiki"
-          git -C "$HOME/Projects/company-wiki" checkout a42bb40
+          git clone --quiet https://github.com/zhengcb81/revenue-forecast.git "$HOME/Projects/revenue-forecast"
+          python "$HOME/Projects/revenue-forecast/tools/ci_checkout_siblings.py"             --manifest "$HOME/Projects/revenue-forecast/compatibility/current.json"             --sibling-root "$HOME/Projects" --skip filing
           echo "PYTHONPATH=$HOME/Projects/company-wiki/src" >> "$GITHUB_ENV"
-        # NOTE: bump the pinned commit when the compatibility matrix advances;
-        # do NOT clone floating main (WU-7.1 requirement).
       - name: Ruff + compileall + import smoke (WU-1.2)
         run: |
           python -m pip install "ruff==0.15.18"
