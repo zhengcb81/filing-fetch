@@ -135,7 +135,14 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
     expanded = CONFIG_TOKEN_RE.sub(replace_token, configured)
     root = Path(expanded).expanduser()
     if not root.is_absolute():
-        root = selected.parent / root
+        # FC-1202: a relative root would be resolved implicitly against the
+        # config file's parent directory — only explicit absolute (token-
+        # expanded) roots are valid.
+        raise FilingFetchError(
+            "company-wiki config company_wiki_root must be absolute after "
+            "token expansion",
+            code="config_error",
+        )
     return _validate_company_wiki_root(root)
 
 

@@ -134,7 +134,7 @@ class FilingFetchTests(unittest.TestCase):
             config_path = parent / "company_wiki.json"
             config_path.write_text(
                 json.dumps(
-                    {"schema_version": "1.0", "company_wiki_root": "wiki-one"}
+                    {"schema_version": "1.0", "company_wiki_root": str(first)}
                 ),
                 encoding="utf-8",
             )
@@ -142,11 +142,29 @@ class FilingFetchTests(unittest.TestCase):
 
             config_path.write_text(
                 json.dumps(
-                    {"schema_version": "1.0", "company_wiki_root": "wiki-two"}
+                    {"schema_version": "1.0", "company_wiki_root": str(second)}
                 ),
                 encoding="utf-8",
             )
             self.assertEqual(load_company_wiki_root(config_path=config_path), second)
+
+    def test_relative_company_wiki_root_is_rejected(self) -> None:
+        # FC-1202: a relative root resolved against the config file's parent
+        # directory is implicit location — only absolute roots are valid.
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            self._wiki_root(parent, "wiki-one")
+            config_path = parent / "company_wiki.json"
+            config_path.write_text(
+                json.dumps(
+                    {"schema_version": "1.0", "company_wiki_root": "wiki-one"}
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(FilingFetchError) as ctx:
+                load_company_wiki_root(config_path=config_path)
+        self.assertEqual(ctx.exception.code, "config_error")
+        self.assertIn("absolute", str(ctx.exception))
 
     def test_resolve_uses_configured_root_when_root_is_omitted(self) -> None:
         with TemporaryDirectory() as temporary:

@@ -137,11 +137,13 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
 ## Notes
 
 - **Read-only reuse is config-driven (ADR-008 Strategy B)**: any root kind
-  listed in company-wiki's `reusable_root_kinds` (`source_catalog.yaml`) whose
-  directory is listed in filing-fetch's `allowed_handle_roots`
-  (`config/company_wiki.json`) serves its already-indexed documents directly —
-  e.g. `dayu_portfolio` reuses filings dayu already downloaded, zero download.
-  Adding a directory to the whitelist = one line in each config, no code.
+  listed in company-wiki's `reusable_root_kinds` (`source_catalog.yaml`)
+  serves its already-indexed documents directly — e.g. `dayu_portfolio`
+  reuses filings dayu already downloaded, zero download.  Adding a root =
+  one line in company-wiki's `source_catalog.yaml`, no code and no
+  filing-fetch config change (FC-501/FC-1202: the RootPolicySnapshot is the
+  single policy source; filing-fetch's `config/company_wiki.json` only
+  locates the company-wiki root).
 - By default, filing-fetch **pauses the background worker itself** around
   downloads and resumes it afterwards, so a worker mid-batch no longer blocks
   fetches. Only with `--no-pause-worker` are downloads blocked while the worker
