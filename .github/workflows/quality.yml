@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: python -m pip install pytest pyyaml requests
+        run: python -m pip install pytest pyyaml requests mypy
       - name: Fetch company-wiki runtime (FC-1101: manifest-driven current triplet)
         run: |
           git clone --quiet https://github.com/zhengcb81/revenue-forecast.git "$HOME/Projects/revenue-forecast"
@@ -25,6 +25,8 @@ jobs:
           ruff check scripts tests tools e2e
           python -m compileall -q scripts tests tools e2e
           python -c "import sys; sys.path.insert(0, 'scripts'); import fetch_filing, filing_contracts"
+      - name: Strict type check on public contracts (FC-1204-c)
+        run: python -m mypy scripts/filing_contracts.py scripts/fetch_filing.py
       - name: Unique test symbols gate (WU-7.1)
         run: |
           python - <<'PY'
@@ -54,6 +56,8 @@ jobs:
         run: python -m pytest tests/test_latest_mode.py tests/test_dropbox_config_invariants.py tests/test_bundle_compat.py tests/e2e_support/test_spy_log.py -q
       - name: Run hermetic test suite
         run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
+      - name: Branch coverage gate (FC-1204-a)
+        run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py --cov=scripts --cov-branch --cov-fail-under=90 --cov-report=term
       - name: Config doctor (FC-1202: three-repo contract compatibility)
         run: python tools/config_doctor.py --revenue-root "$HOME/Projects/revenue-forecast"
       - name: Run companies-reuse-only E2E
