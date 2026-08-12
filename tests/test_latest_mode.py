@@ -1,4 +1,5 @@
 """WU-4.1: versioned FilingRequest with explicit mode (exact / latest_as_of).
+SCENARIO: LT-01 LT-02 LT-03 LT-05 LT-07 LT-08
 
 RED phase: ``mode`` is not part of the 1.1 schema, so a latest_as_of
 request is rejected today (unknown field) — the semantic "latest" cannot

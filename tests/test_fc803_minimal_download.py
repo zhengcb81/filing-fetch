@@ -1,4 +1,5 @@
 """FC-803: minimal download + second-request zero fetch/write (T1).
+SCENARIO: LT-01 LT-02 LT-05 LT-07 LT-08 LT-09/DL-04 DL-02 DL-03 DL-07 DL-08 DL-09
 
 Real cross-process spies: the IsolatedWiki acquisition config points at
 tests/e2e_support/spy_adapter.py (a real subprocess json_command_v1

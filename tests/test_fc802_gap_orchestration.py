@@ -1,4 +1,5 @@
 """FC-802 RED/acceptance tests: latest_as_of gap orchestration.
+SCENARIO: GAP-01 LT-08 DL-02
 
 filing-fetch no longer maps GAP to not_found: latest_as_of returns the
 structured gap plan (fetch=0); allow_download=True WITH a valid

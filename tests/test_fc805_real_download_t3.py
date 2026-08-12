@@ -1,4 +1,5 @@
 """FC-805: real-provider isolated E2E (T3) — CN/HK/US minimal samples.
+SCENARIO: UJ-03 UJ-05 DL-01 DL-05 DL-06 DL-10
 
 Runs the REAL chain (filing-fetch CLI -> company-wiki CLI -> REAL
 provider adapters: cninfo/dayu) against an ISOLATED temp wiki — the
