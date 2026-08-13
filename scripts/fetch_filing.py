@@ -704,6 +704,9 @@ def resolve_filing(
             # exclusions (LT-07) — never a silently downgraded handle.
             has_missing = bool(gap_plan and gap_plan.get("missing"))
             if allow_download and authorization is not None and has_missing:
+                # has_missing implies a dict payload (the .get above would
+                # have failed otherwise); narrow for mypy (FC-1204 F1 fix).
+                assert isinstance(gap_plan, dict)
                 return _close_gap_and_return_handle(
                     payload=payload,
                     gap_plan=gap_plan,

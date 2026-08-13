@@ -13,7 +13,7 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parents[1] / "scripts"
 
 FROZEN_MAX = {
-    "fetch_filing.py": 33,
+    "fetch_filing.py": 34,  # F1 fix added one assert (gap_plan narrow) — deliberate +1
     "filing_contracts.py": 39,
 }
 
