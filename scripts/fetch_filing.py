@@ -20,6 +20,7 @@ import json
 import math
 import os
 from pathlib import Path
+import random
 import re
 import subprocess
 import sys
@@ -43,9 +44,17 @@ from filing_contracts import (  # noqa: E402  re-export
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
 
-# Exponential backoff for transient catalog lock contention (Phase 15.2).
+# Exponential backoff for transient catalog lock contention (Phase 15.2,
+# ZR-205: jitter + cap + deadline bound, no sleep past the deadline).
 CATALOG_LOCKED_BACKOFF_SECONDS = 5.0
 CATALOG_LOCKED_BACKOFF_MULTIPLIER = 2.0
+CATALOG_LOCKED_BACKOFF_MAX_SECONDS = 60.0
+CATALOG_LOCKED_BACKOFF_JITTER = 0.2  # ±20% uniform jitter around the backoff
+
+# ZR-205: canonical error codes emitted by company-wiki's error taxonomy
+# (ZR-204).  These are the only codes the deadline-aware auto-retry loop
+# spins on; everything else (worker_paused, fatal, ...) is fail-closed.
+_CATALOG_RETRY_CODES = frozenset({"catalog_locked", "catalog_busy", "db_timeout"})
 
 
 def _validate_company_wiki_root(root: Path) -> Path:
@@ -201,10 +210,13 @@ def _run_company_wiki_json(
     root: Path,
     timeout_seconds: float,
     action: str,
+    stats: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     environment = dict(os.environ)
     environment["PYTHONUTF8"] = "1"
     creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    if stats is not None:
+        stats["calls"] += 1
     try:
         completed = subprocess.run(
             command,
@@ -229,25 +241,11 @@ def _run_company_wiki_json(
         raise FilingFetchError(f"company-wiki {action} failed: {exc}") from exc
     if completed.returncode != 0:
         detail = completed.stderr.strip()[-2000:] or "no stderr"
-        code = "fatal"
-        try:
-            structured = json.loads(completed.stderr.strip())
-        except json.JSONDecodeError:
-            structured = None
-        if (
-            isinstance(structured, dict)
-            and structured.get("error_type") == "CatalogOperationLockedError"
-        ):
-            code = "catalog_locked"
-        elif (
-            isinstance(structured, dict)
-            and structured.get("error_type") == "RuntimeError"
-            and "paused" in structured.get("error", "")
-        ):
-            code = "worker_paused"
         raise FilingFetchError(
             f"company-wiki {action} exited {completed.returncode}: {detail}",
-            code=code,
+            code=_classify_wiki_error(completed.stderr.strip()),
+            stage=action,
+            attempts=1,
         )
     try:
         payload = json.loads(completed.stdout)
@@ -258,22 +256,66 @@ def _run_company_wiki_json(
     return payload
 
 
+def _classify_wiki_error(stderr_text: str) -> str:
+    """Map a company-wiki structured stderr payload to a filing error code.
+
+    ZR-205: consume the canonical ZR-204 error-taxonomy codes emitted by the
+    wiki CLI (``catalog_locked`` / ``catalog_busy`` / ``db_timeout`` /
+    ``worker_paused`` / ``fatal``) directly; keep N-1 fallbacks for the
+    legacy class-name emission shape (``CatalogOperationLockedError``,
+    ``RuntimeError`` + paused text).  Unknown / malformed payloads fail
+    closed to ``fatal`` (never retryable).
+    """
+    try:
+        structured = json.loads(stderr_text)
+    except json.JSONDecodeError:
+        return "fatal"
+    if not isinstance(structured, dict):
+        return "fatal"
+    error_type = structured.get("error_type")
+    if error_type in _CATALOG_RETRY_CODES:
+        return error_type
+    if error_type == "worker_paused":
+        return "worker_paused"
+    if error_type == "fatal":
+        return "fatal"
+    # N-1 legacy emission: exception class names from before the taxonomy.
+    if error_type == "CatalogOperationLockedError":
+        return "catalog_locked"
+    if error_type == "RuntimeError" and "paused" in str(structured.get("error", "")):
+        return "worker_paused"
+    return "fatal"
+
+
 def _run_company_wiki_json_retry(
     *,
     command: list[str],
     root: Path,
     action: str,
     deadline: float,
+    stats: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Run a company-wiki CLI call, retrying transient catalog lock
-    contention with exponential backoff bounded by the overall deadline."""
+    contention with jittered exponential backoff (5s, 10s, ... capped at
+    ``CATALOG_LOCKED_BACKOFF_MAX_SECONDS``) bounded by the overall deadline.
+
+    ZR-205: the retry set is the canonical catalog-contention codes
+    (catalog_locked / catalog_busy / db_timeout); ``worker_paused`` and
+    ``fatal`` are NOT auto-retried (fail closed).  Jitter is ±20% uniform;
+    the wait is clamped to the remaining deadline so a sleep never exceeds
+    it.  Every company-wiki subprocess invocation is counted in
+    ``stats["calls"]`` for final envelope reconciliation (READ-09).
+    """
     attempt = 1
     backoff = CATALOG_LOCKED_BACKOFF_SECONDS
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise FilingFetchError(
-                f"overall deadline exceeded before {action}", code="upstream_error"
+                f"overall deadline exceeded before {action}",
+                code="upstream_error",
+                stage=action,
+                attempts=attempt - 1,
             )
         try:
             return _run_company_wiki_json(
@@ -281,15 +323,19 @@ def _run_company_wiki_json_retry(
                 root=root,
                 timeout_seconds=remaining,
                 action=action,
+                stats=stats,
             )
         except FilingFetchError as exc:
-            if exc.code != "catalog_locked":
+            if exc.code not in _CATALOG_RETRY_CODES:
                 raise
-            wait = min(backoff, remaining)
+            jittered = backoff * (1.0 + random.uniform(-CATALOG_LOCKED_BACKOFF_JITTER, CATALOG_LOCKED_BACKOFF_JITTER))
+            wait = min(jittered, remaining)
             if wait <= 0:
                 raise FilingFetchError(
                     f"overall deadline exceeded retrying {action}: {exc}",
                     code="upstream_error",
+                    stage=action,
+                    attempts=attempt,
                 ) from exc
             print(
                 f"[filing-fetch] {action} blocked by a running catalog operation "
@@ -298,7 +344,10 @@ def _run_company_wiki_json_retry(
             )
             time.sleep(wait)
             attempt += 1
-            backoff *= CATALOG_LOCKED_BACKOFF_MULTIPLIER
+            backoff = min(
+                backoff * CATALOG_LOCKED_BACKOFF_MULTIPLIER,
+                CATALOG_LOCKED_BACKOFF_MAX_SECONDS,
+            )
 
 
 def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
@@ -450,6 +499,7 @@ class PausedWorkerScope:
         graceful_timeout_seconds: float,
         resume_wait_seconds: float,
         deadline: float,
+        stats: dict[str, int] | None = None,
     ) -> None:
         self.root = root
         self.command_prefix = command_prefix
@@ -459,6 +509,7 @@ class PausedWorkerScope:
         self.deadline = deadline
         self.action = "none"
         self._first = False
+        self.stats = stats
 
     def _run(self, subcommand: str, *args: str, timeout: float) -> dict[str, Any]:
         return _run_company_wiki_json(
@@ -466,6 +517,7 @@ class PausedWorkerScope:
             root=self.root,
             timeout_seconds=timeout,
             action=subcommand,
+            stats=self.stats,
         )
 
     def _remaining(self) -> float:
@@ -572,6 +624,25 @@ class PausedWorkerScope:
             )
 
 
+def _normalize_stats(stats: dict[str, int] | None) -> dict[str, int]:
+    """Return a mutable reconciliation stats dict (ZR-205)."""
+    if stats is None:
+        stats = {}
+    stats.setdefault("calls", 0)
+    stats.setdefault("downloads", 0)
+    return stats
+
+
+def _record_download_events(stats: dict[str, int] | None, handle: dict) -> None:
+    """Mirror the final resolution envelope's download_events count into the
+    reconciliation stats so the response preserves zero-download evidence."""
+    if stats is None:
+        return
+    events = (handle.get("resolution_envelope") or {}).get("download_events")
+    if isinstance(events, int):
+        stats["downloads"] = events
+
+
 def resolve_filing(
     *,
     request: dict[str, Any],
@@ -582,6 +653,7 @@ def resolve_filing(
     pause_worker: bool = True,
     worker_graceful_timeout_seconds: float = 5.0,
     worker_resume_wait_seconds: float = 5.0,
+    stats: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Identify an optional company query, then resolve or explicitly ensure a filing.
 
@@ -591,7 +663,16 @@ def resolve_filing(
     (CN -> StockInfo, HK/US -> dayu) and writes any new bytes into
     ``companies/{entity}/raw/{kind}/``. A ``company_query`` is resolved to one
     verified active security before either source command is constructed.
+
+    ``stats`` (optional, mutated in place): ZR-205 reconciliation counters.
+    ``stats["calls"]`` counts every company-wiki subprocess invocation
+    (including retries and worker pause/resume orchestration);
+    ``stats["downloads"]`` is the download event count from the final
+    resolution envelope (0 unless a download actually committed).  Final
+    success and failure both preserve these counts in the response envelope
+    (READ-09/READ-10).
     """
+    stats = _normalize_stats(stats)
 
     if company_wiki_root is not None and config_path is not None:
         raise ValueError("company_wiki_root cannot be combined with config_path")
@@ -626,6 +707,7 @@ def resolve_filing(
         root=root,
         action="identify",
         deadline=deadline,
+        stats=stats,
     )
     company_identity = _resolved_company_identity(identity_payload)
     normalized_request = {
@@ -676,6 +758,7 @@ def resolve_filing(
             graceful_timeout_seconds=worker_graceful_timeout_seconds,
             resume_wait_seconds=worker_resume_wait_seconds,
             deadline=deadline,
+            stats=stats,
         )
         with scope:
             payload = _run_company_wiki_json_retry(
@@ -683,6 +766,7 @@ def resolve_filing(
                 root=root,
                 action=action,
                 deadline=deadline,
+                stats=stats,
             )
     else:
         payload = _run_company_wiki_json_retry(
@@ -690,6 +774,7 @@ def resolve_filing(
             root=root,
             action=action,
             deadline=deadline,
+            stats=stats,
         )
     if action == "ensure":
         # FC-802: the ensure payload carries the top-level status; GAP is a
@@ -720,6 +805,7 @@ def resolve_filing(
                     pause_worker=pause_worker,
                     worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
                     worker_resume_wait_seconds=worker_resume_wait_seconds,
+                    stats=stats,
                 )
             return {
                 "status": "gap",
@@ -751,6 +837,10 @@ def resolve_filing(
         )
     handle = _handle_from_resolution(resolution, request, root)
     handle["company_identity"] = company_identity
+    # ZR-205: record the download event count from the final resolution
+    # envelope (0 = pure reuse, 1 = committed download) so the final
+    # envelope preserves the zero-download / call-count evidence (READ-10).
+    _record_download_events(stats, handle)
     return handle
 
 
@@ -817,6 +907,7 @@ def _close_gap_and_return_handle(
     pause_worker: bool,
     worker_graceful_timeout_seconds: float,
     worker_resume_wait_seconds: float,
+    stats: dict[str, int] | None = None,
 ) -> dict:
     """FC-802: execute the authorized close-gap transaction and return the
     final handle.  filing-fetch stays thin: the binding is assembled from
@@ -860,6 +951,7 @@ def _close_gap_and_return_handle(
             graceful_timeout_seconds=worker_graceful_timeout_seconds,
             resume_wait_seconds=worker_resume_wait_seconds,
             deadline=deadline,
+            stats=stats,
         )
         with scope:
             closed = _run_company_wiki_json_retry(
@@ -867,6 +959,7 @@ def _close_gap_and_return_handle(
                 root=root,
                 action="close-gap",
                 deadline=deadline,
+                stats=stats,
             )
     finally:
         Path(binding_file.name).unlink(missing_ok=True)
@@ -883,6 +976,7 @@ def _close_gap_and_return_handle(
     handle = _handle_from_resolution(
         closed_resolution, request, root, envelope=closed.get("envelope"))
     handle["company_identity"] = company_identity
+    _record_download_events(stats, handle)
     return handle
 
 
@@ -959,6 +1053,7 @@ def main(argv: list[str] | None = None) -> int:
             raise FilingFetchError(
                 "request must be a JSON object", code="request_error"
             )
+        stats = {"calls": 0, "downloads": 0}
         handle = resolve_filing(
             request=request,
             config_path=args.config,
@@ -967,6 +1062,7 @@ def main(argv: list[str] | None = None) -> int:
             pause_worker=not args.no_pause_worker,
             worker_graceful_timeout_seconds=args.worker_graceful_timeout_seconds,
             worker_resume_wait_seconds=args.worker_resume_wait_seconds,
+            stats=stats,
         )
         if isinstance(handle, dict) and handle.get("status") == "gap":
             # FC-802: a structured gap passes through unwrapped — it is NOT
@@ -977,6 +1073,10 @@ def main(argv: list[str] | None = None) -> int:
                 "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
                 "status": "capture_ready",
                 "handle": handle,
+                # ZR-205: preserve the call/download counts in the final
+                # success envelope for reconciliation (READ-09/READ-10).
+                "calls": stats["calls"],
+                "downloads": stats["downloads"],
             }
         json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
@@ -997,6 +1097,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.debug and exc.debug_trace:
             error_response["debug_trace"] = exc.debug_trace
+        # ZR-205 stage-error transparency: the failing stage and attempt
+        # count ride on the error envelope when known (READ-09), and the
+        # call/download counts stay visible on failure too (READ-10).
+        if exc.stage is not None:
+            error_response["stage"] = exc.stage
+        if exc.attempts is not None:
+            error_response["attempts"] = exc.attempts
+        if "stats" in locals():
+            error_response["calls"] = stats["calls"]
+            error_response["downloads"] = stats["downloads"]
         json.dump(error_response, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 2

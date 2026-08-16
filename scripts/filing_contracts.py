@@ -50,16 +50,33 @@ class FilingFetchError(RuntimeError):
         code: str = "fatal",
         candidates: list | None = None,
         debug_trace: list | None = None,
+        stage: str | None = None,
+        attempts: int | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
-        self.retryable = code in {"upstream_error", "worker_paused", "catalog_locked"}
+        # ZR-205: retryable = the caller may retry. catalog_busy (raw SQLite
+        # busy/locked) and db_timeout join catalog_locked/worker_paused; the
+        # deadline-aware auto-retry loop in fetch_filing only spins on the
+        # bounded catalog-contention codes (worker_paused stays caller-side).
+        self.retryable = code in {
+            "upstream_error",
+            "worker_paused",
+            "catalog_locked",
+            "catalog_busy",
+            "db_timeout",
+        }
         # Candidate identities surfaced by company-wiki when the query is
         # ambiguous, so callers can disambiguate from the error response alone.
         self.candidates = candidates
         # Per-candidate exclusion trace from the company-wiki resolve step,
         # surfaced with --debug so a not_found explains itself (Phase 19.6).
         self.debug_trace = debug_trace
+        # ZR-205 stage transparency: which company-wiki call failed
+        # (identify/ensure/resolve/close-gap) and how many attempts were made,
+        # so the final envelope stays reconcilable (READ-09).
+        self.stage = stage
+        self.attempts = attempts
 
 
 # ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from fetch_filing import (  # noqa: E402
     FilingFetchError,
+    _classify_wiki_error,
     _run_company_wiki_json,
     load_company_wiki_root,
     main,
@@ -1475,14 +1476,23 @@ class FilingFetchTests(unittest.TestCase):
     # --- Phase 15.2: catalog lock contention is retryable ---
 
     def test_catalog_lock_error_is_classified_retryable(self) -> None:
-        """A company-wiki CatalogOperationLockedError must be classified as
-        catalog_locked / retryable, not fatal; other upstream errors must stay
-        fail-closed (fatal / not retryable)."""
+        """A company-wiki catalog-contention failure must be classified with
+        its canonical ZR-204 taxonomy code (catalog_locked / catalog_busy /
+        db_timeout / worker_paused), each retryable; unknown or malformed
+        upstream errors must stay fail-closed (fatal / not retryable)."""
         with TemporaryDirectory() as temporary:
             root = self._wiki_root(Path(temporary), "company-wiki")
-            for error_type, expected_code, expected_retryable in (
-                ("CatalogOperationLockedError", "catalog_locked", True),
-                ("SomeOtherUpstreamError", "fatal", False),
+            for error_type, error_text, expected_code, expected_retryable in (
+                ("CatalogOperationLockedError", "catalog operation already running: pid=15536", "catalog_locked", True),
+                # ZR-204 canonical codes pass through verbatim.
+                ("catalog_locked", "catalog operation already running: pid=15536", "catalog_locked", True),
+                ("catalog_busy", "database is locked", "catalog_busy", True),
+                ("db_timeout", "database is locked", "db_timeout", True),
+                ("worker_paused", "source acquisition is paused", "worker_paused", True),
+                ("fatal", "boom", "fatal", False),
+                # N-1 legacy raw emission (pre-taxonomy) still maps.
+                ("RuntimeError", "source acquisition is paused; start the worker", "worker_paused", True),
+                ("SomeOtherUpstreamError", "boom", "fatal", False),
             ):
                 with self.subTest(error_type=error_type):
                     failed = subprocess.CompletedProcess(
@@ -1493,7 +1503,7 @@ class FilingFetchTests(unittest.TestCase):
                             {
                                 "status": "failed",
                                 "error_type": error_type,
-                                "error": "catalog operation already running: pid=15536",
+                                "error": error_text,
                             }
                         ),
                     )
@@ -1507,10 +1517,19 @@ class FilingFetchTests(unittest.TestCase):
                             )
                     self.assertEqual(ctx.exception.code, expected_code)
                     self.assertEqual(ctx.exception.retryable, expected_retryable)
+                    self.assertEqual(ctx.exception.stage, "resolve")
+
+    def test_classify_wiki_error_fails_closed_on_malformed_stderr(self) -> None:
+        """Non-JSON or non-object stderr payloads must fail closed to fatal."""
+        for payload in ("not json at all", "[]", "", "[1, 2]"):
+            with self.subTest(payload=payload[:12]):
+                self.assertEqual(_classify_wiki_error(payload), "fatal")
 
     def test_catalog_lock_retries_with_backoff_then_succeeds(self) -> None:
-        """Lock contention is retried with exponential backoff (5s, 10s) and
-        recovers once the catalog is free, within the overall deadline."""
+        """Lock contention is retried with jittered exponential backoff
+        (5s, 10s) and recovers once the catalog is free, within the overall
+        deadline.  Jitter is pinned to 0 here so the exact waits are
+        deterministic; jitter range is covered by a dedicated test."""
         with TemporaryDirectory() as temporary:
             parent = Path(temporary)
             root = self._wiki_root(parent, "company-wiki")
@@ -1521,7 +1540,7 @@ class FilingFetchTests(unittest.TestCase):
                 stderr=json.dumps(
                     {
                         "status": "failed",
-                        "error_type": "CatalogOperationLockedError",
+                        "error_type": "catalog_locked",
                         "error": "catalog operation already running: pid=15536",
                     }
                 ),
@@ -1541,13 +1560,190 @@ class FilingFetchTests(unittest.TestCase):
             completed = [ok_identity, locked, locked, ok_source]
             with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
                 with patch("fetch_filing.time.sleep") as sleep:
-                    handle = resolve_filing(
-                        request=self._request(),
-                        company_wiki_root=root,
-                    )
+                    with patch("fetch_filing.random.uniform", return_value=0.0):
+                        handle = resolve_filing(
+                            request=self._request(),
+                            company_wiki_root=root,
+                        )
             self.assertEqual(run.call_count, 4)  # identify + 3 resolve attempts
             self.assertEqual(sleep.call_args_list, [call(5.0), call(10.0)])
             self.assertEqual(handle["request_id"], source_response["request_id"])
+
+    def test_catalog_busy_retries_with_backoff_then_succeeds(self) -> None:
+        """A raw SQLite busy/locked form (catalog_busy — ZR102-F2) is
+        auto-retried like catalog_locked, not treated as fatal."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            busy = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "catalog_busy",
+                        "error": "database is locked",
+                    }
+                ),
+            )
+            ok_identity = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            )
+            source_response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:company-wiki:request:after-busy",
+                "matches": [self._handle(root)],
+            }
+            ok_source = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(source_response), stderr=""
+            )
+            completed = [ok_identity, busy, busy, ok_source]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                with patch("fetch_filing.time.sleep") as sleep:
+                    with patch("fetch_filing.random.uniform", return_value=0.0):
+                        handle = resolve_filing(
+                            request=self._request(),
+                            company_wiki_root=root,
+                        )
+            self.assertEqual(run.call_count, 4)  # identify + 3 resolve attempts
+            self.assertEqual(sleep.call_args_list, [call(5.0), call(10.0)])
+            self.assertEqual(handle["request_id"], source_response["request_id"])
+
+    def test_db_timeout_retries_with_backoff_then_succeeds(self) -> None:
+        """A sqlite timeout (db_timeout) is auto-retried with backoff too."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            timed_out = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "db_timeout",
+                        "error": "database is locked",
+                    }
+                ),
+            )
+            ok_identity = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            )
+            source_response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:company-wiki:request:after-timeout",
+                "matches": [self._handle(root)],
+            }
+            ok_source = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(source_response), stderr=""
+            )
+            completed = [ok_identity, timed_out, timed_out, ok_source]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                with patch("fetch_filing.time.sleep") as sleep:
+                    with patch("fetch_filing.random.uniform", return_value=0.0):
+                        handle = resolve_filing(
+                            request=self._request(),
+                            company_wiki_root=root,
+                        )
+            self.assertEqual(run.call_count, 4)  # identify + 3 resolve attempts
+            self.assertEqual(sleep.call_args_list, [call(5.0), call(10.0)])
+            self.assertEqual(handle["request_id"], source_response["request_id"])
+
+    def test_backoff_jitter_stays_within_bounds(self) -> None:
+        """The jittered wait must stay within the ±20% jitter band of the
+        scheduled backoff and never exceed the remaining deadline."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            locked = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "catalog_locked",
+                        "error": "catalog operation already running: pid=15536",
+                    }
+                ),
+            )
+            ok_identity = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            )
+            ok_source = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "status": "reused_exact",
+                        "request_id": "urn:company-wiki:request:after-jitter",
+                        "matches": [self._handle(root)],
+                    }
+                ), stderr=""
+            )
+            completed = [ok_identity, locked, ok_source]
+            for jitter_value in (0.2, -0.2):
+                with self.subTest(jitter=jitter_value):
+                    with patch("fetch_filing.subprocess.run", side_effect=completed):
+                        with patch("fetch_filing.time.sleep") as sleep:
+                            with patch("fetch_filing.random.uniform", return_value=jitter_value):
+                                resolve_filing(
+                                    request=self._request(),
+                                    company_wiki_root=root,
+                                    timeout_seconds=30,
+                                )
+                    waited = sleep.call_args.args[0]
+                    self.assertAlmostEqual(waited, 5.0 * (1.0 + jitter_value), delta=1e-9)
+
+    def test_backoff_capped_at_max(self) -> None:
+        """Exponential backoff must never exceed the configured cap, even
+        when the deadline would allow a longer wait."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            locked = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "catalog_locked",
+                        "error": "catalog operation already running: pid=15536",
+                    }
+                ),
+            )
+            ok_identity = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            )
+            ok_source = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "status": "reused_exact",
+                        "request_id": "urn:company-wiki:request:after-cap",
+                        "matches": [self._handle(root)],
+                    }
+                ), stderr=""
+            )
+            # 5, 10, 20, 40, 60(cap), 60(cap), then success: 7 resolve attempts.
+            completed = [ok_identity, locked, locked, locked, locked, locked, locked, ok_source]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                with patch("fetch_filing.time.sleep") as sleep:
+                    with patch("fetch_filing.random.uniform", return_value=0.0):
+                        with patch("fetch_filing.time.monotonic", return_value=100.0):
+                            resolve_filing(
+                                request=self._request(),
+                                company_wiki_root=root,
+                                timeout_seconds=200,
+                            )
+            self.assertEqual(run.call_count, 8)
+            self.assertEqual(
+                sleep.call_args_list,
+                [call(5.0), call(10.0), call(20.0), call(40.0), call(60.0), call(60.0)],
+            )
 
 
     # --- Phase 2: request validation boundaries ---
@@ -1869,7 +2065,8 @@ class FilingFetchTests(unittest.TestCase):
 
     def test_catalog_locked_until_deadline_is_upstream_error(self) -> None:
         """Constantly locked catalog: backoff retries exhaust the deadline and
-        the failure surfaces as upstream_error, not a hang."""
+        the failure surfaces as upstream_error (not a hang), with the stage
+        and attempt count attached for reconciliation."""
         with TemporaryDirectory() as temporary:
             root = self._wiki_root(Path(temporary), "company-wiki")
             locked = subprocess.CompletedProcess(
@@ -1879,23 +2076,26 @@ class FilingFetchTests(unittest.TestCase):
                 stderr=json.dumps(
                     {
                         "status": "failed",
-                        "error_type": "CatalogOperationLockedError",
+                        "error_type": "catalog_locked",
                         "error": "catalog operation already running: pid=15536",
                     }
                 ),
             )
             with patch("fetch_filing.subprocess.run", return_value=locked) as run:
                 with patch("fetch_filing.time.sleep") as sleep:
-                    with patch(
-                        "fetch_filing.time.monotonic", side_effect=[100.0, 100.0, 105.0, 108.0]
-                    ):
-                        with self.assertRaises(FilingFetchError) as ctx:
-                            resolve_filing(
-                                request=self._request(), company_wiki_root=root, timeout_seconds=8
-                            )
+                    with patch("fetch_filing.random.uniform", return_value=0.0):
+                        with patch(
+                            "fetch_filing.time.monotonic", side_effect=[100.0, 100.0, 105.0, 108.0]
+                        ):
+                            with self.assertRaises(FilingFetchError) as ctx:
+                                resolve_filing(
+                                    request=self._request(), company_wiki_root=root, timeout_seconds=8
+                                )
             self.assertEqual(ctx.exception.code, "upstream_error")
             self.assertEqual(run.call_count, 2)
             self.assertEqual(sleep.call_args_list, [call(5.0), call(3.0)])
+            self.assertEqual(ctx.exception.stage, "identify")
+            self.assertEqual(ctx.exception.attempts, 2)
 
     def test_upstream_subprocess_timeout_is_upstream_error(self) -> None:
         """A subprocess timeout (attempt outlived the deadline budget) must
@@ -1922,7 +2122,7 @@ class FilingFetchTests(unittest.TestCase):
                 stderr=json.dumps(
                     {
                         "status": "failed",
-                        "error_type": "RuntimeError",
+                        "error_type": "worker_paused",
                         "error": "source acquisition is paused; ...",
                     }
                 ),
@@ -1938,6 +2138,141 @@ class FilingFetchTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "worker_paused")
             self.assertEqual(run.call_count, 2)  # identify + one resolve, no retry
             sleep.assert_not_called()
+
+    def test_worker_paused_legacy_runtime_error_still_maps(self) -> None:
+        """N-1: the legacy RuntimeError + paused text emission still maps to
+        worker_paused (retryable, not auto-retried)."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            paused = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "RuntimeError",
+                        "error": "source acquisition is paused; start the worker to resume",
+                    }
+                ),
+            )
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""),
+                paused,
+            ]
+            with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=self._request(), company_wiki_root=root)
+            self.assertEqual(ctx.exception.code, "worker_paused")
+            self.assertTrue(ctx.exception.retryable)
+            self.assertEqual(run.call_count, 2)
+
+    def test_success_envelope_preserves_calls_and_downloads(self) -> None:
+        """ZR-205 READ-09: the final success envelope carries the call count
+        and the zero-download evidence."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            config_path = parent / "company_wiki.json"
+            config_path.write_text(
+                json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}),
+                encoding="utf-8",
+            )
+            locked = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "catalog_busy",
+                        "error": "database is locked",
+                    }
+                ),
+            )
+            ok_identity = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            )
+            ok_source = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "status": "reused_exact",
+                        "request_id": "urn:company-wiki:request:envelope",
+                        "matches": [self._handle(root)],
+                    }
+                ), stderr=""
+            )
+            completed = [ok_identity, locked, ok_source]
+            import io as _io
+
+            request = json.dumps(self._request())
+            original_stdin, original_stdout = sys.stdin, sys.stdout
+            sys.stdin = _io.StringIO(request)
+            sys.stdout = _io.StringIO()
+            try:
+                with patch("fetch_filing.subprocess.run", side_effect=completed):
+                    with patch("fetch_filing.random.uniform", return_value=0.0):
+                        exit_code = __import__("fetch_filing").main(["--config", str(config_path)])
+                output = sys.stdout.getvalue()
+            finally:
+                sys.stdin, sys.stdout = original_stdin, original_stdout
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(output)
+            self.assertEqual(payload["status"], "capture_ready")
+            self.assertEqual(payload["calls"], 3)  # identify + 2 resolve attempts
+            self.assertEqual(payload["downloads"], 0)
+
+    def test_failure_envelope_preserves_stage_attempts_calls_downloads(self) -> None:
+        """ZR-205 READ-10: after a deadline exhaustion the failure envelope
+        keeps the stage, attempt count, call count and zero-download
+        evidence."""
+        with TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = self._wiki_root(parent, "company-wiki")
+            config_path = parent / "company_wiki.json"
+            config_path.write_text(
+                json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}),
+                encoding="utf-8",
+            )
+            locked = subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr=json.dumps(
+                    {
+                        "status": "failed",
+                        "error_type": "db_timeout",
+                        "error": "database is locked",
+                    }
+                ),
+            )
+            import io as _io
+
+            request = json.dumps(self._request())
+            original_stdin, original_stdout = sys.stdin, sys.stdout
+            sys.stdin = _io.StringIO(request)
+            sys.stdout = _io.StringIO()
+            try:
+                with patch("fetch_filing.subprocess.run", return_value=locked):
+                    with patch("fetch_filing.random.uniform", return_value=0.0):
+                        with patch(
+                            "fetch_filing.time.monotonic",
+                            side_effect=[100.0, 100.0, 105.0, 108.0],
+                        ):
+                            exit_code = __import__("fetch_filing").main(
+                                ["--config", str(config_path), "--timeout-seconds", "8"]
+                            )
+                output = sys.stdout.getvalue()
+            finally:
+                sys.stdin, sys.stdout = original_stdin, original_stdout
+            self.assertEqual(exit_code, 2)
+            payload = json.loads(output)
+            self.assertEqual(payload["status"], "upstream_error")
+            self.assertEqual(payload["stage"], "identify")
+            self.assertEqual(payload["attempts"], 2)
+            self.assertEqual(payload["calls"], 2)
+            self.assertEqual(payload["downloads"], 0)
 
     # --- Phase 2: handle boundaries ---
 

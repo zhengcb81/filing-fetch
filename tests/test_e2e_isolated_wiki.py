@@ -292,9 +292,10 @@ class TestIdentityUnavailable(MutatingE2E):
         )
 
     def test_e2e_identity_unavailable_without_snapshots(self) -> None:
-        """No security_master snapshots: identify exits 1 with
-        SecurityMasterUnavailableError, which filing-fetch maps to fatal
-        (fail-closed).  Pinned mapping documented here."""
+        """No security_master snapshots: identify exits 1 with a structured
+        fatal (ZR-204 canonical emission — error_type 'fatal', retryable
+        false), which filing-fetch maps to fatal (fail-closed).  Pinned
+        mapping documented here."""
         rc, out, err = self.wiki.run_fetch(
             {
                 "schema_version": "1.1",
@@ -307,7 +308,12 @@ class TestIdentityUnavailable(MutatingE2E):
         self.assertEqual(rc, 2, out + err)
         payload = json.loads(out)
         self.assertEqual(payload["status"], "fatal")
-        self.assertIn("SecurityMasterUnavailableError", payload["error"])
+        self.assertEqual(payload["error_code"], "fatal")
+        self.assertFalse(payload["retryable"])
+        # The canonical taxonomy emission names the structured error_type
+        # (fatal) and keeps the cause text visible; the legacy class-name
+        # ('SecurityMasterUnavailableError') is no longer the emission shape.
+        self.assertIn("no security-master snapshots", payload["error"])
 
 
 class TestCatalogLockContention(MutatingE2E):
