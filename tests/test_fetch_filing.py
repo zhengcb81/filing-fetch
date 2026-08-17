@@ -21,6 +21,7 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 from fetch_filing import (  # noqa: E402
     FilingFetchError,
     _classify_wiki_error,
+    _resolution_trace,
     _run_company_wiki_json,
     load_company_wiki_root,
     main,
@@ -2272,6 +2273,124 @@ class FilingFetchTests(unittest.TestCase):
             self.assertEqual(payload["stage"], "identify")
             self.assertEqual(payload["attempts"], 2)
             self.assertEqual(payload["calls"], 2)
+            self.assertEqual(payload["downloads"], 0)
+
+    # --- ZR-307: staged evidence survives downstream failures ---
+
+    def test_resolution_trace_returns_none_for_none_resolution(self) -> None:
+        """_resolution_trace returns None for non-dict resolution."""
+        self.assertIsNone(_resolution_trace(None))
+        self.assertIsNone(_resolution_trace("not-a-dict"))
+
+    def test_resolution_trace_extracts_request_status_reason(self) -> None:
+        trace = _resolution_trace({
+            "request_id": "urn:req:1",
+            "status": "missing",
+            "reason": "gap",
+            "other_field": "ignored",
+        })
+        self.assertEqual(trace, {
+            "request_id": "urn:req:1",
+            "status": "missing",
+            "reason": "gap",
+        })
+
+    def test_not_found_error_carries_resolution_trace(self) -> None:
+        """The not_found error envelope includes resolution_trace with
+        request_id/status/reason (ZR-307: error never swallows upstream
+        evidence)."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            ok_identity = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            )
+            not_reusable = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps({
+                    "schema_version": "1.0",
+                    "status": "missing",
+                    "reason": "no existing source satisfies request",
+                    "request_id": "urn:wiki:missing",
+                }), stderr=""
+            )
+            with patch("fetch_filing.subprocess.run", side_effect=[ok_identity, not_reusable]):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(
+                        request=self._request(),
+                        company_wiki_root=root,
+                    )
+            self.assertEqual(ctx.exception.code, "not_found")
+            self.assertIsNotNone(ctx.exception.resolution_trace)
+            self.assertEqual(ctx.exception.resolution_trace["request_id"], "urn:wiki:missing")
+            self.assertEqual(ctx.exception.resolution_trace["status"], "missing")
+
+    def test_handle_validation_failure_carries_resolution_trace(self) -> None:
+        """When validate_handle raises, the FilingFetchError carries
+        the upstream resolution trace (request_id/status) so the error
+        envelope never swallows the exact-reuse evidence (ZR-307)."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            ok_identity = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            )
+            bad_handle = self._handle(root)
+            bad_handle["capture_ready"] = False
+            bad_handle["missing_capture_fields"] = ["content_hash"]
+            response = {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:wiki:reuse",
+                "matches": [bad_handle],
+            }
+            ok_source = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(response), stderr=""
+            )
+            with patch("fetch_filing.subprocess.run", side_effect=[ok_identity, ok_source]):
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(
+                        request=self._request(),
+                        company_wiki_root=root,
+                    )
+            self.assertEqual(ctx.exception.code, "not_found")
+            self.assertIsNotNone(ctx.exception.resolution_trace)
+            self.assertEqual(ctx.exception.resolution_trace["request_id"], "urn:wiki:reuse")
+            self.assertEqual(ctx.exception.resolution_trace["status"], "reused_exact")
+
+    def test_envelope_failure_includes_resolution_trace_in_output(self) -> None:
+        """main() error envelope includes resolution_trace unconditionally
+        when available (ZR-307)."""
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            config_path = (Path(temporary) / "company_wiki.json")
+            config_path.write_text(
+                json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}),
+                encoding="utf-8",
+            )
+            import io as _io
+            original_stdin, original_stdout = sys.stdin, sys.stdout
+            sys.stdin = _io.StringIO(json.dumps(self._request()))
+            sys.stdout = _io.StringIO()
+            try:
+                ok_identity = subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+                )
+                not_found = subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps({
+                        "schema_version": "1.0",
+                        "status": "missing",
+                        "reason": "gap",
+                        "request_id": "urn:trace-test",
+                    }), stderr=""
+                )
+                with patch("fetch_filing.subprocess.run", side_effect=[ok_identity, not_found]):
+                    exit_code = __import__("fetch_filing").main(["--config", str(config_path)])
+                output = sys.stdout.getvalue()
+            finally:
+                sys.stdin, sys.stdout = original_stdin, original_stdout
+            self.assertEqual(exit_code, 2)
+            payload = json.loads(output)
+            self.assertIn("resolution_trace", payload)
+            self.assertEqual(payload["resolution_trace"]["request_id"], "urn:trace-test")
+            self.assertEqual(payload["resolution_trace"]["status"], "missing")
             self.assertEqual(payload["downloads"], 0)
 
     # --- Phase 2: handle boundaries ---

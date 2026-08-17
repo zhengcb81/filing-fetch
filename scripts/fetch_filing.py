@@ -834,6 +834,7 @@ def resolve_filing(
             f"source is not reusable: {resolution.get('status')} / {resolution.get('reason')}",
             code="not_found",
             debug_trace=resolution.get("debug_trace"),
+            resolution_trace=_resolution_trace(resolution),
         )
     handle = _handle_from_resolution(resolution, request, root)
     handle["company_identity"] = company_identity
@@ -842,6 +843,21 @@ def resolve_filing(
     # envelope preserves the zero-download / call-count evidence (READ-10).
     _record_download_events(stats, handle)
     return handle
+
+
+def _resolution_trace(resolution: dict | None) -> dict[str, Any] | None:
+    """Build a compact trace of the upstream resolution evidence.
+
+    ZR-307: the trace survives downstream handle/validation failures so the
+    error envelope never swallows the exact-reuse / download=0 evidence.
+    """
+    if not isinstance(resolution, dict):
+        return None
+    return {
+        "request_id": resolution.get("request_id"),
+        "status": resolution.get("status"),
+        "reason": resolution.get("reason"),
+    }
 
 
 def _handle_from_resolution(
@@ -862,6 +878,7 @@ def _handle_from_resolution(
         raise FilingFetchError(
             "company-wiki did not return exactly one source handle",
             code="upstream_error",
+            resolution_trace=_resolution_trace(resolution),
         )
     handle = dict(matches[0])
     if handle.get("capture_ready") is not True:
@@ -869,6 +886,7 @@ def _handle_from_resolution(
             "source lacks capture provenance: "
             + ", ".join(str(item) for item in handle.get("missing_capture_fields", [])),
             code="not_found",
+            resolution_trace=_resolution_trace(resolution),
         )
     handle["request_id"] = resolution.get("request_id")
     # FC-501: no independent root allowlist.  Handle containment is
@@ -876,20 +894,27 @@ def _handle_from_resolution(
     # upstream returns it; until then the legacy <wiki_root>/companies
     # default applies).  Direct company_wiki_root callers (tests) keep the
     # legacy default.
-    validate_handle(handle, request, root)
-    # FC-704: deep-validate and forward the resolution envelope verbatim —
-    # the journal-reconciled outcome + download event evidence the revenue
-    # receipt derives from.  N/N-1: an old company-wiki without an envelope
-    # resolves normally; the handle simply carries no envelope (revenue then
-    # fails closed instead of fabricating evidence).
-    if envelope is None:
-        envelope = resolution.get("resolution_envelope")
-    if envelope is not None:
-        # FC-903: validate + normalize (an N-1 company-wiki envelope gains
-        # the explicit honest bundle_status='unavailable') and forward the
-        # result — never a faked empty-green.
-        envelope = validate_resolution_envelope(envelope)
-        handle["resolution_envelope"] = dict(envelope)
+    # ZR-307: validate handle and resolution envelope; any failure carries
+    # the upstream resolution trace so the error envelope never swallows
+    # the exact-reuse / download=0 evidence.
+    try:
+        validate_handle(handle, request, root)
+        # FC-704: deep-validate and forward the resolution envelope verbatim —
+        # the journal-reconciled outcome + download event evidence the revenue
+        # receipt derives from.  N/N-1: an old company-wiki without an envelope
+        # resolves normally; the handle simply carries no envelope (revenue then
+        # fails closed instead of fabricating evidence).
+        if envelope is None:
+            envelope = resolution.get("resolution_envelope")
+        if envelope is not None:
+            # FC-903: validate + normalize (an N-1 company-wiki envelope gains
+            # the explicit honest bundle_status='unavailable') and forward the
+            # result — never a faked empty-green.
+            envelope = validate_resolution_envelope(envelope)
+            handle["resolution_envelope"] = dict(envelope)
+    except FilingFetchError as exc:
+        exc.resolution_trace = _resolution_trace(resolution)
+        raise
     return handle
 
 
@@ -1104,6 +1129,11 @@ def main(argv: list[str] | None = None) -> int:
             error_response["stage"] = exc.stage
         if exc.attempts is not None:
             error_response["attempts"] = exc.attempts
+        # ZR-307: the upstream resolution trace survives downstream
+        # handle/validation failures — the error envelope never swallows
+        # the exact-reuse / download=0 evidence.
+        if exc.resolution_trace is not None:
+            error_response["resolution_trace"] = exc.resolution_trace
         if "stats" in locals():
             error_response["calls"] = stats["calls"]
             error_response["downloads"] = stats["downloads"]

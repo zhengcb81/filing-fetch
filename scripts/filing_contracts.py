@@ -52,6 +52,7 @@ class FilingFetchError(RuntimeError):
         debug_trace: list | None = None,
         stage: str | None = None,
         attempts: int | None = None,
+        resolution_trace: dict | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -77,6 +78,10 @@ class FilingFetchError(RuntimeError):
         # so the final envelope stays reconcilable (READ-09).
         self.stage = stage
         self.attempts = attempts
+        # ZR-307 staged-evidence visibility: the upstream resolution summary
+        # (request_id/status/reason) survives a downstream failure — the
+        # error never swallows the exact-reuse/download=0 evidence.
+        self.resolution_trace = resolution_trace
 
 
 # ---------------------------------------------------------------------------
