@@ -629,6 +629,13 @@ def _record_download_events(stats: dict[str, int] | None, handle: dict) -> None:
         stats["downloads"] = events
 
 
+def _gap_plan_has_actionable_candidate(gap_plan: object) -> bool:
+    """Whether a metadata-only GAP contains an authorized-download target."""
+    if not isinstance(gap_plan, dict):
+        return False
+    return bool(gap_plan.get("missing") or gap_plan.get("newer_revision"))
+
+
 def resolve_filing(
     *,
     request: dict[str, Any],
@@ -762,15 +769,19 @@ def resolve_filing(
         if payload.get("status") == "gap":
             gap_plan = (payload.get("acquisition") or {}).get("gap_plan")
             authorization = request.get("authorization")
-            # FC-803: the close-gap transaction only runs when the plan is
-            # ACTIONABLE (missing items).  An empty plan stays a structured
-            # gap so the caller sees the details — reuse handles
+            # ZR-407: the close-gap transaction only runs when the plan is
+            # ACTIONABLE (a missing period or a newer same-period revision).
+            # An empty plan stays a structured gap so the caller sees the
+            # details — reuse handles
             # (LT-01), provider_unavailable retryability (LT-05), future
             # exclusions (LT-07) — never a silently downgraded handle.
-            has_missing = bool(gap_plan and gap_plan.get("missing"))
-            if allow_download and authorization is not None and has_missing:
-                # has_missing implies a dict payload (the .get above would
-                # have failed otherwise); narrow for mypy (FC-1204 F1 fix).
+            if (
+                allow_download
+                and authorization is not None
+                and _gap_plan_has_actionable_candidate(gap_plan)
+            ):
+                # The actionable check proves the payload is a dict; narrow
+                # for mypy (FC-1204 F1 fix).
                 assert isinstance(gap_plan, dict)
                 return _close_gap_and_return_handle(
                     payload=payload,

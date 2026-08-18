@@ -172,9 +172,13 @@ class Fc802GapTests(unittest.TestCase):
         self.assertEqual(result["gap_plan"]["gap_hash"], "c" * 64)
 
     def test_allow_download_without_authorization_stays_gap(self) -> None:
-        """allow_download=True without an authorization block never
+        """ZR-407: an actionable newer revision without authorization never
         downloads — the structured gap is returned."""
         root = self._wiki_root(self.parent, "company-wiki")
+        gap = self._gap_ensure()
+        plan = gap["acquisition"]["gap_plan"]
+        plan["missing"] = []
+        plan["newer_revision"] = [{"provider_document_id": "acc-2025-amend"}]
         completed = [
             subprocess.CompletedProcess(
                 args=[], returncode=0,
@@ -182,7 +186,7 @@ class Fc802GapTests(unittest.TestCase):
             self._worker_status_response(),
             subprocess.CompletedProcess(
                 args=[], returncode=0,
-                stdout=json.dumps(self._gap_ensure()), stderr=""),
+                stdout=json.dumps(gap), stderr=""),
         ]
         with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
             result = resolve_filing(
@@ -263,6 +267,80 @@ class Fc802GapTests(unittest.TestCase):
         self.assertEqual(binding["allowed_accessions"], ["acc-2025"])
         self.assertEqual(handle["request_id"], "urn:req:closed")
         self.assertEqual(handle["resolution_envelope"]["outcome"], "downloaded_new")
+
+    def test_authorized_newer_revision_closes_gap(self) -> None:
+        """ZR-407: an authorization may close a same-period newer revision,
+        even when there is no wholly missing fiscal year."""
+        root = self._wiki_root(self.parent, "company-wiki")
+        gap = self._gap_ensure()
+        plan = gap["acquisition"]["gap_plan"]
+        plan["missing"] = []
+        plan["newer_revision"] = [{"provider_document_id": "acc-2025-amend"}]
+        closed = {
+            "schema_version": "1.0",
+            "txn_id": "urn:company-wiki:close-gap:sha256:" + "t" * 64,
+            "status": "completed",
+            "reason": "gap_closed_downloaded",
+            "fetch_events": 1,
+            "outcome": "downloaded_new",
+            "resolution": {
+                "schema_version": "1.0",
+                "status": "reused_exact",
+                "request_id": "urn:req:revision-closed",
+                "matches": [self._handle(root)],
+            },
+            "envelope": {
+                "envelope_schema_version": "1.0",
+                "outcome": "downloaded_new",
+                "download_events": 1,
+                "policy_hash": "b" * 64,
+                "activation_epoch": "epoch-1",
+                "bundle_status": "unavailable",
+            },
+        }
+        completed = [
+            subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout=json.dumps(self._identity_response()),
+                stderr="",
+            ),
+            self._worker_status_response(),
+            subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(gap), stderr=""
+            ),
+            self._worker_status_response(),
+            subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(closed), stderr=""
+            ),
+        ]
+        request = self._latest_request()
+        request["authorization"] = {
+            "provider": "sec",
+            "allowed_accessions": ["acc-2025-amend"],
+            "max_items": 1,
+            "max_bytes": 5_000_000,
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+        captured = {}
+
+        def _run(*args, **kwargs):
+            argv = args[0]
+            if "close-gap" in argv:
+                flag = argv[argv.index("--binding-file") + 1]
+                captured["binding"] = json.loads(
+                    Path(flag).read_text(encoding="utf-8"))
+            return completed.pop(0)
+
+        with patch("fetch_filing.subprocess.run", side_effect=_run) as run:
+            handle = resolve_filing(
+                request=request, company_wiki_root=root, allow_download=True)
+        self.assertEqual(run.call_count, 5)
+        self.assertIn("close-gap", run.call_args_list[4].args[0])
+        self.assertEqual(
+            captured["binding"]["allowed_accessions"], ["acc-2025-amend"]
+        )
+        self.assertEqual(handle["request_id"], "urn:req:revision-closed")
 
     def test_exact_mode_missing_still_not_found(self) -> None:
         """Only GAP is structured — an exact-mode miss keeps the not_found
