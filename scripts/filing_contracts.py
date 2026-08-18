@@ -88,28 +88,36 @@ class FilingFetchError(RuntimeError):
 # Request schema (1.1)
 # ---------------------------------------------------------------------------
 
-_REQUEST_SCHEMA_1_1_FIELDS = frozenset({
-    "schema_version",
-    "company_query",
-    "market",
-    "exchange",
-    "document_kind",
-    "fiscal_year",
-    "as_of_date",
-    "form_type",
-    "fiscal_period",
-    "language",
-    "provider",
-    "provider_document_id",
-})
+_REQUEST_SCHEMA_1_1_FIELDS = frozenset(
+    {
+        "schema_version",
+        "company_query",
+        "market",
+        "exchange",
+        "document_kind",
+        "fiscal_year",
+        "as_of_date",
+        "form_type",
+        "fiscal_period",
+        "language",
+        "provider",
+        "provider_document_id",
+    }
+)
 
 # WU-4.1: 1.2 adds the explicit mode field; FC-802 adds the optional
 # authorization block (close-gap input: provider/accessions/caps/expiry).
 _REQUEST_SCHEMA_1_2_FIELDS = _REQUEST_SCHEMA_1_1_FIELDS | {"mode", "authorization"}
 
-_AUTHORIZATION_REQUIRED_FIELDS = frozenset({
-    "provider", "allowed_accessions", "max_items", "max_bytes", "expires_at",
-})
+_AUTHORIZATION_REQUIRED_FIELDS = frozenset(
+    {
+        "provider",
+        "allowed_accessions",
+        "max_items",
+        "max_bytes",
+        "expires_at",
+    }
+)
 
 
 def _required_text(value: Any, field_name: str) -> str:
@@ -165,8 +173,7 @@ def validate_request(request: dict[str, Any]) -> None:
         # FC-802: the close-gap input — provider + accessions + caps +
         # expiry. Anything missing is a request error (never ignored).
         if not isinstance(authorization, dict):
-            raise FilingFetchError(
-                "authorization must be an object", code="request_error")
+            raise FilingFetchError("authorization must be an object", code="request_error")
         missing = _AUTHORIZATION_REQUIRED_FIELDS - set(authorization)
         if missing:
             raise FilingFetchError(
@@ -175,12 +182,13 @@ def validate_request(request: dict[str, Any]) -> None:
             )
         _required_text(authorization.get("provider"), "authorization.provider")
         accessions = authorization.get("allowed_accessions")
-        if not isinstance(accessions, list) or not accessions or not all(
-            isinstance(a, str) and a.strip() for a in accessions
+        if (
+            not isinstance(accessions, list)
+            or not accessions
+            or not all(isinstance(a, str) and a.strip() for a in accessions)
         ):
             raise FilingFetchError(
-                "authorization.allowed_accessions must be a non-empty list of "
-                "non-empty strings",
+                "authorization.allowed_accessions must be a non-empty list of non-empty strings",
                 code="request_error",
             )
         for name in ("max_items", "max_bytes"):
@@ -190,8 +198,7 @@ def validate_request(request: dict[str, Any]) -> None:
                     f"authorization.{name} must be a positive integer",
                     code="request_error",
                 )
-        _required_text(
-            authorization.get("expires_at"), "authorization.expires_at")
+        _required_text(authorization.get("expires_at"), "authorization.expires_at")
     fiscal_year = request.get("fiscal_year")
     if mode == "exact" or (mode is None and version == FILING_REQUEST_SCHEMA_VERSION):
         # schema 1.2: explicit mode is expected; a missing mode defaults to
@@ -215,7 +222,9 @@ def validate_request(request: dict[str, Any]) -> None:
         if isinstance(fiscal_year, bool) or not isinstance(fiscal_year, int):
             raise FilingFetchError("fiscal_year must be an integer", code="request_error")
         if fiscal_year < 1900:
-            raise FilingFetchError(f"fiscal_year is out of range: {fiscal_year}", code="request_error")
+            raise FilingFetchError(
+                f"fiscal_year is out of range: {fiscal_year}", code="request_error"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -223,15 +232,24 @@ def validate_request(request: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 RESOLUTION_ENVELOPE_SCHEMA_VERSION = "1.0"
-RESOLUTION_ENVELOPE_OUTCOMES = frozenset({
-    "reused_existing", "reused_after_discovery", "downloaded_new", "gap",
-    "ambiguous", "rejected", "missing", "failed",
-})
+RESOLUTION_ENVELOPE_OUTCOMES = frozenset(
+    {
+        "reused_existing",
+        "reused_after_discovery",
+        "downloaded_new",
+        "gap",
+        "ambiguous",
+        "rejected",
+        "missing",
+        "failed",
+    }
+)
 RESOLUTION_ENVELOPE_BUNDLE_STATUSES = frozenset({"unavailable", "available"})
 # FC-905-a: trusted capture/safety evidence.  not_reviewed = the document has
 # no review receipt (consumers block per policy — never assumed clean).
 RESOLUTION_ENVELOPE_PROMPT_INJECTION_STATUSES = frozenset(
-    {"not_detected", "detected_and_ignored", "not_reviewed"})
+    {"not_detected", "detected_and_ignored", "not_reviewed"}
+)
 
 
 def validate_resolution_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
@@ -251,12 +269,10 @@ def validate_resolution_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     forwarded verbatim.
     """
     if not isinstance(envelope, dict):
-        raise FilingFetchError(
-            "resolution_envelope must be an object", code="upstream_error")
+        raise FilingFetchError("resolution_envelope must be an object", code="upstream_error")
     if envelope.get("envelope_schema_version") != RESOLUTION_ENVELOPE_SCHEMA_VERSION:
         raise FilingFetchError(
-            f"resolution_envelope schema_version must be "
-            f"{RESOLUTION_ENVELOPE_SCHEMA_VERSION}",
+            f"resolution_envelope schema_version must be {RESOLUTION_ENVELOPE_SCHEMA_VERSION}",
             code="upstream_error",
         )
     outcome = envelope.get("outcome")
@@ -273,17 +289,14 @@ def validate_resolution_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         )
     policy_hash = envelope.get("policy_hash")
     if policy_hash is not None and not (
-        isinstance(policy_hash, str)
-        and re.fullmatch(r"[0-9a-f]{64}", policy_hash)
+        isinstance(policy_hash, str) and re.fullmatch(r"[0-9a-f]{64}", policy_hash)
     ):
         raise FilingFetchError(
             "resolution_envelope policy_hash must be a lowercase SHA-256 or null",
             code="upstream_error",
         )
     epoch = envelope.get("activation_epoch")
-    if epoch is not None and not (
-        isinstance(epoch, str) and epoch.strip()
-    ):
+    if epoch is not None and not (isinstance(epoch, str) and epoch.strip()):
         raise FilingFetchError(
             "resolution_envelope activation_epoch must be text or null",
             code="upstream_error",
@@ -298,16 +311,12 @@ def validate_resolution_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         bundle_status = "unavailable"
     if bundle_status not in RESOLUTION_ENVELOPE_BUNDLE_STATUSES:
         raise FilingFetchError(
-            "resolution_envelope bundle_status is outside the enum: "
-            f"{bundle_status!r}",
+            f"resolution_envelope bundle_status is outside the enum: {bundle_status!r}",
             code="upstream_error",
         )
     if bundle_status == "available":
         bundle_hash = envelope.get("bundle_hash")
-        if not (
-            isinstance(bundle_hash, str)
-            and re.fullmatch(r"[0-9a-f]{64}", bundle_hash)
-        ):
+        if not (isinstance(bundle_hash, str) and re.fullmatch(r"[0-9a-f]{64}", bundle_hash)):
             raise FilingFetchError(
                 "bundle_status=available requires a SHA-256 bundle_hash",
                 code="upstream_error",
@@ -361,12 +370,37 @@ def validate_resolution_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
 # Handle validation
 # ---------------------------------------------------------------------------
 
-_HANDLE_REQUIRED_FIELDS = frozenset({
-    "request_id", "document_id", "source_id", "title", "published_date",
-    "https_url", "canonical_path", "snapshot_sha256", "retrieved_at",
-    "provider", "provider_document_id", "collector_name", "collector_version",
-    "byte_size", "mime_type", "capture_ready",
-})
+_HANDLE_REQUIRED_FIELDS = frozenset(
+    {
+        "request_id",
+        "document_id",
+        "source_id",
+        "title",
+        "published_date",
+        "https_url",
+        "canonical_path",
+        "snapshot_sha256",
+        "retrieved_at",
+        "provider",
+        "provider_document_id",
+        "collector_name",
+        "collector_version",
+        "byte_size",
+        "mime_type",
+        "capture_ready",
+    }
+)
+
+
+def _policy_document_hash(policy_snapshot: dict[str, Any]) -> str:
+    """ZR-405: the canonical hash of the policy DOCUMENT — the
+    ``policy_hash`` envelope key is excluded from the hashed bytes so the
+    wiki's export payload (document + hash) verifies itself."""
+    canonical_document = {
+        key: value for key, value in policy_snapshot.items() if key != "policy_hash"
+    }
+    payload = json.dumps(canonical_document, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def validate_handle(
@@ -389,7 +423,9 @@ def validate_handle(
     """
     missing = _HANDLE_REQUIRED_FIELDS - set(handle)
     if missing:
-        raise FilingFetchError(f"handle missing required field(s): {', '.join(sorted(missing))}", code="upstream_error")
+        raise FilingFetchError(
+            f"handle missing required field(s): {', '.join(sorted(missing))}", code="upstream_error"
+        )
     request_id = handle.get("request_id")
     if (
         not isinstance(request_id, str)
@@ -407,7 +443,9 @@ def validate_handle(
     try:
         canonical.resolve(strict=False)
     except (OSError, ValueError) as exc:
-        raise FilingFetchError(f"handle canonical_path is invalid: {canonical}", code="upstream_error") from exc
+        raise FilingFetchError(
+            f"handle canonical_path is invalid: {canonical}", code="upstream_error"
+        ) from exc
     if policy_snapshot is not None:
         # FC-501: policy snapshot is the single containment source.
         if expected_policy_hash is None:
@@ -415,14 +453,19 @@ def validate_handle(
                 "policy_snapshot supplied without expected_policy_hash",
                 code="upstream_error",
             )
-        payload = json.dumps(policy_snapshot, sort_keys=True, ensure_ascii=False)
-        actual = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        # ZR-405: the canonical hash is computed over the policy DOCUMENT —
+        # the ``policy_hash`` key itself is envelope metadata (like the
+        # canonical_hash discipline in uc receipts) and must not be part of
+        # the hashed bytes.  The wiki policy-export payload carries both
+        # the document and its hash; consumers verify document==hash.
+        actual = _policy_document_hash(policy_snapshot)
         if actual != expected_policy_hash:
             raise FilingFetchError(
                 f"policy snapshot hash mismatch: {actual[:12]}... != "
                 f"{expected_policy_hash[:12]}...",
                 code="upstream_error",
             )
+
         def _expand_path_ref(ref: str) -> Path:
             expanded = re.sub(
                 r"\$\{PROJECT_ROOT\}",
@@ -454,7 +497,9 @@ def validate_handle(
         )
     digest = handle.get("snapshot_sha256", "")
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
-        raise FilingFetchError("handle snapshot_sha256 is not a valid lowercase SHA-256", code="upstream_error")
+        raise FilingFetchError(
+            "handle snapshot_sha256 is not a valid lowercase SHA-256", code="upstream_error"
+        )
     url = handle.get("https_url", "")
     if not isinstance(url, str) or not url.startswith("https://"):
         raise FilingFetchError("handle https_url must use HTTPS", code="upstream_error")
@@ -462,14 +507,22 @@ def validate_handle(
         raise FilingFetchError("handle canonical_path is not a regular file", code="upstream_error")
     size = handle.get("byte_size")
     if isinstance(size, bool) or not isinstance(size, int) or size != canonical.stat().st_size:
-        raise FilingFetchError("handle byte_size does not match the canonical file", code="upstream_error")
+        raise FilingFetchError(
+            "handle byte_size does not match the canonical file", code="upstream_error"
+        )
     content = canonical.read_bytes()
     content_digest = hashlib.sha256(content).hexdigest()
     if content_digest != digest:
-        raise FilingFetchError("handle snapshot_sha256 does not match the canonical file bytes", code="upstream_error")
+        raise FilingFetchError(
+            "handle snapshot_sha256 does not match the canonical file bytes", code="upstream_error"
+        )
     published = handle.get("published_date", "")
     if not isinstance(published, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", published):
-        raise FilingFetchError("handle published_date must use YYYY-MM-DD format", code="upstream_error")
+        raise FilingFetchError(
+            "handle published_date must use YYYY-MM-DD format", code="upstream_error"
+        )
     as_of = request.get("as_of_date", "")
     if isinstance(as_of, str) and as_of and published > as_of:
-        raise FilingFetchError("handle published_date is after the request as_of_date", code="upstream_error")
+        raise FilingFetchError(
+            "handle published_date is after the request as_of_date", code="upstream_error"
+        )

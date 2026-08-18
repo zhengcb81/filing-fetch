@@ -93,19 +93,13 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
             f"company-wiki config does not exist: {selected}", code="config_error"
         ) from exc
     if not selected.is_file():
-        raise FilingFetchError(
-            "company-wiki config must be a file", code="config_error"
-        )
+        raise FilingFetchError("company-wiki config must be a file", code="config_error")
     try:
         payload = json.loads(selected.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise FilingFetchError(
-            f"invalid company-wiki config: {exc}", code="config_error"
-        ) from exc
+        raise FilingFetchError(f"invalid company-wiki config: {exc}", code="config_error") from exc
     if not isinstance(payload, dict):
-        raise FilingFetchError(
-            "company-wiki config must be an object", code="config_error"
-        )
+        raise FilingFetchError("company-wiki config must be an object", code="config_error")
     required = {"schema_version", "company_wiki_root"}
     if not set(payload) <= required or not required <= set(payload):
         raise FilingFetchError(
@@ -148,12 +142,10 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
         # config file's parent directory — only explicit absolute (token-
         # expanded) roots are valid.
         raise FilingFetchError(
-            "company-wiki config company_wiki_root must be absolute after "
-            "token expansion",
+            "company-wiki config company_wiki_root must be absolute after token expansion",
             code="config_error",
         )
     return _validate_company_wiki_root(root)
-
 
 
 def _command_arguments(request: dict[str, Any]) -> list[str]:
@@ -328,7 +320,9 @@ def _run_company_wiki_json_retry(
         except FilingFetchError as exc:
             if exc.code not in _CATALOG_RETRY_CODES:
                 raise
-            jittered = backoff * (1.0 + random.uniform(-CATALOG_LOCKED_BACKOFF_JITTER, CATALOG_LOCKED_BACKOFF_JITTER))
+            jittered = backoff * (
+                1.0 + random.uniform(-CATALOG_LOCKED_BACKOFF_JITTER, CATALOG_LOCKED_BACKOFF_JITTER)
+            )
             wait = min(jittered, remaining)
             if wait <= 0:
                 raise FilingFetchError(
@@ -371,9 +365,7 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
         )
     resolved = payload.get("resolved")
     if not isinstance(resolved, dict):
-        raise FilingFetchError(
-            "resolved company identity is missing", code="identity_error"
-        )
+        raise FilingFetchError("resolved company identity is missing", code="identity_error")
     for name in (
         "canonical_name",
         "market",
@@ -387,11 +379,7 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
         "source_record_id",
     ):
         value = resolved.get(name)
-        if (
-            not isinstance(value, str)
-            or not value.strip()
-            or value != value.strip()
-        ):
+        if not isinstance(value, str) or not value.strip() or value != value.strip():
             raise FilingFetchError(
                 f"company_identity.{name} must be non-empty trimmed text",
                 code="identity_error",
@@ -402,9 +390,7 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
             code="identity_error",
         )
     if resolved["market"] not in {"CN", "HK", "US"}:
-        raise FilingFetchError(
-            "company identity market is unsupported", code="identity_error"
-        )
+        raise FilingFetchError("company identity market is unsupported", code="identity_error")
     return dict(resolved)
 
 
@@ -711,9 +697,7 @@ def resolve_filing(
     )
     company_identity = _resolved_company_identity(identity_payload)
     normalized_request = {
-        key: value
-        for key, value in request.items()
-        if key not in {"company_query", "exchange"}
+        key: value for key, value in request.items() if key not in {"company_query", "exchange"}
     }
     normalized_request.update(
         {
@@ -733,12 +717,8 @@ def resolve_filing(
         *_command_arguments(normalized_request),
     ]
     if allow_download:
-        if not normalized_request.get("market") or not normalized_request.get(
-            "security_id"
-        ):
-            raise FilingFetchError(
-                "explicit download requires market and security_id"
-            )
+        if not normalized_request.get("market") or not normalized_request.get("security_id"):
+            raise FilingFetchError("explicit download requires market and security_id")
         command.extend(
             (
                 "--allow-download",
@@ -816,9 +796,7 @@ def resolve_filing(
     else:
         resolution = payload
     if not isinstance(resolution, dict):
-        raise FilingFetchError(
-            "company-wiki resolution is missing", code="upstream_error"
-        )
+        raise FilingFetchError("company-wiki resolution is missing", code="upstream_error")
     expected_schema = (
         SUPPORTED_COMPANY_WIKI_CONTRACTS["ensure_schema_version"]
         if allow_download
@@ -889,16 +867,29 @@ def _handle_from_resolution(
             resolution_trace=_resolution_trace(resolution),
         )
     handle["request_id"] = resolution.get("request_id")
-    # FC-501: no independent root allowlist.  Handle containment is
-    # validated against the company-wiki RootPolicySnapshot (wired when the
-    # upstream returns it; until then the legacy <wiki_root>/companies
-    # default applies).  Direct company_wiki_root callers (tests) keep the
-    # legacy default.
+    # ZR-405: production containment is validated against the root policy
+    # the company-wiki response carries ("policy_export" — the wiki's
+    # read-only policy-export payload with policy_hash + tokenized roots).
+    # When the upstream response carries it, the legacy <wiki_root>/
+    # companies default is never consulted; a policy-carrying response that
+    # does NOT contain the handle's path fails closed.  An N-1 wiki whose
+    # response omits "policy_export" keeps the legacy bridge (documented
+    # deviation; the CURRENT triplet always sends it).
+    policy_snapshot = resolution.get("policy_export")
+    expected_policy_hash = None
+    if isinstance(policy_snapshot, dict):
+        expected_policy_hash = policy_snapshot.get("policy_hash")
     # ZR-307: validate handle and resolution envelope; any failure carries
     # the upstream resolution trace so the error envelope never swallows
     # the exact-reuse / download=0 evidence.
     try:
-        validate_handle(handle, request, root)
+        validate_handle(
+            handle,
+            request,
+            root,
+            policy_snapshot=policy_snapshot,
+            expected_policy_hash=expected_policy_hash,
+        )
         # FC-704: deep-validate and forward the resolution envelope verbatim —
         # the journal-reconciled outcome + download event evidence the revenue
         # receipt derives from.  N/N-1: an old company-wiki without an envelope
@@ -911,6 +902,21 @@ def _handle_from_resolution(
             # the explicit honest bundle_status='unavailable') and forward the
             # result — never a faked empty-green.
             envelope = validate_resolution_envelope(envelope)
+            # ZR-405: the envelope's policy_hash (ZR-404) must match the
+            # response's exported root policy — a drifted/mismatched policy
+            # is fail closed (the handle's containment was checked against a
+            # DIFFERENT policy than the one the envelope pins).
+            envelope_policy_hash = envelope.get("policy_hash")
+            if (
+                envelope_policy_hash is not None
+                and expected_policy_hash is not None
+                and envelope_policy_hash != expected_policy_hash
+            ):
+                raise FilingFetchError(
+                    "resolution envelope policy_hash does not match the exported root policy",
+                    code="upstream_error",
+                    resolution_trace=_resolution_trace(resolution),
+                )
             handle["resolution_envelope"] = dict(envelope)
     except FilingFetchError as exc:
         exc.resolution_trace = _resolution_trace(resolution)
@@ -954,7 +960,8 @@ def _close_gap_and_return_handle(
     import tempfile
 
     binding_file = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8")
+        mode="w", suffix=".json", delete=False, encoding="utf-8"
+    )
     try:
         json.dump(binding, binding_file, ensure_ascii=False)
         binding_file.close()
@@ -990,16 +997,15 @@ def _close_gap_and_return_handle(
         Path(binding_file.name).unlink(missing_ok=True)
     if closed.get("status") != "completed":
         raise FilingFetchError(
-            f"close-gap did not complete: {closed.get('status')} / "
-            f"{closed.get('reason')}",
+            f"close-gap did not complete: {closed.get('status')} / {closed.get('reason')}",
             code="gap_not_closed",
         )
     closed_resolution = closed.get("resolution")
     if not isinstance(closed_resolution, dict):
-        raise FilingFetchError(
-            "close-gap resolution is missing", code="upstream_error")
+        raise FilingFetchError("close-gap resolution is missing", code="upstream_error")
     handle = _handle_from_resolution(
-        closed_resolution, request, root, envelope=closed.get("envelope"))
+        closed_resolution, request, root, envelope=closed.get("envelope")
+    )
     handle["company_identity"] = company_identity
     _record_download_events(stats, handle)
     return handle
@@ -1022,9 +1028,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="allow a market-routed download if the filing is missing (default: read-only reuse)",
     )
-    parser.add_argument("--config", type=Path, default=None, help="path to company_wiki.json config")
-    parser.add_argument("--request-file", type=Path, default=None, help="read JSON request from file instead of stdin")
-    parser.add_argument("--timeout-seconds", type=float, default=900.0, help="overall deadline for the entire request (default: 900)")
+    parser.add_argument(
+        "--config", type=Path, default=None, help="path to company_wiki.json config"
+    )
+    parser.add_argument(
+        "--request-file",
+        type=Path,
+        default=None,
+        help="read JSON request from file instead of stdin",
+    )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=900.0,
+        help="overall deadline for the entire request (default: 900)",
+    )
     parser.add_argument(
         "--no-pause-worker",
         action="store_true",
@@ -1071,13 +1089,9 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 request = json.loads(sys.stdin.read())
         except (OSError, json.JSONDecodeError) as exc:
-            raise FilingFetchError(
-                f"invalid request: {exc}", code="request_error"
-            ) from exc
+            raise FilingFetchError(f"invalid request: {exc}", code="request_error") from exc
         if not isinstance(request, dict):
-            raise FilingFetchError(
-                "request must be a JSON object", code="request_error"
-            )
+            raise FilingFetchError("request must be a JSON object", code="request_error")
         stats = {"calls": 0, "downloads": 0}
         handle = resolve_filing(
             request=request,
@@ -1141,7 +1155,18 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 2
     except Exception as exc:
-        json.dump({"schema_version": FILING_RESPONSE_SCHEMA_VERSION, "status": "fatal", "error": str(exc), "error_code": "fatal", "retryable": False}, sys.stdout, ensure_ascii=False, indent=2)
+        json.dump(
+            {
+                "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
+                "status": "fatal",
+                "error": str(exc),
+                "error_code": "fatal",
+                "retryable": False,
+            },
+            sys.stdout,
+            ensure_ascii=False,
+            indent=2,
+        )
         sys.stdout.write("\n")
         return 1
 
