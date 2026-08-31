@@ -1,0 +1,13 @@
+﻿{
+    "written_at_utc":  "2026-08-31T23:00:00+00:00",
+    "written_by":  "old-plan-owner",
+    "covers":  [
+                   "task_plan.md",
+                   "progress.md",
+                   "findings.md"
+               ],
+    "superseded_by":  "revenue-forecast/assurance/unified_completion/state.json",
+    "schema_version":  "1.0",
+    "note":  "final machine closure ledger (revenue-forecast state.json) is authoritative; root-level planning docs (task_plan.md/progress.md/findings.md) are historical archives closed as superseded-incomplete. DAG 117/117 accepted; all three repos pushed.",
+    "status":  "closed_superseded_incomplete"
+}
