@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: python -m pip install pytest pyyaml requests "mypy==1.19.0"
+        run: python -m pip install pytest pytest-cov pyyaml requests "mypy==1.19.0"
       - name: "Fetch company-wiki runtime (FC-1101: manifest-driven current triplet)"
         run: |
           git clone --quiet https://github.com/zhengcb81/revenue-forecast.git "$HOME/Projects/revenue-forecast"
