@@ -14,7 +14,7 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: python -m pip install pytest pyyaml requests mypy
-      - name: Fetch company-wiki runtime (FC-1101: manifest-driven current triplet)
+      - name: "Fetch company-wiki runtime (FC-1101: manifest-driven current triplet)"
         run: |
           git clone --quiet https://github.com/zhengcb81/revenue-forecast.git "$HOME/Projects/revenue-forecast"
           python "$HOME/Projects/revenue-forecast/tools/ci_checkout_siblings.py"             --manifest "$HOME/Projects/revenue-forecast/compatibility/current.json"             --sibling-root "$HOME/Projects" --skip filing
@@ -58,7 +58,7 @@ jobs:
         run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py
       - name: Branch coverage gate (FC-1204-a)
         run: python -m pytest tests -q --tb=short --ignore=tests/test_real_tool_conformance.py --ignore=tests/test_e2e_download.py --cov=scripts --cov-branch --cov-fail-under=90 --cov-report=term
-      - name: Config doctor (FC-1202: three-repo contract compatibility)
+      - name: "Config doctor (FC-1202: three-repo contract compatibility)"
         run: python tools/config_doctor.py --revenue-root "$HOME/Projects/revenue-forecast"
       - name: Run companies-reuse-only E2E
         run: python e2e/run_companies_reuse_only_e2e.py
