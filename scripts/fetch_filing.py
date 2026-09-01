@@ -206,7 +206,7 @@ def _run_company_wiki_json(
 ) -> dict[str, Any]:
     environment = dict(os.environ)
     environment["PYTHONUTF8"] = "1"
-    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0  # type: ignore[attr-defined]
     if stats is not None:
         stats["calls"] += 1
     try:
@@ -424,7 +424,7 @@ def _pid_is_alive(pid: int) -> bool:
                 capture_output=True,
                 text=True,
                 errors="replace",
-                creationflags=subprocess.CREATE_NO_WINDOW,
+                creationflags=subprocess.CREATE_NO_WINDOW,  # type: ignore[attr-defined]
                 timeout=20,
             )
         except (OSError, subprocess.SubprocessError):
