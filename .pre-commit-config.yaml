@@ -1,0 +1,24 @@
+# Local pre-commit gate mirroring the CI quality workflow's fast checks.
+# Pins match CI exactly (ruff 0.15.18, mypy 1.19.0 via the local system).
+# Full regression stays manual: run the affected pytest suites before push.
+#
+#   pre-commit install   # once per clone (installs .git/hooks/pre-commit)
+#   pre-commit run --all-files   # full gate on demand
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff check (WU-1.2, mirrors CI)
+        entry: ruff check
+        language: system
+        types: [python]
+        # CI scope: ruff check scripts tests tools e2e
+        files: ^(scripts/|tests/|tools/|e2e/).*\.py$
+
+      - id: mypy-contract
+        name: mypy public contracts (FC-1204-c, mirrors CI)
+        entry: python -m mypy scripts/filing_contracts.py scripts/fetch_filing.py
+        language: system
+        pass_filenames: false
+        # Run only when one of the checked modules is staged.
+        files: ^scripts/(filing_contracts\.py|fetch_filing\.py)$
