@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-push gate hook (root-cause fix, 2026-09-08): BLOCKS any push that
+# fails the CI-equivalent surface.  See
+# revenue-forecast/assurance/runs/2026-09-02_remaining-gap-closure/ci_root_fix.md.
+#
+# Installed as .githooks/pre-push (git config core.hooksPath .githooks).
+# Every `git push` runs tools/pre_push_gate.py first; a red gate aborts
+# the push BEFORE anything reaches GitHub CI.
+#
+# NOTE: shebang MUST be #!/bin/sh (git-for-windows spawns /bin/sh hooks
+# natively; /usr/bin/env bash failed with "cannot spawn").  Use
+# `python`, not python3, on Windows.
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+if [ ! -f "$ROOT/tools/pre_push_gate.py" ]; then
+  echo "pre-push gate: tools/pre_push_gate.py missing - skipping" >&2
+  exit 0
+fi
+
+python "$ROOT/tools/pre_push_gate.py"
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  echo "" >&2
+  echo "PUSH BLOCKED by pre-push gate (CI root-fix protocol). Fix the root cause; do not bypass." >&2
+fi
+exit "$rc"
