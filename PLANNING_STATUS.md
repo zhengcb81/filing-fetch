@@ -1,5 +1,10 @@
 # filing-fetch 当前规划状态
 
+> **CI 推送协议（2026-09-08）**：本仓任何推送都必须走 revenue-forecast 的
+> [CI 反复失败根因与根治协议](../revenue-forecast/assurance/runs/2026-09-02_remaining-gap-closure/ci_root_fix.md)：
+> 先跑本仓 `python tools/pre_push_gate.py`（CI 等价面 + 安装一致性，绿才推），推送后立即自盯
+> GitHub Actions 至绿；若失败面是本门漏掉的，必须同时扩展本页矩阵与该 gate，再推。
+
 > **2026-09-08 当前规划覆盖：R4**。按用户要求，整改的唯一活动编排现为[虚拟数据湖收敛计划](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/simplified-execution-plan.md)，配套[真实测试/审计矩阵](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/simplified-test-matrix.md)与[旧WP迁移表](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/r4-transition.md)。四个增量A/B/C/D及独立收入M取代旧15包/95门执行顺序；原117项、GP和原始负例保留。下方较早“15包/旧总计划为准”仅指当时交付，不再驱动执行。v5继续独占worker正式合同，仅约束对应后台能力，不阻普通本地读取。本次仅文档，没有复验源码/运行状态或授权实施；下方HEAD和daily均为历史观测，未来实施重新锁定输入。
 
 > **2026-09-07最新覆盖**：其他任务继续推进，wiki HEAD=d92f8bf、revenue=6682ecf、filing=89c8bdb。最新daily为20260906T210001Z、ok=false/空triplet；默认观察账本已改到wiki路径，revenue旧ledger的green不可替代。revenue旧closure工具/测试及CI step已实际删除，wiki批3延后，不能再按下方旧快照重复删除或称“只等时间”。详见[并发状态差异与未验证边界](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/current-delta-2026-09-07.md)；下方9/6事实保留为当时观测，相关原反证在新HEAD须独立重验。本轮仅同步文档，没有执行这些代码/删除/运行。
