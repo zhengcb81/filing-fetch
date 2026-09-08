@@ -31,7 +31,15 @@ import tempfile
 import time
 from pathlib import Path
 
-PRODUCTION_WIKI = Path.home() / "Projects" / "company-wiki"
+# Prefer the sibling layout (…/Projects/<repo>) so the harness also works when
+# the weekly T3 scheduled task runs as SYSTEM, where Path.home() is the system
+# profile; fall back to ~/Projects for installed skill copies (GP-009 fix).
+_SIBLING_PROJECTS = Path(__file__).resolve().parents[2].parent
+PRODUCTION_WIKI = (
+    _SIBLING_PROJECTS / "company-wiki"
+    if (_SIBLING_PROJECTS / "company-wiki").is_dir()
+    else Path.home() / "Projects" / "company-wiki"
+)
 
 PRODUCTION_MASTER_AVAILABLE = all(
     (PRODUCTION_WIKI / ".source_catalog" / "security_master" / f"{market}.json").is_file()

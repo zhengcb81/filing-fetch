@@ -30,14 +30,24 @@ sys.path.insert(0, str(SKILL_ROOT / "tests"))
 
 from e2e_support.isolated_wiki import IsolatedWiki, cleanup_temporary  # noqa: E402
 
+# Resolve the production tools from the sibling layout (…/Projects/<repo>), not
+# from Path.home(): the weekly T3 scheduled task runs as SYSTEM, where
+# Path.home() is the system profile and every ~/Projects lookup would fail and
+# silently skip the suite (GP-009, 2026-09-08).  Fall back to ~/Projects for
+# installed skill copies.
+_SIBLING_PROJECTS = SKILL_ROOT.parent
+_PROJECTS_ROOT = (
+    _SIBLING_PROJECTS
+    if (_SIBLING_PROJECTS / "StockInfoDLSimple").is_dir()
+    else Path.home() / "Projects"
+)
 _TOOL_PATHS = (
-    Path.home()
-    / "Projects"
+    _PROJECTS_ROOT
     / "StockInfoDLSimple"
     / "v2-clean-rewrite"
     / "src"
     / "company_wiki_adapter_cli.py",
-    Path.home() / "Projects" / "dayu-agent" / "dayu-agent" / ".venv" / "Scripts" / "python.exe",
+    _PROJECTS_ROOT / "dayu-agent" / "dayu-agent" / ".venv" / "Scripts" / "python.exe",
 )
 
 _DOWNLOAD_GATE = os.environ.get("FILING_FETCH_E2E_DOWNLOAD") == "1"
@@ -190,7 +200,13 @@ class DownloadE2E(unittest.TestCase):
         self.wiki.seed_market("CN")
         self.wiki.scan()
         target = self.wiki.root / "companies" / "宁德时代" / "raw" / "financial_reports" / "annual"
-        source = target / "2025-03-14_cninfo_1222806982_2024年年度报告.pdf"
+        # Discover the seeded PDF instead of pinning the provider's 2026-XX
+        # filename: the seed is `synthetic_cn_2024_annual.pdf`, and a hardcoded
+        # `2025-03-14_cninfo_..._2024年年度报告.pdf` made this test fail with
+        # FileNotFoundError regardless of the code under test.
+        candidates = sorted(target.glob("*.pdf"))
+        self.assertEqual(len(candidates), 1, f"expected one seeded PDF, got {candidates}")
+        source = candidates[0]
         raw = bytearray(source.read_bytes())
         raw[0] ^= 0xFF
         source.write_bytes(bytes(raw))
