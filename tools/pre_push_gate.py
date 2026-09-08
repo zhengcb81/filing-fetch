@@ -15,8 +15,10 @@ This gate mirrors the CI fast surface locally:
   5. unique test symbols                          (CI WU-1.1 inline gate)
   6. hermetic test suite                          (CI "Run hermetic test suite")
   7. tools/config_doctor.py three-repo doctor     (CI FC-1202)
-  8. tools/sync_installs_b3.py --check            (CI WU-7.1; informational —
-     installed-skill drift is machine state, never a push blocker)
+  8. installed-skill consistency (owner requirement 2026-09-08): the copies
+     under ~/.agents, ~/.claude, ~/.codex must equal this repo; stale copies
+     are auto-synced from the repo and re-checked.  CI cannot cover this
+     (runners have no install roots, so its check is trivially green).
   9. tools/verify_plan_claims.py                  (CI WU-8.3)
  10. UTF-8 BOM scan                               (CA-304/final_ratchet class)
 
@@ -28,6 +30,7 @@ Exit non-zero on the first red check.  Push protocol:
     # ROOT CAUSE and extend this gate so it would have caught it.
 
 Usage: python tools/pre_push_gate.py [--skip-tests] [--skip-mypy]
+       [--skip-install-sync]
 """
 
 from __future__ import annotations
@@ -153,10 +156,42 @@ def _config_doctor_gate() -> int:
     )
 
 
+def _install_sync() -> int:
+    """Keep the installed copies of this skill in step with the repo.
+
+    Owner requirement (2026-09-08): every installed skill must equal its
+    Projects git repo.  CI can never catch this class — GitHub runners have no
+    install roots, so the drift check is trivially green there — hence it lives
+    here: check, auto-sync when stale (the repo is the source of truth), then
+    re-check.
+    """
+    tool = PROJECT_ROOT / "tools" / "sync_installs_b3.py"
+    rc = _run(
+        [sys.executable, str(tool), "--check"],
+        "installed-skill consistency (check)",
+        blocking=False,
+    )
+    if rc == 0:
+        return 0
+    print("installed copies were stale: applying the repo -> install sync ...")
+    rc = _run(
+        [sys.executable, str(tool)],
+        "installed-skill sync (repo -> install)",
+        blocking=False,
+    )
+    if rc != 0:
+        return rc
+    return _run(
+        [sys.executable, str(tool), "--check"],
+        "installed-skill consistency (re-check)",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument("--skip-mypy", action="store_true")
+    parser.add_argument("--skip-install-sync", action="store_true")
     args = parser.parse_args(argv)
     _safe_console()
 
@@ -227,18 +262,14 @@ def main(argv: list[str] | None = None) -> int:
     if rc != 0:
         return rc
 
-    rc = _run(
-        [sys.executable, str(PROJECT_ROOT / "tools" / "sync_installs_b3.py"), "--check"],
-        "installation sync check (CI WU-7.1, read-only; informational)",
-        blocking=False,
-    )
-    if rc != 0:
-        print(
-            "WARN: the installed-skill drift above is local machine state "
-            "(~/.agents, ~/.claude, ~/.codex installs); CI runs the same check "
-            "against a fresh checkout. Not a push blocker — run "
-            "tools/sync_installs_b3.py to refresh the installs."
-        )
+    if not args.skip_install_sync:
+        rc = _install_sync()
+        if rc != 0:
+            print(
+                "\nGATE RED at: installed-skill consistency\n"
+                "Fix: python tools/sync_installs_b3.py"
+            )
+            return rc
 
     rc = _run(
         [
