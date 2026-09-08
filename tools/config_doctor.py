@@ -19,7 +19,14 @@ Checks:
    exactly {schema_version, filing_fetch_root}; absolute after expansion;
    the root carries ``scripts/fetch_filing.py``.  An older revenue checkout
    without the config file is skipped honestly (reported as a note, never a
-   fabricated green verdict).
+   fabricated green verdict) — unless ``--require-revenue-config`` is given,
+   which CI uses so the check can never silently degrade into a note.
+
+CI note (2026-09-08 regression): the check only runs when the checked-out
+revenue pin actually carries the config file.  CI therefore must materialize
+the local sibling layout — ``${USER_PROFILE}/Projects/filing-fetch`` — before
+running the doctor, otherwise a pin that adds the config turns a silent skip
+into a red build for a purely environmental reason.
 
 Exit code 0 = healthy, 1 = problems found.
 """
@@ -153,15 +160,26 @@ def _check_wiki_policy(root: Path, problems: list[str]) -> None:
 
 
 def _check_revenue_config(
-    revenue_root: Path, problems: list[str], notes: list[str]
+    revenue_root: Path,
+    problems: list[str],
+    notes: list[str],
+    *,
+    require_config: bool = False,
 ) -> None:
     """Validate revenue's config/filing_fetch.json when present."""
     config = revenue_root / "config" / "filing_fetch.json"
     if not config.is_file():
-        notes.append(
-            f"NOTE: revenue config/filing_fetch.json not present at "
+        message = (
+            f"revenue config/filing_fetch.json not present at "
             f"{revenue_root} — revenue-filing check skipped (older checkout?)"
         )
+        if require_config:
+            problems.append(
+                f"{message} (FC-1202: CI requires a revenue checkout that "
+                f"carries config/filing_fetch.json)"
+            )
+        else:
+            notes.append(f"NOTE: {message}")
         return
     try:
         payload = json.loads(config.read_text(encoding="utf-8"))
@@ -206,13 +224,16 @@ def _check_revenue_config(
     if not (root / "scripts" / "fetch_filing.py").is_file():
         problems.append(
             f"revenue config filing_fetch_root lacks scripts/fetch_filing.py: "
-            f"{root}"
+            f"{root} (expected a filing-fetch checkout at the configured "
+            f"sibling path; CI must materialize it before running the doctor)"
         )
 
 
 def diagnose(
     filing_config: Path | None = None,
     revenue_root: Path | None = None,
+    *,
+    require_revenue_config: bool = False,
 ) -> tuple[list[str], list[str]]:
     """Return (problems, notes); healthy when problems is empty."""
     problems: list[str] = []
@@ -223,7 +244,12 @@ def diagnose(
     if wiki_root is not None:
         _check_wiki_policy(wiki_root, problems)
     if revenue_root is not None:
-        _check_revenue_config(revenue_root, problems, notes)
+        _check_revenue_config(
+            revenue_root,
+            problems,
+            notes,
+            require_config=require_revenue_config,
+        )
     return problems, notes
 
 
@@ -245,9 +271,17 @@ def main(argv: list[str] | None = None) -> int:
         help="revenue-forecast checkout to check config/filing_fetch.json "
         "(skipped when absent)",
     )
+    parser.add_argument(
+        "--require-revenue-config",
+        action="store_true",
+        help="fail when the revenue checkout lacks config/filing_fetch.json "
+        "(CI uses this so the three-repo check cannot silently degrade)",
+    )
     args = parser.parse_args(argv)
     problems, notes = diagnose(
-        filing_config=args.filing_config, revenue_root=args.revenue_root
+        filing_config=args.filing_config,
+        revenue_root=args.revenue_root,
+        require_revenue_config=args.require_revenue_config,
     )
     for note in notes:
         print(note)

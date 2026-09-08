@@ -185,3 +185,100 @@ def test_user_profile_token_is_expanded(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     problems, _ = diagnose(filing_config=filing_config, revenue_root=None)
     assert problems == [], problems
+
+
+def test_revenue_config_missing_fails_when_required(tmp_path: Path) -> None:
+    # CI passes --require-revenue-config so a pin without the config cannot
+    # silently degrade the three-repo check into a note (2026-09-08 root fix).
+    wiki = _write_wiki(tmp_path)
+    filing_config = _write_filing_config(
+        tmp_path, {"schema_version": "1.0", "company_wiki_root": str(wiki)}
+    )
+    bare_revenue = tmp_path / "revenue-old"
+    bare_revenue.mkdir()
+    problems, notes = diagnose(
+        filing_config=filing_config,
+        revenue_root=bare_revenue,
+        require_revenue_config=True,
+    )
+    assert any("filing_fetch.json not present" in p for p in problems), problems
+    assert notes == [], notes
+
+
+def test_healthy_three_repo_config_passes_when_required(tmp_path: Path) -> None:
+    wiki = _write_wiki(tmp_path)
+    filing_config = _write_filing_config(
+        tmp_path, {"schema_version": "1.0", "company_wiki_root": str(wiki)}
+    )
+    skill = _write_fake_filing_skill(tmp_path)
+    revenue = _write_revenue_config(
+        tmp_path, {"schema_version": "1.0", "filing_fetch_root": str(skill)}
+    )
+    problems, notes = diagnose(
+        filing_config=filing_config,
+        revenue_root=revenue,
+        require_revenue_config=True,
+    )
+    assert problems == [], problems
+    assert notes == []
+
+
+def test_ci_sibling_layout_passes(tmp_path: Path, monkeypatch) -> None:
+    # The CI workflow mirrors the local layout: it symlinks the checkout to
+    # ${USER_PROFILE}/Projects/filing-fetch, which is exactly what revenue's
+    # config names.  A healthy build must therefore resolve that path.
+    _write_wiki(tmp_path)
+    filing_config = _write_filing_config(
+        tmp_path, {"schema_version": "1.0", "company_wiki_root": str(tmp_path / "wiki")}
+    )
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    sibling = tmp_path / "Projects" / "filing-fetch" / "scripts"
+    sibling.mkdir(parents=True)
+    (sibling / "fetch_filing.py").write_text("", encoding="utf-8")
+    revenue = _write_revenue_config(
+        tmp_path,
+        {
+            "schema_version": "1.0",
+            "filing_fetch_root": "${USER_PROFILE}/Projects/filing-fetch",
+        },
+    )
+    problems, notes = diagnose(
+        filing_config=filing_config,
+        revenue_root=revenue,
+        require_revenue_config=True,
+    )
+    assert problems == [], problems
+    assert notes == []
+
+
+def test_ci_sibling_layout_missing_sibling_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # 2026-09-08 CI signature: the revenue pin carried the config, but the
+    # runner never created ${USER_PROFILE}/Projects/filing-fetch (the sibling
+    # helper skips the repo under test), so the doctor went red on a path that
+    # cannot exist.  The message must name the path and the expected layout.
+    _write_wiki(tmp_path)
+    filing_config = _write_filing_config(
+        tmp_path, {"schema_version": "1.0", "company_wiki_root": str(tmp_path / "wiki")}
+    )
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    revenue = _write_revenue_config(
+        tmp_path,
+        {
+            "schema_version": "1.0",
+            "filing_fetch_root": "${USER_PROFILE}/Projects/filing-fetch",
+        },
+    )
+    problems, _ = diagnose(
+        filing_config=filing_config,
+        revenue_root=revenue,
+        require_revenue_config=True,
+    )
+    assert any(
+        "lacks scripts/fetch_filing.py" in p
+        and "Projects" in p
+        and "filing-fetch" in p
+        for p in problems
+    ), problems
+    assert any("CI must materialize it" in p for p in problems), problems
