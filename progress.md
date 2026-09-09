@@ -24,3 +24,11 @@
   20.3s 全链路通过。**4/4 真实下载测试全绿**（CN 宁德时代 / US AMD / HK 腾讯 / 损坏拒绝），
   全程无残留进程
 - 遗留：live ensure 测试在生产空闲时才执行（worker 持续占用 catalog 锁，按设计 skip）
+
+## 2026-09-09 深夜 — 状态核对（只读，不新增待办）
+
+- 本仓 HEAD `bb8d485`，工作树干净；无未提交改动。
+- E2E 范围已在 `bb8d485` 明确：`e2e/E2E_DESIGN.md` 记录 harness 为 **synthetic T1 only**，不代表真实数据 E2E；真实原文/CLI/provider 层由 R4 测试矩阵（L/P/VR/AR）承接。
+- CI：`quality.yml`（`config_doctor --require-revenue-config` + `$GITHUB_WORKSPACE` 符号链接）最近推送全绿；本仓不再单独维护 legacy closure 调用。
+- 上游观测（只读）：revenue daily `20260909T210001Z` ok=true，triplet 记录 filing `bb8d485`；FC-705 门仍 false（预计 2026-09-10 22:00 后转 true），与 filing 本仓无直接动作。
+- 本轮未改代码/配置/任务，未下载、未跑真实 E2E、未恢复 worker。当前权威编排在 company-wiki R4 目录（见 `docs/plans/painpoint-outcome-audit-2026-09-05/current-delta-2026-09-09.md`）。

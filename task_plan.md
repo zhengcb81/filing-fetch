@@ -2,6 +2,8 @@
 
 > **2026-08-09 状态覆盖：`completed_historical_scope`。** 本文件的 v1.3.0 六阶段、75 项旧范围工作保持已完成；其测试数字和 live 证据是历史快照。最新要求增加了统一 resolver、Dropbox-only、latest 单次闭环、SourceBundle、current-triplet CI 和持续动态审核，统一由 revenue-forecast 的 [FCAP r2](../revenue-forecast/audit_review/2026-08-09_full_completion_assurance_plan/task_plan.md) 接管。本文件不再新增同类待办，也不能单独证明六项目标完成。
 
+> **2026-09-09 深夜状态（只读核对，不新增待办）**：本仓当前 HEAD `bb8d485`、工作树干净；CI（`quality.yml`，含 `--require-revenue-config` 与 `$GITHUB_WORKSPACE` 符号链接）最近一次推送全绿。E2E 设计已于 `bb8d485` 提交：**harness 明确为 synthetic T1 范围，不代表真实数据 E2E**；真实原文/CLI/provider 层路由到 R4 测试矩阵（L/P/VR/AR），见 [e2e/E2E_DESIGN.md](e2e/E2E_DESIGN.md)。filing 的消费面证据仍在 R4 审计目录 [filing-audit.md](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/filing-audit.md) 与最新 [current-delta-2026-09-09.md](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/current-delta-2026-09-09.md)；本轮未改代码/配置/任务。
+
 ## 目标
 修复审查发现的契约漂移（错误分类、文档、失效测试），并建立覆盖
 『A股/港股/美股 × 文档已存在/不存在/部分存在』全场景矩阵的三层测试体系：

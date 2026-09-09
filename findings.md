@@ -1,5 +1,7 @@
 # 研究发现 — filing-fetch 审查（2026-08-01）
 
+> **2026-09-09 补充（只读）**：本仓 E2E 范围已收窄并提交（`bb8d485`）——harness 是 **synthetic T1 only**，真实数据/CLI/provider 层由 R4 测试矩阵承接（[e2e/E2E_DESIGN.md](e2e/E2E_DESIGN.md)）。下方 2026-08-01 的架构/契约结论仍是历史快照；当前消费面证据以 company-wiki R4 目录的 [filing-audit.md](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/filing-audit.md) 为准。本轮未改代码。
+
 ## 架构结论
 - filing-fetch 是 company-wiki CLI 的瘦客户端：identify → resolve（复用，默认）/ ensure（下载，需 --allow-download）
 - 两模块：scripts/fetch_filing.py（CLI+编排，501 行）+ scripts/filing_contracts.py（校验，154 行）
