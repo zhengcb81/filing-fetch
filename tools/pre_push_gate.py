@@ -258,6 +258,18 @@ def main(argv: list[str] | None = None) -> int:
     if _unique_test_symbols() != 0:
         return 1
 
+    # FC-1307-a (vendored from company-wiki): host assumptions - a test path or a
+    # frozen value that is host-dependent, green here and red on Linux CI.  That is
+    # the class that broke revenue-forecast's CI on 2026-09-13; this repository's
+    # symlink test was the false-positive case that had to be fixed first.
+    rc = _run(
+        [sys.executable, str(PROJECT_ROOT / "tools" / "host_assumption_guard.py"),
+         "--roots", *PY_DIRS],
+        "host assumption guard (FC-1307-a)",
+    )
+    if rc != 0:
+        return rc
+
     rc = _config_doctor_gate()
     if rc != 0:
         return rc

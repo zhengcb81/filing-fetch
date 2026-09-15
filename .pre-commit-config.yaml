@@ -22,3 +22,15 @@ repos:
         pass_filenames: false
         # Run only when one of the checked modules is staged.
         files: ^scripts/(filing_contracts\.py|fetch_filing\.py)$
+
+      # FC-1307-a, vendored from company-wiki/scripts/host_assumption_guard.py
+      # (byte-identical; tests/test_fc1307a_host_assumption_gate.py checks the drift
+      # when the sibling checkouts are present).  It catches the class that broke
+      # revenue-forecast's CI on 2026-09-13: a test path/value that is host-dependent,
+      # green on Windows and red on Linux.  Rule 1/2 judge files under tests/ only.
+      - id: host-assumption-guard
+        name: host assumption guard (FC-1307-a, mirrors the CI contract test)
+        entry: python tools/host_assumption_guard.py --roots tests tools scripts e2e
+        language: system
+        pass_filenames: false
+        files: ^(tests/|tools/|scripts/|e2e/).*\.py$

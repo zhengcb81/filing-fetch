@@ -1,0 +1,9 @@
+{
+  "note": "Ratchet baseline for the host-assumption guard.  These entries are PRE-EXISTING: absolute-path literals in tests that are deliberate inputs (a path that must be rejected) and capability uses that already skip.  The gate fails on anything NEW, so a new absolute path or an un-skipped capability use must be fixed rather than silently added.  The identity is rule|relative_path|FULL_VALUE, so entries are exact.",
+  "baseline": [
+    "host-absolute-path|tests/test_bundle_fidelity.py|C:/catalog",
+    "host-absolute-path|tests/test_dropbox_config_invariants.py|/tmp",
+    "host-absolute-path|tests/test_fetch_filing.py|/tmp",
+    "host-absolute-path|tests/test_policy_containment_fc501.py|/tmp"
+  ]
+}
