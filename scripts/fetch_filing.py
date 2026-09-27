@@ -25,7 +25,7 @@ import re
 import subprocess
 import sys
 import time
-from typing import Any
+from typing import Any, cast
 
 
 from filing_contracts import (  # noqa: E402  re-export
@@ -36,10 +36,12 @@ from filing_contracts import (  # noqa: E402  re-export
     SUPPORTED_COMPANY_WIKI_CONTRACTS,
     FilingFetchError,
     validate_handle,
+    validate_handle_metadata,
     validate_request,
     validate_resolution_envelope,
     _required_text,
 )
+from source_reader_transport import read_source_version
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
@@ -647,6 +649,7 @@ def resolve_filing(
     worker_graceful_timeout_seconds: float = 5.0,
     worker_resume_wait_seconds: float = 5.0,
     stats: dict[str, int] | None = None,
+    verify_source_version: bool = False,
 ) -> dict[str, Any]:
     """Identify an optional company query, then resolve or explicitly ensure a filing.
 
@@ -673,6 +676,8 @@ def resolve_filing(
         raise TypeError("request must be a dict")
     if not isinstance(allow_download, bool):
         raise TypeError("allow_download must be boolean")
+    if not isinstance(verify_source_version, bool):
+        raise TypeError("verify_source_version must be boolean")
     if timeout_seconds <= 0 or not math.isfinite(timeout_seconds):
         raise ValueError("timeout_seconds must be positive and finite")
     validate_request(request)
@@ -797,6 +802,7 @@ def resolve_filing(
                     worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
                     worker_resume_wait_seconds=worker_resume_wait_seconds,
                     stats=stats,
+                    verify_source_version=verify_source_version,
                 )
             return {
                 "status": "gap",
@@ -825,7 +831,16 @@ def resolve_filing(
             debug_trace=resolution.get("debug_trace"),
             resolution_trace=_resolution_trace(resolution),
         )
-    handle = _handle_from_resolution(resolution, request, root)
+    handle = _handle_from_resolution(
+        resolution,
+        request,
+        root,
+        verify_source_version=verify_source_version,
+        read_timeout_seconds=(
+            deadline - time.monotonic() if verify_source_version else timeout_seconds
+        ),
+        stats=stats,
+    )
     handle["company_identity"] = company_identity
     # ZR-205: record the download event count from the final resolution
     # envelope (0 = pure reuse, 1 = committed download) so the final
@@ -855,6 +870,9 @@ def _handle_from_resolution(
     root: Path,
     *,
     envelope: dict | None = None,
+    verify_source_version: bool = False,
+    read_timeout_seconds: float = 900.0,
+    stats: dict[str, int] | None = None,
 ) -> dict:
     """Build + deep-validate the handle from a reused resolution.
 
@@ -894,13 +912,25 @@ def _handle_from_resolution(
     # the upstream resolution trace so the error envelope never swallows
     # the exact-reuse / download=0 evidence.
     try:
-        validate_handle(
-            handle,
-            request,
-            root,
-            policy_snapshot=policy_snapshot,
-            expected_policy_hash=expected_policy_hash,
-        )
+        if verify_source_version:
+            if not isinstance(policy_snapshot, dict) or not isinstance(
+                expected_policy_hash, str
+            ):
+                raise FilingFetchError(
+                    "root policy export is required for SourceReader v2",
+                    code="upstream_error",
+                )
+            validate_handle_metadata(
+                handle, request, policy_snapshot, expected_policy_hash
+            )
+        else:
+            validate_handle(
+                handle,
+                request,
+                root,
+                policy_snapshot=policy_snapshot,
+                expected_policy_hash=expected_policy_hash,
+            )
         # FC-704: deep-validate and forward the resolution envelope verbatim —
         # the journal-reconciled outcome + download event evidence the revenue
         # receipt derives from.  N/N-1: an old company-wiki without an envelope
@@ -908,6 +938,11 @@ def _handle_from_resolution(
         # fails closed instead of fabricating evidence).
         if envelope is None:
             envelope = resolution.get("resolution_envelope")
+        if verify_source_version and envelope is None:
+            raise FilingFetchError(
+                "resolution envelope is required for SourceReader v2",
+                code="upstream_error",
+            )
         if envelope is not None:
             # FC-903: validate + normalize (an N-1 company-wiki envelope gains
             # the explicit honest bundle_status='unavailable') and forward the
@@ -918,6 +953,11 @@ def _handle_from_resolution(
             # is fail closed (the handle's containment was checked against a
             # DIFFERENT policy than the one the envelope pins).
             envelope_policy_hash = envelope.get("policy_hash")
+            if verify_source_version and envelope_policy_hash is None:
+                raise FilingFetchError(
+                    "resolution envelope policy_hash is required for SourceReader v2",
+                    code="upstream_error",
+                )
             if (
                 envelope_policy_hash is not None
                 and expected_policy_hash is not None
@@ -929,6 +969,26 @@ def _handle_from_resolution(
                     resolution_trace=_resolution_trace(resolution),
                 )
             handle["resolution_envelope"] = dict(envelope)
+        if verify_source_version:
+            receipt = read_source_version(
+                wiki_root=root,
+                document_id=handle["document_id"],
+                source_id=handle["source_id"],
+                content_sha256=handle["snapshot_sha256"],
+                byte_size=handle["byte_size"],
+                policy_sha256=cast(str, expected_policy_hash),
+                timeout_seconds=read_timeout_seconds,
+                stats=stats,
+            )
+            handle["source_ref"] = {
+                "schema_version": "2.0",
+                "document_id": handle["document_id"],
+                "source_id": handle["source_id"],
+                "content_sha256": handle["snapshot_sha256"],
+                "byte_size": handle["byte_size"],
+                "mime_type": handle["mime_type"],
+            }
+            handle["source_read_receipt"] = receipt
     except FilingFetchError as exc:
         exc.resolution_trace = _resolution_trace(resolution)
         raise
@@ -950,6 +1010,7 @@ def _close_gap_and_return_handle(
     worker_graceful_timeout_seconds: float,
     worker_resume_wait_seconds: float,
     stats: dict[str, int] | None = None,
+    verify_source_version: bool = False,
 ) -> dict:
     """FC-802: execute the authorized close-gap transaction and return the
     final handle.  filing-fetch stays thin: the binding is assembled from
@@ -1015,7 +1076,13 @@ def _close_gap_and_return_handle(
     if not isinstance(closed_resolution, dict):
         raise FilingFetchError("close-gap resolution is missing", code="upstream_error")
     handle = _handle_from_resolution(
-        closed_resolution, request, root, envelope=closed.get("envelope")
+        closed_resolution,
+        request,
+        root,
+        envelope=closed.get("envelope"),
+        verify_source_version=verify_source_version,
+        read_timeout_seconds=(deadline - time.monotonic() if verify_source_version else 900.0),
+        stats=stats,
     )
     handle["company_identity"] = company_identity
     _record_download_events(stats, handle)
@@ -1080,6 +1147,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="include the per-candidate exclusion trace in the error response",
     )
+    parser.add_argument(
+        "--verify-source-version",
+        action="store_true",
+        help="verify reused source bytes through company-wiki SourceReader v2",
+    )
     args = parser.parse_args(argv)
 
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
@@ -1113,6 +1185,7 @@ def main(argv: list[str] | None = None) -> int:
             worker_graceful_timeout_seconds=args.worker_graceful_timeout_seconds,
             worker_resume_wait_seconds=args.worker_resume_wait_seconds,
             stats=stats,
+            verify_source_version=args.verify_source_version,
         )
         if isinstance(handle, dict) and handle.get("status") == "gap":
             # FC-802: a structured gap passes through unwrapped — it is NOT

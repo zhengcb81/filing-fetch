@@ -392,6 +392,56 @@ _HANDLE_REQUIRED_FIELDS = frozenset(
 )
 
 
+def validate_handle_metadata(
+    handle: dict[str, Any],
+    request: dict[str, Any],
+    policy_snapshot: dict[str, Any],
+    expected_policy_hash: str,
+) -> None:
+    """Validate legacy resolution facts without trusting its physical path.
+
+    SourceReader v2 owns current location, root eligibility and byte checks.
+    The legacy response still supplies capture metadata and the policy export.
+    """
+    missing = (_HANDLE_REQUIRED_FIELDS - {"canonical_path"}) - set(handle)
+    if missing:
+        raise FilingFetchError(
+            f"handle missing required field(s): {', '.join(sorted(missing))}",
+            code="upstream_error",
+        )
+    for name in ("request_id", "document_id", "source_id", "mime_type"):
+        value = handle.get(name)
+        if not isinstance(value, str) or not value.strip() or value != value.strip():
+            raise FilingFetchError(
+                f"handle {name} must be non-empty trimmed text", code="upstream_error"
+            )
+    if handle.get("capture_ready") is not True:
+        raise FilingFetchError("handle capture_ready is not True", code="upstream_error")
+    digest = handle.get("snapshot_sha256")
+    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise FilingFetchError("handle snapshot_sha256 is invalid", code="upstream_error")
+    if handle.get("content_sha256", digest) != digest:
+        raise FilingFetchError("handle content_sha256 differs from snapshot_sha256", code="upstream_error")
+    size = handle.get("byte_size")
+    if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+        raise FilingFetchError("handle byte_size is invalid", code="upstream_error")
+    url = handle.get("https_url")
+    if not isinstance(url, str) or not url.startswith("https://"):
+        raise FilingFetchError("handle https_url must use HTTPS", code="upstream_error")
+    published = handle.get("published_date")
+    if not isinstance(published, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", published):
+        raise FilingFetchError("handle published_date must use YYYY-MM-DD", code="upstream_error")
+    as_of = request.get("as_of_date")
+    if isinstance(as_of, str) and as_of and published > as_of:
+        raise FilingFetchError("handle published_date is after as_of_date", code="upstream_error")
+    if not isinstance(policy_snapshot, dict) or not re.fullmatch(
+        r"[0-9a-f]{64}", str(expected_policy_hash)
+    ):
+        raise FilingFetchError("root policy export is missing or invalid", code="upstream_error")
+    if _policy_document_hash(policy_snapshot) != expected_policy_hash:
+        raise FilingFetchError("root policy export hash mismatch", code="upstream_error")
+
+
 def _policy_document_hash(policy_snapshot: dict[str, Any]) -> str:
     """ZR-405: the canonical hash of the policy DOCUMENT — the
     ``policy_hash`` envelope key is excluded from the hashed bytes so the
