@@ -12,6 +12,14 @@
     "2b098b1f53b5d347671ddeda9aa7f8eabb08ca97b539ccbdddf7b3699e7f5453": {
       "where": "tests/test_et_s0b_contract.py",
       "rationale": "SHA-256 of ET's frozen fake-provider golden manifest; its fixed JSON contains no local paths, credentials, or host state."
+    },
+    "b27dccb3d8f4adf101d8f66b8feb1dcc98b987ec7993fbcc9c995f865f3d5869": {
+      "where": "tests/test_cwp_s0b_source_ref_contract.py",
+      "rationale": "SHA-256 of CWP's normalized synthetic verified-open receipt; runtime policy pins and clock are fixed markers, not host values."
+    },
+    "f4f34a791ead2775d276435d3093ddfda74bfa324cd34e26f80e0273a1ae8ada": {
+      "where": "tests/test_cwp_s0b_source_ref_contract.py",
+      "rationale": "SHA-256 of CWP's fixed expected-version-mismatch JSON refusal; the bytes are synthetic and independent of local paths."
     }
   }
 }
