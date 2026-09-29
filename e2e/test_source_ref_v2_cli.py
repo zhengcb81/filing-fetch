@@ -1,4 +1,4 @@
-"""Offline, real-process filing-fetch reuse through company-wiki SourceReader v2.
+"""Offline, real-process filing-fetch SourceRef v2 candidate handoff.
 
 Run with FILING_FETCH_V2_WIKI_SRC pointing to the checkout's ``src`` directory.
 All state lives under pytest's temporary directory. No acquisition is enabled.
@@ -26,8 +26,8 @@ def _environment() -> dict[str, str]:
     if not source:
         pytest.skip("set FILING_FETCH_V2_WIKI_SRC to run the isolated v2 E2E")
     source_dir = Path(source).resolve(strict=True)
-    if not (source_dir / "company_wiki" / "source_catalog" / "source_reader_cli.py").is_file():
-        pytest.fail("FILING_FETCH_V2_WIKI_SRC lacks SourceReader v2")
+    if not (source_dir / "company_wiki" / "source_catalog" / "cli.py").is_file():
+        pytest.fail("FILING_FETCH_V2_WIKI_SRC lacks source catalog CLI")
     environment = dict(os.environ)
     environment["PYTHONPATH"] = str(source_dir)
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -138,18 +138,53 @@ def _setup_wiki(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
 
 
 def _wiki_cli(
-    wiki: Path, catalog_config: Path, environment: dict[str, str], command: str
+    wiki: Path,
+    catalog_config: Path,
+    environment: dict[str, str],
+    command: str,
+    *arguments: str,
 ) -> dict:
     proc = subprocess.run(
         [
             sys.executable, "-B", "-m", "company_wiki.source_catalog.cli",
-            "--config", str(catalog_config), command,
+            "--config", str(catalog_config), command, *arguments,
         ],
         cwd=wiki, env=environment, capture_output=True, text=True,
         encoding="utf-8", timeout=60, check=False,
     )
     assert proc.returncode == 0, proc.stderr
     return json.loads(proc.stdout)
+
+
+
+def _record_clean_review(config_path: Path, environment: dict[str, str]) -> None:
+    source_dir = environment["PYTHONPATH"]
+    if source_dir not in sys.path:
+        sys.path.insert(0, source_dir)
+    from company_wiki.source_catalog import SourceCatalog
+    from company_wiki.source_catalog.config import load_catalog_config
+    from company_wiki.source_catalog.policy_2x import export_policy_2x
+    from company_wiki.source_catalog.prompt_injection import record_prompt_injection_review
+
+    catalog = SourceCatalog(load_catalog_config(config_path))
+    try:
+        row = catalog.reader.fetchone(
+            "SELECT document_id FROM documents d JOIN sources s "
+            "ON s.source_id=d.primary_source_id "
+            "WHERE d.source_status='active' AND s.content_sha256=? LIMIT 1",
+            (SHA,),
+        )
+        assert row is not None
+        policy_hash, _ = export_policy_2x(catalog.config)
+        with catalog.store.transaction() as connection:
+            record_prompt_injection_review(
+                connection, str(row["document_id"]), status="not_detected",
+                reviewer="ff-source-ref-v2-e2e", evidence_sha256=SHA,
+                evidence_payload=BODY, source_sha256=SHA,
+                policy_hash=policy_hash, now="2026-09-27T00:00:00Z",
+            )
+    finally:
+        catalog.close()
 
 
 def _activate_policy(wiki: Path, policy_hash: str) -> None:
@@ -188,7 +223,7 @@ def _fetch(launcher: Path, environment: dict[str, str]) -> dict:
     proc = subprocess.run(
         [
             sys.executable, "-B", str(REPO / "scripts" / "fetch_filing.py"),
-            "--config", str(launcher), "--verify-source-version",
+            "--config", str(launcher), "--source-ref-v2",
             "--timeout-seconds", "60",
         ],
         cwd=REPO, env=environment,
@@ -199,13 +234,24 @@ def _fetch(launcher: Path, environment: dict[str, str]) -> dict:
     return json.loads(proc.stdout)
 
 
-def test_same_sha_duplicate_is_reused_with_v2_read_and_zero_download(tmp_path):
+def _assert_pathless(value: object) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            assert not any(word in key for word in ("path", "location", "root"))
+            _assert_pathless(child)
+    elif isinstance(value, list):
+        for child in value:
+            _assert_pathless(child)
+
+
+def test_same_sha_duplicate_returns_pathless_candidate_without_reading_pdf(tmp_path):
     environment = _environment()
     wiki, config, launcher, primary = _setup_wiki(tmp_path)
     duplicate = wiki / "future_lake" / "2025.pdf"
     _wiki_cli(wiki, config, environment, "scan")
     policy = _wiki_cli(wiki, config, environment, "policy-export")
     _activate_policy(wiki, policy["policy_hash"])
+    _record_clean_review(config, environment)
     original_mtimes = (primary.stat().st_mtime_ns, duplicate.stat().st_mtime_ns)
     journal = wiki / ".source_catalog" / "acquisition_attempts.jsonl"
     journal_before = journal.read_bytes() if journal.exists() else b""
@@ -213,11 +259,18 @@ def test_same_sha_duplicate_is_reused_with_v2_read_and_zero_download(tmp_path):
     first = _fetch(launcher, environment)
     assert first["status"] == "capture_ready"
     assert first["downloads"] == 0
+    assert first["calls"] == 2
     first_handle = first["handle"]
-    assert first_handle["resolution_envelope"]["download_events"] == 0
-    assert first_handle["resolution_envelope"]["policy_hash"] == policy["policy_hash"]
-    assert first_handle["source_read_receipt"]["policy_sha256"] == policy["policy_hash"]
+    assert first_handle["download_events"] == 0
+    assert first_handle["resolution_outcome"] == "reused_existing"
     assert first_handle["source_ref"]["content_sha256"] == SHA
+    assert first_handle["document_kind"] == "annual_report"
+    assert first_handle["fiscal_year"] == 2025
+    assert first_handle["provider"] == "sec"
+    assert first_handle["capture_ready"] is True
+    assert first_handle["company_identity"]["security_id"] == "AAPL"
+    assert "source_read_receipt" not in first_handle
+    _assert_pathless(first_handle)
     assert primary.read_bytes() == duplicate.read_bytes() == BODY
     assert (primary.stat().st_mtime_ns, duplicate.stat().st_mtime_ns) == original_mtimes
     assert (journal.read_bytes() if journal.exists() else b"") == journal_before
@@ -226,8 +279,11 @@ def test_same_sha_duplicate_is_reused_with_v2_read_and_zero_download(tmp_path):
     second = _fetch(launcher, environment)
     second_handle = second["handle"]
     assert second["downloads"] == 0
+    assert second["calls"] == 2
     assert second_handle["source_ref"] == first_handle["source_ref"]
-    assert second_handle["source_read_receipt"]["policy_sha256"] == policy["policy_hash"]
+    assert second_handle["download_events"] == 0
+    _assert_pathless(second_handle)
     assert duplicate.read_bytes() == BODY
     assert duplicate.stat().st_mtime_ns == original_mtimes[1]
     assert (journal.read_bytes() if journal.exists() else b"") == journal_before
+

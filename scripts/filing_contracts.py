@@ -395,13 +395,11 @@ _HANDLE_REQUIRED_FIELDS = frozenset(
 def validate_handle_metadata(
     handle: dict[str, Any],
     request: dict[str, Any],
-    policy_snapshot: dict[str, Any],
-    expected_policy_hash: str,
 ) -> None:
-    """Validate legacy resolution facts without trusting its physical path.
+    """Validate source-candidate identity and provenance without local I/O.
 
-    SourceReader v2 owns current location, root eligibility and byte checks.
-    The legacy response still supplies capture metadata and the policy export.
+    The final consumer opens the SourceRef through company-wiki.  A candidate
+    therefore does not interpret root policy or claim that bytes were read.
     """
     missing = (_HANDLE_REQUIRED_FIELDS - {"canonical_path"}) - set(handle)
     if missing:
@@ -434,12 +432,6 @@ def validate_handle_metadata(
     as_of = request.get("as_of_date")
     if isinstance(as_of, str) and as_of and published > as_of:
         raise FilingFetchError("handle published_date is after as_of_date", code="upstream_error")
-    if not isinstance(policy_snapshot, dict) or not re.fullmatch(
-        r"[0-9a-f]{64}", str(expected_policy_hash)
-    ):
-        raise FilingFetchError("root policy export is missing or invalid", code="upstream_error")
-    if _policy_document_hash(policy_snapshot) != expected_policy_hash:
-        raise FilingFetchError("root policy export hash mismatch", code="upstream_error")
 
 
 def _policy_document_hash(policy_snapshot: dict[str, Any]) -> str:

@@ -25,7 +25,7 @@ import re
 import subprocess
 import sys
 import time
-from typing import Any, cast
+from typing import Any
 
 
 from filing_contracts import (  # noqa: E402  re-export
@@ -41,7 +41,6 @@ from filing_contracts import (  # noqa: E402  re-export
     validate_resolution_envelope,
     _required_text,
 )
-from source_reader_transport import read_source_version
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
@@ -57,6 +56,61 @@ CATALOG_LOCKED_BACKOFF_JITTER = 0.2  # ±20% uniform jitter around the backoff
 # (ZR-204).  These are the only codes the deadline-aware auto-retry loop
 # spins on; everything else (worker_paused, fatal, ...) is fail-closed.
 _CATALOG_RETRY_CODES = frozenset({"catalog_locked", "catalog_busy", "db_timeout"})
+
+# The opt-in v2 result contains only source/business facts. A path in the
+# upstream legacy match is a transient storage detail, never a consumer handle.
+_SOURCE_CANDIDATE_FIELDS = frozenset(
+    {
+        "request_id",
+        "document_id",
+        "source_id",
+        "title",
+        "document_kind",
+        "fiscal_year",
+        "fiscal_period",
+        "period_end",
+        "form_type",
+        "market",
+        "security_id",
+        "language",
+        "published_date",
+        "https_url",
+        "snapshot_sha256",
+        "content_sha256",
+        "retrieved_at",
+        "provider",
+        "provider_document_id",
+        "collector_name",
+        "collector_version",
+        "byte_size",
+        "mime_type",
+        "capture_ready",
+    }
+)
+_COMPANY_IDENTITY_FIELDS = frozenset(
+    {
+        "canonical_name",
+        "market",
+        "exchange",
+        "ticker",
+        "security_id",
+        "match_basis",
+        "matched_value",
+        "source_name",
+        "source_url",
+        "source_record_id",
+        "verified",
+        "active",
+    }
+)
+_SOURCE_REF_FIELDS = frozenset(
+    {"schema_version", "document_id", "source_id", "content_sha256", "byte_size", "mime_type"}
+)
+_QUERY_REQUEST_FIELDS = frozenset(
+    {"entity", "market", "security_id", "document_kind", "form_type",
+     "fiscal_year", "fiscal_period", "language", "provider",
+     "provider_document_id", "as_of_date", "mode"}
+)
 
 
 def _validate_company_wiki_root(root: Path) -> Path:
@@ -626,9 +680,476 @@ def _record_download_events(stats: dict[str, int] | None, handle: dict) -> None:
     reconciliation stats so the response preserves zero-download evidence."""
     if stats is None:
         return
-    events = (handle.get("resolution_envelope") or {}).get("download_events")
-    if isinstance(events, int):
+    events = handle.get("download_events")
+    if events is None:
+        events = (handle.get("resolution_envelope") or {}).get("download_events")
+    if isinstance(events, int) and not isinstance(events, bool):
         stats["downloads"] = events
+
+
+def _source_candidate(
+    handle: dict[str, Any], envelope: dict[str, Any]
+) -> dict[str, Any]:
+    """Project one source reference without physical storage or bundle fields."""
+    candidate = {
+        key: value for key, value in handle.items() if key in _SOURCE_CANDIDATE_FIELDS
+    }
+    candidate["source_ref"] = {
+        "schema_version": "2.0",
+        "document_id": handle["document_id"],
+        "source_id": handle["source_id"],
+        "content_sha256": handle["snapshot_sha256"],
+        "byte_size": handle["byte_size"],
+        "mime_type": handle["mime_type"],
+    }
+    candidate["resolution_outcome"] = envelope["outcome"]
+    candidate["download_events"] = envelope["download_events"]
+    candidate["prompt_injection_status"] = envelope["prompt_injection_status"]
+    return candidate
+
+
+def _candidate_company_identity(identity: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in identity.items() if key in _COMPANY_IDENTITY_FIELDS}
+
+
+def _run_source_query(
+    *, root: Path, normalized_request: dict[str, Any], deadline: float,
+    stats: dict[str, int],
+) -> dict[str, Any]:
+    """Transport one DB-only query and classify its result."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise FilingFetchError("overall deadline exceeded before source query", code="upstream_error")
+    query = {
+        key: value for key, value in normalized_request.items()
+        if key in _QUERY_REQUEST_FIELDS
+    }
+    query["schema_version"] = "1.0"
+    query["allow_download"] = False
+    command = [
+        sys.executable, "-m", "company_wiki.source_catalog.source_query_cli",
+        "--config", str(root / "config" / "source_catalog.yaml"),
+    ]
+    environment = dict(os.environ)
+    environment["PYTHONUTF8"] = "1"
+    stats["calls"] += 1
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0  # type: ignore[attr-defined]
+    try:
+        completed = subprocess.run(
+            command, input=json.dumps(query, ensure_ascii=False),
+            cwd=root, env=environment, text=True, encoding="utf-8",
+            errors="strict", capture_output=True, timeout=remaining,
+            check=False, shell=False, creationflags=creationflags,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise FilingFetchError(
+            f"company-wiki source query unavailable: {exc}", code="upstream_error",
+        ) from exc
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise FilingFetchError(
+            "company-wiki source query stdout is not JSON", code="upstream_error",
+        ) from exc
+    if not isinstance(payload, dict) or payload.get("schema_version") != "2.0":
+        raise FilingFetchError(
+            "company-wiki source query schema is unsupported", code="upstream_error",
+        )
+    status = payload.get("status")
+    if status != "found":
+        errors = {
+            "not_found": "not_found", "ambiguous": "ambiguous",
+            "blocked": "source_blocked", "unavailable": "upstream_error",
+        }
+        if status not in errors:
+            raise FilingFetchError("company-wiki source query status is invalid", code="upstream_error")
+        raise FilingFetchError(
+            f"company-wiki source query {status}: {payload.get('reason')}",
+            code=errors[status], stage="source_query",
+        )
+    if completed.returncode != 0:
+        raise FilingFetchError(
+            "company-wiki source query returned found with nonzero exit",
+            code="upstream_error",
+        )
+    return payload
+
+
+def _source_query_candidate(
+    *, root: Path, normalized_request: dict[str, Any], request: dict[str, Any],
+    company_identity: dict[str, Any], deadline: float, stats: dict[str, int],
+) -> dict[str, Any]:
+    """Get a provisional pathless candidate from CWP's DB-only query CLI.
+
+    No source bytes or root paths cross this boundary. The downstream CWP
+    ``open_version(filing_reuse)`` remains the sole verified source read.
+    """
+    payload = _run_source_query(
+        root=root, normalized_request=normalized_request, deadline=deadline,
+        stats=stats,
+    )
+    matches = payload.get("matches")
+    candidates = payload.get("candidates")
+    if (
+        not isinstance(matches, list) or len(matches) != 1
+        or not isinstance(candidates, list) or len(candidates) != 1
+        or not isinstance(matches[0], dict) or not isinstance(candidates[0], dict)
+    ):
+        raise FilingFetchError(
+            "company-wiki source query did not return one candidate",
+            code="upstream_error",
+        )
+    source_ref = matches[0]
+    candidate = candidates[0]
+    if (
+        set(source_ref) != _SOURCE_REF_FIELDS
+        or source_ref.get("schema_version") != "2.0"
+        or candidate.get("source_ref") != source_ref
+    ):
+        raise FilingFetchError(
+            "company-wiki source query SourceRef mismatch", code="upstream_error",
+        )
+    if any(
+        forbidden in key.lower()
+        for key in candidate
+        for forbidden in ("path", "location", "root", "bundle")
+    ):
+        raise FilingFetchError(
+            "company-wiki source query leaked a physical location", code="upstream_error",
+        )
+    handle = dict(candidate)
+    handle["request_id"] = payload.get("request_id")
+    review_status = handle.get("prompt_injection_status")
+    if review_status == "detected_and_ignored":
+        raise FilingFetchError(
+            "company-wiki source query has a disposed prompt-injection finding; "
+            "v2 reuse is held pending verifiable disposition evidence",
+            code="source_blocked",
+        )
+    if review_status != "not_detected":
+        raise FilingFetchError(
+            "company-wiki source query review is missing or invalid",
+            code="source_not_reviewed",
+        )
+    validate_handle_metadata(handle, request)
+    if (
+        handle.get("document_id") != source_ref["document_id"]
+        or handle.get("source_id") != source_ref["source_id"]
+        or handle.get("snapshot_sha256") != source_ref["content_sha256"]
+        or handle.get("byte_size") != source_ref["byte_size"]
+        or handle.get("mime_type") != source_ref["mime_type"]
+    ):
+        raise FilingFetchError(
+            "company-wiki source query candidate identity mismatch", code="upstream_error",
+        )
+    if handle.get("document_kind") != request.get("document_kind"):
+        raise FilingFetchError(
+            "company-wiki source query document_kind mismatch", code="upstream_error",
+        )
+    if request.get("fiscal_year") is not None and handle.get("fiscal_year") != request["fiscal_year"]:
+        raise FilingFetchError(
+            "company-wiki source query fiscal_year mismatch", code="upstream_error",
+        )
+    for key in ("market", "security_id"):
+        if key in handle and handle[key] != company_identity[key]:
+            raise FilingFetchError(
+                f"company-wiki source query {key} mismatch", code="upstream_error",
+            )
+    handle["company_identity"] = _candidate_company_identity(company_identity)
+    handle["resolution_outcome"] = "reused_existing"
+    handle["download_events"] = 0
+    return handle
+
+
+
+_SOURCE_OPERATION_VERSION = "1.0"
+_SOURCE_OPERATION_FIELDS = frozenset({
+    "operation_schema_version", "operation", "status", "request_id",
+    "outcome", "download_events", "policy_hash", "source_ref",
+    "candidate", "gap_plan",
+})
+_SOURCE_OPERATION_STATUSES = frozenset({
+    "completed", "gap", "ambiguous", "not_found", "unavailable",
+})
+def _contains_physical_field(value: object) -> bool:
+    if isinstance(value, dict):
+        return any(
+            any(token in str(key).lower() for token in ("path", "location", "root", "bundle"))
+            or _contains_physical_field(child)
+            for key, child in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_physical_field(child) for child in value)
+    return False
+
+
+def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise FilingFetchError("company-wiki operation result must be an object", code="upstream_error")
+    if (
+        payload.get("operation_schema_version") != _SOURCE_OPERATION_VERSION
+        or payload.get("operation") != operation
+        or not set(payload) <= _SOURCE_OPERATION_FIELDS
+    ):
+        raise FilingFetchError("company-wiki operation contract is unsupported", code="upstream_error")
+    if payload.get("status") not in _SOURCE_OPERATION_STATUSES:
+        raise FilingFetchError("company-wiki operation status is invalid", code="upstream_error")
+    if _contains_physical_field(payload):
+        raise FilingFetchError("company-wiki operation result leaked a physical location", code="upstream_error")
+    request_id = payload.get("request_id")
+    if not isinstance(request_id, str) or not request_id.strip() or request_id != request_id.strip():
+        raise FilingFetchError("company-wiki operation request_id is invalid", code="upstream_error")
+    policy_hash = payload.get("policy_hash")
+    if policy_hash is not None and (
+        not isinstance(policy_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", policy_hash)
+    ):
+        raise FilingFetchError("company-wiki operation policy_hash is invalid", code="upstream_error")
+    return payload
+
+
+def _pathless_operation_gap(
+    payload: dict[str, Any], *, operation: str,
+) -> dict[str, Any]:
+    result = _validated_operation(payload, operation)
+    if result["status"] != "gap":
+        raise FilingFetchError("company-wiki operation is not a gap", code="upstream_error")
+    plan = result.get("gap_plan")
+    if (
+        not isinstance(plan, dict)
+        or plan.get("schema_version") != "1.0"
+        or not isinstance(plan.get("gap_hash"), str)
+        or not re.fullmatch(r"[0-9a-f]{64}", plan["gap_hash"])
+        or plan.get("request_id") != result["request_id"]
+    ):
+        raise FilingFetchError("company-wiki gap plan is incomplete", code="upstream_error")
+    if (
+        result.get("outcome") != "gap"
+        or isinstance(result.get("download_events"), bool)
+        or result.get("download_events") != 0
+    ):
+        raise FilingFetchError("company-wiki gap receipt is inconsistent", code="upstream_error")
+    if plan.get("request_id") not in (None, result["request_id"]):
+        raise FilingFetchError("company-wiki gap request binding changed", code="upstream_error")
+    resolution = {
+        "status": "missing",
+        "reason": "metadata_only_gap_plan",
+        "request_id": result["request_id"],
+        "resolution_envelope": {"policy_hash": result.get("policy_hash")},
+    }
+    return {"status": "gap", "gap_plan": plan, "resolution": resolution}
+
+
+def _pathless_operation_handle(
+    payload: dict[str, Any],
+    *,
+    operation: str,
+    request: dict[str, Any],
+    company_identity: dict[str, Any],
+    stats: dict[str, int] | None,
+) -> dict[str, Any]:
+    result = _validated_operation(payload, operation)
+    if result["status"] != "completed":
+        errors = {
+            "ambiguous": ("ambiguous", "ambiguous"),
+            "not_found": ("not_found", "not_found"),
+            "unavailable": ("upstream_error", "upstream_error"),
+        }
+        code, stage = errors.get(result["status"], ("upstream_error", "source_operation"))
+        raise FilingFetchError(
+            f"company-wiki {operation} {result['status']}",
+            code=code, stage=stage,
+        )
+    outcome = result.get("outcome")
+    events = result.get("download_events")
+    if outcome not in {"reused_existing", "reused_after_discovery", "downloaded_new"}:
+        raise FilingFetchError("company-wiki operation outcome is invalid", code="upstream_error")
+    if isinstance(events, bool) or events not in (0, 1):
+        raise FilingFetchError("company-wiki operation download_events is invalid", code="upstream_error")
+    if (outcome == "downloaded_new") != (events == 1):
+        raise FilingFetchError("company-wiki operation download receipt is inconsistent", code="upstream_error")
+
+    source_ref = result.get("source_ref")
+    candidate = result.get("candidate")
+    if (
+        not isinstance(source_ref, dict)
+        or set(source_ref) != _SOURCE_REF_FIELDS
+        or source_ref.get("schema_version") != "2.0"
+        or not isinstance(candidate, dict)
+        or candidate.get("source_ref") != source_ref
+    ):
+        raise FilingFetchError("company-wiki operation SourceRef mismatch", code="upstream_error")
+    handle = {key: value for key, value in candidate.items() if key in _SOURCE_CANDIDATE_FIELDS}
+    handle["source_ref"] = dict(source_ref)
+    handle["request_id"] = result["request_id"]
+    if (
+        handle.get("document_id") != source_ref.get("document_id")
+        or handle.get("source_id") != source_ref.get("source_id")
+        or handle.get("snapshot_sha256") != source_ref.get("content_sha256")
+        or handle.get("byte_size") != source_ref.get("byte_size")
+        or handle.get("mime_type") != source_ref.get("mime_type")
+        or handle.get("content_sha256", source_ref.get("content_sha256")) != source_ref.get("content_sha256")
+    ):
+        raise FilingFetchError("company-wiki operation candidate identity mismatch", code="upstream_error")
+    review_status = candidate.get("prompt_injection_status")
+    if review_status == "detected_and_ignored":
+        raise FilingFetchError(
+            "company-wiki operation has a disposed prompt-injection finding; "
+            "v2 reuse is held pending verifiable disposition evidence",
+            code="source_blocked",
+        )
+    if review_status != "not_detected":
+        raise FilingFetchError(
+            "company-wiki operation review is missing or invalid",
+            code="source_not_reviewed",
+        )
+    validate_handle_metadata(handle, request)
+    if handle.get("document_kind") != request.get("document_kind"):
+        raise FilingFetchError("company-wiki operation document_kind mismatch", code="upstream_error")
+    if request.get("fiscal_year") is not None and handle.get("fiscal_year") != request["fiscal_year"]:
+        raise FilingFetchError("company-wiki operation fiscal_year mismatch", code="upstream_error")
+    for key in ("market", "security_id"):
+        if key in handle and handle[key] != company_identity[key]:
+            raise FilingFetchError(f"company-wiki operation {key} mismatch", code="upstream_error")
+
+    handle["company_identity"] = _candidate_company_identity(company_identity)
+    handle["resolution_outcome"] = outcome
+    handle["download_events"] = events
+    handle["prompt_injection_status"] = review_status
+    handle["operation_receipt"] = {
+        "operation_schema_version": _SOURCE_OPERATION_VERSION,
+        "operation": operation,
+        "request_id": result["request_id"],
+        "outcome": outcome,
+        "download_events": events,
+        "policy_hash": result.get("policy_hash"),
+    }
+    _record_download_events(stats, handle)
+    return handle
+
+
+def _resolve_source_ref_v2(
+    *,
+    source_query_route: bool,
+    root: Path,
+    command_prefix: list[str],
+    normalized_request: dict[str, Any],
+    request: dict[str, Any],
+    company_identity: dict[str, Any],
+    deadline: float,
+    allow_download: bool,
+    pause_worker: bool,
+    worker_graceful_timeout_seconds: float,
+    worker_resume_wait_seconds: float,
+    stats: dict[str, int],
+) -> dict[str, Any]:
+    # Own every opt-in SourceRef route behind one isolated dispatcher.
+    if source_query_route:
+        return _source_query_candidate(
+            root=root, normalized_request=normalized_request, request=request,
+            company_identity=company_identity, deadline=deadline, stats=stats,
+        )
+
+    command = [
+        *command_prefix, "ensure", *_command_arguments(normalized_request),
+        "--source-ref-v2",
+    ]
+    if allow_download:
+        if not normalized_request.get("market") or not normalized_request.get("security_id"):
+            raise FilingFetchError("explicit download requires market and security_id")
+        command.extend((
+            "--allow-download", "--acquisition-config",
+            str(root / "config" / "source_acquisition.yaml"),
+        ))
+        if pause_worker:
+            command.append("--allow-acquisition-while-paused")
+        scope = PausedWorkerScope(
+            root=root, command_prefix=command_prefix, enabled=pause_worker,
+            graceful_timeout_seconds=worker_graceful_timeout_seconds,
+            resume_wait_seconds=worker_resume_wait_seconds,
+            deadline=deadline, stats=stats,
+        )
+        with scope:
+            payload = _run_company_wiki_json_retry(
+                command=command, root=root, action="ensure",
+                deadline=deadline, stats=stats,
+            )
+    else:
+        payload = _run_company_wiki_json_retry(
+            command=command, root=root, action="ensure",
+            deadline=deadline, stats=stats,
+        )
+
+    if payload.get("status") != "gap":
+        return _pathless_operation_handle(
+            payload, operation="ensure", request=request,
+            company_identity=company_identity, stats=stats,
+        )
+
+    gap_result = _pathless_operation_gap(payload, operation="ensure")
+    gap_plan = gap_result["gap_plan"]
+    authorization = request.get("authorization")
+    if (
+        allow_download
+        and authorization is not None
+        and _gap_plan_has_actionable_candidate(gap_plan)
+    ):
+        if not gap_result["resolution"]["resolution_envelope"]["policy_hash"]:
+            raise FilingFetchError(
+                "company-wiki gap is missing the policy binding required for close-gap",
+                code="upstream_error",
+            )
+        return _close_gap_and_return_handle(
+            payload=gap_result, gap_plan=gap_plan, authorization=authorization,
+            company_identity=company_identity, command_prefix=command_prefix,
+            normalized_request=normalized_request, root=root, request=request,
+            deadline=deadline, pause_worker=pause_worker,
+            worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
+            worker_resume_wait_seconds=worker_resume_wait_seconds,
+            stats=stats, source_ref_v2=True,
+        )
+    stats["downloads"] = 0
+    return gap_result
+
+
+def _run_legacy_filing_command(
+    *,
+    action: str,
+    command_prefix: list[str],
+    normalized_request: dict[str, Any],
+    root: Path,
+    deadline: float,
+    allow_download: bool,
+    pause_worker: bool,
+    worker_graceful_timeout_seconds: float,
+    worker_resume_wait_seconds: float,
+    stats: dict[str, int],
+) -> dict[str, Any]:
+    # Keep the legacy path-bearing CLI behind a compatibility boundary.
+    command = [*command_prefix, action, *_command_arguments(normalized_request)]
+    if allow_download:
+        if not normalized_request.get("market") or not normalized_request.get("security_id"):
+            raise FilingFetchError("explicit download requires market and security_id")
+        command.extend((
+            "--allow-download", "--acquisition-config",
+            str(root / "config" / "source_acquisition.yaml"),
+        ))
+        if pause_worker:
+            command.append("--allow-acquisition-while-paused")
+        scope = PausedWorkerScope(
+            root=root, command_prefix=command_prefix, enabled=pause_worker,
+            graceful_timeout_seconds=worker_graceful_timeout_seconds,
+            resume_wait_seconds=worker_resume_wait_seconds,
+            deadline=deadline, stats=stats,
+        )
+        with scope:
+            return _run_company_wiki_json_retry(
+                command=command, root=root, action=action,
+                deadline=deadline, stats=stats,
+            )
+    return _run_company_wiki_json_retry(
+        command=command, root=root, action=action,
+        deadline=deadline, stats=stats,
+    )
 
 
 def _gap_plan_has_actionable_candidate(gap_plan: object) -> bool:
@@ -636,6 +1157,14 @@ def _gap_plan_has_actionable_candidate(gap_plan: object) -> bool:
     if not isinstance(gap_plan, dict):
         return False
     return bool(gap_plan.get("missing") or gap_plan.get("newer_revision"))
+
+
+def _use_source_query(source_ref_v2: bool, allow_download: bool, request: dict) -> bool:
+    """Keep the opt-in reuse decision out of the legacy orchestrator."""
+    if not isinstance(source_ref_v2, bool):
+        raise TypeError("source_ref_v2 must be boolean")
+    mode = str(request.get("mode") or "").strip().lower()
+    return source_ref_v2 and not allow_download and mode != "latest_as_of"
 
 
 def resolve_filing(
@@ -649,7 +1178,7 @@ def resolve_filing(
     worker_graceful_timeout_seconds: float = 5.0,
     worker_resume_wait_seconds: float = 5.0,
     stats: dict[str, int] | None = None,
-    verify_source_version: bool = False,
+    source_ref_v2: bool = False,
 ) -> dict[str, Any]:
     """Identify an optional company query, then resolve or explicitly ensure a filing.
 
@@ -676,8 +1205,7 @@ def resolve_filing(
         raise TypeError("request must be a dict")
     if not isinstance(allow_download, bool):
         raise TypeError("allow_download must be boolean")
-    if not isinstance(verify_source_version, bool):
-        raise TypeError("verify_source_version must be boolean")
+    source_query_route = _use_source_query(source_ref_v2, allow_download, request)
     if timeout_seconds <= 0 or not math.isfinite(timeout_seconds):
         raise ValueError("timeout_seconds must be positive and finite")
     validate_request(request)
@@ -718,56 +1246,28 @@ def resolve_filing(
             "security_id": company_identity["security_id"],
         }
     )
-    # FC-802: latest_as_of always consults the provider through the ensure
-    # path — the metadata-only gap plan comes back even without download.
+    # All explicit v2 requests are handled by one pathless dispatcher.
     mode = str(request.get("mode") or "").strip().lower()
     is_latest = mode == "latest_as_of"
+    if source_ref_v2:
+        return _resolve_source_ref_v2(
+            source_query_route=source_query_route,
+            root=root, command_prefix=command_prefix,
+            normalized_request=normalized_request, request=request,
+            company_identity=company_identity, deadline=deadline,
+            allow_download=allow_download, pause_worker=pause_worker,
+            worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
+            worker_resume_wait_seconds=worker_resume_wait_seconds, stats=stats,
+        )
+
     action = "ensure" if (allow_download or is_latest) else "resolve"
-    command = [
-        *command_prefix,
-        action,
-        *_command_arguments(normalized_request),
-    ]
-    if allow_download:
-        if not normalized_request.get("market") or not normalized_request.get("security_id"):
-            raise FilingFetchError("explicit download requires market and security_id")
-        command.extend(
-            (
-                "--allow-download",
-                "--acquisition-config",
-                str(root / "config" / "source_acquisition.yaml"),
-            )
-        )
-        if pause_worker:
-            # Explicit opt-in bypass of the company-wiki paused-guard: we
-            # deliberately pause the worker around this download, so the guard
-            # must not refuse us. Without pause_worker the legacy guard applies.
-            command.append("--allow-acquisition-while-paused")
-        scope = PausedWorkerScope(
-            root=root,
-            command_prefix=command_prefix,
-            enabled=pause_worker,
-            graceful_timeout_seconds=worker_graceful_timeout_seconds,
-            resume_wait_seconds=worker_resume_wait_seconds,
-            deadline=deadline,
-            stats=stats,
-        )
-        with scope:
-            payload = _run_company_wiki_json_retry(
-                command=command,
-                root=root,
-                action=action,
-                deadline=deadline,
-                stats=stats,
-            )
-    else:
-        payload = _run_company_wiki_json_retry(
-            command=command,
-            root=root,
-            action=action,
-            deadline=deadline,
-            stats=stats,
-        )
+    payload = _run_legacy_filing_command(
+        action=action, command_prefix=command_prefix,
+        normalized_request=normalized_request, root=root, deadline=deadline,
+        allow_download=allow_download, pause_worker=pause_worker,
+        worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
+        worker_resume_wait_seconds=worker_resume_wait_seconds, stats=stats,
+    )
     if action == "ensure":
         # FC-802: the ensure payload carries the top-level status; GAP is a
         # STRUCTURED result (metadata-only plan), never a not_found error.
@@ -802,7 +1302,7 @@ def resolve_filing(
                     worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
                     worker_resume_wait_seconds=worker_resume_wait_seconds,
                     stats=stats,
-                    verify_source_version=verify_source_version,
+                    source_ref_v2=source_ref_v2,
                 )
             return {
                 "status": "gap",
@@ -835,13 +1335,13 @@ def resolve_filing(
         resolution,
         request,
         root,
-        verify_source_version=verify_source_version,
-        read_timeout_seconds=(
-            deadline - time.monotonic() if verify_source_version else timeout_seconds
-        ),
-        stats=stats,
+        source_ref_v2=source_ref_v2,
     )
-    handle["company_identity"] = company_identity
+    handle["company_identity"] = (
+        _candidate_company_identity(company_identity)
+        if source_ref_v2
+        else company_identity
+    )
     # ZR-205: record the download event count from the final resolution
     # envelope (0 = pure reuse, 1 = committed download) so the final
     # envelope preserves the zero-download / call-count evidence (READ-10).
@@ -870,15 +1370,12 @@ def _handle_from_resolution(
     root: Path,
     *,
     envelope: dict | None = None,
-    verify_source_version: bool = False,
-    read_timeout_seconds: float = 900.0,
-    stats: dict[str, int] | None = None,
+    source_ref_v2: bool = False,
 ) -> dict:
-    """Build + deep-validate the handle from a reused resolution.
+    """Build either the legacy local handle or a pathless source candidate.
 
     Shared by the reuse path and the FC-802 close-gap path so the handle
-    contract (exactly-one match, capture provenance, policy containment,
-    FC-704 envelope forwarding) stays single-sourced.
+    contract (exactly-one match and capture provenance) stays single-sourced.
     """
     matches = resolution.get("matches")
     if not isinstance(matches, list) or len(matches) != 1 or not isinstance(matches[0], dict):
@@ -896,15 +1393,10 @@ def _handle_from_resolution(
             resolution_trace=_resolution_trace(resolution),
         )
     handle["request_id"] = resolution.get("request_id")
-    # ZR-405: production containment is validated against the root policy
-    # the company-wiki response carries ("policy_export" — the wiki's
-    # read-only policy-export payload with policy_hash + tokenized roots).
-    # When the upstream response carries it, the legacy <wiki_root>/
-    # companies default is never consulted; a policy-carrying response that
-    # does NOT contain the handle's path fails closed.  An N-1 wiki whose
-    # response omits "policy_export" keeps the legacy bridge (documented
-    # deviation; the CURRENT triplet always sends it).
-    policy_snapshot = resolution.get("policy_export")
+    # The old local-file contract still uses policy_export for containment.
+    # The source-ref contract leaves physical eligibility to the one final
+    # company-wiki open performed by the consumer.
+    policy_snapshot = resolution.get("policy_export") if not source_ref_v2 else None
     expected_policy_hash = None
     if isinstance(policy_snapshot, dict):
         expected_policy_hash = policy_snapshot.get("policy_hash")
@@ -912,17 +1404,8 @@ def _handle_from_resolution(
     # the upstream resolution trace so the error envelope never swallows
     # the exact-reuse / download=0 evidence.
     try:
-        if verify_source_version:
-            if not isinstance(policy_snapshot, dict) or not isinstance(
-                expected_policy_hash, str
-            ):
-                raise FilingFetchError(
-                    "root policy export is required for SourceReader v2",
-                    code="upstream_error",
-                )
-            validate_handle_metadata(
-                handle, request, policy_snapshot, expected_policy_hash
-            )
+        if source_ref_v2:
+            validate_handle_metadata(handle, request)
         else:
             validate_handle(
                 handle,
@@ -931,35 +1414,24 @@ def _handle_from_resolution(
                 policy_snapshot=policy_snapshot,
                 expected_policy_hash=expected_policy_hash,
             )
-        # FC-704: deep-validate and forward the resolution envelope verbatim —
-        # the journal-reconciled outcome + download event evidence the revenue
-        # receipt derives from.  N/N-1: an old company-wiki without an envelope
-        # resolves normally; the handle simply carries no envelope (revenue then
-        # fails closed instead of fabricating evidence).
+        # Validate the upstream acquisition outcome. Legacy mode forwards the
+        # full envelope; source-ref mode projects only pathless audit scalars.
         if envelope is None:
             envelope = resolution.get("resolution_envelope")
-        if verify_source_version and envelope is None:
+        if source_ref_v2 and envelope is None:
             raise FilingFetchError(
-                "resolution envelope is required for SourceReader v2",
+                "resolution envelope is required for SourceRef v2",
                 code="upstream_error",
             )
         if envelope is not None:
-            # FC-903: validate + normalize (an N-1 company-wiki envelope gains
-            # the explicit honest bundle_status='unavailable') and forward the
-            # result — never a faked empty-green.
+            # FC-903: normalize N-1 fields and validate the outcome taxonomy.
             envelope = validate_resolution_envelope(envelope)
-            # ZR-405: the envelope's policy_hash (ZR-404) must match the
-            # response's exported root policy — a drifted/mismatched policy
-            # is fail closed (the handle's containment was checked against a
-            # DIFFERENT policy than the one the envelope pins).
+            # ZR-405: legacy local handles keep their root-policy hash fence.
+            # SourceRef candidates leave current read policy to the consumer.
             envelope_policy_hash = envelope.get("policy_hash")
-            if verify_source_version and envelope_policy_hash is None:
-                raise FilingFetchError(
-                    "resolution envelope policy_hash is required for SourceReader v2",
-                    code="upstream_error",
-                )
             if (
-                envelope_policy_hash is not None
+                not source_ref_v2
+                and envelope_policy_hash is not None
                 and expected_policy_hash is not None
                 and envelope_policy_hash != expected_policy_hash
             ):
@@ -968,27 +1440,11 @@ def _handle_from_resolution(
                     code="upstream_error",
                     resolution_trace=_resolution_trace(resolution),
                 )
-            handle["resolution_envelope"] = dict(envelope)
-        if verify_source_version:
-            receipt = read_source_version(
-                wiki_root=root,
-                document_id=handle["document_id"],
-                source_id=handle["source_id"],
-                content_sha256=handle["snapshot_sha256"],
-                byte_size=handle["byte_size"],
-                policy_sha256=cast(str, expected_policy_hash),
-                timeout_seconds=read_timeout_seconds,
-                stats=stats,
-            )
-            handle["source_ref"] = {
-                "schema_version": "2.0",
-                "document_id": handle["document_id"],
-                "source_id": handle["source_id"],
-                "content_sha256": handle["snapshot_sha256"],
-                "byte_size": handle["byte_size"],
-                "mime_type": handle["mime_type"],
-            }
-            handle["source_read_receipt"] = receipt
+            if not source_ref_v2:
+                handle["resolution_envelope"] = dict(envelope)
+        if source_ref_v2:
+            assert envelope is not None
+            return _source_candidate(handle, envelope)
     except FilingFetchError as exc:
         exc.resolution_trace = _resolution_trace(resolution)
         raise
@@ -1010,7 +1466,7 @@ def _close_gap_and_return_handle(
     worker_graceful_timeout_seconds: float,
     worker_resume_wait_seconds: float,
     stats: dict[str, int] | None = None,
-    verify_source_version: bool = False,
+    source_ref_v2: bool = False,
 ) -> dict:
     """FC-802: execute the authorized close-gap transaction and return the
     final handle.  filing-fetch stays thin: the binding is assembled from
@@ -1046,6 +1502,8 @@ def _close_gap_and_return_handle(
             "--acquisition-config",
             str(root / "config" / "source_acquisition.yaml"),
         ]
+        if source_ref_v2:
+            command.append("--source-ref-v2")
         if pause_worker:
             command.append("--allow-acquisition-while-paused")
         scope = PausedWorkerScope(
@@ -1067,6 +1525,16 @@ def _close_gap_and_return_handle(
             )
     finally:
         Path(binding_file.name).unlink(missing_ok=True)
+    if source_ref_v2:
+        if closed.get("status") != "completed":
+            raise FilingFetchError(
+                f"close-gap did not complete: {closed.get('status')}",
+                code="gap_not_closed",
+            )
+        return _pathless_operation_handle(
+            closed, operation="close-gap", request=request,
+            company_identity=company_identity, stats=stats,
+        )
     if closed.get("status") != "completed":
         raise FilingFetchError(
             f"close-gap did not complete: {closed.get('status')} / {closed.get('reason')}",
@@ -1080,11 +1548,13 @@ def _close_gap_and_return_handle(
         request,
         root,
         envelope=closed.get("envelope"),
-        verify_source_version=verify_source_version,
-        read_timeout_seconds=(deadline - time.monotonic() if verify_source_version else 900.0),
-        stats=stats,
+        source_ref_v2=source_ref_v2,
     )
-    handle["company_identity"] = company_identity
+    handle["company_identity"] = (
+        _candidate_company_identity(company_identity)
+        if source_ref_v2
+        else company_identity
+    )
     _record_download_events(stats, handle)
     return handle
 
@@ -1148,9 +1618,9 @@ def main(argv: list[str] | None = None) -> int:
         help="include the per-candidate exclusion trace in the error response",
     )
     parser.add_argument(
-        "--verify-source-version",
+        "--source-ref-v2",
         action="store_true",
-        help="verify reused source bytes through company-wiki SourceReader v2",
+        help="return a pathless source reference for a later company-wiki read",
     )
     args = parser.parse_args(argv)
 
@@ -1185,7 +1655,7 @@ def main(argv: list[str] | None = None) -> int:
             worker_graceful_timeout_seconds=args.worker_graceful_timeout_seconds,
             worker_resume_wait_seconds=args.worker_resume_wait_seconds,
             stats=stats,
-            verify_source_version=args.verify_source_version,
+            source_ref_v2=args.source_ref_v2,
         )
         if isinstance(handle, dict) and handle.get("status") == "gap":
             # FC-802: a structured gap passes through unwrapped — it is NOT
