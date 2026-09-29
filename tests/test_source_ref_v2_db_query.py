@@ -153,21 +153,13 @@ def test_query_status_fails_closed_without_legacy_resolve(
 
 @pytest.mark.parametrize(
     ("change", "code"),
-    [("unreviewed", "source_not_reviewed"),
-     ("disposed_review", "source_blocked"),
-     ("sha_drift", "upstream_error"), ("path_leak", "upstream_error")],
+    [("sha_drift", "upstream_error"), ("path_leak", "upstream_error")],
 )
-def test_query_candidate_requires_review_identity_and_pathless_shape(
+def test_query_candidate_requires_identity_and_pathless_shape(
     tmp_path: Path, change: str, code: str,
 ) -> None:
     candidate = _candidate()
-    if change == "unreviewed":
-        candidate["prompt_injection_status"] = "not_reviewed"
-        candidate["capture_ready"] = False
-    elif change == "disposed_review":
-        candidate["prompt_injection_status"] = "detected_and_ignored"
-        candidate["capture_ready"] = False
-    elif change == "sha_drift":
+    if change == "sha_drift":
         candidate["snapshot_sha256"] = "0" * 64
     else:
         candidate["canonical_path"] = str(tmp_path / "private" / "report.pdf")
@@ -182,6 +174,28 @@ def test_query_candidate_requires_review_identity_and_pathless_shape(
             )
     assert len(run.call_args_list) == 2
     assert error.value.code == code
+
+
+@pytest.mark.parametrize("review_status", ["not_reviewed", "detected_and_ignored"])
+def test_review_state_is_diagnostic_for_unverified_v2_candidate(
+    tmp_path: Path, review_status: str,
+) -> None:
+    candidate = _candidate()
+    candidate["prompt_injection_status"] = review_status
+    candidate["capture_ready"] = False
+    with patch(
+        "fetch_filing.subprocess.run",
+        side_effect=[_completed(_identity()), _completed(_query(candidate=candidate))],
+    ) as run:
+        handle = fetch_filing.resolve_filing(
+            request=_request(), company_wiki_root=_wiki(tmp_path),
+            source_ref_v2=True,
+        )
+    assert len(run.call_args_list) == 2
+    assert handle["source_ref"] == _ref()
+    assert handle["prompt_injection_status"] == review_status
+    assert handle["byte_verified"] is False
+    assert handle["capture_ready"] is False
 
 
 def test_candidate_without_explicit_title_does_not_guess_from_filename(
@@ -361,78 +375,34 @@ def test_latest_as_of_pathless_provider_gap_stays_structured_without_download(
     assert "canonical_path" not in str(result)
 
 
-def test_explicit_download_returns_only_pathless_source_ref_and_receipt(
+def test_v2_explicit_download_waits_for_request_plan_without_cwp_calls(
     tmp_path: Path,
 ) -> None:
-    stats = {"calls": 0, "downloads": 0}
-    operation = _operation_v2(
-        outcome="downloaded_new", download_events=1,
-    )
-    with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(operation)],
-    ) as run:
-        handle = fetch_filing.resolve_filing(
-            request=_request(), company_wiki_root=_wiki(tmp_path),
-            allow_download=True, source_ref_v2=True, pause_worker=False,
-            stats=stats,
-        )
-    ensure_command = run.call_args_list[1].args[0]
-    assert "ensure" in ensure_command
-    assert "--source-ref-v2" in ensure_command
-    assert "--allow-download" in ensure_command
-    assert handle["source_ref"] == _ref()
-    assert handle["resolution_outcome"] == "downloaded_new"
-    assert handle["download_events"] == stats["downloads"] == 1
-    assert "canonical_path" not in str(handle)
+    with patch("fetch_filing.subprocess.run") as run:
+        with pytest.raises(FilingFetchError) as error:
+            fetch_filing.resolve_filing(
+                request=_request(), company_wiki_root=_wiki(tmp_path),
+                allow_download=True, source_ref_v2=True, pause_worker=False,
+            )
+    assert error.value.code == "contract_pending"
+    run.assert_not_called()
 
-def test_authorized_close_gap_uses_pathless_operation_contract(tmp_path: Path) -> None:
-    stats = {"calls": 0, "downloads": 0}
-    gap_plan = {
-        "schema_version": "1.0",
-        "request_id": "urn:req:operation-v2",
-        "as_of_date": "2026-09-27",
-        "document_kind": "annual_report",
-        "entity": "Advanced Micro Devices, Inc.",
-        "market": "US",
-        "missing": [{
-            "provider": "sec", "provider_document_id": "amd-2025-10k",
-            "accession": "acc-2025",
-        }],
-        "newer_revision": [], "future": [], "gap_hash": "c" * 64,
-    }
-    ensure_gap = _operation_v2(status="gap", outcome="gap", gap_plan=gap_plan)
-    ensure_gap["source_ref"] = None
-    ensure_gap["candidate"] = None
-    closed = _operation_v2(
-        operation="close-gap", outcome="downloaded_new", download_events=1,
-    )
+
+def test_v2_legacy_authorization_cannot_activate_close_gap(tmp_path: Path) -> None:
     request = _latest_request()
     request["authorization"] = {
         "provider": "sec", "allowed_accessions": ["acc-2025"],
         "max_items": 1, "max_bytes": 5_000_000,
         "expires_at": "2099-01-01T00:00:00Z",
     }
-    with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(ensure_gap), _completed(closed)],
-    ) as run:
-        handle = fetch_filing.resolve_filing(
-            request=request, company_wiki_root=_wiki(tmp_path), allow_download=True,
-            source_ref_v2=True, pause_worker=False, stats=stats,
-        )
-
-    commands = [call.args[0] for call in run.call_args_list]
-    ensure_command = next(command for command in commands if "ensure" in command)
-    close_command = next(command for command in commands if "close-gap" in command)
-    assert "--source-ref-v2" in ensure_command
-    assert "--source-ref-v2" in close_command
-    assert handle["operation_receipt"]["operation"] == "close-gap"
-    assert handle["operation_receipt"]["policy_hash"] == "b" * 64
-    assert handle["resolution_outcome"] == "downloaded_new"
-    assert handle["download_events"] == stats["downloads"] == 1
-    assert handle["source_ref"] == _ref()
-    assert "canonical_path" not in str(handle)
+    with patch("fetch_filing.subprocess.run") as run:
+        with pytest.raises(FilingFetchError) as error:
+            fetch_filing.resolve_filing(
+                request=request, company_wiki_root=_wiki(tmp_path),
+                allow_download=True, source_ref_v2=True, pause_worker=False,
+            )
+    assert error.value.code == "contract_pending"
+    run.assert_not_called()
 
 
 @pytest.mark.parametrize(

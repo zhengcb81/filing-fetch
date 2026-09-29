@@ -1,0 +1,13 @@
+{
+  "exit_code": 0,
+  "payload": {
+    "schema_version": "1.1",
+    "status": "capture_ready",
+    "handle": {
+      "document_id": "legacy-doc",
+      "canonical_path": "inside/report.pdf"
+    },
+    "calls": 0,
+    "downloads": 0
+  }
+}

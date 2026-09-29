@@ -1,4 +1,17 @@
 {
   "note": "No digest is registered yet; a host-derived one must never be added here.",
-  "registered_hashes": {}
+  "registered_hashes": {
+    "aca22689b9369151932d8402614c48d0122a8049fee3015b420264bcfd335cf1": {
+      "where": "tests/test_cwp_s0b_source_ref_contract.py",
+      "rationale": "SHA-256 of CWP's LF-serialized synthetic SourceRef JSON; content is pathless and independent of the host checkout."
+    },
+    "45f2f3a6dfaec665ebb6ac85eb2127093092a367031952f5c7e83bc477d714d1": {
+      "where": "tests/test_cwp_s0b_source_ref_contract.py",
+      "rationale": "SHA-256 of CWP's synthetic bad-SHA SourceRef JSON fixture; the digest names fixed fixture bytes, not a host-derived path."
+    },
+    "2b098b1f53b5d347671ddeda9aa7f8eabb08ca97b539ccbdddf7b3699e7f5453": {
+      "where": "tests/test_et_s0b_contract.py",
+      "rationale": "SHA-256 of ET's frozen fake-provider golden manifest; its fixed JSON contains no local paths, credentials, or host state."
+    }
+  }
 }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -17,6 +18,8 @@ from typing import Any, Sequence
 SKILL_VERSION = "1.2.0"
 FILING_REQUEST_SCHEMA_VERSION = "1.2"
 FILING_RESPONSE_SCHEMA_VERSION = "1.1"
+FILING_V2_REQUEST_SCHEMA_VERSION = "2.0"
+FILING_V2_RESPONSE_SCHEMA_VERSION = "2.0"
 COMPANY_WIKI_CONFIG_SCHEMA_VERSION = "1.0"
 COMPANY_WIKI_IDENTITY_SCHEMA_VERSION = "1.0"
 # WU-4.1: explicit request mode. "exact" requires fiscal_year (a null year
@@ -108,6 +111,9 @@ _REQUEST_SCHEMA_1_1_FIELDS = frozenset(
 # WU-4.1: 1.2 adds the explicit mode field; FC-802 adds the optional
 # authorization block (close-gap input: provider/accessions/caps/expiry).
 _REQUEST_SCHEMA_1_2_FIELDS = _REQUEST_SCHEMA_1_1_FIELDS | {"mode", "authorization"}
+_REQUEST_SCHEMA_2_0_FIELDS = (_REQUEST_SCHEMA_1_2_FIELDS - {"authorization"}) | {
+    "filing_intent", "companion_transcript", "acquisition_limits",
+}
 
 _AUTHORIZATION_REQUIRED_FIELDS = frozenset(
     {
@@ -118,6 +124,32 @@ _AUTHORIZATION_REQUIRED_FIELDS = frozenset(
         "expires_at",
     }
 )
+
+
+def _request_fields(version: Any) -> frozenset[str]:
+    if version == FILING_V2_REQUEST_SCHEMA_VERSION:
+        return _REQUEST_SCHEMA_2_0_FIELDS
+    if version == FILING_REQUEST_SCHEMA_VERSION:
+        return _REQUEST_SCHEMA_1_2_FIELDS
+    if version in LEGACY_REQUEST_SCHEMA_VERSIONS:
+        return _REQUEST_SCHEMA_1_1_FIELDS
+    raise FilingFetchError(
+        f"unsupported request schema_version: {version} "
+        f"(expected {FILING_REQUEST_SCHEMA_VERSION})",
+        code="request_error",
+    )
+
+
+def _validate_v2_request(request: dict[str, Any]) -> None:
+    if request.get("filing_intent") not in {"reuse_only", "fetch_if_missing"}:
+        raise FilingFetchError(
+            "filing_intent must be reuse_only or fetch_if_missing",
+            code="request_error",
+        )
+    _validate_acquisition_limits(
+        request.get("filing_intent"), request.get("acquisition_limits")
+    )
+    _validate_companion_request(request.get("companion_transcript"))
 
 
 def _required_text(value: Any, field_name: str) -> str:
@@ -136,16 +168,7 @@ def validate_request(request: dict[str, Any]) -> None:
       is derived from as_of_date + document_kind + provider calendar.
     """
     version = request.get("schema_version")
-    if version == FILING_REQUEST_SCHEMA_VERSION:
-        allowed_fields = _REQUEST_SCHEMA_1_2_FIELDS
-    elif version in LEGACY_REQUEST_SCHEMA_VERSIONS:
-        allowed_fields = _REQUEST_SCHEMA_1_1_FIELDS
-    else:
-        raise FilingFetchError(
-            f"unsupported request schema_version: {version} "
-            f"(expected {FILING_REQUEST_SCHEMA_VERSION})",
-            code="request_error",
-        )
+    allowed_fields = _request_fields(version)
     unknown = set(request) - allowed_fields
     if unknown:
         raise FilingFetchError(
@@ -168,6 +191,8 @@ def validate_request(request: dict[str, Any]) -> None:
             f"mode must be one of {', '.join(sorted(REQUEST_MODES))}: {mode!r}",
             code="request_error",
         )
+    if version == FILING_V2_REQUEST_SCHEMA_VERSION:
+        _validate_v2_request(request)
     authorization = request.get("authorization")
     if authorization is not None:
         # FC-802: the close-gap input — provider + accessions + caps +
@@ -200,7 +225,9 @@ def validate_request(request: dict[str, Any]) -> None:
                 )
         _required_text(authorization.get("expires_at"), "authorization.expires_at")
     fiscal_year = request.get("fiscal_year")
-    if mode == "exact" or (mode is None and version == FILING_REQUEST_SCHEMA_VERSION):
+    if mode == "exact" or (
+        mode is None and version in {FILING_REQUEST_SCHEMA_VERSION, FILING_V2_REQUEST_SCHEMA_VERSION}
+    ):
         # schema 1.2: explicit mode is expected; a missing mode defaults to
         # exact and MUST carry fiscal_year (a null year must not silently
         # mean "latest"). Legacy 1.1 requests keep the old exact-any-year
@@ -227,6 +254,74 @@ def validate_request(request: dict[str, Any]) -> None:
             )
 
 
+
+def _validate_acquisition_limits(intent: Any, value: Any) -> None:
+    """Bind one fetch intent to explicit byte, time and fee ceilings."""
+    if intent == "reuse_only":
+        if value is not None:
+            raise FilingFetchError(
+                "reuse_only forbids acquisition_limits", code="request_error"
+            )
+        return
+    if not isinstance(value, dict) or set(value) != {
+        "max_bytes", "timeout_seconds", "max_cost_usd"
+    }:
+        raise FilingFetchError(
+            "fetch_if_missing requires max_bytes, timeout_seconds and max_cost_usd",
+            code="request_error",
+        )
+    size = value["max_bytes"]
+    if type(size) is not int or size <= 0:
+        raise FilingFetchError("invalid acquisition_limits.max_bytes", code="request_error")
+    seconds = value["timeout_seconds"]
+    if (
+        isinstance(seconds, bool) or not isinstance(seconds, (int, float))
+        or not math.isfinite(seconds) or seconds <= 0
+    ):
+        raise FilingFetchError("invalid acquisition_limits.timeout_seconds", code="request_error")
+    cost = value["max_cost_usd"]
+    if not isinstance(cost, str) or not re.fullmatch(
+        r"(?:0|[1-9][0-9]*)(?:\.[0-9]{1,2})?", cost
+    ):
+        raise FilingFetchError("invalid acquisition_limits.max_cost_usd", code="request_error")
+
+
+def _validate_companion_request(value: Any) -> None:
+    """Validate an optional transcript intent without inventing a fiscal quarter."""
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise FilingFetchError("companion_transcript must be an object", code="request_error")
+    allowed = {"intent", "fiscal_year", "fiscal_quarter", "provider", "acquisition_limits"}
+    unknown = set(value) - allowed
+    if unknown:
+        raise FilingFetchError(
+            f"unknown companion_transcript field(s): {', '.join(sorted(unknown))}",
+            code="request_error",
+        )
+    if value.get("intent") not in {"reuse_only", "fetch_if_missing"}:
+        raise FilingFetchError("invalid companion_transcript.intent", code="request_error")
+    year = value.get("fiscal_year")
+    if year is not None and (type(year) is not int or not 1900 <= year <= 2100):
+        raise FilingFetchError("invalid companion_transcript.fiscal_year", code="request_error")
+    quarter = value.get("fiscal_quarter")
+    if quarter is not None and (type(quarter) is not int or quarter not in {1, 2, 3, 4}):
+        raise FilingFetchError("invalid companion_transcript.fiscal_quarter", code="request_error")
+    intent = value["intent"]
+    limits = value.get("acquisition_limits")
+    if intent == "reuse_only":
+        _validate_acquisition_limits(intent, limits)
+    elif year is not None and quarter is not None:
+        _validate_acquisition_limits(intent, limits)
+    elif limits is not None:
+        _validate_acquisition_limits(intent, limits)
+    provider = value.get("provider")
+    if provider is not None and (
+        not isinstance(provider, str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", provider)
+    ):
+        raise FilingFetchError("invalid companion_transcript.provider", code="request_error")
+
+
 # ---------------------------------------------------------------------------
 # Resolution envelope validation (FC-704)
 # ---------------------------------------------------------------------------
@@ -245,8 +340,7 @@ RESOLUTION_ENVELOPE_OUTCOMES = frozenset(
     }
 )
 RESOLUTION_ENVELOPE_BUNDLE_STATUSES = frozenset({"unavailable", "available"})
-# FC-905-a: trusted capture/safety evidence.  not_reviewed = the document has
-# no review receipt (consumers block per policy — never assumed clean).
+# FC-905-a: diagnostic review state; byte and identity checks decide v2 readiness.
 RESOLUTION_ENVELOPE_PROMPT_INJECTION_STATUSES = frozenset(
     {"not_detected", "detected_and_ignored", "not_reviewed"}
 )
@@ -413,8 +507,8 @@ def validate_handle_metadata(
             raise FilingFetchError(
                 f"handle {name} must be non-empty trimmed text", code="upstream_error"
             )
-    if handle.get("capture_ready") is not True:
-        raise FilingFetchError("handle capture_ready is not True", code="upstream_error")
+    if type(handle.get("capture_ready")) is not bool:
+        raise FilingFetchError("handle capture_ready must be boolean", code="upstream_error")
     digest = handle.get("snapshot_sha256")
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise FilingFetchError("handle snapshot_sha256 is invalid", code="upstream_error")

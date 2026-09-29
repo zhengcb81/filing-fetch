@@ -1,0 +1,24 @@
+{
+  "exit_code": 2,
+  "payload": {
+    "schema_version": "2.0",
+    "status": "upstream_error",
+    "request_period": {
+      "mode": "exact",
+      "fiscal_year": 2025,
+      "fiscal_period": null,
+      "as_of_date": "2026-09-29"
+    },
+    "filing": {
+      "status": "upstream_error",
+      "reason": "source hash mismatch",
+      "retryable": true
+    },
+    "transcript": {
+      "status": "not_requested",
+      "retryable": false
+    },
+    "calls": 0,
+    "downloads": 0
+  }
+}

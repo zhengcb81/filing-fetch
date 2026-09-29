@@ -30,6 +30,7 @@ from typing import Any
 
 from filing_contracts import (  # noqa: E402  re-export
     FILING_RESPONSE_SCHEMA_VERSION,
+    FILING_V2_REQUEST_SCHEMA_VERSION,
     CONFIG_TOKEN_RE,
     COMPANY_WIKI_CONFIG_SCHEMA_VERSION,
     COMPANY_WIKI_IDENTITY_SCHEMA_VERSION,
@@ -817,20 +818,13 @@ def _source_query_candidate(
         raise FilingFetchError(
             "company-wiki source query leaked a physical location", code="upstream_error",
         )
+    from ff_v2_envelope import _reference
+    _reference(source_ref)
     handle = dict(candidate)
     handle["request_id"] = payload.get("request_id")
     review_status = handle.get("prompt_injection_status")
-    if review_status == "detected_and_ignored":
-        raise FilingFetchError(
-            "company-wiki source query has a disposed prompt-injection finding; "
-            "v2 reuse is held pending verifiable disposition evidence",
-            code="source_blocked",
-        )
-    if review_status != "not_detected":
-        raise FilingFetchError(
-            "company-wiki source query review is missing or invalid",
-            code="source_not_reviewed",
-        )
+    # Review state is diagnostic. The SourceRef is still an unverified candidate;
+    # the consumer must use CWP verified-open before treating the bytes as evidence.
     validate_handle_metadata(handle, request)
     if (
         handle.get("document_id") != source_ref["document_id"]
@@ -858,6 +852,8 @@ def _source_query_candidate(
     handle["company_identity"] = _candidate_company_identity(company_identity)
     handle["resolution_outcome"] = "reused_existing"
     handle["download_events"] = 0
+    handle["byte_verified"] = False
+    handle["prompt_injection_status"] = review_status
     return handle
 
 
@@ -991,17 +987,8 @@ def _pathless_operation_handle(
     ):
         raise FilingFetchError("company-wiki operation candidate identity mismatch", code="upstream_error")
     review_status = candidate.get("prompt_injection_status")
-    if review_status == "detected_and_ignored":
-        raise FilingFetchError(
-            "company-wiki operation has a disposed prompt-injection finding; "
-            "v2 reuse is held pending verifiable disposition evidence",
-            code="source_blocked",
-        )
-    if review_status != "not_detected":
-        raise FilingFetchError(
-            "company-wiki operation review is missing or invalid",
-            code="source_not_reviewed",
-        )
+    # The operation supplies logical metadata; byte verification remains CWP's
+    # verified-open responsibility at the consumer boundary.
     validate_handle_metadata(handle, request)
     if handle.get("document_kind") != request.get("document_kind"):
         raise FilingFetchError("company-wiki operation document_kind mismatch", code="upstream_error")
@@ -1015,6 +1002,7 @@ def _pathless_operation_handle(
     handle["resolution_outcome"] = outcome
     handle["download_events"] = events
     handle["prompt_injection_status"] = review_status
+    handle["byte_verified"] = False
     handle["operation_receipt"] = {
         "operation_schema_version": _SOURCE_OPERATION_VERSION,
         "operation": operation,
@@ -1085,28 +1073,10 @@ def _resolve_source_ref_v2(
             company_identity=company_identity, stats=stats,
         )
 
+    # V2 emits the exact CWP gap as a pathless result. The old five-field
+    # authorization/close-gap route remains confined to the default v1 API.
+    # One-intent v2 acquisition waits for CWP's frozen RequestPlan producer.
     gap_result = _pathless_operation_gap(payload, operation="ensure")
-    gap_plan = gap_result["gap_plan"]
-    authorization = request.get("authorization")
-    if (
-        allow_download
-        and authorization is not None
-        and _gap_plan_has_actionable_candidate(gap_plan)
-    ):
-        if not gap_result["resolution"]["resolution_envelope"]["policy_hash"]:
-            raise FilingFetchError(
-                "company-wiki gap is missing the policy binding required for close-gap",
-                code="upstream_error",
-            )
-        return _close_gap_and_return_handle(
-            payload=gap_result, gap_plan=gap_plan, authorization=authorization,
-            company_identity=company_identity, command_prefix=command_prefix,
-            normalized_request=normalized_request, root=root, request=request,
-            deadline=deadline, pause_worker=pause_worker,
-            worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
-            worker_resume_wait_seconds=worker_resume_wait_seconds,
-            stats=stats, source_ref_v2=True,
-        )
     stats["downloads"] = 0
     return gap_result
 
@@ -1209,6 +1179,15 @@ def resolve_filing(
     if timeout_seconds <= 0 or not math.isfinite(timeout_seconds):
         raise ValueError("timeout_seconds must be positive and finite")
     validate_request(request)
+    if request.get("schema_version") == FILING_V2_REQUEST_SCHEMA_VERSION and not source_ref_v2:
+        raise FilingFetchError(
+            "v2 requests require the pathless SourceRef route", code="request_error",
+        )
+    if source_ref_v2 and allow_download:
+        raise FilingFetchError(
+            "v2 acquisition requires the frozen CWP RequestPlan contract",
+            code="contract_pending",
+        )
     deadline = time.monotonic() + timeout_seconds
     root = (
         _validate_company_wiki_root(company_wiki_root)
@@ -1237,7 +1216,8 @@ def resolve_filing(
     )
     company_identity = _resolved_company_identity(identity_payload)
     normalized_request = {
-        key: value for key, value in request.items() if key not in {"company_query", "exchange"}
+        key: value for key, value in request.items()
+        if key not in {"company_query", "exchange", "filing_intent", "companion_transcript"}
     }
     normalized_request.update(
         {
@@ -1559,6 +1539,24 @@ def _close_gap_and_return_handle(
     return handle
 
 
+def _resolve_v2_companion(
+    *, request: dict[str, Any], handle: dict[str, Any],
+) -> dict[str, Any]:
+    """Report exact-period readiness without calling an unfrozen producer."""
+    if handle.get("status") == "gap":
+        return {"status": "not_applicable", "reason": "filing_not_capture_ready",
+                "retryable": False}
+    option = request.get("companion_transcript")
+    if option is None:
+        return {"status": "not_requested", "retryable": False}
+    if option.get("fiscal_year") is None or option.get("fiscal_quarter") is None:
+        return {"status": "period_unresolved", "reason": "exact_fy_q_required",
+                "retryable": False}
+    from transcript_companion import resolve_companion_transcript
+
+    return resolve_companion_transcript(request=request, filing_handle=handle)
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for on-demand filing fetch.
 
@@ -1623,6 +1621,7 @@ def main(argv: list[str] | None = None) -> int:
         help="return a pathless source reference for a later company-wiki read",
     )
     args = parser.parse_args(argv)
+    v2_response = False
 
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
         print("error: timeout-seconds must be positive and finite", file=sys.stderr)
@@ -1645,6 +1644,19 @@ def main(argv: list[str] | None = None) -> int:
             raise FilingFetchError(f"invalid request: {exc}", code="request_error") from exc
         if not isinstance(request, dict):
             raise FilingFetchError("request must be a JSON object", code="request_error")
+        v2_response = request.get("schema_version") == FILING_V2_REQUEST_SCHEMA_VERSION
+        if v2_response:
+            validate_request(request)
+            if args.allow_download:
+                raise FilingFetchError(
+                    "v2 acquisition requires the frozen CWP RequestPlan contract",
+                    code="contract_pending",
+                )
+            if request["filing_intent"] != "reuse_only":
+                raise FilingFetchError(
+                    "v2 acquisition requires the frozen CWP RequestPlan contract",
+                    code="contract_pending",
+                )
         stats = {"calls": 0, "downloads": 0}
         handle = resolve_filing(
             request=request,
@@ -1655,9 +1667,15 @@ def main(argv: list[str] | None = None) -> int:
             worker_graceful_timeout_seconds=args.worker_graceful_timeout_seconds,
             worker_resume_wait_seconds=args.worker_resume_wait_seconds,
             stats=stats,
-            source_ref_v2=args.source_ref_v2,
+            source_ref_v2=(args.source_ref_v2 or v2_response),
         )
-        if isinstance(handle, dict) and handle.get("status") == "gap":
+        if v2_response:
+            from ff_v2_envelope import success_envelope
+
+            output = success_envelope(
+                request, handle, _resolve_v2_companion(request=request, handle=handle), stats,
+            )
+        elif isinstance(handle, dict) and handle.get("status") == "gap":
             # FC-802: a structured gap passes through unwrapped — it is NOT
             # a capture-ready handle and must never be wrapped as one.
             output = handle
@@ -1675,6 +1693,17 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 0
     except FilingFetchError as exc:
+        if v2_response:
+            from ff_v2_envelope import error_envelope
+
+            output = error_envelope(
+                exc.code, str(exc), retryable=exc.retryable,
+                stats=stats if "stats" in locals() else None,
+                request=request if "request" in locals() and isinstance(request, dict) else None,
+            )
+            json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
+            sys.stdout.write("\n")
+            return 2
         error_response: dict[str, Any] = {
             "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
             "status": exc.code,
@@ -1709,6 +1738,17 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 2
     except Exception as exc:
+        if v2_response:
+            from ff_v2_envelope import error_envelope
+
+            output = error_envelope(
+                "fatal", str(exc), retryable=False,
+                stats=stats if "stats" in locals() else None,
+                request=request if "request" in locals() and isinstance(request, dict) else None,
+            )
+            json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
+            sys.stdout.write("\n")
+            return 1
         json.dump(
             {
                 "schema_version": FILING_RESPONSE_SCHEMA_VERSION,

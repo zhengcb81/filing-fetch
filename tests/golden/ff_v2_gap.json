@@ -1,0 +1,26 @@
+{
+  "exit_code": 0,
+  "payload": {
+    "schema_version": "2.0",
+    "status": "gap",
+    "request_period": {
+      "mode": "exact",
+      "fiscal_year": 2025,
+      "fiscal_period": null,
+      "as_of_date": "2026-09-29"
+    },
+    "filing": {
+      "status": "gap",
+      "reason": "metadata_only_gap_plan",
+      "gap_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "download_events": 0
+    },
+    "transcript": {
+      "status": "not_applicable",
+      "reason": "filing_not_capture_ready",
+      "retryable": false
+    },
+    "calls": 0,
+    "downloads": 0
+  }
+}
