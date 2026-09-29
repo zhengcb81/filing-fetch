@@ -1,1 +1,2 @@
 *.json text eol=lf
+verified_open_bad_sha.json -text whitespace=cr-at-eol
