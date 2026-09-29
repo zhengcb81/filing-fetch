@@ -148,7 +148,7 @@ def test_companion_failure_does_not_rollback_filing(monkeypatch: pytest.MonkeyPa
     assert output["filing"]["source_ref"] == SOURCE_REF
     assert output["filing"]["byte_verification"] == "pending_verified_open"
     assert output["transcript"]["status"] == "contract_pending"
-    assert output["transcript"]["reason"] == "et_cwp_goldens_not_frozen"
+    assert output["transcript"]["reason"] == "cwp_fmp_import_contract_pending"
 
 
 def test_v2_fetch_intent_waits_for_frozen_request_plan_without_source_call(

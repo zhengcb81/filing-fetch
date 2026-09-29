@@ -141,7 +141,7 @@ def resolve_companion_transcript(
     if not isinstance(prepared, _Ready):
         return prepared
     if transport is None:
-        return _result("contract_pending", reason="et_cwp_goldens_not_frozen")
+        return _result("contract_pending", reason="cwp_fmp_import_contract_pending")
     arguments = {
         "identity": prepared.identity,
         "filing_source_ref": filing_handle.get("source_ref"),

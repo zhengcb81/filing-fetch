@@ -120,5 +120,5 @@ if __name__ == "__main__":
         data = _render(case_request, case_outcome)
         (GOLDEN_DIR / f"{case_name}.json").write_text(
             json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
+            encoding="utf-8", newline="",
         )

@@ -28,7 +28,7 @@
     },
     "transcript": {
       "status": "contract_pending",
-      "reason": "et_cwp_goldens_not_frozen",
+      "reason": "cwp_fmp_import_contract_pending",
       "retryable": false
     },
     "calls": 0,

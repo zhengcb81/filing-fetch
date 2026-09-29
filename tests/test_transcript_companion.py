@@ -124,7 +124,7 @@ def test_default_transport_waits_for_producer_contract_without_network() -> None
         request=request(), filing_handle=filing(),
     )
     assert result == {
-        "status": "contract_pending", "reason": "et_cwp_goldens_not_frozen",
+        "status": "contract_pending", "reason": "cwp_fmp_import_contract_pending",
         "retryable": False,
     }
 
