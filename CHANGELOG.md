@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+- **One download intent.** A schema `2.0` request derives its download
+  decision from `filing_intent` alone; `resolve_filing()`'s `allow_download`
+  becomes an optional confirmation (`None` by default), and an explicit value
+  that contradicts the request raises `request_error` instead of silently
+  diverging from the CLI. The CLI and the library share one derivation
+  function.
+- **Acquisition limits reach the producer.** `acquisition_limits` is forwarded
+  on `ensure` / `close-gap` as `--max-download-bytes`, `--max-download-seconds`
+  and `--max-download-cost-usd`; `max_cost_usd` is passed through unchanged.
+- **Bounded execution.** The deadline shared by every company-wiki subprocess
+  of a request is the smallest of the remaining global deadline, the
+  configured `timeout_seconds` and the request's own `timeout_seconds`; child
+  stdout is capped at one shared byte ceiling, and a non-zero exit reports its
+  status and classified code only - never the stderr body (which routinely
+  carries absolute paths and provider credentials).
+- **Explicit, minimal install.** `tools/sync_installs_b3.py` requires
+  `--install` to write and keeps `--check` read-only; the manifest is an
+  allowlist (scripts, skill docs, references, the one public config template)
+  that structurally excludes credentials, local `.env`, `tests/`, caches and
+  run logs. The pre-push gate reports drift without touching the shared
+  `.agents` / `.claude` / `.codex` skill roots.
+- **SKILL.md** now documents schema `2.0` as the recommended entry point
+  (bounded `fetch_if_missing`, pathless `source_ref`, companion transcript
+  with exact FY/Q, `EARNINGS_TRANSCRIPTS_TOOL`), with `1.2` / `1.1` kept as
+  legacy thin compatibility.
+
 ## v1.4.0 — 2026-08-04
 
 - **Worker pause-around for downloads.** `ensure --allow-download` no longer

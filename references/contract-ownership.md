@@ -10,8 +10,10 @@ source.
 
 - Validate a `FilingRequest`.
 - Call company-wiki `identify` / `resolve` / `ensure` / `close-gap`.
-- Forward a download authorization to company-wiki only after explicit user
-  authorization; filing-fetch never decides whether a root is safe.
+- Forward exactly one bounded acquisition intent to company-wiki: the v2
+  `filing_intent` with its `acquisition_limits`, or - for existing callers
+  only - the legacy v1 `--allow-download` flag.  filing-fetch never decides
+  whether a root is safe and never widens or drops a ceiling on the way out.
 - Deeply validate and forward `ResolutionEnvelope`, `SourceHandle`,
   `SourceBundle`, and `AcquisitionTrace` unchanged.
 

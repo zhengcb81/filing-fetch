@@ -18,7 +18,9 @@ _LOOKUP_SCHEMA = "company-wiki-transcript-import-lookup-request/1"
 _IMPORT_SCHEMA = "company-wiki-transcript-import-request/2"
 _IMPORT_RESPONSE_SCHEMA = "company-wiki-transcript-import-response/3"
 _SOURCE_REQUEST_SCHEMA = "1.0"
-_MAX_JSON_BYTES = 32 * 1024 * 1024
+# One ceiling for every JSON subprocess this repo spawns.  The filing-fetch
+# company-wiki runner imports it so both transports fail closed at one number.
+MAX_JSON_OUTPUT_BYTES = 32 * 1024 * 1024
 _MAX_REF_FIELDS = frozenset(
     {
         "schema_version",
@@ -104,7 +106,7 @@ class EarningsTranscriptsTransport:
         *,
         cwd: Path,
         env: dict[str, str],
-        maximum: int = _MAX_JSON_BYTES,
+        maximum: int = MAX_JSON_OUTPUT_BYTES,
     ) -> tuple[dict[str, Any], int]:
         self.company_wiki_calls += 1
         completed = subprocess.run(
@@ -315,7 +317,7 @@ class EarningsTranscriptsTransport:
             shell=False,
             creationflags=self._creationflags(),
         )
-        if len(completed.stdout) > _MAX_JSON_BYTES:
+        if len(completed.stdout) > MAX_JSON_OUTPUT_BYTES:
             return {
                 "status": "provider_unavailable",
                 "reason": "provider_result_oversized",

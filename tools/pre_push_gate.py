@@ -15,10 +15,12 @@ This gate mirrors the CI fast surface locally:
   5. unique test symbols                          (CI WU-1.1 inline gate)
   6. hermetic test suite                          (CI "Run hermetic test suite")
   7. tools/config_doctor.py three-repo doctor     (CI FC-1202)
-  8. installed-skill consistency (owner requirement 2026-09-08): the copies
-     under ~/.agents, ~/.claude, ~/.codex must equal this repo; stale copies
-     are auto-synced from the repo and re-checked.  CI cannot cover this
-     (runners have no install roots, so its check is trivially green).
+  8. installed-skill drift report (FF-S3): the copies under ~/.agents,
+     ~/.claude, ~/.codex are COMPARED with this repo and any drift is
+     printed.  The gate never writes them - installing is an explicit
+     `python tools/sync_installs_b3.py --install` run by the owner.  CI
+     cannot cover this either (runners have no install roots, so its check
+     is trivially green).
   9. tools/verify_plan_claims.py                  (CI WU-8.3)
  10. UTF-8 BOM scan                               (CA-304/final_ratchet class)
 
@@ -156,35 +158,25 @@ def _config_doctor_gate() -> int:
     )
 
 
-def _install_sync() -> int:
-    """Keep the installed copies of this skill in step with the repo.
+def _install_check() -> int:
+    """Report install drift READ-ONLY (FF-S3).
 
-    Owner requirement (2026-09-08): every installed skill must equal its
-    Projects git repo.  CI can never catch this class — GitHub runners have no
-    install roots, so the drift check is trivially green there — hence it lives
-    here: check, auto-sync when stale (the repo is the source of truth), then
-    re-check.
+    Installing touches the shared ``~/.agents`` / ``~/.claude`` /
+    ``~/.codex`` skill roots, so it is an explicit action performed by the
+    owner - never a side effect of pushing.  This step surfaces the drift and
+    returns success regardless, so the gate can neither write global state nor
+    block a push on it.
     """
     tool = PROJECT_ROOT / "tools" / "sync_installs_b3.py"
     rc = _run(
         [sys.executable, str(tool), "--check"],
-        "installed-skill consistency (check)",
-        blocking=False,
-    )
-    if rc == 0:
-        return 0
-    print("installed copies were stale: applying the repo -> install sync ...")
-    rc = _run(
-        [sys.executable, str(tool)],
-        "installed-skill sync (repo -> install)",
+        "installed-skill drift check (read-only)",
         blocking=False,
     )
     if rc != 0:
-        return rc
-    return _run(
-        [sys.executable, str(tool), "--check"],
-        "installed-skill consistency (re-check)",
-    )
+        print("installed skill copies differ from this repo.")
+        print("  installing is explicit: python tools/sync_installs_b3.py --install")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -275,13 +267,9 @@ def main(argv: list[str] | None = None) -> int:
         return rc
 
     if not args.skip_install_sync:
-        rc = _install_sync()
-        if rc != 0:
-            print(
-                "\nGATE RED at: installed-skill consistency\n"
-                "Fix: python tools/sync_installs_b3.py"
-            )
-            return rc
+        # Read-only (FF-S3): reports drift, never writes an install root and
+        # never blocks the push.
+        _install_check()
 
     rc = _run(
         [

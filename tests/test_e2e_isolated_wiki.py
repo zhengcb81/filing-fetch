@@ -310,10 +310,12 @@ class TestIdentityUnavailable(MutatingE2E):
         self.assertEqual(payload["status"], "fatal")
         self.assertEqual(payload["error_code"], "fatal")
         self.assertFalse(payload["retryable"])
-        # The canonical taxonomy emission names the structured error_type
-        # (fatal) and keeps the cause text visible; the legacy class-name
-        # ('SecurityMasterUnavailableError') is no longer the emission shape.
-        self.assertIn("no security-master snapshots", payload["error"])
+        # The canonical taxonomy emission still pins the mapping to `fatal`
+        # (fail-closed).  FF-S3: the stderr body is consumed for classification
+        # but never echoed - it routinely carries absolute paths and provider
+        # credentials - so the envelope names the failing stage instead.
+        self.assertIn("exited 1", payload["error"])
+        self.assertNotIn("no security-master snapshots", payload["error"])
 
 
 class TestCatalogLockContention(MutatingE2E):

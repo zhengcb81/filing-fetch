@@ -42,6 +42,9 @@ from filing_contracts import (  # noqa: E402  re-export
     validate_resolution_envelope,
     _required_text,
 )
+# The same output ceiling the ET transport already enforces; both subprocess
+# transports fail closed at one number rather than each growing its own.
+from transcript_tool_transport import MAX_JSON_OUTPUT_BYTES  # noqa: E402
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
@@ -205,6 +208,28 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
     return _validate_company_wiki_root(root)
 
 
+def _limit_arguments(request: dict[str, Any]) -> list[str]:
+    """The acquisition ceilings a ``fetch_if_missing`` request already carries.
+
+    They ride every argv built from this request - ``ensure`` and
+    ``close-gap`` both - because the request is the single place the intent
+    and its byte/time/fee bounds are declared.  A request without
+    ``acquisition_limits`` (v1, or v2 ``reuse_only``) contributes nothing.
+    """
+    limits = request.get("acquisition_limits")
+    if limits is None:
+        return []
+    seconds = limits["timeout_seconds"]
+    rendered = str(int(seconds)) if float(seconds).is_integer() else str(seconds)
+    return [
+        "--max-download-bytes", str(limits["max_bytes"]),
+        "--max-download-seconds", rendered,
+        # The fee ceiling is already a decimal string; pass it through
+        # unchanged so the producer sees exactly what the caller wrote.
+        "--max-download-cost-usd", str(limits["max_cost_usd"]),
+    ]
+
+
 def _command_arguments(request: dict[str, Any]) -> list[str]:
     required = ("entity", "document_kind", "as_of_date")
     for name in required:
@@ -238,7 +263,7 @@ def _command_arguments(request: dict[str, Any]) -> list[str]:
     mode = request.get("mode")
     if mode is not None:
         arguments.extend(("--mode", str(mode)))
-    return arguments
+    return arguments + _limit_arguments(request)
 
 
 def _identity_arguments(request: dict[str, Any]) -> list[str]:
@@ -281,18 +306,32 @@ def _run_company_wiki_json(
             creationflags=creationflags,
         )
     except subprocess.TimeoutExpired as exc:
-        # A subprocess timeout means the attempt outlived the remaining
-        # deadline budget: classify as upstream_error (retryable), not fatal.
+        # A subprocess timeout means the attempt outlived the shared deadline
+        # budget.  subprocess.run has already terminated the child it started;
+        # the message stays free of the command line so no root path leaks.
         raise FilingFetchError(
-            f"company-wiki {action} failed: {exc}", code="upstream_error"
+            f"company-wiki {action} exceeded its deadline budget",
+            code="upstream_error",
         ) from exc
     except OSError as exc:
-        raise FilingFetchError(f"company-wiki {action} failed: {exc}") from exc
-    if completed.returncode != 0:
-        detail = completed.stderr.strip()[-2000:] or "no stderr"
+        # Never echo `exc`: an OSError message carries the interpreter path.
         raise FilingFetchError(
-            f"company-wiki {action} exited {completed.returncode}: {detail}",
+            f"company-wiki {action} failed to start", code="fatal"
+        ) from exc
+    if completed.returncode != 0:
+        # Static failure: report the exit status and the classified code only.
+        # The raw stderr body is consumed for classification but never echoed -
+        # it routinely carries absolute paths and provider credentials.
+        raise FilingFetchError(
+            f"company-wiki {action} exited {completed.returncode}",
             code=_classify_wiki_error(completed.stderr.strip()),
+            stage=action,
+            attempts=1,
+        )
+    if len(completed.stdout) > MAX_JSON_OUTPUT_BYTES:
+        raise FilingFetchError(
+            f"company-wiki {action} exceeded the output byte cap",
+            code="upstream_error",
             stage=action,
             attempts=1,
         )
@@ -742,9 +781,14 @@ def _run_source_query(
             errors="strict", capture_output=True, timeout=remaining,
             check=False, shell=False, creationflags=creationflags,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
         raise FilingFetchError(
-            f"company-wiki source query unavailable: {exc}", code="upstream_error",
+            "company-wiki source query exceeded its deadline budget",
+            code="upstream_error",
+        ) from exc
+    except OSError as exc:
+        raise FilingFetchError(
+            "company-wiki source query could not be started", code="upstream_error",
         ) from exc
     try:
         payload = json.loads(completed.stdout)
@@ -1075,7 +1119,9 @@ def _resolve_source_ref_v2(
 
     # V2 emits the exact CWP gap as a pathless result. The old five-field
     # authorization/close-gap route remains confined to the default v1 API.
-    # One-intent v2 acquisition waits for CWP's frozen RequestPlan producer.
+    # The request's byte/time/fee ceilings are already on this ensure argv;
+    # a gap the producer still reports is returned as the honest gap, never
+    # rewritten into a capture that did not happen.
     gap_result = _pathless_operation_gap(payload, operation="ensure")
     stats["downloads"] = 0
     return gap_result
@@ -1137,12 +1183,54 @@ def _use_source_query(source_ref_v2: bool, allow_download: bool, request: dict) 
     return source_ref_v2 and not allow_download and mode != "latest_as_of"
 
 
+def _download_intent(request: dict[str, Any], explicit: bool | None) -> bool:
+    """One download intent per request, derived in exactly one place.
+
+    v2 declares it as ``filing_intent``; that is the authority, and both the
+    CLI and the library go through here.  v1 keeps the caller's flag as a thin
+    compatibility input.  An explicit value that contradicts a v2 request is a
+    named request error rather than a second, silently different decision.
+    """
+    if request.get("schema_version") != FILING_V2_REQUEST_SCHEMA_VERSION:
+        return bool(explicit)
+    derived = request.get("filing_intent") == "fetch_if_missing"
+    if explicit is not None and bool(explicit) != derived:
+        raise FilingFetchError(
+            "allow_download contradicts filing_intent; a v2 request carries "
+            "exactly one download intent",
+            code="request_error",
+        )
+    return derived
+
+
+def _shared_deadline(
+    request: dict[str, Any], *, deadline: float | None, timeout_seconds: float
+) -> float:
+    """The single budget every subprocess of this request shares.
+
+    It is the smallest of what remains of the caller's global deadline, the
+    configured ``--timeout-seconds`` budget, and - when the request declares
+    one - its own ``acquisition_limits.timeout_seconds``.  One monotonic
+    sample feeds all three so the three candidates are measured together.
+    """
+    now = time.monotonic()
+    if deadline is None:
+        deadline = now + timeout_seconds
+    elif deadline <= now:
+        raise FilingFetchError("overall deadline expired", code="upstream_error")
+    budget = min(deadline, now + timeout_seconds)
+    limits = request.get("acquisition_limits")
+    if isinstance(limits, dict):
+        budget = min(budget, now + float(limits["timeout_seconds"]))
+    return budget
+
+
 def resolve_filing(
     *,
     request: dict[str, Any],
     company_wiki_root: Path | None = None,
     config_path: Path | None = None,
-    allow_download: bool = False,
+    allow_download: bool | None = None,
     timeout_seconds: float = 900.0,
     pause_worker: bool = True,
     worker_graceful_timeout_seconds: float = 5.0,
@@ -1154,11 +1242,18 @@ def resolve_filing(
     """Identify an optional company query, then resolve or explicitly ensure a filing.
 
     The default path calls the read-only ``resolve`` command and reuses an
-    existing company-wiki filing. ``allow_download=True`` calls
+    existing company-wiki filing. An explicit download intent calls
     ``ensure --allow-download``; company-wiki then routes the download by market
     (CN -> StockInfo, HK/US -> dayu) and writes any new bytes into
     ``companies/{entity}/raw/{kind}/``. A ``company_query`` is resolved to one
     verified active security before either source command is constructed.
+
+    The download intent is derived once, in :func:`_download_intent`: a v2
+    request declares it as ``filing_intent`` and ``allow_download`` may only
+    confirm it, never contradict it; a v1 request keeps the caller's flag.
+    The deadline every subprocess shares is :func:`_shared_deadline`, the
+    smallest of the remaining global deadline, the configured
+    ``timeout_seconds`` and the request's own ``acquisition_limits``.
 
     ``stats`` (optional, mutated in place): ZR-205 reconciliation counters.
     ``stats["calls"]`` counts every company-wiki subprocess invocation
@@ -1174,20 +1269,20 @@ def resolve_filing(
         raise ValueError("company_wiki_root cannot be combined with config_path")
     if not isinstance(request, dict):
         raise TypeError("request must be a dict")
-    if not isinstance(allow_download, bool):
+    if allow_download is not None and not isinstance(allow_download, bool):
         raise TypeError("allow_download must be boolean")
-    source_query_route = _use_source_query(source_ref_v2, allow_download, request)
     if timeout_seconds <= 0 or not math.isfinite(timeout_seconds):
         raise ValueError("timeout_seconds must be positive and finite")
     validate_request(request)
+    allow_download = _download_intent(request, allow_download)
+    source_query_route = _use_source_query(source_ref_v2, allow_download, request)
     if request.get("schema_version") == FILING_V2_REQUEST_SCHEMA_VERSION and not source_ref_v2:
         raise FilingFetchError(
             "v2 requests require the pathless SourceRef route", code="request_error",
         )
-    if deadline is None:
-        deadline = time.monotonic() + timeout_seconds
-    elif deadline <= time.monotonic():
-        raise FilingFetchError("overall deadline expired", code="upstream_error")
+    deadline = _shared_deadline(
+        request, deadline=deadline, timeout_seconds=timeout_seconds
+    )
     root = (
         _validate_company_wiki_root(company_wiki_root)
         if company_wiki_root is not None
@@ -1668,9 +1763,10 @@ def main(argv: list[str] | None = None) -> int:
             validate_request(request)
         stats = {"calls": 0, "downloads": 0}
         deadline = time.monotonic() + args.timeout_seconds
-        allow_download = (
-            request.get("filing_intent") == "fetch_if_missing"
-            if v2_response else args.allow_download
+        # One derivation point: v2 declares the intent in the request itself
+        # (the --allow-download flag only ever applies to v1 requests).
+        allow_download = _download_intent(
+            request, None if v2_response else args.allow_download
         )
         handle = resolve_filing(
             request=request,

@@ -1,8 +1,17 @@
-"""Check or synchronize filing-fetch skill installs (.agents/.claude/.codex).
+"""Explicit, minimal install surface for the filing-fetch skill (.agents/.claude/.codex).
 
-Mirrors revenue-forecast's installable surface: ROOT_FILES + config/
-references/scripts/tests, ignoring working docs, pycache, codegraph, coverage.
-``--check`` is read-only (exit 1 on drift) for pre-commit/CI gates.
+The manifest is an allowlist, not a sweep: the runtime ``scripts/``, the skill
+docs, the reference notes and the one public config template.  Credentials,
+local ``.env`` files, the test suite, caches and run logs are structurally
+outside it - and a name-based fence catches a credential dropped into an
+included directory.
+
+Installing writes to shared user directories, so it is an explicit action::
+
+    python tools/sync_installs_b3.py --install [--dest DIR]
+
+``--check`` is the read-only drift report used by CI and by the pre-push gate
+(FF-S3: the gate reports drift, it never performs the install).
 """
 
 from __future__ import annotations
@@ -15,22 +24,47 @@ from pathlib import Path
 HOME = Path.home()
 SKILL = "filing-fetch"
 CANONICAL = Path(__file__).resolve().parents[1]
-ROOT_FILES = (".gitignore", "CHANGELOG.md", "SKILL.md")
-ROOT_DIRS = ("config", "references", "scripts", "tests")
-IGNORED = {"__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".codegraph", ".codex"}
+ROOT_FILES = ("SKILL.md", "CHANGELOG.md")
+ROOT_DIRS = ("references", "scripts")
+# The only config file the skill reads at runtime.  Anything else that lands
+# in config/ (a downloaded key, a local override) has to be named here before
+# it can ever reach an install.
+CONFIG_FILES = ("config/company_wiki.json",)
+IGNORED_DIRS = {
+    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    ".codegraph", ".codex", ".git", ".runs", ".env",
+}
+CREDENTIAL_MARKERS = (
+    "api_key", "apikey", "secret", "token", "credential",
+    "private_key", "passphrase", "password",
+)
+CREDENTIAL_SUFFIXES = (".env", ".pem", ".key", ".p12", ".pfx", ".log")
+
+
+def _excluded(relative: Path) -> bool:
+    """True for anything that must never be installed."""
+    name = relative.name.lower()
+    if name.startswith(".env"):
+        return True
+    if any(marker in name for marker in CREDENTIAL_MARKERS):
+        return True
+    if name.endswith(CREDENTIAL_SUFFIXES):
+        return True
+    if set(relative.parts) & IGNORED_DIRS:
+        return True
+    return relative.suffix in {".pyc", ".pyo"}
 
 
 def installable(canonical: Path) -> list[Path]:
     files = [canonical / name for name in ROOT_FILES]
+    files += [canonical / name for name in CONFIG_FILES]
     for directory in ROOT_DIRS:
         base = canonical / directory
         if base.is_dir():
             files.extend(
                 p
                 for p in base.rglob("*")
-                if p.is_file()
-                and not (set(p.relative_to(canonical).parts) & IGNORED)
-                and p.suffix not in {".pyc", ".pyo"}
+                if p.is_file() and not _excluded(p.relative_to(canonical))
             )
     return sorted(set(files))
 
@@ -71,7 +105,7 @@ def sync(destination: Path) -> None:
         if p.suffix in {".pyc", ".pyo"}:
             p.unlink()
             continue
-        if any(part in IGNORED for part in p.relative_to(target).parts):
+        if any(part in IGNORED_DIRS for part in p.relative_to(target).parts):
             continue
         if p.relative_to(target).as_posix() not in expected:
             p.unlink()
@@ -89,19 +123,37 @@ DESTINATIONS = (
 )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Check or synchronize filing-fetch skill installs"
+        description="Check or install the filing-fetch skill surface"
     )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="read-only drift check across install roots; exit 1 on drift",
+        help="read-only drift check; exit 1 on drift",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help="copy the manifest into the install roots (the only writing mode)",
+    )
+    parser.add_argument(
+        "--dest",
+        type=Path,
+        action="append",
+        default=None,
+        help=(
+            "install parent directory holding the filing-fetch folder; "
+            "repeatable, defaults to the three global skill roots"
+        ),
+    )
+    args = parser.parse_args(argv)
+    if args.check == args.install:
+        parser.error("pass exactly one of --check or --install (install is explicit)")
+    destinations = tuple(args.dest) if args.dest else DESTINATIONS
     if args.check:
         failed = False
-        for destination in DESTINATIONS:
+        for destination in destinations:
             diffs = installation_diff(destination)
             if diffs:
                 failed = True
@@ -111,7 +163,7 @@ def main() -> int:
             else:
                 print(f"MATCH {destination}: {len(manifest(CANONICAL))} files")
         return 1 if failed else 0
-    for destination in DESTINATIONS:
+    for destination in destinations:
         sync(destination)
     return 0
 
