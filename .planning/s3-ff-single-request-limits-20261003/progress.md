@@ -46,12 +46,16 @@
 
 1. `test_fc1307a_the_three_vendored_copies_are_byte_identical`
    本仓 LF 18794 B `9294dc7c…`；兄弟 `Projects\filing-fetch`、`Projects\company-wiki`
-   落盘 CRLF 19190 B `20c9da56…`。归一化后内容完全一致，纯行尾漂移。兄弟仓只读。
+   落盘 CRLF 19190 B `20c9da56…`。归一化后内容完全一致，纯行尾漂移。
+   → **已处理**（root 选定“守卫改比归一化行尾”）：测试更名
+   `test_fc1307a_the_three_vendored_copies_are_content_identical`，先把 `\r\n`
+   折成 `\n` 再比哈希；真实内容差异仍然全红；兄弟仓未改动。
 2. `test_e2e_isolated_wiki.py::TestWorkerPaused::test_e2e_worker_paused_blocks_download_with_no_pause_worker`
    会话期间兄弟 `Projects\company-wiki` 由 `a104d25` 前进到
    `73de6be refactor: retire legacy source catalog worker routes`（-218 行 cli.py、
    删除 worker/control/startup 路由与 `source_catalog_worker.ps1`）。
    在净基线 `c47c397` checkout（Temp）上同一测试同样失败 → 上游漂移，非本卡改动。
+   → **已处理**（root 选定“按 CWP 新契约更新 worker 用例”）：见下方第二阶段。
 
 ## 临时根与清理
 
@@ -88,6 +92,15 @@
 
 - 未合 main、未做全局安装、未启动 worker、未写 company-wiki/ET/StockWiki/IQS。
 - 未新增签名、人工授权文件、逐候选 receipt、覆盖率门、场景数门。
-- 未用 `--no-verify` 绕过任何钩子，未修改 vendored host-assumption 守卫。
+- 未用 `--no-verify` 绕过任何钩子。
+- 未改动 `tools/host_assumption_guard.py` 本体（只改了它的漂移比较方式）。
 - 跨仓正式限额接口 E2E 记为 pending（见 handoff §8.1）。
-- `test_fc1307a_...byte_identical` 行尾漂移仍未处理（兄弟仓只读，交 root）。
+
+## 第三阶段：vendored 守卫改比归一化行尾（root 决策）
+
+- `tests/test_fc1307a_host_assumption_gate.py`：
+  `..._are_byte_identical` → `..._are_content_identical`，比较前把 `\r\n` 折为 `\n`。
+  动机写进 docstring：`.gitattributes` 只在提交时归一化，工作树可以落盘 CRLF 而
+  `git status` 仍干净，所以裸字节哈希量的是 checkout 而不是代码。
+- `tools/host_assumption_guard.py` 本体未动，与兄弟仓仍内容一致。
+- 三个提交：`8c340f8`（实现主体）、`0f27606`（补记 head）、`820624c`（worker 契约）。

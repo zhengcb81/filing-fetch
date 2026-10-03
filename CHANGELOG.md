@@ -34,6 +34,11 @@
   isolated-wiki E2E pin that upstream contract instead of the retired
   `--no-pause-worker` escape hatch; the flag stays accepted for existing
   callers.
+- **Vendored host-assumption guard compares content, not checkout bytes.**
+  `.gitattributes` forces `*.py text eol=lf` on commit, but a working tree can
+  still hold CRLF on disk while `git status` stays clean, so hashing raw bytes
+  reported a checkout difference as a code difference. The drift check now
+  folds `\r\n` to `\n` first; every real content difference still fails.
 
 ## v1.4.0 — 2026-08-04
 

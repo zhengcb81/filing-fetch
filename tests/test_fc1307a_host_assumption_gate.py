@@ -1,13 +1,16 @@
 """FC-1307-a in this repository: the host-assumption gate, vendored.
 
-The gate itself lives in ``tools/host_assumption_guard.py`` and is BYTE-IDENTICAL to
-``company-wiki/scripts/host_assumption_guard.py`` and
+The gate itself lives in ``tools/host_assumption_guard.py`` and is content-identical
+(line endings normalized) to ``company-wiki/scripts/host_assumption_guard.py`` and
 ``filing-fetch/tools/host_assumption_guard.py``; only the ratchet baseline and the
 digest registry are per-repository.  Why a copy: each repository's CI checks out only
 itself, so importing the wiki's script is not possible, and a silent divergence would
 be worse than the duplication.  The drift check below therefore compares the copies
 whenever the sibling checkouts are next to this one (they are on the development
 machine, not in CI) and SKIPS otherwise - absence of the siblings is not a failure.
+Line endings are folded to ``\n`` first, because a working tree can hold CRLF on disk
+while ``git status`` stays clean (the clean filter folds it back on commit); hashing
+raw bytes would then report a checkout difference as if it were a code difference.
 
 History: the class this catches broke this repository's CI on 2026-09-13
 (run 34784800110) - a new test hard-coded ``C:\\Users\\someone\\...`` and took
@@ -69,16 +72,31 @@ def test_fc1307a_every_registered_digest_carries_a_rationale():
         assert len(entry.get("rationale", "")) > 40, digest
 
 
-def test_fc1307a_the_three_vendored_copies_are_byte_identical():
+def test_fc1307a_the_three_vendored_copies_are_content_identical():
     """Drift guard for the vendored copy: a local fix that only lands in one repo is
-    how this kind of gate rots.  Skips where the siblings are not checked out."""
-    mine = GUARD.read_bytes()
+    how this kind of gate rots.  Skips where the siblings are not checked out.
+
+    The comparison is line-ending normalized.  `.gitattributes` forces `*.py text
+    eol=lf` on commit, but a working tree can still hold CRLF on disk (a checkout
+    made before that rule, or rewritten by another tool), and `git status` stays
+    clean because the clean filter folds CRLF back to LF.  Hashing raw bytes then
+    measures the checkout rather than the code - it went red on 2026-10-03 with all
+    three copies byte-different yet content-identical.  Normalizing `\r\n` to `\n`
+    keeps every real content difference failing while staying indifferent to how the
+    file happened to be written.
+    """
+    def content(path: Path) -> bytes:
+        return path.read_bytes().replace(b"\r\n", b"\n")
+
     present = {name: path for name, path in SIBLINGS.items() if path.is_file()}
     if not present:
         pytest.skip("sibling checkouts not present (expected in CI)")
-    digests = {name: hashlib.sha256(path.read_bytes()).hexdigest()[:16]
-               for name, path in present.items()}
+    mine = content(GUARD)
     mine_digest = hashlib.sha256(mine).hexdigest()[:16]
+    digests = {
+        name: hashlib.sha256(content(path)).hexdigest()[:16]
+        for name, path in present.items()
+    }
     assert all(digest == mine_digest for digest in digests.values()), (
         f"vendored guard differs: this repo {mine_digest} vs {digests}"
     )

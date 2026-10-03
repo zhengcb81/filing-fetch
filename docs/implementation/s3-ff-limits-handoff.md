@@ -189,12 +189,12 @@ company-wiki 的 `ensure` / `close-gap` **尚未**接受
 
 | 测试 | 原因 | 处置 |
 |---|---|---|
-| `test_fc1307a_the_three_vendored_copies_are_byte_identical` | 兄弟 `Projects\filing-fetch`、`Projects\company-wiki` 的 `host_assumption_guard.py` 落盘 CRLF 19190 B，本仓 LF 18794 B；归一化后内容完全一致 | **未处理**（兄弟仓对本卡只读，且卡片不授权改守卫）。需 root 决定：重检出兄弟工作树，或让该守卫比较归一化行尾 |
+| `test_fc1307a_the_three_vendored_copies_*` | 兄弟 `Projects\filing-fetch`、`Projects\company-wiki` 的 `host_assumption_guard.py` 落盘 CRLF 19190 B，本仓 LF 18794 B；`.gitattributes` 的 clean filter 会在提交时折叠，所以 `git status` 干净、磁盘字节却不同。归一化后三份内容完全一致 | **已处理**（root 选定）：守卫改为先把 `\r\n` 折成 `\n` 再比哈希，测试更名 `..._are_content_identical`。真实内容差异仍然全红；兄弟仓未被改动 |
 | `test_e2e_isolated_wiki.py::TestWorkerPaused` | 会话期间 `Projects\company-wiki` 由 `a104d25` → `73de6be refactor: retire legacy source catalog worker routes`，`--no-pause-worker` 不再返回 `worker_paused` | **已按 CWP 新契约处理**（root 选定）：测试重写为 `test_e2e_no_pause_worker_is_retired_upstream`，断言 `not_found`/不可重试，并在 SKILL.md / CHANGELOG 如实记录 pause-around 已被上游退役 |
 
 `PausedWorkerScope` 本身保留（薄兼容，`worker-status` 失败即告警并继续，
 `worker-pause`/`worker-resume` 已不存在故不会被调用），未做超出本卡的编排重写。
-跨仓正式限额接口仍见 §8.1 pending。
+跨仓正式限额接口仍见 §8.1 pending。本卡**未**用 `--no-verify` 绕过任何钩子。
 
 ## 9. 显式安装命令与 manifest
 

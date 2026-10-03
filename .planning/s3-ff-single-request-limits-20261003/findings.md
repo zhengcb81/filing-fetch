@@ -48,17 +48,19 @@
   是适配器配置期限，由 CWP 自己消费；FF 侧“配置期限”取
   `--timeout-seconds` / `resolve_filing(timeout_seconds=)` 的配置值。
 
-## 既有环境红灯（与本卡无关，交 root 判定）
+## 会话内出现的环境红灯（均已在净基线 `c47c397` 复现，非 FF-S3 引入）
 
-### 1. vendored guard 行尾漂移
+### 1. vendored guard 行尾漂移 — 已按 root 决策处理
 
 `tests/test_fc1307a_host_assumption_gate.py::test_fc1307a_the_three_vendored_copies_are_byte_identical`
+（处理后更名 `..._are_content_identical`）
 - 本仓 LF 18794 B `9294dc7c…`；`Projects\filing-fetch`（fcap@d35b6f5）
   与 `Projects\company-wiki` 均为 CRLF 19190 B `20c9da56…`
 - `.gitattributes` 双方都有 `*.py text eol=lf`，但兄弟工作树落盘为 CRLF
   （git clean filter 归一化后 `status` 仍显示干净）
 - 归一化 `\r\n -> \n` 后三份内容完全一致：纯行尾差异，无代码差异
-- 兄弟仓只读，本卡不改写；在净基线 `c47c397` 上同样失败
+- **处置**：比较前先把 `\r\n` 折成 `\n`。量的是代码而不是 checkout；
+  真实内容差异仍然全红。`tools/host_assumption_guard.py` 本体与两个兄弟仓均未改动
 
 ### 2. 上游 CWP 在本会话中退役了 worker 路由
 
@@ -70,12 +72,18 @@
   重写 `test_source_catalog_ensure_paused_guard.py`）
 - 结果：`--no-pause-worker` 下 CWP 不再返回 `worker_paused`，而是 `not_found`
 - 在净基线 `c47c397` checkout（Temp）上复现同一失败 → 上游漂移
-- 影响面（如实记录，不在本卡“修”）：
-  - `PausedWorkerScope.__enter__` 本就捕获 `worker-status` 的
-    `FilingFetchError` 并降级为 `no_status` 继续执行，因此默认路径不崩；
-  - 但 `--no-pause-worker` 的 legacy 语义与 SKILL.md 中 worker pause 章节
-    是否仍成立，取决于 root 对 CWP 新契约的确认
-- 本卡不猜别仓实现，不改 FF 的 worker 契约
+- CWP 自己的契约（只读核对，`tests/contract/test_source_catalog_ensure_paused_guard.py`）：
+  `ensure --allow-download` 与 `close-gap` 都**不**查询 worker 状态 ——
+  以 `()` 与 `("--allow-acquisition-while-paused",)` 两种入参参数化，断言
+  `WorkerController` 从不被调用、`"source acquisition is paused" not in err`；
+  `worker-status`/`worker-stop` 仅剩“检查/收尾遗留 worker”，`worker-pause`、
+  `worker-resume` 已不存在；`--allow-acquisition-while-paused` 仍被接受（no-op）。
+- **处置**（root 选定“按 CWP 新契约更新 worker 用例”）：
+  - 测试重写为 `test_e2e_no_pause_worker_is_retired_upstream`，断言 `not_found`/不可重试；
+  - `SKILL.md` 工作流第 5 步、`--no-pause-worker`/`--worker-*` 说明、
+    `worker_paused` 错误行、两条 Notes 改为“pause-around 已被上游退役”；
+  - `PausedWorkerScope` 代码保留（薄兼容：`worker-status` 失败即告警并继续，
+    不存在的 `worker-pause`/`worker-resume` 不会被调用），未做超出本卡的编排重写
 
 ## 覆盖率门
 
