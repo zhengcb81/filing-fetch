@@ -88,14 +88,6 @@
 - `PausedWorkerScope` 代码保留（薄兼容；`worker-status` 失败即告警并继续，
   不存在的 `worker-pause`/`worker-resume` 不会被调用），未做超出本卡的编排重写。
 
-## 未做（按卡片）
-
-- 未合 main、未做全局安装、未启动 worker、未写 company-wiki/ET/StockWiki/IQS。
-- 未新增签名、人工授权文件、逐候选 receipt、覆盖率门、场景数门。
-- 未用 `--no-verify` 绕过任何钩子。
-- 未改动 `tools/host_assumption_guard.py` 本体（只改了它的漂移比较方式）。
-- 跨仓正式限额接口 E2E 记为 pending（见 handoff §8.1）。
-
 ## 第三阶段：vendored 守卫改比归一化行尾（root 决策）
 
 - `tests/test_fc1307a_host_assumption_gate.py`：
@@ -103,4 +95,60 @@
   动机写进 docstring：`.gitattributes` 只在提交时归一化，工作树可以落盘 CRLF 而
   `git status` 仍干净，所以裸字节哈希量的是 checkout 而不是代码。
 - `tools/host_assumption_guard.py` 本体未动，与兄弟仓仍内容一致。
-- 三个提交：`8c340f8`（实现主体）、`0f27606`（补记 head）、`820624c`（worker 契约）。
+
+## 第四阶段：push 尝试被拦，停在分支交付状态（root 决策）
+
+执行过一次 `git push -u origin codex/ff-s3-single-request-limits`，pre-push gate 拦下，
+**未**使用 `--no-verify`：
+
+```
+hermetic test suite: 10 failed, 442 passed, 8 skipped, 78 subtests passed (192.86s)
+FAILED: hermetic test suite (CI)
+PUSH BLOCKED by pre-push gate (CI root-fix protocol)
+```
+
+根因只读核对得到：兄弟 `Projects\company-wiki` 工作树有 14 项**未提交**改动
+（HEAD 仍 `73de6be`），root 的 producer 侧正在落地，并把三个参数改成了下载必填：
+
+- 新增 `src/company_wiki/source_catalog/download_budget.py`
+- `ensure` / `close-gap` 新增 `--max-download-bytes` / `--max-download-seconds` /
+  `--max-download-cost-usd`
+- `_acquisition_budget_from_args(args, required=...)`：
+  `ensure` 的 `required = args.allow_download or request.mode == "latest_as_of"`，
+  `close-gap` 恒为 True；一个都没给 → `bounded provider access requires ...`，
+  只给一部分 → `the three --max-download-* limits must be supplied together`
+
+FF 侧给不出：v1 请求结构上没有 `acquisition_limits`（未知字段被拒），
+v2 `reuse_only` 明令禁止携带。所以 10 个红灯全部落在
+“v1 `--allow-download`”或“`mode=latest_as_of`”这两行上：
+
+- `tests/test_fc803_minimal_download.py` ×5（lt01/lt02/lt05/lt07/lt09）
+- `tests/test_e2e_isolated_wiki.py::TestWorkerPaused` ×3
+- `tests/test_e2e_isolated_wiki.py::TestCatalogLockContention` ×2
+
+本卡交付本身不受影响：18 个新测试（fake producer）、责任包 337 passed、
+`e2e/test_source_ref_v2_cli.py` 独立 CLI E2E 全绿；v2 `fetch_if_missing` 本来就带全三参数。
+
+**root 决策**：停在分支交付状态，交 root。卡片写明「root 负责…最终集成」，
+且「不能回退 v1 绕过额度」「本包不静默变金额格式」—— v1 的预算来源不是本卡能定的。
+根因与三个待决问题已写入 handoff §8.3。
+
+## 提交清单
+
+| sha | 说明 |
+|---|---|
+| `8c340f8` | 实现主体：单一意图、三额度进 argv、共享 deadline、字节 cap、stderr 不回显、显式安装面、SKILL v2 重写 |
+| `0f27606` | 补记 delivery head |
+| `820624c` | 按 CWP `73de6be` 更新 worker 用例与 SKILL/CHANGELOG |
+| `bd6d053` | vendored 守卫改比归一化行尾 |
+
+分支 `codex/ff-s3-single-request-limits`，base `c47c397`，**未 push**。
+
+## 未做（按卡片）
+
+- 未合 main、未做全局安装、未启动 worker、未写 company-wiki/ET/StockWiki/IQS。
+- 未新增签名、人工授权文件、逐候选 receipt、覆盖率门、场景数门。
+- 未用 `--no-verify` 绕过任何钩子。
+- 未改动 `tools/host_assumption_guard.py` 本体（只改了它的漂移比较方式）。
+- 未替 root 决定 v1 下载的预算来源（handoff §8.3 待决）。
+- 跨仓正式限额接口 E2E 记为 pending（见 handoff §8.1）。

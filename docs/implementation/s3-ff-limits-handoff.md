@@ -7,11 +7,11 @@
 | 项 | 值 |
 |---|---|
 | base | `origin/main` @ `c47c397c4d93979d8a7defbe026eff9e9edf0e6d` |
-| branch | `codex/ff-s3-single-request-limits` |
-| head（实现主体） | `8c340f8dcce6f85b0ff106ac56484cde3caab7b5`（本报告的 sha 补记是其后的 `docs:` 提交；完整交付范围 `git log c47c397..HEAD`） |
+| branch | `codex/ff-s3-single-request-limits`（**未 push**，见 §8.3） |
+| head（实现主体） | `8c340f8dcce6f85b0ff106ac56484cde3caab7b5` |
+| 交付提交 | `8c340f8` 实现主体 → `0f27606` 补记 head → `820624c` worker 契约 → `bd6d053` 守卫行尾 → 最终 head 见 `git rev-parse HEAD` |
 | 工作目录 | `C:\Users\郑曾波\Projects\filing-fetch-s3-limits`（唯一写入处） |
 | 局部 PWF | `.planning/s3-ff-single-request-limits-20261003/`（task_plan / findings / progress） |
-| 仓内改动 | 8 modified + 5 new（见 §2） |
 | 基线漂移 | 无 reset、无 rebase；基线与计划一致 |
 
 ## 2. 修改清单
@@ -54,6 +54,7 @@
 | `tests/fixtures/s3_fake_cwp/fake_source_catalog_cli.py` | fake `company_wiki.source_catalog.cli`，5 种模式（default / reject_limits / slow / flood / noisy_failure） |
 | `tests/golden/s3_ff_limits_argv.json` | limits → argv 表 golden（`tests/golden/` 为既有目录，按卡复用） |
 | `tests/test_e2e_isolated_wiki.py` | 更新 2 处到新契约：错误不再回显 stderr 正文；`TestWorkerPaused` 按 CWP `73de6be` 重写为“`worker_paused` 已由上游退役” |
+| `tests/test_fc1307a_host_assumption_gate.py` | vendored 漂移比较改为归一化行尾后比哈希（更名 `..._are_content_identical`），见 §8.2 |
 
 **未改**：`filing_contracts.py`（EXACT 校验原样保留）、`ff_v2_envelope.py`、
 `et_v2_contract.py`、`transcript_companion.py`、`transcript_tool_transport.py` 的行为。
@@ -170,12 +171,13 @@ python -m pytest tests -q --cov=scripts --cov-branch --cov-fail-under=90 ...
 - 交付时 `git status` 仅含本卡文件：无 `nul`、无 pycache、无密钥、无下载原件、
   无逐执行全文日志。
 
-## 8. root 需要知道的两件事
+## 8. root 需要知道的三件事
 
 ### 8.1 producer pending（**不是**端到端通过）
 
 company-wiki 的 `ensure` / `close-gap` **尚未**接受
-`--max-download-bytes` / `--max-download-seconds` / `--max-download-cost-usd`。
+`--max-download-bytes` / `--max-download-seconds` / `--max-download-cost-usd`
+（以已提交的 `origin/main` 为准；未提交的在途实现见 §8.3）。
 本卡只保证：
 
 - FF 把三个参数真实写进 argv（离线参数捕获测试通过，未 skip）；
@@ -195,6 +197,62 @@ company-wiki 的 `ensure` / `close-gap` **尚未**接受
 `PausedWorkerScope` 本身保留（薄兼容，`worker-status` 失败即告警并继续，
 `worker-pause`/`worker-resume` 已不存在故不会被调用），未做超出本卡的编排重写。
 跨仓正式限额接口仍见 §8.1 pending。本卡**未**用 `--no-verify` 绕过任何钩子。
+
+### 8.3 push 被拦：CWP 在途改动把三个限额参数改成了下载必填（root 集成项）
+
+`git push -u origin codex/ff-s3-single-request-limits` 已执行一次，被 pre-push gate
+拦下（未绕过钩子）：
+
+```
+hermetic test suite: 10 failed, 442 passed, 8 skipped, 78 subtests passed (192.86s)
+FAILED: hermetic test suite (CI)
+PUSH BLOCKED by pre-push gate (CI root-fix protocol)
+```
+
+**根因**（只读核对兄弟 `Projects\company-wiki` 的**未提交**工作树，14 项改动，
+HEAD 仍是 `73de6be`）：root 的 producer 侧正在落地，且已经把三个参数改成必填。
+
+新增（均未提交）：
+- `src/company_wiki/source_catalog/download_budget.py`（`AcquisitionBudget.from_limits`）
+- `cli.py`：`ensure` / `close-gap` 各自新增 `--max-download-bytes`（int）、
+  `--max-download-seconds`（float）、`--max-download-cost-usd`
+- `cli.py::_acquisition_budget_from_args(args, *, required)`：
+  - `ensure`：`required = args.allow_download or request.mode == "latest_as_of"`
+  - `close-gap`：`required = True`
+  - 一个都没给 → `ValueError("bounded provider access requires --max-download-bytes, "
+    "--max-download-seconds, and --max-download-cost-usd")`
+  - 只给一部分 → `ValueError("the three --max-download-* limits must be supplied together")`
+  - 由 `main()` 兜成 `error_type: fatal`
+
+**为什么 FF 这边给不出**：v1 请求（`schema_version` `1.1` / `1.2`）结构上没有
+`acquisition_limits` 字段（未知字段会被 `validate_request` 拒绝），v2 `reuse_only`
+则明令禁止携带。于是：
+
+| 调用 | 三参数 | 新 CWP 结果 |
+|---|---|---|
+| v2 `fetch_if_missing`（本卡主路径） | 有 | 正常 |
+| v1 `--allow-download` | 无 | `fatal` |
+| `mode=latest_as_of`（含只读） | 无 | `fatal`（`required` 把它算进去了） |
+| v1 / v2 只读 `resolve`（`mode=exact`） | 无 | 不要求，正常 |
+
+**受影响的 10 个红灯**（全部落在上表第 2、3 行）：
+- `tests/test_fc803_minimal_download.py` ×5：`lt01` `lt02` `lt05` `lt07` `lt09`
+- `tests/test_e2e_isolated_wiki.py::TestWorkerPaused` ×3
+- `tests/test_e2e_isolated_wiki.py::TestCatalogLockContention` ×2
+
+**不受影响**：本卡 18 个新测试（本地 fake producer）、§7 责任包 337 passed、
+`e2e/test_source_ref_v2_cli.py` 独立 CLI E2E（复用走 `source_query_cli`，不进 `ensure`）。
+
+**为什么不在本卡内修**：卡片明确「不能回退 v1 绕过额度」「本包不静默变金额格式」。
+v1 请求无法表达额度，给它编一个默认金额就是替 root 做集成决策。这属于卡片
+写明的「root 负责…最终集成」。
+
+**需要 root 定的三件事**：
+1. v1 `--allow-download` 怎么办 —— FF 侧改成具名拒绝（`request_error`/`not_supported`），
+   还是允许从某个显式配置读默认额度；
+2. `mode=latest_as_of` 的**只读** `ensure` 是否真的需要 budget
+   （CWP 当前 `required` 表达式把它算进去了，FF 的 `reuse_only` 又禁止带额度）；
+3. CWP 这批改动提交、工作树稳定后，重跑本仓 hermetic 并再 push 一次。
 
 ## 9. 显式安装命令与 manifest
 
@@ -230,7 +288,9 @@ scripts/transcript_tool_transport.py
 ## 10. root 后续动作（本卡未做）
 
 1. 核 `git diff c47c397..codex/ff-s3-single-request-limits` 与 §7 责任测试。
-2. CWP 补三个限额参数 → 跑一次限额跨仓 E2E（§8.1）。
-3. 判定 §8.2 两个环境红灯的处置。
-4. 合 main、跑 `python tools/sync_installs_b3.py --install` 统一安装。
-5. 未合入前本分支保持交付状态。
+2. **先处理 §8.3**：CWP 在途的「三参数必填」与 FF v1/`latest_as_of` 路径的集成决策；
+   这是当前唯一挡住 push 的东西。
+3. CWP 三参数提交后 → 跑一次限额跨仓 E2E（§8.1，正式接口仍 pending）。
+4. 重跑本仓 hermetic → `git push -u origin codex/ff-s3-single-request-limits`。
+5. 合 main、跑 `python tools/sync_installs_b3.py --install` 统一安装。
+6. 未合入前本分支保持交付状态。
