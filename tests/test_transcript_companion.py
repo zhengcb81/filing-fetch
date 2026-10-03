@@ -27,7 +27,7 @@ def request(*, intent: str = "fetch_if_missing", quarter: int | None = 2) -> dic
         companion["fiscal_quarter"] = quarter
         if intent == "fetch_if_missing":
             companion["acquisition_limits"] = {
-                "max_bytes": 1_000_000, "timeout_seconds": 10, "max_cost_usd": "0.00",
+                "max_bytes": 1_000_000, "timeout_seconds": 10, "max_cost_usd": "1.00",
             }
     return {"as_of_date": "2026-09-29", "companion_transcript": companion}
 
@@ -180,3 +180,15 @@ def test_companion_limits_reach_acquisition_once() -> None:
     assert transport.calls[1][1]["acquisition_limits"] == (
         value["companion_transcript"]["acquisition_limits"]
     )
+def test_zero_cost_budget_reuses_but_never_calls_provider() -> None:
+    transport = FakeTransport()
+    value = request()
+    value["companion_transcript"]["acquisition_limits"]["max_cost_usd"] = "0.00"
+    result = resolve_companion_transcript(
+        request=value, filing_handle=filing(), transport=transport,
+    )
+    assert result == {
+        "status": "provider_unavailable", "reason": "zero_cost_budget",
+        "retryable": False, "provider": "fmp", "provider_calls": 0,
+    }
+    assert [name for name, _ in transport.calls] == ["lookup"]

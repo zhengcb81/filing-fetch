@@ -2259,7 +2259,7 @@ class FilingFetchTests(unittest.TestCase):
                     with patch("fetch_filing.random.uniform", return_value=0.0):
                         with patch(
                             "fetch_filing.time.monotonic",
-                            side_effect=[100.0, 100.0, 105.0, 108.0],
+                            side_effect=[100.0, 100.0, 100.0, 105.0, 108.0],
                         ):
                             exit_code = __import__("fetch_filing").main(
                                 ["--config", str(config_path), "--timeout-seconds", "8"]

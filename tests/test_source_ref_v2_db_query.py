@@ -36,6 +36,19 @@ def _request() -> dict:
     }
 
 
+def _v2_request(*, intent: str = "fetch_if_missing") -> dict:
+    return {
+        **_request(),
+        "schema_version": "2.0",
+        "filing_intent": intent,
+        "acquisition_limits": {
+            "max_bytes": 5_000_000,
+            "timeout_seconds": 60,
+            "max_cost_usd": "1.00",
+        },
+    }
+
+
 def _identity() -> dict:
     return {
         "schema_version": "1.0", "status": "resolved", "reason": "exact ticker",
@@ -375,21 +388,29 @@ def test_latest_as_of_pathless_provider_gap_stays_structured_without_download(
     assert "canonical_path" not in str(result)
 
 
-def test_v2_explicit_download_waits_for_request_plan_without_cwp_calls(
+def test_v2_explicit_bounded_intent_reaches_cwp_ensure(
     tmp_path: Path,
 ) -> None:
-    with patch("fetch_filing.subprocess.run") as run:
-        with pytest.raises(FilingFetchError) as error:
-            fetch_filing.resolve_filing(
-                request=_request(), company_wiki_root=_wiki(tmp_path),
-                allow_download=True, source_ref_v2=True, pause_worker=False,
-            )
-    assert error.value.code == "contract_pending"
-    run.assert_not_called()
+    with patch(
+        "fetch_filing.subprocess.run",
+        side_effect=[_completed(_identity()), _completed(_operation_v2())],
+    ) as run:
+        result = fetch_filing.resolve_filing(
+            request=_v2_request(), company_wiki_root=_wiki(tmp_path),
+            allow_download=True, source_ref_v2=True, pause_worker=False,
+        )
+    command = run.call_args_list[1].args[0]
+    assert "ensure" in command
+    assert "--source-ref-v2" in command
+    assert "--allow-download" in command
+    assert "--acquisition-config" in command
+    assert result["source_ref"] == _ref()
+    assert result["download_events"] == 0
+    assert "canonical_path" not in json.dumps(result)
 
 
-def test_v2_legacy_authorization_cannot_activate_close_gap(tmp_path: Path) -> None:
-    request = _latest_request()
+def test_v2_request_rejects_legacy_per_document_authorization(tmp_path: Path) -> None:
+    request = _v2_request()
     request["authorization"] = {
         "provider": "sec", "allowed_accessions": ["acc-2025"],
         "max_items": 1, "max_bytes": 5_000_000,
@@ -401,7 +422,7 @@ def test_v2_legacy_authorization_cannot_activate_close_gap(tmp_path: Path) -> No
                 request=request, company_wiki_root=_wiki(tmp_path),
                 allow_download=True, source_ref_v2=True, pause_worker=False,
             )
-    assert error.value.code == "contract_pending"
+    assert error.value.code == "request_error"
     run.assert_not_called()
 
 

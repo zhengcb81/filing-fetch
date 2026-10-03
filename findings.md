@@ -61,3 +61,12 @@
 - mock 层从未真实验证：进程参数序列化、cwd/env、PYTHONUTF8、CREATE_NO_WINDOW、超时传播、重试循环、退出码
 - 已有：CN（中微公司）/HK（小米）/US（AMD）mock 身份验证；not_found/ambiguous/hash 损坏/路径逃逸/未来日期等单点
 - 缺失：Phase 2 §2.1-2.5 全部边界；真实 E2E（Phase 3/4）从零建设
+
+## 2026-10-03 Cross-project SourceRef/ET integration
+
+- The SourceRef branch is an ancestor of the single FF integration branch; the standalone companion branch was not merged wholesale because its implementation overlapped `fetch_filing.py` and guessed checkout paths. The combined branch reuses the SourceRef producer and introduces one explicit `EarningsTranscriptsTransport`.
+- Integration contract: FF invokes the configured ET `/2` CLI with exact security/FY/Q, request id, bounded timeout/body size and `--include-source-payload`; the API key stays in ET process environment and is not sent to CWP. CWP validates the exact result and saves unchanged provider JSON under the company data root.
+- CWP returns response `/3` with an exact pathless SourceRef. FF reopens those exact bytes through `source_reader_cli`, checks byte count, raw SHA and receipt identity. A transcript-specific exact lookup can expose `unknown_publication` for deduplication while ordinary historical/as-of reads continue to exclude it.
+- Tests replace the old RequestPlan blocker with a single explicit bounded acquisition intent. v2 rejects the legacy per-document authorization field. An existing retry test fake monotonic sequence was extended for the new shared top-level deadline; no production timing rule was weakened.
+- Windows test lesson: deep `AppData/Local/Temp/.../test_name/company-wiki` roots made the immutable destination exceed usable path length. The same actual E2E passed under unique `C:/cwt` basetemp. This is test-root setup, not a production data-path workaround.
+- Verified node: 191 passed / 1 existing production opt-in skip, FF Ruff clean; RF consumer integration remains unverified.

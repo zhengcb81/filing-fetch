@@ -15,6 +15,8 @@ _REF_KEYS = frozenset({
 _TRANSCRIPT_KEYS = (
     "status", "reason", "retryable", "source_ref", "provider",
     "fiscal_year", "fiscal_quarter", "content_sha256", "locator",
+    "provider_document_id", "call_date", "publication_date",
+    "as_of_cutoff_verified", "provider_calls",
 )
 
 

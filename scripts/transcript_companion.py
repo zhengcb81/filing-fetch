@@ -1,11 +1,8 @@
-"""Exact FY/Q companion orchestration over a versioned transport boundary.
-
-ET's /2 producer JSON has a frozen offline contract. CWP FMP admission remains
-pending; the default transport therefore makes no network or importer calls.
-"""
+"""Exact-period transcript orchestration with a replaceable transport."""
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import Any, NamedTuple, Protocol, cast
 
 from ff_v2_envelope import _reference
@@ -50,6 +47,9 @@ def _option_error(option: dict[str, Any]) -> dict[str, Any] | None:
     intent = option.get("intent")
     if intent not in {"reuse_only", "fetch_if_missing"}:
         return _result("request_error", reason="invalid_transcript_intent")
+    provider = option.get("provider")
+    if provider not in (None, "fmp"):
+        return _result("request_error", reason="unsupported_transcript_provider")
     try:
         _validate_acquisition_limits(intent, option.get("acquisition_limits"))
     except FilingFetchError:
@@ -86,6 +86,10 @@ def _prepare(
     return _Ready(option, cast(dict[str, Any], identity), *period)
 
 
+def _optional_fields(source: dict[str, Any], names: tuple[str, ...]) -> dict[str, Any]:
+    return {name: source[name] for name in names if name in source}
+
+
 def _lookup(
     transport: TranscriptTransport, arguments: dict[str, Any],
     year: int, quarter: int,
@@ -96,11 +100,49 @@ def _lookup(
         return _result("upstream_error", reason="transcript_lookup_failed", retryable=True)
     if existing is None:
         return None
+    if isinstance(existing, dict) and existing.get("status") in {
+        "found", "unknown_publication",
+    }:
+        status = existing["status"]
+        try:
+            ref = _reference(existing.get("source_ref"))
+        except FilingFetchError:
+            return _result("upstream_error", reason="transcript_lookup_contract")
+        fields = _optional_fields(existing, (
+            "provider", "publication_date", "as_of_cutoff_verified", "provider_calls",
+        ))
+        if status == "unknown_publication":
+            fields["as_of_cutoff_verified"] = False
+            return _result(
+                "unknown_publication", reason="publication_date_unknown",
+                source_ref=ref, fiscal_year=year, fiscal_quarter=quarter, **fields,
+            )
+        return _result(
+            "reused", source_ref=ref, fiscal_year=year, fiscal_quarter=quarter, **fields,
+        )
+    if isinstance(existing, dict) and existing.get("status") in {
+        "ambiguous", "blocked", "unavailable", "upstream_error",
+    }:
+        status = "ambiguous" if existing["status"] == "ambiguous" else "upstream_error"
+        reason = existing.get("reason")
+        return _result(status, reason=reason or "transcript_lookup_unavailable")
     try:
         ref = _reference(existing)
     except FilingFetchError:
         return _result("upstream_error", reason="transcript_lookup_contract")
-    return _result("reused", source_ref=ref, fiscal_year=year, fiscal_quarter=quarter)
+    return _result(
+        "reused", source_ref=ref, fiscal_year=year, fiscal_quarter=quarter,
+    )
+
+
+def _zero_cost_budget(option: dict[str, Any]) -> bool:
+    limits = option.get("acquisition_limits")
+    if not isinstance(limits, dict):
+        return False
+    try:
+        return Decimal(limits.get("max_cost_usd", "0")) == 0
+    except (InvalidOperation, TypeError):
+        return False
 
 
 def _acquire(
@@ -110,8 +152,8 @@ def _acquire(
         fetched = transport.acquire_exact(
             **arguments, acquisition_limits=ready.option["acquisition_limits"],
         )
-    except Exception:
-        return _result("upstream_error", reason="transcript_acquisition_failed", retryable=True)
+    except Exception as exc:
+        return _result("upstream_error", reason=f"transcript_acquisition_failed:{type(exc).__name__}", retryable=True)
     if not isinstance(fetched, dict):
         return _result("upstream_error", reason="transcript_acquisition_contract")
     status = fetched.get("status")
@@ -123,17 +165,23 @@ def _acquire(
         return _result(
             "downloaded", source_ref=ref,
             fiscal_year=ready.year, fiscal_quarter=ready.quarter,
+            **_optional_fields(fetched, (
+                "provider", "provider_document_id", "call_date",
+                "publication_date", "as_of_cutoff_verified", "provider_calls",
+            )),
         )
     if status in {"provider_unavailable", "not_found", "upstream_error"}:
         return _result(
             status, reason=str(fetched.get("reason") or status),
             retryable=fetched.get("retryable") is True,
+            **_optional_fields(fetched, ("provider_calls",)),
         )
     return _result("upstream_error", reason="transcript_acquisition_contract")
 
 
 def resolve_companion_transcript(
-    *, request: dict[str, Any], filing_handle: dict[str, Any],
+    *,
+    request: dict[str, Any], filing_handle: dict[str, Any],
     transport: TranscriptTransport | None = None,
 ) -> dict[str, Any]:
     """Reuse an exact transcript, then acquire at most once if requested."""
@@ -148,11 +196,16 @@ def resolve_companion_transcript(
         "fiscal_year": prepared.year,
         "fiscal_quarter": prepared.quarter,
         "as_of_date": request.get("as_of_date"),
-        "provider": prepared.option.get("provider"),
+        "provider": prepared.option.get("provider") or "fmp",
     }
     existing = _lookup(transport, arguments, prepared.year, prepared.quarter)
     if existing is not None:
         return existing
     if prepared.option["intent"] == "reuse_only":
         return _result("not_found", reason="exact_transcript_missing")
+    if _zero_cost_budget(prepared.option):
+        return _result(
+            "provider_unavailable", reason="zero_cost_budget",
+            provider="fmp", provider_calls=0,
+        )
     return _acquire(transport, arguments, prepared)

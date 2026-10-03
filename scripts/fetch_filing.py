@@ -1149,6 +1149,7 @@ def resolve_filing(
     worker_resume_wait_seconds: float = 5.0,
     stats: dict[str, int] | None = None,
     source_ref_v2: bool = False,
+    deadline: float | None = None,
 ) -> dict[str, Any]:
     """Identify an optional company query, then resolve or explicitly ensure a filing.
 
@@ -1183,12 +1184,10 @@ def resolve_filing(
         raise FilingFetchError(
             "v2 requests require the pathless SourceRef route", code="request_error",
         )
-    if source_ref_v2 and allow_download:
-        raise FilingFetchError(
-            "v2 acquisition requires the frozen CWP RequestPlan contract",
-            code="contract_pending",
-        )
-    deadline = time.monotonic() + timeout_seconds
+    if deadline is None:
+        deadline = time.monotonic() + timeout_seconds
+    elif deadline <= time.monotonic():
+        raise FilingFetchError("overall deadline expired", code="upstream_error")
     root = (
         _validate_company_wiki_root(company_wiki_root)
         if company_wiki_root is not None
@@ -1540,22 +1539,42 @@ def _close_gap_and_return_handle(
 
 
 def _resolve_v2_companion(
-    *, request: dict[str, Any], handle: dict[str, Any],
+    *,
+    request: dict[str, Any],
+    handle: dict[str, Any],
+    config_path: Path | None,
+    deadline: float,
+    stats: dict[str, int],
 ) -> dict[str, Any]:
-    """Report exact-period readiness without calling an unfrozen producer."""
+    """Resolve one exact-period companion without changing filing success."""
     if handle.get("status") == "gap":
         return {"status": "not_applicable", "reason": "filing_not_capture_ready",
                 "retryable": False}
     option = request.get("companion_transcript")
     if option is None:
         return {"status": "not_requested", "retryable": False}
-    if option.get("fiscal_year") is None or option.get("fiscal_quarter") is None:
+    if not isinstance(option, dict) or option.get("fiscal_year") is None or option.get("fiscal_quarter") is None:
         return {"status": "period_unresolved", "reason": "exact_fy_q_required",
                 "retryable": False}
-    from transcript_companion import resolve_companion_transcript
+    try:
+        wiki_root = load_company_wiki_root(config_path=config_path)
+        from transcript_companion import resolve_companion_transcript
+        from transcript_tool_transport import EarningsTranscriptsTransport
 
-    return resolve_companion_transcript(request=request, filing_handle=handle)
-
+        transport = EarningsTranscriptsTransport(
+            wiki_root=wiki_root, deadline=deadline,
+        )
+        result = resolve_companion_transcript(
+            request=request, filing_handle=handle, transport=transport,
+        )
+        stats["calls"] = stats.get("calls", 0) + transport.company_wiki_calls
+        return result
+    except Exception as exc:
+        return {
+            "status": "upstream_error",
+            "reason": f"transcript_transport_unavailable:{type(exc).__name__}",
+            "retryable": True,
+        }
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for on-demand filing fetch.
@@ -1647,33 +1666,34 @@ def main(argv: list[str] | None = None) -> int:
         v2_response = request.get("schema_version") == FILING_V2_REQUEST_SCHEMA_VERSION
         if v2_response:
             validate_request(request)
-            if args.allow_download:
-                raise FilingFetchError(
-                    "v2 acquisition requires the frozen CWP RequestPlan contract",
-                    code="contract_pending",
-                )
-            if request["filing_intent"] != "reuse_only":
-                raise FilingFetchError(
-                    "v2 acquisition requires the frozen CWP RequestPlan contract",
-                    code="contract_pending",
-                )
         stats = {"calls": 0, "downloads": 0}
+        deadline = time.monotonic() + args.timeout_seconds
+        allow_download = (
+            request.get("filing_intent") == "fetch_if_missing"
+            if v2_response else args.allow_download
+        )
         handle = resolve_filing(
             request=request,
             config_path=args.config,
-            allow_download=args.allow_download,
+            allow_download=allow_download,
             timeout_seconds=args.timeout_seconds,
             pause_worker=not args.no_pause_worker,
             worker_graceful_timeout_seconds=args.worker_graceful_timeout_seconds,
             worker_resume_wait_seconds=args.worker_resume_wait_seconds,
             stats=stats,
             source_ref_v2=(args.source_ref_v2 or v2_response),
+            deadline=deadline,
         )
         if v2_response:
             from ff_v2_envelope import success_envelope
 
             output = success_envelope(
-                request, handle, _resolve_v2_companion(request=request, handle=handle), stats,
+                request, handle,
+                _resolve_v2_companion(
+                    request=request, handle=handle, config_path=args.config,
+                    deadline=deadline, stats=stats,
+                ),
+                stats,
             )
         elif isinstance(handle, dict) and handle.get("status") == "gap":
             # FC-802: a structured gap passes through unwrapped — it is NOT

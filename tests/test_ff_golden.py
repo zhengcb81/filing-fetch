@@ -78,12 +78,44 @@ def _cases() -> dict[str, tuple[dict, dict | FilingFetchError]]:
         ),
         "ff_v2_source_candidate": (V2_REQUEST, V2_HANDLE),
         "ff_v2_period_unresolved": (period_only, V2_HANDLE),
-        "ff_v2_transcript_pending": (exact_companion, V2_HANDLE),
+        "ff_v2_transcript_downloaded": (exact_companion, V2_HANDLE),
         "ff_v2_upstream_error": (
             V2_REQUEST, FilingFetchError("source hash mismatch", code="upstream_error"),
         ),
-        "ff_v2_fetch_pending": (fetch_pending, V2_HANDLE),
+        "ff_v2_fetch_source_candidate": (fetch_pending, V2_HANDLE),
         "ff_v2_gap": (V2_REQUEST, gap),
+    }
+
+
+def _companion_result(request: dict, **kwargs) -> dict:
+    option = request.get("companion_transcript")
+    if option is None:
+        return {"status": "not_requested", "retryable": False}
+    if option.get("fiscal_year") is None or option.get("fiscal_quarter") is None:
+        return {
+            "status": "period_unresolved", "reason": "exact_fy_q_required",
+            "retryable": False,
+        }
+    digest = "b" * 64
+    return {
+        "status": "downloaded",
+        "retryable": False,
+        "provider": "fmp",
+        "fiscal_year": option["fiscal_year"],
+        "fiscal_quarter": option["fiscal_quarter"],
+        "provider_document_id": "fmp:ACME:2025:Q2:2025-04-29",
+        "call_date": "2025-04-29",
+        "publication_date": None,
+        "as_of_cutoff_verified": False,
+        "provider_calls": 1,
+        "source_ref": {
+            "schema_version": "2.0",
+            "document_id": f"urn:company-wiki:document:sha256:{digest}",
+            "source_id": f"urn:company-wiki:source:sha256:{digest}",
+            "content_sha256": digest,
+            "byte_size": 120,
+            "mime_type": "application/json",
+        },
     }
 
 
@@ -93,16 +125,18 @@ def _render(request: dict, outcome: dict | FilingFetchError) -> dict:
     old_stdin, old_stdout = sys.stdin, sys.stdout
     try:
         sys.stdin, sys.stdout = stdin, stdout
-        with patch.object(
-            fetch_filing, "resolve_filing",
-            side_effect=outcome if isinstance(outcome, FilingFetchError) else None,
-            return_value=outcome if isinstance(outcome, dict) else None,
+        with (
+            patch.object(
+                fetch_filing, "resolve_filing",
+                side_effect=outcome if isinstance(outcome, FilingFetchError) else None,
+                return_value=outcome if isinstance(outcome, dict) else None,
+            ),
+            patch.object(fetch_filing, "_resolve_v2_companion", side_effect=_companion_result),
         ):
             exit_code = fetch_filing.main([])
     finally:
         sys.stdin, sys.stdout = old_stdin, old_stdout
     return {"exit_code": exit_code, "payload": json.loads(stdout.getvalue())}
-
 
 @pytest.mark.parametrize("name", sorted(_cases()))
 def test_cli_serializer_golden(name: str) -> None:

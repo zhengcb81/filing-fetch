@@ -232,3 +232,13 @@ acquisition yaml 用**绝对 USER_PROFILE 路径**指向生产工具（fixture �
 | corrupted 断言 journal 非空 | 1 | REUSED 也记录 journal → 断言无 downloaded_new（Phase 4）|
 | round-trip --config 指向生产 company_wiki.json | 1 | 用 filing-fetch 默认配置（生产无此文件）（Phase 5）|
 | HK 下载失败（0xC0000005 + 900s 超时）| 3 | 诊断链：内存压力间歇崩溃 → 孤儿进程清理 → **根因=fiscal_year 2024 与 dayu 标题推断 2025 不匹配**，适配器年份过滤永远拒绝 → 改 fiscal_year 2025 通过（Phase 4）|
+
+## 2026-10-03 Cross-project integration addendum
+
+The v1.3.0 scope above remains a historical completed task. This addendum records the CWP-owned FF SourceRef/ET companion integration, using this isolated FF branch:
+
+- [x] Consolidated SourceRef v2 and transcript companion into one integration worktree; retained the pathless CWP SourceRef contract and used a compact ET subprocess transport.
+- [x] Added bounded explicit-intent acquisition, ET `/2` request/result binding, CWP importer `/3` SourceRef response, exact unknown-publication dedup lookup, verified-open, and failure-isolated companion output.
+- [x] Replaced obsolete RequestPlan-blocking tests with tests that require one explicit bounded `fetch_if_missing` intent and reject legacy per-document authorization in v2.
+- [x] Final node suite: **191 passed, 1 skipped in 50.40s** across v1 CLI, SourceRef v2, CWP/ET contracts, and real-process FF→CWP fixture E2E. Ruff passed. The existing production opt-in test is the only skip.
+- [ ] Commit and fast-forward this tested branch to `origin/main` after the matching CWP contract commit is pushed; do not stage FMP credentials. RF consumer G-A E2E remains outside this branch.

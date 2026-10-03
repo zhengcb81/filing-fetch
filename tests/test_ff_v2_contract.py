@@ -106,7 +106,7 @@ def test_v2_no_companion_is_pathless_and_calls_no_transcript(
         "transcript_companion.resolve_companion_transcript",
         lambda **kwargs: pytest.fail("unrequested transcript must not be called"),
     )
-    rc, output = run_main(monkeypatch, request())
+    rc, output = run_main(monkeypatch, request(), args=["--allow-download"])
     assert rc == 0
     assert output["schema_version"] == "2.0"
     assert output["filing"]["status"] == "source_candidate"
@@ -137,39 +137,38 @@ def test_fy_only_companion_is_period_unresolved_without_network(
 
 def test_companion_failure_does_not_rollback_filing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fetch_filing, "resolve_filing", lambda **kwargs: _filing())
+    monkeypatch.setattr(fetch_filing, "_resolve_v2_companion", lambda **kwargs: {
+        "status": "provider_unavailable", "reason": "provider_entitlement_required",
+        "retryable": False, "provider_calls": 1,
+    })
     rc, output = run_main(monkeypatch, request(companion={
         "intent": "fetch_if_missing", "fiscal_year": 2025, "fiscal_quarter": 2,
         "acquisition_limits": {
-            "max_bytes": 1_000_000, "timeout_seconds": 10, "max_cost_usd": "0.00",
+            "max_bytes": 1_000_000, "timeout_seconds": 10, "max_cost_usd": "1.00",
         },
     }))
     assert rc == 0
     assert output["filing"]["status"] == "source_candidate"
     assert output["filing"]["source_ref"] == SOURCE_REF
-    assert output["filing"]["byte_verification"] == "pending_verified_open"
-    assert output["transcript"]["status"] == "contract_pending"
-    assert output["transcript"]["reason"] == "cwp_fmp_import_contract_pending"
+    assert output["transcript"]["status"] == "provider_unavailable"
+    assert output["transcript"]["reason"] == "provider_entitlement_required"
+    assert output["transcript"]["provider_calls"] == 1
 
-
-def test_v2_fetch_intent_waits_for_frozen_request_plan_without_source_call(
+def test_v2_fetch_intent_is_forwarded_as_one_explicit_cwp_intent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        fetch_filing, "resolve_filing",
-        lambda **kwargs: pytest.fail("unfrozen acquisition must not call CWP"),
-    )
+    seen: list[dict] = []
+    monkeypatch.setattr(fetch_filing, "resolve_filing", lambda **kwargs: (seen.append(kwargs), _filing())[1])
     value = request()
     value["filing_intent"] = "fetch_if_missing"
     value["acquisition_limits"] = {
-        "max_bytes": 5_000_000, "timeout_seconds": 60,
-        "max_cost_usd": "0.00",
+        "max_bytes": 5_000_000, "timeout_seconds": 60, "max_cost_usd": "1.00",
     }
     rc, output = run_main(monkeypatch, value)
-    assert rc == 2
-    assert output["schema_version"] == "2.0"
-    assert output["filing"]["status"] == "contract_pending"
-    assert output["downloads"] == 0
-
+    assert rc == 0
+    assert output["filing"]["status"] == "source_candidate"
+    assert seen[0]["allow_download"] is True
+    assert seen[0]["source_ref_v2"] is True
 
 def test_v2_fetch_intent_requires_byte_time_and_cost_caps() -> None:
     value = request()
@@ -193,44 +192,61 @@ def test_v2_fetch_intent_requires_byte_time_and_cost_caps() -> None:
 
 def test_provider_failure_is_child_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fetch_filing, "resolve_filing", lambda **kwargs: _filing())
-    monkeypatch.setattr(
-        "transcript_companion.resolve_companion_transcript",
-        lambda **kwargs: {
-            "status": "provider_unavailable", "reason": "entitlement_required",
-            "retryable": False,
-        },
-    )
+    monkeypatch.setattr(fetch_filing, "_resolve_v2_companion", lambda **kwargs: {
+        "status": "provider_unavailable", "reason": "provider_entitlement_required",
+        "retryable": False, "provider_calls": 1,
+    })
     rc, output = run_main(monkeypatch, request(companion={
         "intent": "fetch_if_missing", "fiscal_year": 2025, "fiscal_quarter": 2,
         "acquisition_limits": {
-            "max_bytes": 1_000_000, "timeout_seconds": 10, "max_cost_usd": "0.00",
+            "max_bytes": 1_000_000, "timeout_seconds": 10, "max_cost_usd": "1.00",
         },
     }))
     assert rc == 0
     assert output["filing"]["status"] == "source_candidate"
     assert output["transcript"]["status"] == "provider_unavailable"
-    assert output["transcript"]["reason"] == "entitlement_required"
 
-
-def test_v2_library_call_cannot_bypass_pending_acquisition(
-    monkeypatch: pytest.MonkeyPatch,
+def test_v2_library_call_forwards_fetch_to_cwp_ensure(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    root = tmp_path / "company-wiki"
+    (root / "config").mkdir(parents=True)
+    (root / "config" / "source_catalog.yaml").write_text("fixture", encoding="utf-8")
+    calls: list[dict] = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs)
+        if kwargs["action"] == "identify":
+            return {
+                "schema_version": fetch_filing.COMPANY_WIKI_IDENTITY_SCHEMA_VERSION,
+                "status": "resolved",
+                "resolved": {
+                    "canonical_name": "Acme Inc.", "market": "US", "exchange": "NASDAQ",
+                    "ticker": "ACME", "security_id": "ACME", "match_basis": "ticker",
+                    "matched_value": "ACME", "source_name": "fixture",
+                    "source_url": "https://example.test/security/ACME",
+                    "source_record_id": "fixture:acme", "verified": True, "active": True,
+                },
+            }
+        return {"status": "gap"}
+
+    monkeypatch.setattr(fetch_filing, "_run_company_wiki_json_retry", fake_call)
     monkeypatch.setattr(
-        fetch_filing, "load_company_wiki_root",
-        lambda **kwargs: pytest.fail("v2 pending fetch must not open CWP"),
+        fetch_filing, "_pathless_operation_gap", lambda payload, **kwargs: {"status": "gap"},
     )
     value = request()
     value["filing_intent"] = "fetch_if_missing"
     value["acquisition_limits"] = {
-        "max_bytes": 5_000_000, "timeout_seconds": 60,
-        "max_cost_usd": "0.00",
+        "max_bytes": 5_000_000, "timeout_seconds": 60, "max_cost_usd": "1.00",
     }
-    with pytest.raises(FilingFetchError) as error:
-        fetch_filing.resolve_filing(
-            request=value, source_ref_v2=True, allow_download=True,
-        )
-    assert error.value.code == "contract_pending"
-
+    result = fetch_filing.resolve_filing(
+        request=value, company_wiki_root=root, source_ref_v2=True,
+        allow_download=True, pause_worker=False,
+    )
+    assert result == {"status": "gap"}
+    ensure = next(call for call in calls if call["action"] == "ensure")
+    assert "--source-ref-v2" in ensure["command"]
+    assert "--allow-download" in ensure["command"]
 
 def test_v2_library_request_requires_pathless_mode() -> None:
     with pytest.raises(FilingFetchError) as error:

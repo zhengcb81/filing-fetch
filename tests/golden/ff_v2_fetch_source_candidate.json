@@ -27,8 +27,7 @@
       "download_events": 0
     },
     "transcript": {
-      "status": "contract_pending",
-      "reason": "cwp_fmp_import_contract_pending",
+      "status": "not_requested",
       "retryable": false
     },
     "calls": 0,

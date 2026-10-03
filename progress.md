@@ -32,3 +32,12 @@
 - CI：`quality.yml`（`config_doctor --require-revenue-config` + `$GITHUB_WORKSPACE` 符号链接）最近推送全绿；本仓不再单独维护 legacy closure 调用。
 - 上游观测（只读）：revenue daily `20260909T210001Z` ok=true，triplet 记录 filing `bb8d485`；FC-705 门仍 false（预计 2026-09-10 22:00 后转 true），与 filing 本仓无直接动作。
 - 本轮未改代码/配置/任务，未下载、未跑真实 E2E、未恢复 worker。当前权威编排在 company-wiki R4 目录（见 `docs/plans/painpoint-outcome-audit-2026-09-05/current-delta-2026-09-09.md`）。
+
+## 2026-10-03 — CWP coordinated SourceRef/ET companion integration
+
+- Integrated the FF SourceRef v2 branch and the transcript-companion work into one isolated branch based on current `origin/main`. Kept the v1 path/goldens, added an ET `/2` stdin transport and CWP transcript-import `/3` SourceRef handoff.
+- Added true fixture-only subprocess coverage through CWP catalog scan, transcript import, verified open, unknown-publication replay and duplicate suppression. Original JSON bytes/hash are retained; no translation, PDF transcription, real FMP request, or API-key access.
+- Final relevant FF node: **191 passed, 1 skipped in 50.40s**; the single skip is an existing production opt-in test. FF Ruff passed. CWP transcript/read CLI: **16 passed**; CWP Ruff, four-module mypy, and fast pre-push gate passed.
+- Replaced two SourceRef tests that still asserted the retired RequestPlan blocker: the new tests require explicit bounded `fetch_if_missing` and reject the removed legacy authorization field. Corrected the fake clock with one additional start-time sample to model the shared end-to-end deadline; production deadlines remain unchanged.
+- Initial long-path E2E failed on Windows; the isolated path exceeded the usable path length. Final suite used unique `C:/cwt` basetemp and passed. Test roots were cleaned.
+- Next: push the CWP producer contract, then fast-forward this FF integration to `origin/main`; run the existing RF three-project consumer E2E as the next global G-A node.
