@@ -70,3 +70,10 @@
 - Tests replace the old RequestPlan blocker with a single explicit bounded acquisition intent. v2 rejects the legacy per-document authorization field. An existing retry test fake monotonic sequence was extended for the new shared top-level deadline; no production timing rule was weakened.
 - Windows test lesson: deep `AppData/Local/Temp/.../test_name/company-wiki` roots made the immutable destination exceed usable path length. The same actual E2E passed under unique `C:/cwt` basetemp. This is test-root setup, not a production data-path workaround.
 - Verified node: 191 passed / 1 existing production opt-in skip, FF Ruff clean; RF consumer integration remains unverified.
+
+
+## 2026-10-03 — Delivery gate findings
+
+- The FF push hook runs the complete hermetic suite and policy checks (roughly three minutes); it is repository-enforced and was not bypassed. The first run surfaced a real complexity regression; helper extraction restored the <=10 new-file limit without relaxing the ratchet.
+- `verify_plan_claims.parse_plan` previously kept a completed phase active across subsequent Markdown sections, so the new integration addendum's pending push item was falsely counted inside Phase 6. The parser now closes scope at a peer or parent heading while retaining nested subsection scope; a regression test covers both boundaries.
+- Current status remains pending until the final full hook succeeds and `origin/main` advances.

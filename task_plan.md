@@ -241,4 +241,6 @@ The v1.3.0 scope above remains a historical completed task. This addendum record
 - [x] Added bounded explicit-intent acquisition, ET `/2` request/result binding, CWP importer `/3` SourceRef response, exact unknown-publication dedup lookup, verified-open, and failure-isolated companion output.
 - [x] Replaced obsolete RequestPlan-blocking tests with tests that require one explicit bounded `fetch_if_missing` intent and reject legacy per-document authorization in v2.
 - [x] Final node suite: **191 passed, 1 skipped in 50.40s** across v1 CLI, SourceRef v2, CWP/ET contracts, and real-process FF→CWP fixture E2E. Ruff passed. The existing production opt-in test is the only skip.
-- [ ] Commit and fast-forward this tested branch to `origin/main` after the matching CWP contract commit is pushed; do not stage FMP credentials. RF consumer G-A E2E remains outside this branch.
+- [x] Committed the CWP/ET integration in `cf05f7e` and the lookup complexity split in `492f5d4`; focused lookup/E2E/complexity tests: **18 passed**.
+- [x] Fixed plan-claim scope: a new level-2 section ends the preceding completed phase; regression tests **3 passed**, `python tools/verify_plan_claims.py --plan-dir .` is green.
+- [ ] Finish the required full pre-push gate and fast-forward to `origin/main`; do not stage FMP credentials. RF consumer G-A E2E remains outside this branch.

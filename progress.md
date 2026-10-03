@@ -41,3 +41,10 @@
 - Replaced two SourceRef tests that still asserted the retired RequestPlan blocker: the new tests require explicit bounded `fetch_if_missing` and reject the removed legacy authorization field. Corrected the fake clock with one additional start-time sample to model the shared end-to-end deadline; production deadlines remain unchanged.
 - Initial long-path E2E failed on Windows; the isolated path exceeded the usable path length. Final suite used unique `C:/cwt` basetemp and passed. Test roots were cleaned.
 - Next: push the CWP producer contract, then fast-forward this FF integration to `origin/main`; run the existing RF three-project consumer E2E as the next global G-A node.
+
+
+## 2026-10-03 — Mainline delivery gate follow-up
+
+- FF commit `cf05f7e` passed its required full push gate through the hermetic suite but was blocked by the new-file complexity ratchet: `transcript_companion.py` lookup complexity 14 > 10. Split lookup result normalization into focused helpers; lookup/transport E2E plus complexity tests: **18 passed**; Ruff and mypy passed. Fix committed as `492f5d4`.
+- The next required full gate passed hermetic tests but exposed a plan-verifier boundary bug: an unchecked task in the following `## Cross-project integration addendum` was attributed to the historical completed Phase 6. Updated `verify_plan_claims.py` to end completed-phase scope at the next equal-or-higher Markdown heading and added a regression test. Targeted regression + complexity tests: **3 passed**; `python tools/verify_plan_claims.py --plan-dir .` reports all completed claims evidence-backed.
+- Final full pre-push gate and remote fast-forward are pending; no hook was bypassed. No FMP credential or source document was read or staged.

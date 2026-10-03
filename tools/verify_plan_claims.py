@@ -38,6 +38,7 @@ def parse_plan(plan_text: str) -> list[dict]:
     """Return per-phase: number, unchecked count, has_waiver."""
     phases: list[dict] = []
     current: dict | None = None
+    current_level: int | None = None
     for line in plan_text.splitlines():
         heading = PHASE_HEADING.match(line)
         if heading:
@@ -46,7 +47,18 @@ def parse_plan(plan_text: str) -> list[dict]:
                 "unchecked": 0,
                 "has_waiver": False,
             }
+            current_level = len(line) - len(line.lstrip("#"))
             phases.append(current)
+            continue
+        markdown_heading = re.match(r"^(#{2,3})\s+", line)
+        if (
+            current is not None
+            and current_level is not None
+            and markdown_heading is not None
+            and len(markdown_heading.group(1)) <= current_level
+        ):
+            current = None
+            current_level = None
             continue
         if current is None:
             continue
