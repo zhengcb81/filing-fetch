@@ -26,30 +26,36 @@
 
 ### 1. 行为测试先行（RED）
 
-- [ ] `tests/test_s3_single_request_limits.py`：真 FF CLI → 本地 fake child CLI，捕获实际 argv/stdin
-- [ ] 三额度 `--max-download-bytes/--max-download-seconds/--max-download-cost-usd` 进入 ensure/close-gap argv
-- [ ] 同一请求库 / CLI 意图一致；冲突具名 `request_error`
-- [ ] 请求期限压缩共享 deadline，短 deadline 有界超时
-- [ ] producer 拒未知参数 → 具名失败，不剥参数重发、无隐式重试
-- [ ] 子进程输出字节 cap；超时回收自己创建的进程且不碰无关进程
-- [ ] 静态子进程失败不回显 stderr 正文 / 路径 / key
-- [ ] installer manifest 排除假 `FMP_API_KEY`、tests、本地 .env、缓存、运行日志
-- [ ] pre-push 不写全局安装
+- [x] `tests/test_s3_single_request_limits.py`：真 FF CLI → 本地 fake child CLI，捕获实际 argv/stdin
+- [x] 三额度 `--max-download-bytes/--max-download-seconds/--max-download-cost-usd` 进入 ensure/close-gap argv
+- [x] 同一请求库 / CLI 意图一致；冲突具名 `request_error`
+- [x] 请求期限压缩共享 deadline，短 deadline 有界超时
+- [x] producer 拒未知参数 → 具名失败，不剥参数重发、无隐式重试
+- [x] 子进程输出字节 cap；超时回收自己创建的进程且不碰无关进程
+- [x] 静态子进程失败不回显 stderr 正文 / 路径 / key
+- [x] installer manifest 排除假 `FMP_API_KEY`、tests、本地 .env、缓存、运行日志
+- [x] pre-push 不写全局安装
 
 ### 2. 实现贯通
 
-- [ ] `_command_arguments` 输出三额度 argv
-- [ ] `resolve_filing` 单一下载意图推导（`filing_intent` 为唯一权威）+ 显式冲突报错
-- [ ] `resolve_filing` deadline = min(剩余全局 deadline, 配置期限, 请求期限)
-- [ ] 有界子进程：deadline + 输出字节 cap + 静态错误不回显
-- [ ] installer：显式 `--install`、manifest 收窄；pre-push 只读告警
+- [x] `_command_arguments` 输出三额度 argv
+- [x] `resolve_filing` 单一下载意图推导（`filing_intent` 为唯一权威）+ 显式冲突报错
+- [x] `resolve_filing` deadline = min(剩余全局 deadline, 配置期限, 请求期限)
+- [x] 有界子进程：deadline + 输出字节 cap + 静态错误不回显
+- [x] installer：显式 `--install`、manifest 收窄；pre-push 只读告警
 
 ### 3. 文档与交接
 
-- [ ] `SKILL.md` 更新为 v2 推荐例子 / 一次采集请求 / 限额 / FY-Q / ET 工具配置 / 失败分离
-- [ ] 删除失效的 RequestPlan 手工签收与二次下载许可说明
-- [ ] `docs/implementation/s3-ff-limits-handoff.md` + `tests/golden/s3_ff_limits_argv.json`
-- [ ] 提交并 push `codex/ff-s3-single-request-limits`
+- [x] `SKILL.md` 更新为 v2 推荐例子 / 一次采集请求 / 限额 / FY-Q / ET 工具配置 / 失败分离
+- [x] 删除失效的 RequestPlan 手工签收与二次下载许可说明
+- [x] `docs/implementation/s3-ff-limits-handoff.md` + `tests/golden/s3_ff_limits_argv.json`
+- [x] 施工包实现已提交；远端发布与 main 合并由 root 集成节点推进
+
+## 4. 当前状态（root 复核，2026-10-03）
+
+- 施工包实现与本仓责任测试已交付；跨仓 producer 限额及 v1 / `latest_as_of` 兼容仍由 root 收敛，未标为端到端完成。
+- 用户授权降低常规等待：push hook 只运行快速静态/配置检查；CI 对精选回归集跑一次。全量 hermetic 与 coverage 留给大改动时手动运行，不再重复三遍。
+- CWP bounded provider 方法尚未接通；限额参数可到达 CWP CLI，但生产适配器缺 `discover_bounded` / `fetch_bounded` 时必须失败关闭。
 
 ## 明确不做
 

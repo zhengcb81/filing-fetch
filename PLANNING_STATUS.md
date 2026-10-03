@@ -1,5 +1,13 @@
 # filing-fetch 当前规划状态
 
+## Current checkpoint — 2026-10-03
+
+- 当前施工入口是 FF-S3 局部 PWF：`.planning/s3-ff-single-request-limits-20261003/`；跨仓总计划在 company-wiki 的 `docs/plans/narrative-evidence-pilot-2026-09-26/`。
+- 正常 push 门禁已简化：本地 hook 只跑快速静态/配置检查；CI 对精选回归集跑一次。全量 hermetic 与 coverage 仅在大范围改动时手动运行。下方 2026-09-08 的“每次 push 全门禁”协议已被此状态取代。
+- FF-S3 精选回归 358 passed、4 skipped、78 子测试；SourceRef CLI E2E 1 passed；fast gate 通过。FF main 合并仍等待 CWP 的真实 provider 限额能力和 v1 / `latest_as_of` 契约收敛。
+- ET-S3 已于 2026-10-03 合入并推送 earnings-transcripts main，merge commit `93fe52c`。
+- 下方 R4/旧15包表格和 9 月基线均为历史记录，不能作为当前进度或额外审批门。
+
 > **CI 推送协议（2026-09-08）**：本仓任何推送都必须走 revenue-forecast 的
 > [CI 反复失败根因与根治协议](../revenue-forecast/assurance/runs/2026-09-02_remaining-gap-closure/ci_root_fix.md)：
 > 先跑本仓 `python tools/pre_push_gate.py`（CI 等价面 + 安装一致性，绿才推），推送后立即自盯

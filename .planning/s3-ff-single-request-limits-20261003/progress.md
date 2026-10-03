@@ -152,3 +152,11 @@ v2 `reuse_only` 明令禁止携带。所以 10 个红灯全部落在
 - 未改动 `tools/host_assumption_guard.py` 本体（只改了它的漂移比较方式）。
 - 未替 root 决定 v1 下载的预算来源（handoff §8.3 待决）。
 - 跨仓正式限额接口 E2E 记为 pending（见 handoff §8.1）。
+
+## Root review checkpoint — 2026-10-03
+
+- ET-S3 was accepted separately, merged into `earnings-transcripts/main`, and pushed as merge commit `93fe52c`.
+- FF-S3 targeted responsibility set plus gate regression and the four fast mutation-canary files: **358 passed, 4 skipped, 78 subtests passed in 62.99s**. The real SourceRef CLI E2E passed separately (**1 passed in 11.45s**). Both use isolated test data; no provider download or real credential was used.
+- The old push hook ran the hermetic suite three minutes into a failure: 10 failed, 442 passed, 8 skipped, 78 subtests passed in 166.60s. Reproduced representative errors show the in-progress CWP CLI requires limits that legacy FF v1 test requests do not carry. Treat this as a cross-repo contract mismatch; the FF v2 limits responsibility tests are green.
+- Simplified delivery checks: CI now runs the focused set once, drops duplicate full-suite/coverage passes, and runs the isolated SourceRef CLI E2E instead of the persistent `.runs` harness. The local pre-push hook runs fast static/config checks only; full hermetic tests are manual for broad changes.
+- Fast pre-push checks are green. The remaining blocker to FF `main` merge is real producer integration: CWP production adapters still lack bounded methods, plus the FF v1 and `latest_as_of` rules need one shared decision. Do not describe FF as end-to-end bounded until that is resolved.

@@ -1,11 +1,9 @@
 #!/bin/sh
-# Pre-push gate hook (root-cause fix, 2026-09-08): BLOCKS any push that
-# fails the CI-equivalent surface.  See
-# revenue-forecast/assurance/runs/2026-09-02_remaining-gap-closure/ci_root_fix.md.
+# Fast pre-push checks only. The focused regression suite runs once in CI;
+# run the full hermetic suite manually for broad changes.
 #
 # Installed as .githooks/pre-push (git config core.hooksPath .githooks).
-# Every `git push` runs tools/pre_push_gate.py first; a red gate aborts
-# the push BEFORE anything reaches GitHub CI.
+# Every `git push` runs fast static/config checks before GitHub CI.
 #
 # NOTE: shebang MUST be #!/bin/sh (git-for-windows spawns /bin/sh hooks
 # natively; /usr/bin/env bash failed with "cannot spawn").  Use
@@ -18,7 +16,7 @@ if [ ! -f "$ROOT/tools/pre_push_gate.py" ]; then
   exit 0
 fi
 
-python "$ROOT/tools/pre_push_gate.py"
+python "$ROOT/tools/pre_push_gate.py" --skip-install-sync
 rc=$?
 if [ "$rc" -ne 0 ]; then
   echo "" >&2

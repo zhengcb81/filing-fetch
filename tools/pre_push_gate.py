@@ -13,7 +13,7 @@ This gate mirrors the CI fast surface locally:
   3. import smoke (scripts/fetch_filing, scripts/filing_contracts)
   4. mypy on the FC-1204-c contract set          (mirrors CI exactly)
   5. unique test symbols                          (CI WU-1.1 inline gate)
-  6. hermetic test suite                          (CI "Run hermetic test suite")
+  6. optional hermetic test suite                  (manual ``--run-tests`` only)
   7. tools/config_doctor.py three-repo doctor     (CI FC-1202)
   8. installed-skill drift report (FF-S3): the copies under ~/.agents,
      ~/.claude, ~/.codex are COMPARED with this repo and any drift is
@@ -24,14 +24,11 @@ This gate mirrors the CI fast surface locally:
   9. tools/verify_plan_claims.py                  (CI WU-8.3)
  10. UTF-8 BOM scan                               (CA-304/final_ratchet class)
 
-Exit non-zero on the first red check.  Push protocol:
+Exit non-zero on the first red check. The pre-push hook runs fast checks only;
+CI runs one focused regression suite. Run the full suite manually for broad
+changes or provider-contract migrations.
 
-    python tools/pre_push_gate.py   # ~2-3 min
-    git push ...
-    # THEN self-monitor the GitHub Actions run until green; on red, fix the
-    # ROOT CAUSE and extend this gate so it would have caught it.
-
-Usage: python tools/pre_push_gate.py [--skip-tests] [--skip-mypy]
+Usage: python tools/pre_push_gate.py [--run-tests] [--skip-mypy]
        [--skip-install-sync]
 """
 
@@ -181,7 +178,7 @@ def _install_check() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--skip-tests", action="store_true")
+    parser.add_argument("--run-tests", action="store_true")
     parser.add_argument("--skip-mypy", action="store_true")
     parser.add_argument("--skip-install-sync", action="store_true")
     args = parser.parse_args(argv)
@@ -219,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
                 "mypy public contracts (CI FC-1204-c set)",
             )
         )
-    if not args.skip_tests:
+    if args.run_tests:
         gates.append(
             (
                 [

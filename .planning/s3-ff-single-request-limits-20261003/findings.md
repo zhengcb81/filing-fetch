@@ -91,3 +91,11 @@
 - 基线（净 `c47c397`）：**81.66%**
 - 本卡交付：**82.22%**
 - 本地两端均红；卡片明确要求“不要全仓 coverage 重验”，故不新增覆盖任务。
+
+## Root acceptance findings — 2026-10-03
+
+- The observed CWP budget failure is caused by the current producer worktree, not by the committed base alone: CWP CLI now requires all three `--max-download-*` values for download/latest-as-of routes, while FF legacy v1 requests cannot carry them. FF v2 `fetch_if_missing` has the limits and passed its argv/intent tests.
+- The FF pre-push hook used to execute the full hermetic suite; a real push attempt waited **166.60s** and failed 10/452 tests. The owner has repeatedly asked for faster normal gates. The hook is now fast-only, CI runs one selected suite once, and full tests remain opt-in/manual.
+- Verified post-simplification: selected regression **358 passed, 4 skipped, 78 subtests**; SourceRef CLI E2E **1 passed**; fast pre-push gate green. No real provider or credential was used.
+- Still unresolved: CWP has no production `discover_bounded` / `fetch_bounded`; its budget contract currently only has fake bounded adapters in tests. Dayu code is prohibited from changing. The CWP/FF integration must fail closed until an approved provider capability exists; don't label argv passthrough as provider enforcement.
+- Request contract questions for root: v1 download without encoded limits should be rejected or receive a documented bounded default; `reuse_only + latest_as_of` must be clarified because FF forbids limits there while CWP currently demands them and its Dayu discovery can fetch document bodies.

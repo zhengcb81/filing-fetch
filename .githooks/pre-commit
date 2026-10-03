@@ -6,9 +6,9 @@
 # Root-cause fix (2026-09-08): this wrapper replaces the legacy custom
 # pre-commit script (hermetic suite + reuse-only E2E + install sync on every
 # commit), which was never wired (core.hooksPath was unset) and was too heavy
-# for a commit hook.  The framework hooks (ruff + mypy contracts) stay here;
-# the hermetic suite, E2E-adjacent and install-sync checks now run in the
-# pre-push gate (tools/pre_push_gate.py), which mirrors CI.
+# for a commit hook. The framework hooks (ruff + mypy contracts) stay here.
+# The focused regression suite runs once in CI; pre-push runs fast
+# static/config checks.
 
 # start templated
 INSTALL_PYTHON='C:\Miniconda\python.exe'

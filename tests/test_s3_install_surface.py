@@ -134,3 +134,9 @@ def test_pre_push_only_runs_the_read_only_install_check(
     for cmd in commands:
         assert "--check" in cmd
         assert "--install" not in cmd
+
+
+def test_git_pre_push_hook_uses_fast_checks_without_the_full_suite() -> None:
+    hook = (SKILL_ROOT / ".githooks" / "pre-push").read_text(encoding="utf-8")
+    assert "--skip-install-sync" in hook
+    assert "--run-tests" not in hook

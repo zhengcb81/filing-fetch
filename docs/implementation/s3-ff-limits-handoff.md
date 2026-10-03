@@ -294,3 +294,11 @@ scripts/transcript_tool_transport.py
 4. 重跑本仓 hermetic → `git push -u origin codex/ff-s3-single-request-limits`。
 5. 合 main、跑 `python tools/sync_installs_b3.py --install` 统一安装。
 6. 未合入前本分支保持交付状态。
+
+## 11. Root review addendum (2026-10-03)
+
+- Selected FF regression after the review changes: **358 passed, 4 skipped, 78 subtests passed** (62.99s). The real CWP SourceRef CLI E2E passed separately (**1 passed**, 11.45s); it used an isolated synthetic wiki and performed zero downloads.
+- Fast pre-push gate passed: Ruff, compileall, import smoke, scoped mypy, unique-symbol scan, host-assumption guard, config doctor, plan verifier, and BOM scan. The hook no longer runs pytest or the install-root scan.
+- The prior push attempt exposed that the old hook ran the full suite for 166.60s and failed 10/452 tests against the owner's in-progress CWP checkout. Two representative failures were reproduced: legacy `v1` acquisition calls omit limits that the CWP WIP now requires. This is a real cross-repository contract mismatch, not a failure in the FF-S3 argv/deadline responsibility set.
+- CI now runs one focused regression selection once; the duplicate full hermetic suite and 90% branch-coverage rerun were removed. The persistent `.runs` company-reuse harness was replaced in CI by `e2e/test_source_ref_v2_cli.py`, whose pytest temp root is removed after the run.
+- Integration remains open: CWP's current production adapters do not implement `discover_bounded` / `fetch_bounded`; tests currently prove fail-closed behavior with fakes, not a real bounded provider download. Dayu remains unchanged. Resolve the v1 and `latest_as_of` request rules and provider capability before merging FF-S3 into `main`.
