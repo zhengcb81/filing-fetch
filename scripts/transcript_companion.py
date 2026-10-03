@@ -90,6 +90,45 @@ def _optional_fields(source: dict[str, Any], names: tuple[str, ...]) -> dict[str
     return {name: source[name] for name in names if name in source}
 
 
+def _lookup_resolved(
+    existing: dict[str, Any], year: int, quarter: int,
+) -> dict[str, Any]:
+    status = existing["status"]
+    try:
+        ref = _reference(existing.get("source_ref"))
+    except FilingFetchError:
+        return _result("upstream_error", reason="transcript_lookup_contract")
+    fields = _optional_fields(existing, (
+        "provider", "publication_date", "as_of_cutoff_verified", "provider_calls",
+    ))
+    if status == "unknown_publication":
+        fields["as_of_cutoff_verified"] = False
+        return _result(
+            "unknown_publication", reason="publication_date_unknown",
+            source_ref=ref, fiscal_year=year, fiscal_quarter=quarter, **fields,
+        )
+    return _result(
+        "reused", source_ref=ref, fiscal_year=year, fiscal_quarter=quarter, **fields,
+    )
+
+
+def _lookup_unavailable(existing: dict[str, Any]) -> dict[str, Any]:
+    status = "ambiguous" if existing["status"] == "ambiguous" else "upstream_error"
+    return _result(
+        status, reason=existing.get("reason") or "transcript_lookup_unavailable",
+    )
+
+
+def _lookup_legacy(existing: object, year: int, quarter: int) -> dict[str, Any]:
+    try:
+        ref = _reference(existing)
+    except FilingFetchError:
+        return _result("upstream_error", reason="transcript_lookup_contract")
+    return _result(
+        "reused", source_ref=ref, fiscal_year=year, fiscal_quarter=quarter,
+    )
+
+
 def _lookup(
     transport: TranscriptTransport, arguments: dict[str, Any],
     year: int, quarter: int,
@@ -103,36 +142,12 @@ def _lookup(
     if isinstance(existing, dict) and existing.get("status") in {
         "found", "unknown_publication",
     }:
-        status = existing["status"]
-        try:
-            ref = _reference(existing.get("source_ref"))
-        except FilingFetchError:
-            return _result("upstream_error", reason="transcript_lookup_contract")
-        fields = _optional_fields(existing, (
-            "provider", "publication_date", "as_of_cutoff_verified", "provider_calls",
-        ))
-        if status == "unknown_publication":
-            fields["as_of_cutoff_verified"] = False
-            return _result(
-                "unknown_publication", reason="publication_date_unknown",
-                source_ref=ref, fiscal_year=year, fiscal_quarter=quarter, **fields,
-            )
-        return _result(
-            "reused", source_ref=ref, fiscal_year=year, fiscal_quarter=quarter, **fields,
-        )
+        return _lookup_resolved(existing, year, quarter)
     if isinstance(existing, dict) and existing.get("status") in {
         "ambiguous", "blocked", "unavailable", "upstream_error",
     }:
-        status = "ambiguous" if existing["status"] == "ambiguous" else "upstream_error"
-        reason = existing.get("reason")
-        return _result(status, reason=reason or "transcript_lookup_unavailable")
-    try:
-        ref = _reference(existing)
-    except FilingFetchError:
-        return _result("upstream_error", reason="transcript_lookup_contract")
-    return _result(
-        "reused", source_ref=ref, fiscal_year=year, fiscal_quarter=quarter,
-    )
+        return _lookup_unavailable(existing)
+    return _lookup_legacy(existing, year, quarter)
 
 
 def _zero_cost_budget(option: dict[str, Any]) -> bool:
