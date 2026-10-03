@@ -8,7 +8,7 @@
 |---|---|
 | base | `origin/main` @ `c47c397c4d93979d8a7defbe026eff9e9edf0e6d` |
 | branch | `codex/ff-s3-single-request-limits` |
-| head | 本交付提交（`git rev-parse HEAD`，交付分支上最后一个提交） |
+| head（实现主体） | `8c340f8dcce6f85b0ff106ac56484cde3caab7b5`（本报告的 sha 补记是其后的 `docs:` 提交；完整交付范围 `git log c47c397..HEAD`） |
 | 工作目录 | `C:\Users\郑曾波\Projects\filing-fetch-s3-limits`（唯一写入处） |
 | 局部 PWF | `.planning/s3-ff-single-request-limits-20261003/`（task_plan / findings / progress） |
 | 仓内改动 | 8 modified + 5 new（见 §2） |

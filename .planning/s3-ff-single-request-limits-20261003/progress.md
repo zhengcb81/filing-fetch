@@ -1,7 +1,8 @@
 # FF-S3 局部 progress
 
 基线 `origin/main@c47c397c4d93979d8a7defbe026eff9e9edf0e6d`，分支
-`codex/ff-s3-single-request-limits`，唯一写入工作目录
+`codex/ff-s3-single-request-limits`，实现主体提交
+`8c340f8dcce6f85b0ff106ac56484cde3caab7b5`，唯一写入工作目录
 `C:\Users\郑曾波\Projects\filing-fetch-s3-limits`。
 
 ## 基线（改动前，2026-10-03）
