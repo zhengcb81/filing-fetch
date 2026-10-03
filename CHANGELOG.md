@@ -27,6 +27,13 @@
   (bounded `fetch_if_missing`, pathless `source_ref`, companion transcript
   with exact FY/Q, `EARNINGS_TRANSCRIPTS_TOOL`), with `1.2` / `1.1` kept as
   legacy thin compatibility.
+- **Worker pause-around documented as inert.** company-wiki retired its
+  background worker routes (`73de6be refactor: retire legacy source catalog
+  worker routes`), so `ensure --allow-download` never consults worker state
+  and a paused worker can no longer produce `worker_paused`. SKILL.md and the
+  isolated-wiki E2E pin that upstream contract instead of the retired
+  `--no-pause-worker` escape hatch; the flag stays accepted for existing
+  callers.
 
 ## v1.4.0 — 2026-08-04
 

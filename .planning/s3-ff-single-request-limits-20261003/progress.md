@@ -61,8 +61,33 @@
 - 无关哨兵进程在 `finally` 中 kill 并 `wait`。
 - `git status` 交付时仅含本卡改动，无 `nul`、无 pycache、无密钥、无下载原件。
 
+## 第二阶段：按 CWP 新契约更新 worker 用例（root 决策）
+
+上游 `Projects\company-wiki` 在本会话中由 `a104d25` 前进到
+`73de6be refactor: retire legacy source catalog worker routes`：
+`ensure --allow-download` 不再查询 worker 状态、`--allow-acquisition-while-paused`
+变成 no-op、`worker-pause`/`worker-resume` 路由消失（`worker-status`/`worker-stop`
+仅剩诊断与收尾），其自有测试
+`tests/contract/test_source_catalog_ensure_paused_guard.py` 明确断言
+`WorkerController` 从不被调用且 `"source acquisition is paused" not in err`。
+
+处理（root 选定“按 CWP 新契约更新 worker 用例”）：
+
+- `tests/test_e2e_isolated_wiki.py`：
+  `test_e2e_worker_paused_blocks_download_with_no_pause_worker`
+  → `test_e2e_no_pause_worker_is_retired_upstream`，断言 `not_found` / 不可重试；
+  顺带修正 `test_e2e_paused_worker_no_longer_blocks_download_by_default` 的 docstring
+  （“guard was bypassed” → 上游已退役）。
+- `SKILL.md`：工作流第 5 步、`--no-pause-worker`/`--worker-*` 说明、
+  `worker_paused` 错误行、两条 Notes 改为“pause-around 已被上游退役、现在是空操作”。
+- `CHANGELOG.md`：`Unreleased` 增补一条对应记录。
+- `PausedWorkerScope` 代码保留（薄兼容；`worker-status` 失败即告警并继续，
+  不存在的 `worker-pause`/`worker-resume` 不会被调用），未做超出本卡的编排重写。
+
 ## 未做（按卡片）
 
 - 未合 main、未做全局安装、未启动 worker、未写 company-wiki/ET/StockWiki/IQS。
 - 未新增签名、人工授权文件、逐候选 receipt、覆盖率门、场景数门。
-- 跨仓正式限额接口 E2E 记为 pending（见 handoff）。
+- 未用 `--no-verify` 绕过任何钩子，未修改 vendored host-assumption 守卫。
+- 跨仓正式限额接口 E2E 记为 pending（见 handoff §8.1）。
+- `test_fc1307a_...byte_identical` 行尾漂移仍未处理（兄弟仓只读，交 root）。

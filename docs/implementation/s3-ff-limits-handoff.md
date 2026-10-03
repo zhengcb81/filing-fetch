@@ -53,7 +53,7 @@
 | `tests/test_s3_install_surface.py` | 6 个测试：安装面允许清单、假 key 排除、显式安装、pre-push 只读 |
 | `tests/fixtures/s3_fake_cwp/fake_source_catalog_cli.py` | fake `company_wiki.source_catalog.cli`，5 种模式（default / reject_limits / slow / flood / noisy_failure） |
 | `tests/golden/s3_ff_limits_argv.json` | limits → argv 表 golden（`tests/golden/` 为既有目录，按卡复用） |
-| `tests/test_e2e_isolated_wiki.py` | 更新 1 处断言到新契约（stderr 正文不再回显） |
+| `tests/test_e2e_isolated_wiki.py` | 更新 2 处到新契约：错误不再回显 stderr 正文；`TestWorkerPaused` 按 CWP `73de6be` 重写为“`worker_paused` 已由上游退役” |
 
 **未改**：`filing_contracts.py`（EXACT 校验原样保留）、`ff_v2_envelope.py`、
 `et_v2_contract.py`、`transcript_companion.py`、`transcript_tool_transport.py` 的行为。
@@ -187,13 +187,14 @@ company-wiki 的 `ensure` / `close-gap` **尚未**接受
 
 ### 8.2 两个环境红灯（净基线可复现，非本卡引入）
 
-| 测试 | 原因 | 处置建议 |
+| 测试 | 原因 | 处置 |
 |---|---|---|
-| `test_fc1307a_the_three_vendored_copies_are_byte_identical` | 兄弟 `Projects\filing-fetch`、`Projects\company-wiki` 的 `host_assumption_guard.py` 落盘 CRLF 19190 B，本仓 LF 18794 B；归一化后内容完全一致 | 由 root 决定：重检出兄弟工作树，或让该守卫比较归一化行尾。兄弟仓对本卡只读 |
-| `test_e2e_isolated_wiki.py::TestWorkerPaused::test_e2e_worker_paused_blocks_download_with_no_pause_worker` | 会话期间 `Projects\company-wiki` 由 `a104d25` → `73de6be refactor: retire legacy source catalog worker routes`，`--no-pause-worker` 不再返回 `worker_paused` | 由 root 确认 CWP 新契约后更新 FF 侧 worker pause 用例与 SKILL 描述；本卡不猜别仓实现 |
+| `test_fc1307a_the_three_vendored_copies_are_byte_identical` | 兄弟 `Projects\filing-fetch`、`Projects\company-wiki` 的 `host_assumption_guard.py` 落盘 CRLF 19190 B，本仓 LF 18794 B；归一化后内容完全一致 | **未处理**（兄弟仓对本卡只读，且卡片不授权改守卫）。需 root 决定：重检出兄弟工作树，或让该守卫比较归一化行尾 |
+| `test_e2e_isolated_wiki.py::TestWorkerPaused` | 会话期间 `Projects\company-wiki` 由 `a104d25` → `73de6be refactor: retire legacy source catalog worker routes`，`--no-pause-worker` 不再返回 `worker_paused` | **已按 CWP 新契约处理**（root 选定）：测试重写为 `test_e2e_no_pause_worker_is_retired_upstream`，断言 `not_found`/不可重试，并在 SKILL.md / CHANGELOG 如实记录 pause-around 已被上游退役 |
 
-两者均在净基线 `c47c397` checkout 上复现，因此 pre-push gate 在本机当前是红的。
-本卡**未**绕过任何钩子（未用 `--no-verify`、未改守卫）。
+`PausedWorkerScope` 本身保留（薄兼容，`worker-status` 失败即告警并继续，
+`worker-pause`/`worker-resume` 已不存在故不会被调用），未做超出本卡的编排重写。
+跨仓正式限额接口仍见 §8.1 pending。
 
 ## 9. 显式安装命令与 manifest
 

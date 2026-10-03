@@ -33,13 +33,16 @@ gain no new behaviour.
 4. **Resolve (reuse)** — query company-wiki for an already-indexed,
    capture-ready filing. If found, return the pathless candidate — no
    download.
-5. **Pause around downloads (worker)** — before an authorized download, the
-   company-wiki background worker is paused if it is running and enabled. The
-   worker's long batches hold the global catalog `operation.lock`, which would
-   otherwise block the download until the deadline; pausing releases the lock.
-   After the download the worker is resumed. A worker that is already stopped,
-   or paused by the user, is left untouched — a user-initiated pause is
-   **never** resumed. Pass `--no-pause-worker` for the legacy behavior.
+5. **Pause around downloads (legacy, now inert upstream)** — filing-fetch still
+   probes company-wiki's `worker-status` before an authorized download and, if
+   a live legacy worker were found, would pause/resume it around the fetch.
+   company-wiki retired those routes (`73de6be refactor: retire legacy source
+   catalog worker routes`): `ensure --allow-download` never consults worker
+   state, `--allow-acquisition-while-paused` is accepted as a no-op, and a
+   paused background worker therefore cannot block or fail a download any
+   more. `--no-pause-worker` still parses for existing callers and changes
+   nothing upstream. A `worker-status` failure is reported and the download
+   proceeds without a pause.
 6. **Ensure (download)** — only for `fetch_if_missing`. company-wiki routes by
    market and writes new bytes under
    `companies/{entity}/raw/financial_reports/{annual|semi_annual|quarterly}/`
@@ -92,12 +95,11 @@ request's `filing_intent` is the intent.
 - `--timeout-seconds` — overall deadline for the request (default 900).
 - `--source-ref-v2` — return a pathless source reference for a later
   company-wiki read (implied by schema `2.0`).
-- `--no-pause-worker` — legacy behavior: downloads can be blocked by the
-  worker's catalog lock for up to the deadline.
-- `--worker-graceful-timeout-seconds` (default 5) — graceful stop window
-  before `worker-pause` force-kills.
-- `--worker-resume-wait-seconds` (default 5) — how long `worker-resume` waits
-  for the worker to come back.
+- `--no-pause-worker` — legacy: skip the (now inert) worker pause-around.
+- `--worker-graceful-timeout-seconds` (default 5) — graceful stop window used
+  only if a legacy `worker-pause` route is available.
+- `--worker-resume-wait-seconds` (default 5) — how long `worker-resume` waits,
+  under the same condition.
 - `--debug` — include the per-candidate exclusion trace in a `not_found`.
 
 ```bash
@@ -213,7 +215,7 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
 | `not_found` | No matching filing | no |
 | `upstream_error` | company-wiki subprocess failure (including deadline exhaustion or an oversized child body) | yes |
 | `catalog_locked` | company-wiki catalog locked by another operation; auto-retried with backoff until the deadline | yes |
-| `worker_paused` | downloads blocked because the company-wiki worker is paused — resume the worker, then retry | yes |
+| `worker_paused` | legacy: a paused company-wiki worker blocked the download. Current company-wiki no longer emits it — the background worker routes were retired (`73de6be`) | yes |
 | `fatal` | Unexpected error | no |
 
 ### Exit codes
@@ -280,13 +282,16 @@ pre-push gate reports drift but never performs the install.
   filing-fetch config change (FC-501/FC-1202: the RootPolicySnapshot is the
   single policy source; filing-fetch's `config/company_wiki.json` only
   locates the company-wiki root).
-- By default, filing-fetch **pauses the background worker itself** around
-  downloads and resumes it afterwards, so a worker mid-batch no longer blocks
-  fetches. Only with `--no-pause-worker` are downloads blocked while the
-  worker is paused (legacy behavior) — resume it first in that case.
-- `worker_pause_failed` / `worker_resume_failed` error codes surface pause /
-  resume failures; a resume failure never loses the download (the handle is
-  returned) but leaves the worker paused — resume it manually.
+- **Worker pause-around is inert upstream.** filing-fetch still probes
+  `worker-status` around downloads and would pause/resume a live legacy
+  worker, but company-wiki retired those routes (`73de6be`) and its
+  `ensure --allow-download` never consults worker state. A paused background
+  worker therefore neither blocks nor fails a download, with or without
+  `--no-pause-worker`.
+- `worker_pause_failed` / `worker_resume_failed` surface a pause / resume
+  failure against an older company-wiki that still exposes those routes; a
+  resume failure never loses the download (the handle is returned) but leaves
+  the worker paused — resume it manually.
 - An ambiguous **identity** (multiple candidate securities, e.g. dual-class
   tickers GOOGL/GOOG) never auto-picks; the response lists `candidates[]` —
   refine `company_query` to a specific ticker or add `market`/`exchange`, then

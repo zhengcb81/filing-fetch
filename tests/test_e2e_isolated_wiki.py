@@ -382,10 +382,9 @@ class TestCatalogLockContention(MutatingE2E):
 
 class TestWorkerPaused(MutatingE2E):
     def test_e2e_paused_worker_no_longer_blocks_download_by_default(self) -> None:
-        """Default (pause-around): a worker paused by the user is respected and
-        never resumed, but no longer blocks the download; the request resolves
-        MISSING -> not_found with no network traffic (no-op adapters prove the
-        guard was bypassed)."""
+        """Default path: a worker paused by the user is respected and never
+        resumed, and the request resolves MISSING -> not_found with no network
+        traffic (no-op adapters prove nothing was downloaded)."""
         self.wiki.seed_market("CN")
         self.wiki.set_worker_state("paused")
         self.wiki.scan()
@@ -409,9 +408,12 @@ class TestWorkerPaused(MutatingE2E):
         )
         self.assertEqual(control["desired_state"], "paused")
 
-    def test_e2e_worker_paused_blocks_download_with_no_pause_worker(self) -> None:
-        """Legacy escape hatch: --no-pause-worker keeps the paused-acquisition
-        guard -> worker_paused (retryable)."""
+    def test_e2e_no_pause_worker_is_retired_upstream(self) -> None:
+        """company-wiki retired the background worker routes (73de6be): an
+        explicit download never consults legacy worker state, so neither the
+        default pause-around nor the old ``--no-pause-worker`` escape hatch can
+        produce ``worker_paused`` any more.  The flag still parses for existing
+        callers and the request fails closed as an ordinary missing filing."""
         self.wiki.seed_market("CN")
         self.wiki.set_worker_state("paused")
         self.wiki.scan()
@@ -427,8 +429,8 @@ class TestWorkerPaused(MutatingE2E):
         )
         self.assertEqual(rc, 2, out + err)
         payload = json.loads(out)
-        self.assertEqual(payload["status"], "worker_paused")
-        self.assertTrue(payload["retryable"])
+        self.assertEqual(payload["status"], "not_found")
+        self.assertFalse(payload["retryable"])
 
     def test_e2e_worker_enabled_download_resolves_missing(self) -> None:
         """Worker enabled + default: resolves MISSING -> not_found (no adapters
