@@ -1459,7 +1459,7 @@ def _handle_from_resolution(
             resolution_trace=_resolution_trace(resolution),
         )
     handle = dict(matches[0])
-    if handle.get("capture_ready") is not True:
+    if not source_ref_v2 and handle.get("capture_ready") is not True:
         raise FilingFetchError(
             "source lacks capture provenance: "
             + ", ".join(str(item) for item in handle.get("missing_capture_fields", [])),

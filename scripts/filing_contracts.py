@@ -500,12 +500,19 @@ def validate_handle_metadata(
     handle: dict[str, Any],
     request: dict[str, Any],
 ) -> None:
-    """Validate source-candidate identity and provenance without local I/O.
+    """Validate the identity needed for a pathless source candidate.
 
     The final consumer opens the SourceRef through company-wiki.  A candidate
     therefore does not interpret root policy or claim that bytes were read.
+    Collector, URL, and ``capture_ready`` fields are diagnostic metadata; they
+    do not decide whether the consumer may open a locally verified SourceRef.
     """
-    missing = (_HANDLE_REQUIRED_FIELDS - {"canonical_path"}) - set(handle)
+    required = _HANDLE_REQUIRED_FIELDS - {
+        "canonical_path", "https_url", "retrieved_at", "provider",
+        "provider_document_id", "collector_name", "collector_version",
+        "capture_ready",
+    }
+    missing = required - set(handle)
     if missing:
         raise FilingFetchError(
             f"handle missing required field(s): {', '.join(sorted(missing))}",
@@ -517,7 +524,7 @@ def validate_handle_metadata(
             raise FilingFetchError(
                 f"handle {name} must be non-empty trimmed text", code="upstream_error"
             )
-    if type(handle.get("capture_ready")) is not bool:
+    if "capture_ready" in handle and type(handle["capture_ready"]) is not bool:
         raise FilingFetchError("handle capture_ready must be boolean", code="upstream_error")
     digest = handle.get("snapshot_sha256")
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
@@ -527,9 +534,6 @@ def validate_handle_metadata(
     size = handle.get("byte_size")
     if isinstance(size, bool) or not isinstance(size, int) or size < 0:
         raise FilingFetchError("handle byte_size is invalid", code="upstream_error")
-    url = handle.get("https_url")
-    if not isinstance(url, str) or not url.startswith("https://"):
-        raise FilingFetchError("handle https_url must use HTTPS", code="upstream_error")
     published = handle.get("published_date")
     if not isinstance(published, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", published):
         raise FilingFetchError("handle published_date must use YYYY-MM-DD", code="upstream_error")

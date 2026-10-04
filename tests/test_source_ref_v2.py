@@ -124,6 +124,25 @@ def test_v2_candidate_preserves_source_metadata_without_reading_bytes(
     _assert_no_physical_keys(handle)
 
 
+def test_v2_reuse_keeps_partial_capture_as_diagnostic_only(tmp_path):
+    resolution = _resolution(tmp_path)
+    raw = resolution["matches"][0]
+    raw["capture_ready"] = False
+    raw["missing_capture_fields"] = ["https_url", "collector_name", "capture_trace"]
+    for field in (
+        "https_url", "retrieved_at", "provider", "provider_document_id",
+        "collector_name", "collector_version",
+    ):
+        raw.pop(field)
+    handle = fetch_filing._handle_from_resolution(
+        resolution, _request(), tmp_path, source_ref_v2=True
+    )
+    assert handle["source_ref"]["content_sha256"] == SHA
+    assert handle["published_date"] == "2026-02-20"
+    assert handle["capture_ready"] is False
+    assert handle.get("byte_verified") is not True
+
+
 def test_v2_candidate_rejects_unusable_identity_without_opening_bytes(
     tmp_path, monkeypatch
 ):

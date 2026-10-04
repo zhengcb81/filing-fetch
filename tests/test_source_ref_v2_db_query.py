@@ -211,6 +211,38 @@ def test_review_state_is_diagnostic_for_unverified_v2_candidate(
     assert handle["capture_ready"] is False
 
 
+@pytest.mark.parametrize("include_capture_ready", [True, False], ids=["false", "missing"])
+def test_missing_capture_descriptors_and_source_url_do_not_block_v2_candidate(
+    tmp_path: Path, include_capture_ready: bool,
+) -> None:
+    candidate = _candidate()
+    if include_capture_ready:
+        candidate["capture_ready"] = False
+    else:
+        candidate.pop("capture_ready")
+    candidate["missing_capture_fields"] = [
+        "https_url", "retrieved_at", "provider", "collector_name", "collector_version",
+    ]
+    for field in (
+        "https_url", "retrieved_at", "provider", "provider_document_id",
+        "collector_name", "collector_version",
+    ):
+        candidate.pop(field)
+    with patch(
+        "fetch_filing.subprocess.run",
+        side_effect=[_completed(_identity()), _completed(_query(candidate=candidate))],
+    ):
+        handle = fetch_filing.resolve_filing(
+            request=_request(), company_wiki_root=_wiki(tmp_path),
+            source_ref_v2=True,
+        )
+    assert handle["source_ref"] == _ref()
+    assert handle["snapshot_sha256"] == _ref()["content_sha256"]
+    assert handle["published_date"] == "2026-02-20"
+    assert handle.get("capture_ready") is not True
+    assert handle["byte_verified"] is False
+
+
 def test_candidate_without_explicit_title_does_not_guess_from_filename(
     tmp_path: Path,
 ) -> None:
