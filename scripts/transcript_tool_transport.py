@@ -21,6 +21,11 @@ _SOURCE_REQUEST_SCHEMA = "1.0"
 # One ceiling for every JSON subprocess this repo spawns.  The filing-fetch
 # company-wiki runner imports it so both transports fail closed at one number.
 MAX_JSON_OUTPUT_BYTES = 32 * 1024 * 1024
+# The ET CLI supervises a worker whose own deadline is ``timeout_seconds``.
+# FF must leave time for ET to terminate/reap that worker and remove its result
+# directory before the outer subprocess timeout expires.
+_ET_CLEANUP_GRACE_SECONDS = 3.0
+_ET_MAX_TIMEOUT_SECONDS = 60
 _MAX_REF_FIELDS = frozenset(
     {
         "schema_version",
@@ -285,13 +290,35 @@ class EarningsTranscriptsTransport:
                 "retryable": False,
                 "provider_calls": 0,
             }
-        timeout = min(float(limits["timeout_seconds"]), self._remaining())
-        timeout_seconds = max(1, int(math.ceil(timeout)))
+        remaining = self._remaining()
+        # The provider deadline is a cap; reserve bounded time for the ET
+        # process to start, enforce its worker deadline and clean up. If the
+        # enclosing FF request is already too close to its deadline, do not
+        # start a child that FF would have to kill before ET can reap it.
+        provider_budget = min(
+            float(limits["timeout_seconds"]),
+            remaining - _ET_CLEANUP_GRACE_SECONDS,
+            float(_ET_MAX_TIMEOUT_SECONDS),
+        )
+        timeout_seconds = int(math.floor(provider_budget))
+        if timeout_seconds < 1:
+            return {
+                "status": "provider_unavailable",
+                "reason": "provider_deadline",
+                "retryable": True,
+                "provider_calls": 0,
+            }
         et_request = {
             "schema_version": "earnings-transcript-request/1",
             "request_id": request["request_id"],
             "ticker": request["security_id"],
-            "exchange": request["exchange"],
+            # FF's canonical identity uses uppercase exchange names while
+            # ET's public CLI contract uses lowercase exchange slugs.
+            "exchange": (
+                request["exchange"].strip().lower()
+                if isinstance(request.get("exchange"), str)
+                else request.get("exchange")
+            ),
             "fiscal_year": request["fiscal_year"],
             "fiscal_quarter": request["fiscal_quarter"],
             "as_of_date": request["as_of_date"],
@@ -312,7 +339,10 @@ class EarningsTranscriptsTransport:
             cwd=self.transcript_tool.parent,
             env=dict(os.environ),
             capture_output=True,
-            timeout=min(timeout, self._remaining()),
+            timeout=min(
+                float(timeout_seconds) + _ET_CLEANUP_GRACE_SECONDS,
+                self._remaining(),
+            ),
             check=False,
             shell=False,
             creationflags=self._creationflags(),

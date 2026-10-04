@@ -83,6 +83,7 @@ def test_fmp_tool_result_is_imported_and_verified_through_cwp(tmp_path, monkeypa
     }
     request_id = "urn:company-wiki:source-request:sha256:" + "c" * 64
     calls: list[tuple[list[str], bytes]] = []
+    et_timeouts: list[float] = []
 
     def fake_run(command, *, input, **kwargs):
         calls.append((list(command), input))
@@ -99,10 +100,12 @@ def test_fmp_tool_result_is_imported_and_verified_through_cwp(tmp_path, monkeypa
             }
             return _completed(list(command), stdout=json.dumps(payload).encode())
         if str(tool) in command:
+            et_timeouts.append(kwargs["timeout"])
             et_request = json.loads(input.decode("utf-8"))
             assert et_request["download_authorized"] is True
             assert et_request["request_id"] == request_id
             assert et_request["provider"] == "fmp"
+            assert et_request["exchange"] == "nasdaq"
             assert et_request["fiscal_year"] == 2026
             assert et_request["fiscal_quarter"] == 3
             assert "api_key" not in et_request
@@ -173,6 +176,7 @@ def test_fmp_tool_result_is_imported_and_verified_through_cwp(tmp_path, monkeypa
     et_command = next(command for command, _ in calls if str(tool) in command)
     assert "--include-source-payload" in et_command
     assert "--allow-download" not in et_command
+    assert et_timeouts == [13.0]  # 10s provider cap plus bounded ET cleanup grace
 
 
 def test_real_cwp_cli_import_and_unknown_publication_replay(tmp_path, monkeypatch) -> None:
@@ -359,6 +363,43 @@ def test_unknown_publication_lookup_suppresses_second_provider_call(tmp_path, mo
     assert len(calls) == 2
     assert "source_query_cli" in " ".join(calls[0])
     assert "source_reader_cli" in " ".join(calls[1])
+
+
+def test_et_request_timeout_is_capped_to_its_cli_contract(tmp_path, monkeypatch) -> None:
+    tool = tmp_path / "transcript_tool.py"
+    tool.write_text("# fixture path; process is injected", encoding="utf-8")
+    seen: list[tuple[dict[str, Any], float]] = []
+
+    def fake_run(command, *, input, **kwargs):
+        seen.append((json.loads(input.decode("utf-8")), kwargs["timeout"]))
+        return _completed(
+            list(command),
+            stdout=json.dumps({
+                "status": "deadline_exceeded",
+                "error_code": "provider_deadline",
+            }).encode(),
+        )
+
+    monkeypatch.setattr("transcript_tool_transport.subprocess.run", fake_run)
+    transport = EarningsTranscriptsTransport(
+        wiki_root=tmp_path,
+        transcript_tool=tool,
+        deadline=time.monotonic() + 120,
+    )
+    transport._et_result(
+        request={
+            "request_id": "test-request",
+            "security_id": "MSFT",
+            "exchange": "NASDAQ",
+            "fiscal_year": 2026,
+            "fiscal_quarter": 3,
+            "as_of_date": "2026-09-30",
+        },
+        limits={"timeout_seconds": 90, "max_bytes": 1_000_000, "max_cost_usd": "1.00"},
+    )
+
+    assert seen[0][0]["timeout_seconds"] == 60
+    assert seen[0][1] == 63.0
 
 def test_creationflags_handles_a_missing_windows_constant(monkeypatch) -> None:
     monkeypatch.setattr(transcript_tool_transport, "os", SimpleNamespace(name="nt"))
