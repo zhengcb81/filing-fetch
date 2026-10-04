@@ -41,20 +41,20 @@ def test_manifest_is_only_runtime_scripts_docs_and_public_config_templates() -> 
     assert not any(key.endswith((".pyc", ".pyo", ".log", ".env")) for key in keys)
 
 
-def test_manifest_excludes_a_fake_fmp_api_key_file() -> None:
-    """A locally dropped key must never reach an install, even though it sits
-    inside ``config/``.  Only a fake value is ever written or read."""
-    key = sync_installs_b3.CANONICAL / "config" / "FMP_API_KEY.txt"
-    assert not key.exists(), "test precondition: this worktree carries no key"
-    try:
-        key.write_text("FAKE_KEY_FOR_FF_S3_TEST_ONLY", encoding="utf-8")
-        assert "config/FMP_API_KEY.txt" not in sync_installs_b3.manifest(
-            sync_installs_b3.CANONICAL
-        )
-    finally:
-        key.unlink(missing_ok=True)
-    assert not key.exists(), "the fake key must be removed on exit"
+def test_manifest_excludes_a_fake_fmp_api_key_file(tmp_path: Path) -> None:
+    """A fake key in an isolated source tree must never enter the manifest."""
+    canonical = tmp_path / "canonical"
+    config = canonical / "config"
+    config.mkdir(parents=True)
+    (canonical / "SKILL.md").write_text("# skill\n", encoding="utf-8")
+    (canonical / "CHANGELOG.md").write_text("# changelog\n", encoding="utf-8")
+    (config / "company_wiki.json").write_text("{}", encoding="utf-8")
+    key = config / "FMP_API_KEY.txt"
+    key.write_text("FAKE_KEY_FOR_FF_S3_TEST_ONLY", encoding="utf-8")
 
+    manifest = sync_installs_b3.manifest(canonical)
+    assert "config/FMP_API_KEY.txt" not in manifest
+    assert set(manifest) == {"CHANGELOG.md", "SKILL.md", "config/company_wiki.json"}
 
 def test_synthetic_tree_excludes_credentials_env_tests_and_run_logs(
     tmp_path: Path,
