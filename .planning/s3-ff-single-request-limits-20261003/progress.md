@@ -160,3 +160,13 @@ v2 `reuse_only` 明令禁止携带。所以 10 个红灯全部落在
 - The old push hook ran the hermetic suite three minutes into a failure: 10 failed, 442 passed, 8 skipped, 78 subtests passed in 166.60s. Reproduced representative errors show the in-progress CWP CLI requires limits that legacy FF v1 test requests do not carry. Treat this as a cross-repo contract mismatch; the FF v2 limits responsibility tests are green.
 - Simplified delivery checks: CI now runs the focused set once, drops duplicate full-suite/coverage passes, and runs the isolated SourceRef CLI E2E instead of the persistent `.runs` harness. The local pre-push hook runs fast static/config checks only; full hermetic tests are manual for broad changes.
 - Fast pre-push checks are green. The remaining blocker to FF `main` merge is real producer integration: CWP production adapters still lack bounded methods, plus the FF v1 and `latest_as_of` rules need one shared decision. Do not describe FF as end-to-end bounded until that is resolved.
+
+
+## Root mainline integration closeout — 2026-10-04
+
+- `origin/main`/当前 `fcap` 为 `eb0af134b204f513a54cc57e1bf9fd81781c023b`；S3 和 SourceRef/transcript companion 的已交付功能均在主线。
+- FF-S3 原实现分支的 tracking ref 仍落后，但相对 main 的 branch-only commit 数为 0；不把 tracking ref 的 ahead 状态误报为待合并。
+- `codex/transcript-companion@29085f7` 仍保留且不整体合并：其 schema 1.3 与默认 sibling 路径假设已被主线 v2 envelope/transport 设计替代。main 上没有遗漏的 companion 功能提交。
+- CWP 已启用 CNINFO 1.2.0 bounded adapter；真实 BYD FY2024 E2E 的 hash/size、复用、缺额度 fail-closed 收据记在 CWP 总计划。FF 不重复实现 provider。
+- FF 计划接手状态：S3 已完成并线；后续跨仓真实样本与空间测量回到 CWP 总计划，不是本局部卡的待办。
+- 验证范围：本次只做 PWF 对照与文档修订；没有重新运行 FF 全量 CI，也没有读取 `config/FMP_API_KEY.txt`。远端 Actions 结果仍须以 GitHub 页面为准。

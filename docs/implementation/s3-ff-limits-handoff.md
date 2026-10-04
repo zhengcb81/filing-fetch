@@ -302,3 +302,13 @@ scripts/transcript_tool_transport.py
 - The prior push attempt exposed that the old hook ran the full suite for 166.60s and failed 10/452 tests against the owner's in-progress CWP checkout. Two representative failures were reproduced: legacy `v1` acquisition calls omit limits that the CWP WIP now requires. This is a real cross-repository contract mismatch, not a failure in the FF-S3 argv/deadline responsibility set.
 - CI now runs one focused regression selection once; the duplicate full hermetic suite and 90% branch-coverage rerun were removed. The persistent `.runs` company-reuse harness was replaced in CI by `e2e/test_source_ref_v2_cli.py`, whose pytest temp root is removed after the run.
 - Integration remains open: CWP's current production adapters do not implement `discover_bounded` / `fetch_bounded`; tests currently prove fail-closed behavior with fakes, not a real bounded provider download. Dayu remains unchanged. Resolve the v1 and `latest_as_of` request rules and provider capability before merging FF-S3 into `main`.
+
+
+## Root mainline integration closeout — 2026-10-04
+
+- `origin/main`/当前 `fcap` 为 `eb0af134b204f513a54cc57e1bf9fd81781c023b`；S3 和 SourceRef/transcript companion 的已交付功能均在主线。
+- FF-S3 原实现分支的 tracking ref 仍落后，但相对 main 的 branch-only commit 数为 0；不把 tracking ref 的 ahead 状态误报为待合并。
+- `codex/transcript-companion@29085f7` 仍保留且不整体合并：其 schema 1.3 与默认 sibling 路径假设已被主线 v2 envelope/transport 设计替代。main 上没有遗漏的 companion 功能提交。
+- CWP 已启用 CNINFO 1.2.0 bounded adapter；真实 BYD FY2024 E2E 的 hash/size、复用、缺额度 fail-closed 收据记在 CWP 总计划。FF 不重复实现 provider。
+- FF 计划接手状态：S3 已完成并线；后续跨仓真实样本与空间测量回到 CWP 总计划，不是本局部卡的待办。
+- 验证范围：本次只做 PWF 对照与文档修订；没有重新运行 FF 全量 CI，也没有读取 `config/FMP_API_KEY.txt`。远端 Actions 结果仍须以 GitHub 页面为准。

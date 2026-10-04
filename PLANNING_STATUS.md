@@ -1,12 +1,14 @@
 # filing-fetch 当前规划状态
 
-## Current checkpoint — 2026-10-03
+## Current checkpoint — 2026-10-04（当前有效）
 
-- 当前施工入口是 FF-S3 局部 PWF：`.planning/s3-ff-single-request-limits-20261003/`；跨仓总计划在 company-wiki 的 `docs/plans/narrative-evidence-pilot-2026-09-26/`。
-- 正常 push 门禁已简化：本地 hook 只跑快速静态/配置检查；CI 对精选回归集跑一次。全量 hermetic 与 coverage 仅在大范围改动时手动运行。下方 2026-09-08 的“每次 push 全门禁”协议已被此状态取代。
-- FF-S3 精选回归 358 passed、4 skipped、78 子测试；SourceRef CLI E2E 1 passed；fast gate 通过。FF main 合并仍等待 CWP 的真实 provider 限额能力和 v1 / `latest_as_of` 契约收敛。
-- ET-S3 已于 2026-10-03 合入并推送 earnings-transcripts main，merge commit `93fe52c`。
-- 下方 R4/旧15包表格和 9 月基线均为历史记录，不能作为当前进度或额外审批门。
+- 当前 FF 主线为 `fcap@eb0af13`，与 live `origin/main` 同步；本地名为 `main` 的旧 ref 落后，不作为工作线。唯一未跟踪的 `config/FMP_API_KEY.txt` 是用户凭据，保持原地、未读取、未暂存。
+- FF-S3 的实现提交序列已进入远端 `main`。FF→ET→CWP 的 transcript companion 主线也已交付，旧分支 `codex/transcript-companion@29085f7` 是旧 schema/路径假设原型，与现行 v2 契约冲突，保留作历史材料，不整体合并。
+- S3 跨仓 bounded-provider 缺口已由 CWP 接入 StockInfoDLSimple CNINFO 1.2.0 并通过真实 BYD FY2024 年报链路：10,092,140 B，原 PDF、SourceRef SHA/size 一致；reuse-only 和无预算 fail-closed 也有记录。权威记录见 company-wiki `docs/plans/narrative-evidence-pilot-2026-09-26/task_plan.md` 与 `progress.md`。
+- 当前没有待从 FF 支线并入主线的有效产品改动。N4C 真实多类型样本、并发吞吐与空间测量归 company-wiki 总计划，不在 FF-S3 局部卡内重开。
+- 本轮只同步 PWF：FF targeted 回归/SourceRef CLI E2E/ET-CWP 离线联调的既有收据保持原样；本次另外跑的 CWP acquisition 合同测试为 20 passed。远端 GitHub Actions 状态不由本地收据推断。
+
+> 下方 2026-09-08 协议及其后旧快照保留为历史；若与本 checkpoint 冲突，以本 checkpoint 与当前活动 PWF 为准。旧“每次 push 全量门禁”的文字不再构成新门禁。
 
 > **CI 推送协议（2026-09-08）**：本仓任何推送都必须走 revenue-forecast 的
 > [CI 反复失败根因与根治协议](../revenue-forecast/assurance/runs/2026-09-02_remaining-gap-closure/ci_root_fix.md)：

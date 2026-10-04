@@ -63,3 +63,13 @@
 - 不自行合 main、不安装全局技能、不启动无限 worker
 - 不把 producer pending 写成端到端通过
 - 不修改 company-wiki / ET / StockWiki / IQS 源码
+
+
+## Root mainline integration closeout — 2026-10-04
+
+- `origin/main`/当前 `fcap` 为 `eb0af134b204f513a54cc57e1bf9fd81781c023b`；S3 和 SourceRef/transcript companion 的已交付功能均在主线。
+- FF-S3 原实现分支的 tracking ref 仍落后，但相对 main 的 branch-only commit 数为 0；不把 tracking ref 的 ahead 状态误报为待合并。
+- `codex/transcript-companion@29085f7` 仍保留且不整体合并：其 schema 1.3 与默认 sibling 路径假设已被主线 v2 envelope/transport 设计替代。main 上没有遗漏的 companion 功能提交。
+- CWP 已启用 CNINFO 1.2.0 bounded adapter；真实 BYD FY2024 E2E 的 hash/size、复用、缺额度 fail-closed 收据记在 CWP 总计划。FF 不重复实现 provider。
+- FF 计划接手状态：S3 已完成并线；后续跨仓真实样本与空间测量回到 CWP 总计划，不是本局部卡的待办。
+- 验证范围：本次只做 PWF 对照与文档修订；没有重新运行 FF 全量 CI，也没有读取 `config/FMP_API_KEY.txt`。远端 Actions 结果仍须以 GitHub 页面为准。
