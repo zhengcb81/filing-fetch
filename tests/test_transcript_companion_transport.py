@@ -8,11 +8,13 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from transcript_companion import resolve_companion_transcript
+import transcript_tool_transport
 from transcript_tool_transport import EarningsTranscriptsTransport
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "et_s0b" / "fmp_v2.fetched.json"
@@ -357,3 +359,9 @@ def test_unknown_publication_lookup_suppresses_second_provider_call(tmp_path, mo
     assert len(calls) == 2
     assert "source_query_cli" in " ".join(calls[0])
     assert "source_reader_cli" in " ".join(calls[1])
+
+def test_creationflags_handles_a_missing_windows_constant(monkeypatch) -> None:
+    monkeypatch.setattr(transcript_tool_transport, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(transcript_tool_transport, "subprocess", SimpleNamespace())
+
+    assert EarningsTranscriptsTransport._creationflags() == 0

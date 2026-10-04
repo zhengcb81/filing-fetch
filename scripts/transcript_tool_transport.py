@@ -97,7 +97,7 @@ class EarningsTranscriptsTransport:
 
     @staticmethod
     def _creationflags() -> int:
-        return subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        return int(getattr(subprocess, "CREATE_NO_WINDOW", 0)) if os.name == "nt" else 0
 
     def _run_json(
         self,
