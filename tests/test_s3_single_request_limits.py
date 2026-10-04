@@ -125,15 +125,19 @@ def _run_cli(
     env: dict[str, str],
     global_timeout: float = 60.0,
     run_timeout: float = 90.0,
+    extra_args: list[str] | None = None,
 ) -> subprocess.CompletedProcess:
+    command = [
+        sys.executable,
+        str(SKILL_ROOT / "scripts" / "fetch_filing.py"),
+        "--config", str(config),
+        "--no-pause-worker",
+        "--timeout-seconds", str(global_timeout),
+    ]
+    if extra_args:
+        command.extend(extra_args)
     return subprocess.run(
-        [
-            sys.executable,
-            str(SKILL_ROOT / "scripts" / "fetch_filing.py"),
-            "--config", str(config),
-            "--no-pause-worker",
-            "--timeout-seconds", str(global_timeout),
-        ],
+        command,
         input=json.dumps(request, ensure_ascii=False),
         capture_output=True,
         text=True,
@@ -218,6 +222,48 @@ def test_library_default_and_cli_agree_for_one_fetch_intent(
     lib_ensure = _argv_for(lib_capture, "ensure")
     assert cli_ensure == lib_ensure
     assert _flag(lib_ensure[0], "--max-download-bytes") == str(LIMITS["max_bytes"])
+
+
+
+def test_latest_as_of_reuse_only_requires_bounded_metadata_limits(
+    tmp_path: Path,
+) -> None:
+    """latest_as_of checks provider metadata even when downloads are forbidden.
+
+    CWP therefore needs explicit byte/time/fee limits on this read-only
+    provider lookup, and FF must pass them without enabling download.
+    """
+    request = _v2_request(
+        filing_intent="reuse_only", mode="latest_as_of", fiscal_year=None,
+        acquisition_limits=dict(LIMITS),
+    )
+    fetch_filing.validate_request(request)
+
+    root = _wiki_root(tmp_path)
+    capture = tmp_path / "latest_as_of_argv.jsonl"
+    process = _run_cli(
+        request,
+        config=_ff_config(tmp_path, root),
+        env=_child_env(_fake_package(tmp_path), capture, "default"),
+        extra_args=["--source-ref-v2"],
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    assert _payload(process)["status"] == "gap"
+    ensure = _argv_for(capture, "ensure")
+    assert len(ensure) == 1
+    assert "--allow-download" not in ensure[0]
+    assert _flag(ensure[0], "--max-download-bytes") == str(LIMITS["max_bytes"])
+    assert _flag(ensure[0], "--max-download-seconds") == str(LIMITS["timeout_seconds"])
+    assert _flag(ensure[0], "--max-download-cost-usd") == LIMITS["max_cost_usd"]
+
+
+def test_latest_as_of_reuse_only_without_limits_is_rejected() -> None:
+    request = _v2_request(
+        filing_intent="reuse_only", mode="latest_as_of", fiscal_year=None,
+    )
+    del request["acquisition_limits"]
+    with pytest.raises(FilingFetchError, match="latest_as_of.*limits"):
+        fetch_filing.validate_request(request)
 
 
 def test_conflicting_explicit_allow_download_is_a_named_request_error(

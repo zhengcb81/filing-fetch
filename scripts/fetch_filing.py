@@ -209,12 +209,12 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
 
 
 def _limit_arguments(request: dict[str, Any]) -> list[str]:
-    """The acquisition ceilings a ``fetch_if_missing`` request already carries.
+    """Return ceilings for bounded provider work declared by the request.
 
     They ride every argv built from this request - ``ensure`` and
-    ``close-gap`` both - because the request is the single place the intent
-    and its byte/time/fee bounds are declared.  A request without
-    ``acquisition_limits`` (v1, or v2 ``reuse_only``) contributes nothing.
+    ``close-gap`` both. Ordinary reuse_only and legacy v1 requests contribute
+    nothing; latest_as_of + reuse_only carries limits for metadata discovery
+    while still omitting ``--allow-download``.
     """
     limits = request.get("acquisition_limits")
     if limits is None:

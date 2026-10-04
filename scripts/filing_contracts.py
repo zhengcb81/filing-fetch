@@ -147,7 +147,9 @@ def _validate_v2_request(request: dict[str, Any]) -> None:
             code="request_error",
         )
     _validate_acquisition_limits(
-        request.get("filing_intent"), request.get("acquisition_limits")
+        request.get("filing_intent"),
+        request.get("acquisition_limits"),
+        required_for_reuse_only=request.get("mode") == "latest_as_of",
     )
     _validate_companion_request(request.get("companion_transcript"))
 
@@ -255,9 +257,16 @@ def validate_request(request: dict[str, Any]) -> None:
 
 
 
-def _validate_acquisition_limits(intent: Any, value: Any) -> None:
-    """Bind one fetch intent to explicit byte, time and fee ceilings."""
-    if intent == "reuse_only":
+def _validate_acquisition_limits(
+    intent: Any, value: Any, *, required_for_reuse_only: bool = False
+) -> None:
+    """Bind provider work to explicit byte, time and fee ceilings.
+
+    Ordinary reuse_only requests stay provider-free and forbid limits. A
+    latest_as_of reuse_only request performs a bounded metadata lookup to prove
+    whether the local filing is current, but still cannot download bytes.
+    """
+    if intent == "reuse_only" and not required_for_reuse_only:
         if value is not None:
             raise FilingFetchError(
                 "reuse_only forbids acquisition_limits", code="request_error"
@@ -266,10 +275,11 @@ def _validate_acquisition_limits(intent: Any, value: Any) -> None:
     if not isinstance(value, dict) or set(value) != {
         "max_bytes", "timeout_seconds", "max_cost_usd"
     }:
-        raise FilingFetchError(
-            "fetch_if_missing requires max_bytes, timeout_seconds and max_cost_usd",
-            code="request_error",
-        )
+        if intent == "reuse_only":
+            message = "latest_as_of reuse_only requires max_bytes, timeout_seconds and max_cost_usd limits"
+        else:
+            message = "fetch_if_missing requires max_bytes, timeout_seconds and max_cost_usd"
+        raise FilingFetchError(message, code="request_error")
     size = value["max_bytes"]
     if type(size) is not int or size <= 0:
         raise FilingFetchError("invalid acquisition_limits.max_bytes", code="request_error")
