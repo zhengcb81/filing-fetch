@@ -1,0 +1,113 @@
+{
+  "schema_version": "cwp-parallel-handoff/2",
+  "lane_id": "P5-FF",
+  "status": "complete",
+  "repo": "C:/Users/郑曾波/Projects/filing-fetch",
+  "worktree": "C:/Users/郑曾波/Projects/cwp-lanes-20261005/ff-runtime-cleanup",
+  "branch": "codex/p5-ff-runtime-cleanup",
+  "base_head": "d4d2fac4c690bfb8b1368d2ca140fd75150fd288",
+  "delivery_head": "b5c1c824d23cf81ab4bcd3245a25380a0c729972",
+  "commits": [
+    "7c6cf48c5aa890fe34cb8304830246d4c20f16fa",
+    "b5c1c824d23cf81ab4bcd3245a25380a0c729972"
+  ],
+  "changed_paths": [
+    "scripts/fetch_filing.py",
+    "scripts/transcript_tool_transport.py",
+    "scripts/ff_process_transport.py",
+    "tests/support/__init__.py",
+    "tests/test_p5_process_transport.py",
+    "tests/test_p5_worker_scope_retirement.py",
+    "tests/test_fetch_filing.py",
+    "tests/test_fc802_gap_orchestration.py",
+    "tests/test_s3_single_request_limits.py",
+    "tests/test_source_ref_v2_db_query.py",
+    "tests/test_transcript_companion_transport.py",
+    "SKILL.md",
+    "CHANGELOG.md",
+    ".planning/p5-ff-runtime-cleanup/"
+  ],
+  "upstream": [
+    {
+      "repo": "company-wiki",
+      "head": "f775406 (published; read-only from this lane)",
+      "interfaces": [
+        "SourceRef 2.0",
+        "ff operation_schema_version 1.0 (ensure / close-gap)",
+        "cwp transcript import request /2 response /3",
+        "ET request earnings-transcript-request/1 payload /2"
+      ]
+    }
+  ],
+  "entrypoints": [
+    {
+      "command": "echo '{\"schema_version\":\"2.0\",\"company_query\":\"AMD\",\"market\":\"US\",\"document_kind\":\"annual_report\",\"mode\":\"exact\",\"fiscal_year\":2025,\"as_of_date\":\"2026-09-29\",\"filing_intent\":\"fetch_if_missing\",\"acquisition_limits\":{\"max_bytes\":5000000,\"timeout_seconds\":60,\"max_cost_usd\":\"1.25\"}}' | python scripts/fetch_filing.py",
+      "output_contract": "existing FF response envelope (v2 success / error envelope, SourceRef 2.0 candidate)"
+    },
+    {
+      "command": "python -m pytest tests/test_p5_process_transport.py tests/test_p5_worker_scope_retirement.py -q",
+      "output_contract": "18 tests green (cap / deadline / UTF-8 bytes / grandchild-reap / zero worker calls / inert flags)"
+    },
+    {
+      "command": "python tools/pre_push_gate.py",
+      "output_contract": "GREEN (ruff WU-1.2, mypy FC-1204-c, import smoke, verify_plan_claims WU-8.3, UTF-8 BOM scan)"
+    }
+  ],
+  "tests": [
+    {"command": "python -m pytest tests/ -q --no-header", "exit_code": 1, "passed": 463, "failed": 10, "skipped": 14, "elapsed_seconds": 163},
+    {"command": "python -m pytest tests/test_p5_process_transport.py tests/test_p5_worker_scope_retirement.py -q", "exit_code": 0, "passed": 18, "failed": 0, "skipped": 0, "elapsed_seconds": 14},
+    {"command": "python -m pytest tests/test_fetch_filing.py tests/test_fc802_gap_orchestration.py tests/test_s3_single_request_limits.py tests/test_source_ref_v2_db_query.py tests/test_transcript_companion_transport.py tests/test_transcript_companion.py tests/test_source_ref_v2.py tests/test_ff_v2_contract.py tests/test_zr405_policy_roots.py tests/test_ff_golden.py tests/test_complexity_ratchet.py -q", "exit_code": 0, "passed": 194, "failed": 0, "skipped": 2, "elapsed_seconds": 55},
+    {"command": "python tools/pre_push_gate.py", "exit_code": 0, "passed": 6, "failed": 0, "skipped": 0, "elapsed_seconds": 240}
+  ],
+  "real_samples": [
+    {
+      "kind": "annual_report",
+      "source_sha256": "d64c410832f22f5127277bad6dc357c664aede523561af99150c494857fd3aa5",
+      "metadata_is_fixture": true,
+      "note": "Read-only reference only; the real-download E2E (fc803 LT-*) was NOT exercised by this lane because it is baseline-red (see remaining[0]); zero real downloads were performed."
+    }
+  ],
+  "cleanup": {
+    "test_root": "pytest tmp roots under %TEMP%\\pytest-of-*",
+    "before_digest": "not recorded (no project-owned test root; all fixtures use pytest TemporaryDirectory)",
+    "after_digest": "not recorded",
+    "restored": true,
+    "note": "Temp parents are removeable after the run (bounded-transport reaper guarantees self-created children/pipes are gone); diag helper scripts committed by accident earlier were deleted before commit; production config/raw/owner files untouched (file-level SHA check: git status clean on tracked files)."
+  },
+  "protection": {
+    "originals_unchanged": true,
+    "owner_files_unchanged": true,
+    "production_written": false
+  },
+  "calls": {
+    "network": 0,
+    "download": 0,
+    "llm": 0
+  },
+  "metrics": {
+    "worker_calls_removed": "2 per authorized download (worker-status probe; worker-pause/worker-resume were already no-ops upstream since CWP 73de6be — code deleted entirely)",
+    "pause_files_retired": [
+      ".source_catalog/filing_fetch_pause.refcount",
+      ".source_catalog/filing_fetch_pause.owner"
+    ],
+    "shared_module": "scripts/ff_process_transport.py (run_bounded / run_bounded_json / pid_is_alive)",
+    "stdout_cap_during_read": "32 MiB (MAX_JSON_OUTPUT_BYTES, shared by both runners, stops mid-read; non-ASCII counted as UTF-8 bytes)",
+    "stderr_cap_concurrent": "64 KiB concurrent read, raw body never echoed",
+    "deadline": "one shared monotonic budget, no per-stage renewal; ET outer cleanup grace stays 3s (unchanged)",
+    "tree_reaping": "Windows kill-on-close job object (TerminateJobObject verified against a live grandchild holding the pipe: parent returns ~0.3s after child exit); POSIX: child's own process group via setsid + killpg",
+    "ratchet": "ff_process_transport.py max per-function complexity 8 (NEW_FILE_MAX 10)",
+    "baseline_red": "10 pre-existing failures on clean base d4d2fac (identical set re-verified before changes)"
+  },
+  "integration_notes": [
+    "Mock surface change for downstream test authors: fetch_filing's subprocess boundary is now fetch_filing._run_bounded_json (returns (stdout_bytes, stderr_bytes, returncode)); test_fetch_filing / test_fc802 / test_s3 / test_source_ref_v2_db_query / test_transcript_companion_transport were migrated in this lane via tests/support/__init__.py (bounded_response / bounded_side_effect).",
+    "resolve_filing signature unchanged; pause_worker / worker_graceful_timeout_seconds / worker_resume_wait_seconds are accepted no-ops. --no-pause-worker, --worker-graceful-timeout-seconds, --worker-resume-wait-seconds parse and are inert (help updated).",
+    "--allow-acquisition-while-paused is no longer appended to ensure/close-gap argv (it was accepted as a no-op upstream and is meaningless without the pause scope).",
+    "ff_process_transport imports pywin32 lazily and degrades to taskkill /T when unavailable; job assignment requires PROCESS_ALL_ACCESS (narrower rights get EPERM).",
+    "SKILL.md workflow step 5 and Notes rewritten for the retirement; CHANGELOG Unreleased carries the bounded-transport and retirement entries."
+  ],
+  "remaining": [
+    "BASELINE-RED (pre-existing on clean d4d2fac, re-verified before changes; NOT introduced by this lane): tests/test_fc803_minimal_download.py LT-01/02/05/07/09 and tests/test_e2e_isolated_wiki.py TestCatalogLockContention (2) + TestWorkerPaused (3). Root cause: upstream CWP 288b028 (`feat: enforce source acquisition budgets`) rejects `ensure --allow-download` without --max-download-* flags; these tests' requests carry no acquisition_limits, so CWP fails the ensure and the old expected statuses (not_found / capture_ready) become fatal. MAIN should either add acquisition_limits to those fixtures or relax the CWP gate; out of this lane's write-set (wire/golden semantics belong to MAIN §6).",
+    "e2e/test_source_ref_v2_cli.py stays skipped without FILING_FETCH_V2_WIKI_SRC (env-gated by design, consistent with base d4d2fac).",
+    "Windows-only evidence for the grandchild reaper: the POSIX setsid/killpg path is implemented but the E2E ran on win32; no POSIX CI in this lane's matrix."
+  ]
+}
