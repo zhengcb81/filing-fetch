@@ -98,7 +98,14 @@ def main(argv: list[str]) -> int:
         return _fail("provider_unavailable", "spy provider is offline (LT-05)")
     if action == "discover":
         market = str(payload.get("market") or "")
-        _ok({"candidates": _candidate_for(market, payload)})
+        candidates = _candidate_for(market, payload)
+        size = len(json.dumps(candidates, ensure_ascii=False).encode("utf-8"))
+        budget = payload.get("acquisition_budget")
+        if budget is not None and size > budget["max_response_bytes"]:
+            return _fail("response_budget_exceeded", "fake metadata exceeds its budget")
+        _ok({"candidates": candidates, "acquisition_usage": {
+            "schema_version": "1.0", "response_bytes": size, "cost_usd": "0"
+        }})
         return 0
     if action == "fetch":
         staging = None
@@ -110,6 +117,9 @@ def main(argv: list[str]) -> int:
         body = b"%PDF-1.4 spy-provider " + str(
             payload.get("provider_document_id", "doc")
         ).encode("utf-8")
+        budget = payload.get("acquisition_budget")
+        if budget is not None and len(body) > budget["max_response_bytes"]:
+            return _fail("response_budget_exceeded", "fake document exceeds its budget")
         staged = staging / f"{payload.get('provider_document_id', 'doc')}.pdf"
         staged.write_bytes(body)
         receipt = {
@@ -127,7 +137,9 @@ def main(argv: list[str]) -> int:
             "adapter_name": "spy-provider",
             "adapter_version": "1.0.0",
         }
-        _ok({"receipt": receipt})
+        _ok({"receipt": receipt, "acquisition_usage": {
+            "schema_version": "1.0", "response_bytes": len(body), "cost_usd": "0"
+        }})
         return 0
     return _fail("unknown_action", f"unknown action: {action}")
 

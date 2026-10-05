@@ -13,10 +13,11 @@ Two request schemas are accepted:
 | Schema | Status | Download intent | Result |
 |---|---|---|---|
 | `2.0` | **recommended** | one `filing_intent`, bounded by `acquisition_limits` | pathless `source_ref` candidate |
-| `1.2` / `1.1` | legacy, thin compatibility | the `--allow-download` flag | path-bearing handle |
+| `1.2` / `1.1` | legacy, thin compatibility | the `--allow-download` flag plus explicit resource limits when acquiring | path-bearing handle |
 
 New callers use `2.0`. The older schemas keep working for existing callers and
-gain no new behaviour.
+retain their result shapes. Legacy acquisition requests may provide the same
+validated `acquisition_limits` object; existing read-only reuse does not need it.
 
 ## Required workflow (schema 2.0)
 
@@ -52,7 +53,9 @@ gain no new behaviour.
 ## Acquisition limits
 
 `filing_intent: "fetch_if_missing"` **requires** `acquisition_limits`, and
-`reuse_only` **forbids** it:
+`reuse_only` **forbids** it (except bounded metadata discovery for
+`latest_as_of`). Legacy 1.1/1.2 can also supply this object when explicitly
+acquiring; FF never invents byte, time or fee ceilings:
 
 | Field | Rule |
 |---|---|

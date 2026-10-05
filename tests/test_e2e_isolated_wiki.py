@@ -330,6 +330,7 @@ class TestCatalogLockContention(MutatingE2E):
                 "document_kind": "annual_report",
                 "fiscal_year": 2024,
                 "as_of_date": "2026-07-31",
+                "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
             },
             allow_download=True,
             timeout=timeout,
@@ -394,6 +395,7 @@ class TestWorkerPaused(MutatingE2E):
             "market": "CN",
             "document_kind": "quarterly_report",
             "as_of_date": "2026-07-31",
+                "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
         }
         rc, out, err = self.wiki.run_fetch(request, allow_download=True, timeout=30)
         self.assertEqual(rc, 2, out + err)
@@ -423,6 +425,7 @@ class TestWorkerPaused(MutatingE2E):
             "market": "CN",
             "document_kind": "quarterly_report",
             "as_of_date": "2026-07-31",
+                "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
         }
         rc, out, err = self.wiki.run_fetch(
             request, allow_download=True, timeout=30, extra_args=["--no-pause-worker"]
@@ -444,6 +447,7 @@ class TestWorkerPaused(MutatingE2E):
             "market": "CN",
             "document_kind": "quarterly_report",
             "as_of_date": "2026-07-31",
+                "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
         }
         rc, out, err = self.wiki.run_fetch(request, allow_download=True, timeout=30)
         self.assertEqual(rc, 2, out + err)

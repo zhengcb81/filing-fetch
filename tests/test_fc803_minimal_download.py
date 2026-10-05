@@ -37,6 +37,7 @@ adapters:
     name: "spy-provider"
     version: "1.0.0"
     interface: "json_command_v1"
+    supports_acquisition_budget: true
     project_root: "${{PROJECT_ROOT}}"
     config_root: null
     command: {command}
@@ -150,6 +151,7 @@ class Fc803MinimalDownloadTests(unittest.TestCase):
     def _authorized_latest(self) -> dict:
         return {
             "schema_version": "1.2",
+            "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
             "company_query": "宁德时代",
             "market": "CN",
             "document_kind": "annual_report",

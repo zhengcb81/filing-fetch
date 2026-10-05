@@ -165,7 +165,7 @@ roots:
 # the CN adapter (e2e-noop-cn) is ever invoked in the Phase 3 scenarios.
 _NOOP_ADAPTER = ["${PYTHON_EXECUTABLE}", "-c",
                  "import sys,json;json.dump({'schema_version':'1.0','status':'ok',"
-                 "'adapter':{'name':'e2e-noop-cn','version':'1.0.0'},'candidates':[]},sys.stdout)"]
+                 "'adapter':{'name':'e2e-noop-cn','version':'1.0.0'},'candidates':[],'acquisition_usage':{'schema_version':'1.0','response_bytes':0,'cost_usd':'0'}},sys.stdout)"]
 
 _ACQUISITION_YAML = """schema_version: "1.1"
 staging_root: "${PROJECT_ROOT}/.source_catalog/staging"
@@ -175,6 +175,7 @@ adapters:
     name: "e2e-noop-cn"
     version: "1.0.0"
     interface: "json_command_v1"
+    supports_acquisition_budget: true
     project_root: "${PROJECT_ROOT}"
     config_root: null
     command: __NOOP_ADAPTER__

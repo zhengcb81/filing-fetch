@@ -105,6 +105,7 @@ _REQUEST_SCHEMA_1_1_FIELDS = frozenset(
         "language",
         "provider",
         "provider_document_id",
+        "acquisition_limits",
     }
 )
 
@@ -195,6 +196,8 @@ def validate_request(request: dict[str, Any]) -> None:
         )
     if version == FILING_V2_REQUEST_SCHEMA_VERSION:
         _validate_v2_request(request)
+    elif "acquisition_limits" in request:
+        _validate_acquisition_limits("fetch_if_missing", request["acquisition_limits"])
     authorization = request.get("authorization")
     if authorization is not None:
         # FC-802: the close-gap input — provider + accessions + caps +

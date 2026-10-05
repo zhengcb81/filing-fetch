@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Complete subprocess lifetime (MAIN P5-FF acceptance).** The deadline
+  starts before spawn and covers blocked stdin, both pipes and process exit;
+  equal byte limits are valid. Windows runs the actual command only after
+  native job assignment; POSIX retains the session group after leader exit.
+  One 2.5s cleanup grace reaps the owned tree and threads; no pywin32 runtime
+  dependency, process scan or renewed per-stage deadline.
+- **Legacy resource-limit compatibility.** 1.1/1.2 accept the existing optional
+  `acquisition_limits`, sharing 2.0 validation and forwarding. Response and
+  handle formats are unchanged; download budgets remain explicit.
+
 - **Bounded process transport for every JSON child (P5-FF).** One shared
   module (`scripts/ff_process_transport.py`) bounds the filing runner's
   company-wiki calls and the transcript transport's ET/CWP calls: stdout and

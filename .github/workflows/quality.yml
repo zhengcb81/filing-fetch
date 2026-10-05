@@ -74,6 +74,8 @@ jobs:
           tests/test_fetch_filing.py
           tests/test_fc802_gap_orchestration.py
           tests/test_fc1204_coverage_gap.py
+          tests/test_p5_process_lifecycle.py
+          tests/test_p5_legacy_request_limits.py
           tests/test_complexity_ratchet.py
           tests/test_verify_plan_claims.py
           tests/test_latest_mode.py

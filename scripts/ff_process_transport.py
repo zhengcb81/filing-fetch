@@ -1,298 +1,263 @@
-"""Bounded subprocess transport for filing-fetch JSON helpers.
-
-One shared layer for every JSON-speaking child this repo spawns (the
-company-wiki catalog CLI and the ET tool). It bounds stdout and stderr in
-actual UTF-8 bytes *while reading*, shares one deadline per request, decodes
-strictly, and reaps only the process tree it created. It knows nothing about
-filings, sources or transcripts — bytes/time/exit/cleanup only.
-"""
+"""One bounded lifetime for JSON children: bytes, deadline, exit and owned-tree cleanup."""
 
 from __future__ import annotations
 
+import math
 import os
 import subprocess
+import sys
 import threading
 import time
-from typing import Any, cast
+from typing import BinaryIO, cast
 
-# One ceiling for every JSON subprocess this repo spawns; the filing runner
-# imports it and the ET/transcript transport shares the same module so all
-# transports fail closed at the same number.
+from ff_process_tree import (
+    WindowsJob,
+    assign_windows_job,
+    kill_owned_group,
+    pid_is_alive as pid_is_alive,
+)
+
 MAX_JSON_OUTPUT_BYTES = 32 * 1024 * 1024
-
 _DEFAULT_STDOUT_CAP = MAX_JSON_OUTPUT_BYTES
 _DEFAULT_STDERR_CAP = 64 * 1024
+_CLEANUP_GRACE_SECONDS = 2.5
 
-# Cleanup grace used to reap the child tree after a deadline/cap failure.
-# Bounded; it is never counted as new download budget.
-_TREE_KILL_GRACE_SECONDS = 10.0
+# Waiting bootstrap: no user code executes before job assignment succeeds.
+# os.read avoids prefetching request bytes. Keep this parent alive and propagate
+# the actual child's exit status; Windows os.execv would lose that guarantee.
+_WINDOWS_BOOTSTRAP = (
+    "import os,subprocess,sys\n"
+    "if os.read(0,1)!=b'\\x00': sys.exit(125)\n"
+    "p=subprocess.Popen(sys.argv[1:],stdin=sys.stdin,stdout=sys.stdout,stderr=sys.stderr,close_fds=True,"
+    "creationflags=subprocess.CREATE_NO_WINDOW)\n"
+    "sys.exit(p.wait())\n"
+)
 
 
 class TransportError(Exception):
-    """Base class for named bounded-transport failures."""
+    """A bounded transport failed; payloads are never included in its message."""
 
 
 class OutputLimitExceeded(TransportError):
-    """The child wrote past a read-time byte cap (stdout or stderr)."""
+    """A pipe exceeded its exact byte cap."""
 
 
 class ChildTimeout(TransportError):
-    """The child outlived the bounded deadline."""
+    """The complete child lifetime exceeded the single deadline."""
 
 
 class ChildFailed(TransportError):
-    """The child exited nonzero without hitting any cap."""
+    """Nonzero exit / incomplete input; caller owns structured error classification."""
 
     def __init__(
-        self,
-        message: str,
-        *,
-        returncode: int,
-        stdout: bytes = b"",
-        stderr: bytes = b"",
+        self, message: str, *, returncode: int, stdout: bytes = b"", stderr: bytes = b""
     ) -> None:
         super().__init__(message)
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
 
 
-def _job_available() -> bool:
-    if os.name != "nt":
-        return False
+def _assign_windows_job(proc: subprocess.Popen) -> WindowsJob:
+    return assign_windows_job(proc)
+
+
+def _kill_tree(job: WindowsJob | None, proc: subprocess.Popen) -> None:
     try:
-        import win32api  # type: ignore[import-untyped]  # noqa: F401
-        import win32job  # type: ignore[import-untyped]  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
-def _assign_windows_job(proc: subprocess.Popen) -> Any | None:
-    """Windows: assign the child (before grandchildren exist) to a job with
-    KILL_ON_JOB_CLOSE, so reaping the tree is deterministic and never
-    dependent on taskkill's snapshot walk. Returns the job handle or None."""
-    try:
-        import win32api  # type: ignore[import-untyped]
-        import win32job  # type: ignore[import-untyped]
-
-        job = win32job.CreateJobObject(None, "")
-        info = win32job.QueryInformationJobObject(job, win32job.JobObjectExtendedLimitInformation)
-        info["BasicLimitInformation"]["LimitFlags"] = win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        win32job.SetInformationJobObject(job, win32job.JobObjectExtendedLimitInformation, info)
-        # PROCESS_ALL_ACCESS: assignment with narrower rights is refused
-        # with EPERM on standard processes.
-        handle = win32api.OpenProcess(0x1F0FFF, False, proc.pid)
-        win32job.AssignProcessToJobObject(job, handle)
-        return job
-    except Exception:
-        return None
-
-
-def _creationflags() -> int:
-    if os.name != "nt":
-        return 0
-    return int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
-
-
-def _preexec() -> None:
-    # POSIX only: own process group so the reaper can signal the whole tree.
-    os.setsid()  # type: ignore[attr-defined]  # pragma: no cover - POSIX only
-
-
-def _windows_tree_kill(job: Any | None, proc: subprocess.Popen) -> None:
-    if job is not None:
-        try:
-            import win32job  # type: ignore[import-untyped]
-
-            win32job.TerminateJobObject(job, 1)
-        except Exception:
-            pass
-        return
-    try:
-        subprocess.run(
-            ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-            capture_output=True,
-            check=False,
-            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
-            timeout=15,
-        )
-    except (OSError, subprocess.SubprocessError):
-        pass
-
-
-def _posix_group_kill(pid: int) -> None:
-    import errno
-    import signal
-
-    try:
-        os.killpg(os.getpgid(pid), signal.SIGKILL)  # type: ignore[attr-defined]
-    except OSError as exc:
-        if exc.errno != errno.ESRCH:
-            try:
-                os.kill(pid, signal.SIGKILL)  # type: ignore[attr-defined]
-            except OSError:
-                pass
-
-
-def _kill_tree(job: Any | None, proc: subprocess.Popen) -> None:
-    """Kill exactly the tree this call created (never scan other processes)."""
-    try:
-        if os.name == "nt":
-            _windows_tree_kill(job, proc)
+        if job is not None:
+            job.terminate()
         else:
-            _posix_group_kill(proc.pid)
+            kill_owned_group(proc.pid)
     finally:
-        try:
+        if proc.poll() is None:
             proc.kill()
-        except OSError:
-            pass
 
 
-def _drain_tree(job: Any | None, proc: subprocess.Popen) -> None:
-    _kill_tree(job, proc)
-    try:
-        proc.wait(timeout=_TREE_KILL_GRACE_SECONDS)
-    except subprocess.TimeoutExpired:
-        pass  # reaped on job close; never hang on it
-
-
-def pid_is_alive(pid: int) -> bool:
-    """Best-effort pid liveness for tests/diagnostics; unknown states count
-    as alive (conservative)."""
-    if os.name == "nt":
-        try:
-            import ctypes
-
-            kernel32 = ctypes.windll.kernel32
-            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-            if not handle:
-                return False
-            kernel32.CloseHandle(handle)
-            return True
-        except Exception:
-            return True
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except OSError:
-        return True
-
-
-def _close_job(job) -> None:
-    if job is None:
-        return
-    try:
-        import win32api  # type: ignore[import-untyped]
-
-        win32api.CloseHandle(job)
-    except Exception:
-        pass
+def _close_pipes(proc: subprocess.Popen) -> None:
+    for pipe in (proc.stdin, proc.stdout, proc.stderr):
+        if pipe is not None:
+            pipe.close()
 
 
 def _spawn(command, input_bytes, cwd, env):
+    windows = os.name == "nt"
+    argv = [sys.executable, "-B", "-S", "-c", _WINDOWS_BOOTSTRAP, *command] if windows else command
     proc = subprocess.Popen(
-        command,
-        stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
+        argv,
+        stdin=subprocess.PIPE if windows or input_bytes is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=cwd,
         env=env,
         shell=False,
-        creationflags=_creationflags(),
-        preexec_fn=None if os.name == "nt" else _preexec,
+        bufsize=0,
+        start_new_session=not windows,
+        creationflags=subprocess.CREATE_NO_WINDOW if windows else 0,
     )
-    job = _assign_windows_job(proc) if _job_available() else None
+    try:
+        job = _assign_windows_job(proc) if windows else None
+    except BaseException:
+        # Bootstrap cannot create user children yet. Even assignment failures are reaped.
+        proc.kill()
+        proc.wait(timeout=_CLEANUP_GRACE_SECONDS)
+        _close_pipes(proc)
+        raise TransportError("could not establish owned process tree") from None
     return proc, job
 
 
-def _reader_loop(stream, counter, cap, kind):
-    # Count bytes AS THEY ARE READ: an exceeded cap stops the read close to
-    # the cap, never waiting on a fully-buffered child first. Bytes are the
-    # raw read size, so non-ASCII is counted as UTF-8 bytes.
-    chunks: list[bytes] = []
-    error: BaseException | None = None
-    try:
-        while True:
-            remaining = cap - counter[0]
-            if remaining <= 0:
-                raise OutputLimitExceeded(f"{kind} exceeded its byte cap")
-            piece = stream.read(min(65536, remaining + 1))
-            if not piece:
-                return chunks, error
-            chunks.append(piece)
-            counter[0] += len(piece)
-            if counter[0] > cap:
-                raise OutputLimitExceeded(f"{kind} exceeded its byte cap")
-    except OutputLimitExceeded as exc:
-        return chunks, exc
-    except OSError as exc:
-        return chunks, exc
+class _IOState:
+    """Only reader threads own their streams; controller owns the lifecycle."""
 
+    def __init__(self) -> None:
+        self.wake = threading.Event()
+        self.lock = threading.Lock()
+        self.chunks: dict[str, list[bytes]] = {"stdout": [], "stderr": []}
+        self.counts = {"stdout": 0, "stderr": 0}
+        self.finished: set[str] = set()
+        self.error: TransportError | None = None
+        self.write_error = False
+        self.threads: list[threading.Thread] = []
 
-def _start_readers(proc, stdout_cap, stderr_cap):
-    counters = {"stdout": [0], "stderr": [0]}
-    holders: dict[str, BaseException | None] = {}
-    chunks: dict[str, list[bytes]] = {}
-    threads: list[threading.Thread] = []
-    done = threading.Event()
+    def finish(self, kind: str, error: TransportError | None = None) -> None:
+        with self.lock:
+            self.finished.add(kind)
+            if self.error is None:
+                self.error = error
+        self.wake.set()
 
-    def _run(k: str, stream) -> None:
-        data, error = _reader_loop(stream, counters[k], caps[k], k)
-        chunks[k] = data
-        holders[k] = error
+    def read(self, stream: BinaryIO, kind: str, cap: int) -> None:
+        error: TransportError | None = None
         try:
+            while True:
+                # At cap still read ONE probe byte: EOF is valid; cap+1 is not.
+                piece = stream.read(min(65536, cap - self.counts[kind] + 1))
+                if not piece:
+                    break
+                self.chunks[kind].append(piece)
+                self.counts[kind] += len(piece)
+                if self.counts[kind] > cap:
+                    error = OutputLimitExceeded(f"{kind} exceeded its byte cap")
+                    break
+        except (OSError, ValueError):
+            error = TransportError(f"could not read child {kind}")
+        finally:
             stream.close()
-        except OSError:
-            pass
-        if len(holders) == 2:
-            done.set()
+            self.finish(kind, error)
 
-    caps = {"stdout": stdout_cap, "stderr": stderr_cap}
-    for kind, stream in (("stdout", proc.stdout), ("stderr", proc.stderr)):
-        thread = threading.Thread(
-            target=_run,
-            args=(kind, stream),
-            name=f"ff-process-{kind}-reader",
-            daemon=False,
-        )
+    def write(self, stream: BinaryIO, data: bytes) -> None:
+        try:
+            view = memoryview(data)
+            while view:
+                size = stream.write(view)
+                if not size:
+                    raise OSError("incomplete stdin write")
+                view = view[size:]
+        except (OSError, ValueError):
+            self.write_error = True
+        finally:
+            stream.close()
+            self.finish("stdin")
+
+    def start(
+        self, proc: subprocess.Popen, payload: bytes | None, stdout_cap: int, stderr_cap: int
+    ) -> None:
+        for kind, stream, cap in (
+            ("stdout", proc.stdout, stdout_cap),
+            ("stderr", proc.stderr, stderr_cap),
+        ):
+            self.launch(self.read, (stream, kind, cap), f"{kind}-reader")
+        if proc.stdin is None:
+            self.finish("stdin")
+        else:
+            data = (b"\0" if os.name == "nt" else b"") + (payload or b"")
+            self.launch(self.write, (proc.stdin, data), "stdin-writer")
+
+    def launch(self, target, args, kind: str) -> None:
+        thread = threading.Thread(target=target, args=args, name=f"ff-process-{kind}", daemon=False)
+        self.threads.append(thread)
         thread.start()
-        threads.append(thread)
-    return threads, chunks, counters, holders, done
+
+    def snapshot(self) -> tuple[bool, TransportError | None]:
+        with self.lock:
+            return len(self.finished) == 3, self.error
 
 
-def _pump_stdin(proc, input_bytes):
-    if input_bytes is None or proc.stdin is None:
-        return None
-    try:
-        proc.stdin.write(input_bytes)
-        proc.stdin.close()
-    except OSError as exc:
-        return exc
-    return None
+def _validate_timeout(value) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("timeout must be a finite number")
+    if not math.isfinite(value):
+        raise ValueError("timeout must be finite")
+    if value <= 0:
+        raise ChildTimeout("deadline expired before the child started")
 
 
-def _await_streams(done, proc, job, timeout_seconds):
-    """Wait until both readers finish, the shared deadline expires, or the
-    child exits (then reap the tree so grandchild-held pipes can EOF)."""
-    deadline = time.monotonic() + timeout_seconds
+def _validate_caps(*caps) -> None:
+    for cap in caps:
+        if isinstance(cap, bool) or not isinstance(cap, int) or cap <= 0:
+            raise ValueError("output caps must be positive integer byte counts")
+
+
+def _validate_input(command, input_bytes) -> None:
+    if not command or not command[0] or not all(isinstance(arg, str) for arg in command):
+        raise ValueError("command must contain string arguments and an executable")
+    if input_bytes is not None and not isinstance(input_bytes, bytes):
+        raise ValueError("stdin must be bytes")
+
+
+def _validate(timeout_seconds, stdout_cap, stderr_cap, command, input_bytes) -> None:
+    _validate_timeout(timeout_seconds)
+    _validate_caps(stdout_cap, stderr_cap)
+    _validate_input(command, input_bytes)
+
+
+def _await_lifetime(proc, job, state: _IOState, deadline: float) -> None:
+    tree_stopped = False
     while True:
+        state.wake.clear()
+        complete, error = state.snapshot()
+        if error is not None:
+            raise error
+        code = proc.poll()
+        if complete and code is not None:
+            return
+        if code is not None and not tree_stopped:
+            _kill_tree(job, proc)  # Orphans may hold pipe handles even after root exit.
+            tree_stopped = True
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return ChildTimeout("child exceeded the shared deadline")
-        if done.wait(min(0.25, remaining)):
-            return None
-        if proc.poll() is None:
-            continue
-        # Direct child is done but a descendant may still hold the pipe
-        # write ends; it belongs to the tree this call created — reap it.
+            raise ChildTimeout("child exceeded the shared deadline")
+        state.wake.wait(min(0.02, remaining))
+
+
+def _cleanup(proc, job, state: _IOState) -> None:
+    deadline = time.monotonic() + _CLEANUP_GRACE_SECONDS
+    try:
         _kill_tree(job, proc)
-        try:
-            proc.wait(timeout=_TREE_KILL_GRACE_SECONDS)
-        except subprocess.TimeoutExpired:
-            pass
+    finally:
+        if job is not None:
+            job.close()  # Also kills descendants if explicit termination failed.
+    proc.wait(timeout=max(0.001, deadline - time.monotonic()))
+    for thread in state.threads:
+        thread.join(timeout=max(0.0, deadline - time.monotonic()))
+    if any(thread.is_alive() for thread in state.threads):
+        raise TransportError("owned process cleanup exceeded its grace period")
+    _close_pipes(proc)
+
+
+def _result(proc, state: _IOState) -> dict[str, object]:
+    stdout, stderr = b"".join(state.chunks["stdout"]), b"".join(state.chunks["stderr"])
+    if proc.returncode != 0 or state.write_error:
+        raise ChildFailed(
+            "child closed stdin early" if state.write_error else f"child exited {proc.returncode}",
+            returncode=proc.returncode,
+            stdout=stdout,
+            stderr=stderr,
+        )
+    return dict(
+        stdout=stdout,
+        stderr=stderr,
+        stdout_bytes_read=state.counts["stdout"],
+        stderr_bytes_read=state.counts["stderr"],
+        returncode=0,
+    )
 
 
 def run_bounded(
@@ -305,70 +270,23 @@ def run_bounded(
     stdout_cap_bytes: int = _DEFAULT_STDOUT_CAP,
     stderr_cap_bytes: int = _DEFAULT_STDERR_CAP,
 ) -> dict[str, object]:
-    """Run one child with read-time byte caps on stdout and stderr.
+    """Bound stdin, both output pipes and process exit by one absolute deadline.
 
-    Returns ``{"stdout": bytes, "stderr": bytes, "stdout_bytes_read": int,
-    "stderr_bytes_read": int, "returncode": int}`` on success. Raises a named
-    TransportError subclass on cap overflow or deadline overrun; a nonzero
-    exit is raised as :class:`ChildFailed` for the caller to classify.
+    Success returns bytes/counts/returncode; nonzero exit raises ChildFailed with
+    captured bytes. Cleanup has one separate 2.5s maximum, never a renewed request.
     """
-    if timeout_seconds <= 0:
-        raise ChildTimeout("deadline expired before the child started")
+    _validate(timeout_seconds, stdout_cap_bytes, stderr_cap_bytes, command, input_bytes)
+    deadline = time.monotonic() + timeout_seconds
     proc, job = _spawn(command, input_bytes, cwd, env)
-    threads, chunks, counters, holders, done = _start_readers(
-        proc, stdout_cap_bytes, stderr_cap_bytes
-    )
-    write_error = _pump_stdin(proc, input_bytes)
-    overflow = _await_streams(done, proc, job, timeout_seconds)
-    for thread in threads:
-        thread.join(timeout=5)
-    return _finalize(
-        job,
-        proc,
-        overflow,
-        write_error,
-        holders,
-        chunks,
-        counters,
-    )
-
-
-def _final_result(chunks, counters, job):
-    _close_job(job)
-    return {
-        "stdout": b"".join(chunks.get("stdout") or []),
-        "stderr": b"".join(chunks.get("stderr") or []),
-        "stdout_bytes_read": counters["stdout"][0],
-        "stderr_bytes_read": counters["stderr"][0],
-        "returncode": 0,
-    }
-
-
-def _raise_static(job, proc, returncode, chunks, write_error):
-    _drain_tree(job, proc)
-    if write_error is not None:
-        raise ChildFailed(
-            "child closed stdin before the request was fully written",
-            returncode=returncode,
-        )
-    raise ChildFailed(
-        f"child exited {returncode}",
-        returncode=returncode,
-        stdout=b"".join(chunks.get("stdout") or []),
-        stderr=b"".join(chunks.get("stderr") or []),
-    )
-
-
-def _finalize(job, proc, overflow, write_error, holders, chunks, counters):
-    if overflow is None:
-        overflow = holders.get("stdout") or holders.get("stderr")
-    if overflow is not None:
-        _drain_tree(job, proc)
-        raise overflow  # named: OutputLimitExceeded / ChildTimeout
-    returncode = proc.wait()
-    if returncode == 0 and write_error is None:
-        return _final_result(chunks, counters, job)
-    _raise_static(job, proc, returncode, chunks, write_error)
+    state = _IOState()
+    try:
+        if time.monotonic() >= deadline:
+            raise ChildTimeout("deadline expired during spawn")
+        state.start(proc, input_bytes, stdout_cap_bytes, stderr_cap_bytes)
+        _await_lifetime(proc, job, state, deadline)
+    finally:
+        _cleanup(proc, job, state)
+    return _result(proc, state)
 
 
 def run_bounded_json(
@@ -381,13 +299,7 @@ def run_bounded_json(
     stdout_cap_bytes: int = _DEFAULT_STDOUT_CAP,
     stderr_cap_bytes: int = _DEFAULT_STDERR_CAP,
 ) -> tuple[bytes, bytes, int]:
-    """run_bounded for JSON children: strict UTF-8 decode of both pipes.
-
-    Returns ``(stdout_bytes, stderr_bytes, returncode)``. A nonzero exit is
-    still a *return* here — callers own the structured-stderr classification
-    (the layer never inspects payloads). Only caps, timeouts and encoding
-    failures are this layer's named errors.
-    """
+    """Success bytes are strict UTF-8. ChildFailed retains caller-owned error bytes."""
     result = run_bounded(
         command,
         timeout_seconds=timeout_seconds,
@@ -397,11 +309,10 @@ def run_bounded_json(
         stdout_cap_bytes=stdout_cap_bytes,
         stderr_cap_bytes=stderr_cap_bytes,
     )
-    stdout_bytes = cast(bytes, result["stdout"])
-    stderr_bytes = cast(bytes, result["stderr"])
+    stdout, stderr = cast(bytes, result["stdout"]), cast(bytes, result["stderr"])
     try:
-        stdout_bytes.decode("utf-8", errors="strict")
-        stderr_bytes.decode("utf-8", errors="strict")
-    except UnicodeError as exc:
-        raise TransportError("child output was not valid UTF-8") from exc
-    return stdout_bytes, stderr_bytes, cast(int, result["returncode"])
+        stdout.decode("utf-8", errors="strict")
+        stderr.decode("utf-8", errors="strict")
+    except UnicodeError as error:
+        raise TransportError("child output was not valid UTF-8") from error
+    return stdout, stderr, cast(int, result["returncode"])

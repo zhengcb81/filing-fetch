@@ -4,6 +4,10 @@
     "host-absolute-path|tests/test_bundle_fidelity.py|C:/catalog",
     "host-absolute-path|tests/test_dropbox_config_invariants.py|/tmp",
     "host-absolute-path|tests/test_fetch_filing.py|/tmp",
-    "host-absolute-path|tests/test_policy_containment_fc501.py|/tmp"
-  ]
+    "host-absolute-path|tests/test_policy_containment_fc501.py|/tmp",
+    "host-absolute-path|tests/support/p5_process_probe.py|/proc/"
+  ],
+  "rationales": {
+    "host-absolute-path|tests/support/p5_process_probe.py|/proc/": "Linux kernel procfs PID state, checked only after the Windows branch returns and only when the stat file exists. It distinguishes already terminated zombies from running leaked children; this is an OS interface, not a fixture tied to one host directory. No concatenation workaround or global exemption."
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "note": "No digest is registered yet; a host-derived one must never be added here.",
+  "note": "Only fixed content digests independent of machine paths are registered.",
   "registered_hashes": {
     "aca22689b9369151932d8402614c48d0122a8049fee3015b420264bcfd335cf1": {
       "where": "tests/test_cwp_s0b_source_ref_contract.py",
@@ -20,6 +20,10 @@
     "f4f34a791ead2775d276435d3093ddfda74bfa324cd34e26f80e0273a1ae8ada": {
       "where": "tests/test_cwp_s0b_source_ref_contract.py",
       "rationale": "SHA-256 of CWP's fixed expected-version-mismatch JSON refusal; the bytes are synthetic and independent of local paths."
+    },
+    "d64c410832f22f5127277bad6dc357c664aede523561af99150c494857fd3aa5": {
+      "where": "e2e/run_p5_ff_real_source_acceptance.py",
+      "rationale": "SHA-256 of the fixed original AMEC FY2025 annual PDF used as the byte-preservation oracle. The input file is explicitly supplied by CLI; the digest is original content, not a host path, policy or receipt."
     }
   }
 }

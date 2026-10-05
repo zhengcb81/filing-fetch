@@ -133,7 +133,7 @@ class FilingRunnerReusesLayerTests(unittest.TestCase):
     """fetch_filing._run_company_wiki_json delegates to the shared layer."""
 
     def test_runner_uses_shared_transport(self):
-        self.assertIs(fetch_filing._run_bounded, fpt.run_bounded)
+        self.assertIs(fetch_filing._run_bounded_json, fpt.run_bounded_json)
 
     def test_runner_failure_stays_named_upstream_error(self):
         # An overflowing child is reclassified as the runner's own named code:
@@ -159,7 +159,7 @@ class TranscriptRunnerReusesLayerTests(unittest.TestCase):
     """transcript_tool_transport subprocesses delegate to the shared layer."""
 
     def test_runner_uses_shared_transport(self):
-        self.assertIs(ttt._run_bounded, fpt.run_bounded)
+        self.assertIs(ttt._run_bounded_json, fpt.run_bounded_json)
 
     def test_verified_open_stderr_cap_is_real(self):
         # Child writes far beyond the stderr cap; must fail during read.
