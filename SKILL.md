@@ -33,16 +33,13 @@ gain no new behaviour.
 4. **Resolve (reuse)** — query company-wiki for an already-indexed,
    capture-ready filing. If found, return the pathless candidate — no
    download.
-5. **Pause around downloads (legacy, now inert upstream)** — filing-fetch still
-   probes company-wiki's `worker-status` before an authorized download and, if
-   a live legacy worker were found, would pause/resume it around the fetch.
-   company-wiki retired those routes (`73de6be refactor: retire legacy source
-   catalog worker routes`): `ensure --allow-download` never consults worker
-   state, `--allow-acquisition-while-paused` is accepted as a no-op, and a
-   paused background worker therefore cannot block or fail a download any
-   more. `--no-pause-worker` still parses for existing callers and changes
-   nothing upstream. A `worker-status` failure is reported and the download
-   proceeds without a pause.
+ 5. **Pause around downloads (retired)** — filing-fetch no longer probes
+    worker-status or writes pause files: the old pause-around orchestration
+    was removed in this lane. company-wiki retired the worker routes
+    (`73de6be refactor: retire legacy source catalog worker routes`):
+    `ensure --allow-download` never consults worker state. `--no-pause-worker`
+    and the `--worker-*` timing flags still parse for existing callers and are
+    accepted as inert no-ops.
 6. **Ensure (download)** — only for `fetch_if_missing`. company-wiki routes by
    market and writes new bytes under
    `companies/{entity}/raw/financial_reports/{annual|semi_annual|quarterly}/`
@@ -95,11 +92,9 @@ request's `filing_intent` is the intent.
 - `--timeout-seconds` — overall deadline for the request (default 900).
 - `--source-ref-v2` — return a pathless source reference for a later
   company-wiki read (implied by schema `2.0`).
-- `--no-pause-worker` — legacy: skip the (now inert) worker pause-around.
-- `--worker-graceful-timeout-seconds` (default 5) — graceful stop window used
-  only if a legacy `worker-pause` route is available.
-- `--worker-resume-wait-seconds` (default 5) — how long `worker-resume` waits,
-  under the same condition.
+- `--no-pause-worker` — accepted for compatibility; inert (the worker
+  pause-around was retired). `--worker-graceful-timeout-seconds` and
+  `--worker-resume-wait-seconds` are inert as well.
 - `--debug` — include the per-candidate exclusion trace in a `not_found`.
 
 ```bash
@@ -282,16 +277,15 @@ pre-push gate reports drift but never performs the install.
   filing-fetch config change (FC-501/FC-1202: the RootPolicySnapshot is the
   single policy source; filing-fetch's `config/company_wiki.json` only
   locates the company-wiki root).
-- **Worker pause-around is inert upstream.** filing-fetch still probes
-  `worker-status` around downloads and would pause/resume a live legacy
-  worker, but company-wiki retired those routes (`73de6be`) and its
-  `ensure --allow-download` never consults worker state. A paused background
-  worker therefore neither blocks nor fails a download, with or without
-  `--no-pause-worker`.
-- `worker_pause_failed` / `worker_resume_failed` surface a pause / resume
-  failure against an older company-wiki that still exposes those routes; a
-  resume failure never loses the download (the handle is returned) but leaves
-  the worker paused — resume it manually.
+- **Worker pause-around is retired.** filing-fetch keeps neither the
+  `PausedWorkerScope` orchestration nor pause refcount/owner files; it makes
+  zero `worker-status`/`worker-pause`/`worker-resume` calls. company-wiki
+  retired those routes (`73de6be`) and its `ensure --allow-download` never
+  consults worker state. A paused background worker neither blocks nor fails
+  a download, with or without `--no-pause-worker`.
+- `worker_paused` can still surface as an upstream-reported taxonomy code from
+  an older company-wiki; it is passed through honestly (retryable) and never
+  auto-retried.
 - An ambiguous **identity** (multiple candidate securities, e.g. dual-class
   tickers GOOGL/GOOG) never auto-picks; the response lists `candidates[]` —
   refine `company_query` to a specific ticker or add `market`/`exchange`, then

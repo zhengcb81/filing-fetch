@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 from unittest.mock import patch
+from support import bounded_side_effect
 
 import pytest
 
@@ -110,8 +111,8 @@ def test_reuse_queries_db_only_without_resolve_or_source_bytes(tmp_path: Path) -
     root = _wiki(tmp_path)
     stats = {"calls": 0, "downloads": 0}
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(_query())],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(_query())]),
     ) as run, patch.object(
         Path, "read_bytes", side_effect=AssertionError("FF opened source bytes")
     ):
@@ -124,7 +125,7 @@ def test_reuse_queries_db_only_without_resolve_or_source_bytes(tmp_path: Path) -
     assert "identify" in commands[0]
     assert "company_wiki.source_catalog.source_query_cli" in commands[1]
     assert "resolve" not in commands[1] and "ensure" not in commands[1]
-    source_query = json.loads(run.call_args_list[1].kwargs["input"])
+    source_query = json.loads(run.call_args_list[1].kwargs["input_bytes"])
     assert source_query["entity"] == "Advanced Micro Devices, Inc."
     assert source_query["market"] == "US"
     assert source_query["security_id"] == "AMD"
@@ -151,8 +152,8 @@ def test_query_status_fails_closed_without_legacy_resolve(
     payload["matches"] = []
     rc = 2 if status in {"blocked", "unavailable"} else 0
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(payload, rc)],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(payload, rc)]),
     ) as run:
         with pytest.raises(FilingFetchError) as error:
             fetch_filing.resolve_filing(
@@ -177,8 +178,8 @@ def test_query_candidate_requires_identity_and_pathless_shape(
     else:
         candidate["canonical_path"] = str(tmp_path / "private" / "report.pdf")
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(_query(candidate=candidate))],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(_query(candidate=candidate))]),
     ) as run:
         with pytest.raises(FilingFetchError) as error:
             fetch_filing.resolve_filing(
@@ -197,8 +198,8 @@ def test_review_state_is_diagnostic_for_unverified_v2_candidate(
     candidate["prompt_injection_status"] = review_status
     candidate["capture_ready"] = False
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(_query(candidate=candidate))],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(_query(candidate=candidate))]),
     ) as run:
         handle = fetch_filing.resolve_filing(
             request=_request(), company_wiki_root=_wiki(tmp_path),
@@ -229,8 +230,8 @@ def test_missing_capture_descriptors_and_source_url_do_not_block_v2_candidate(
     ):
         candidate.pop(field)
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(_query(candidate=candidate))],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(_query(candidate=candidate))]),
     ):
         handle = fetch_filing.resolve_filing(
             request=_request(), company_wiki_root=_wiki(tmp_path),
@@ -249,8 +250,8 @@ def test_candidate_without_explicit_title_does_not_guess_from_filename(
     candidate = _candidate()
     candidate["title"] = None
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(_query(candidate=candidate))],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(_query(candidate=candidate))]),
     ):
         handle = fetch_filing.resolve_filing(
             request=_request(), company_wiki_root=_wiki(tmp_path),
@@ -361,8 +362,8 @@ def _latest_request() -> dict:
 def test_latest_as_of_uses_pathless_provider_ensure_without_download(tmp_path: Path) -> None:
     stats = {"calls": 0, "downloads": 0}
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(_operation_v2())],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(_operation_v2())]),
     ) as run, patch.object(
         Path, "read_bytes", side_effect=AssertionError("FF opened source bytes")
     ):
@@ -403,8 +404,8 @@ def test_latest_as_of_pathless_provider_gap_stays_structured_without_download(
     operation["source_ref"] = None
     operation["candidate"] = None
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(operation)],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(operation)]),
     ) as run:
         result = fetch_filing.resolve_filing(
             request=_latest_request(), company_wiki_root=_wiki(tmp_path),
@@ -424,8 +425,8 @@ def test_v2_explicit_bounded_intent_reaches_cwp_ensure(
     tmp_path: Path,
 ) -> None:
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(_operation_v2())],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(_operation_v2())]),
     ) as run:
         result = fetch_filing.resolve_filing(
             request=_v2_request(), company_wiki_root=_wiki(tmp_path),
@@ -448,7 +449,7 @@ def test_v2_request_rejects_legacy_per_document_authorization(tmp_path: Path) ->
         "max_items": 1, "max_bytes": 5_000_000,
         "expires_at": "2099-01-01T00:00:00Z",
     }
-    with patch("fetch_filing.subprocess.run") as run:
+    with patch("fetch_filing._run_bounded_json") as run:
         with pytest.raises(FilingFetchError) as error:
             fetch_filing.resolve_filing(
                 request=request, company_wiki_root=_wiki(tmp_path),
@@ -474,8 +475,8 @@ def test_operation_v2_rejects_drift_and_path_leaks(
     else:
         payload["candidate"]["source_ref"]["content_sha256"] = "0" * 64
     with patch(
-        "fetch_filing.subprocess.run",
-        side_effect=[_completed(_identity()), _completed(payload)],
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(payload)]),
     ):
         with pytest.raises(FilingFetchError) as error:
             fetch_filing.resolve_filing(

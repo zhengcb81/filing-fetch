@@ -25,6 +25,7 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 import fetch_filing  # noqa: E402
+import ff_process_transport  # noqa: E402
 from filing_contracts import FilingFetchError  # noqa: E402
 
 FIXTURE_CLI = Path(__file__).parent / "fixtures" / "s3_fake_cwp" / "fake_source_catalog_cli.py"
@@ -325,7 +326,9 @@ def test_shared_deadline_is_the_minimum_of_the_three_budgets(
 
 def test_request_deadline_bounds_the_real_child_run(tmp_path: Path) -> None:
     """The request's ``timeout_seconds`` (3) must bind the run, not the
-    global ``--timeout-seconds 60`` the CLI also carries."""
+    global ``--timeout-seconds 60`` the CLI also carries.  Elapsed covers the
+    bounded tree cleanup whose grace is additive and bounded (not download
+    budget), so the honest bound is budget+cleanup-grace (< 15s on CI)."""
     root = _wiki_root(tmp_path)
     capture = tmp_path / "argv.jsonl"
     started = time.monotonic()
@@ -337,7 +340,7 @@ def test_request_deadline_bounds_the_real_child_run(tmp_path: Path) -> None:
     )
     elapsed = time.monotonic() - started
     assert process.returncode == 2, process.stdout + process.stderr
-    assert elapsed < 12.0, f"request budget was ignored (took {elapsed:.1f}s)"
+    assert elapsed < 15.0, f"request budget was ignored (took {elapsed:.1f}s)"
     assert _payload(process)["status"] == "upstream_error"
     assert _argv_for(capture, "ensure")
 
@@ -362,8 +365,8 @@ def test_timeout_reclaims_the_child_but_never_an_unrelated_process(
         child_pids = [r["pid"] for r in _records(capture) if r["subcommand"] == "ensure"]
         assert child_pids, "the timed-out child was never started"
         for pid in child_pids:
-            assert not fetch_filing._pid_is_alive(pid), "timed-out child survived"
-        assert fetch_filing._pid_is_alive(sentinel.pid), "an unrelated process was killed"
+            assert not ff_process_transport.pid_is_alive(pid), "timed-out child survived"
+        assert ff_process_transport.pid_is_alive(sentinel.pid), "an unrelated process was killed"
     finally:
         sentinel.kill()
         sentinel.wait(timeout=30)
@@ -461,9 +464,6 @@ def test_close_gap_argv_carries_the_same_limits(
             root=_wiki_root(tmp_path),
             request=request,
             deadline=time.monotonic() + 30,
-            pause_worker=False,
-            worker_graceful_timeout_seconds=5.0,
-            worker_resume_wait_seconds=5.0,
             stats={"calls": 0, "downloads": 0},
         )
     assert error.value.code == "gap_not_closed"

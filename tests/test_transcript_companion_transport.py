@@ -16,6 +16,7 @@ import pytest
 from transcript_companion import resolve_companion_transcript
 import transcript_tool_transport
 from transcript_tool_transport import EarningsTranscriptsTransport
+from support import bounded_response
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "et_s0b" / "fmp_v2.fetched.json"
 _FIL_REF = {
@@ -85,8 +86,8 @@ def test_fmp_tool_result_is_imported_and_verified_through_cwp(tmp_path, monkeypa
     calls: list[tuple[list[str], bytes]] = []
     et_timeouts: list[float] = []
 
-    def fake_run(command, *, input, **kwargs):
-        calls.append((list(command), input))
+    def fake_run(command, *, input_bytes=None, timeout_seconds=None, **kwargs):
+        calls.append((list(command), input_bytes))
         joined = " ".join(command)
         if "source_query_cli" in joined:
             payload = {
@@ -98,10 +99,10 @@ def test_fmp_tool_result_is_imported_and_verified_through_cwp(tmp_path, monkeypa
                 "candidates": [],
                 "source_read_policy_sha256": "d" * 64,
             }
-            return _completed(list(command), stdout=json.dumps(payload).encode())
+            return bounded_response(_completed(list(command), stdout=json.dumps(payload).encode()))
         if str(tool) in command:
-            et_timeouts.append(kwargs["timeout"])
-            et_request = json.loads(input.decode("utf-8"))
+            et_timeouts.append(timeout_seconds)
+            et_request = json.loads(input_bytes.decode("utf-8"))
             assert et_request["download_authorized"] is True
             assert et_request["request_id"] == request_id
             assert et_request["provider"] == "fmp"
@@ -110,9 +111,9 @@ def test_fmp_tool_result_is_imported_and_verified_through_cwp(tmp_path, monkeypa
             assert et_request["fiscal_quarter"] == 3
             assert "api_key" not in et_request
             result = dict(producer, request_id=et_request["request_id"])
-            return _completed(list(command), stdout=json.dumps(result).encode())
+            return bounded_response(_completed(list(command), stdout=json.dumps(result).encode()))
         if "transcript_import_cli" in joined:
-            envelope = json.loads(input.decode("utf-8"))
+            envelope = json.loads(input_bytes.decode("utf-8"))
             assert envelope["schema_version"] == "company-wiki-transcript-import-request/2"
             assert "request_id" not in envelope["source_request"]
             assert envelope["source_request"]["allow_download"] is True
@@ -128,7 +129,7 @@ def test_fmp_tool_result_is_imported_and_verified_through_cwp(tmp_path, monkeypa
                 "provider_payload_sha256": digest,
                 "source_ref": ref,
             }
-            return _completed(list(command), stdout=json.dumps(result).encode())
+            return bounded_response(_completed(list(command), stdout=json.dumps(result).encode()))
         if "source_reader_cli" in joined:
             receipt = {
                 "schema_version": "2.1",
@@ -138,14 +139,14 @@ def test_fmp_tool_result_is_imported_and_verified_through_cwp(tmp_path, monkeypa
                 "content_sha256": digest,
                 "byte_size": len(original),
             }
-            return _completed(
+            return bounded_response(_completed(
                 list(command),
                 stdout=original,
                 stderr=json.dumps(receipt).encode(),
-            )
+            ))
         raise AssertionError(f"unexpected subprocess: {joined}")
 
-    monkeypatch.setattr("transcript_tool_transport.subprocess.run", fake_run)
+    monkeypatch.setattr("transcript_tool_transport._run_bounded_json", fake_run)
     transport = EarningsTranscriptsTransport(
         wiki_root=wiki_root,
         transcript_tool=tool,
@@ -309,7 +310,7 @@ def test_unknown_publication_lookup_suppresses_second_provider_call(tmp_path, mo
     }
     calls: list[list[str]] = []
 
-    def fake_run(command, *, input=None, **kwargs):
+    def fake_run(command, *, input_bytes=None, timeout_seconds=None, **kwargs):
         calls.append(list(command))
         joined = " ".join(command)
         if "source_reader_cli" in joined:
@@ -320,7 +321,7 @@ def test_unknown_publication_lookup_suppresses_second_provider_call(tmp_path, mo
                 "content_sha256": digest,
                 "byte_size": len(raw),
             }
-            return _completed(list(command), stdout=raw, stderr=json.dumps(receipt).encode())
+            return bounded_response(_completed(list(command), stdout=raw, stderr=json.dumps(receipt).encode()))
         payload = {
             "schema_version": "2.0",
             "status": "unknown_publication",
@@ -341,9 +342,9 @@ def test_unknown_publication_lookup_suppresses_second_provider_call(tmp_path, mo
             ],
             "source_read_policy_sha256": "d" * 64,
         }
-        return _completed(list(command), stdout=json.dumps(payload).encode())
+        return bounded_response(_completed(list(command), stdout=json.dumps(payload).encode()))
 
-    monkeypatch.setattr("transcript_tool_transport.subprocess.run", fake_run)
+    monkeypatch.setattr("transcript_tool_transport._run_bounded_json", fake_run)
     transport = EarningsTranscriptsTransport(
         wiki_root=wiki_root,
         transcript_tool=tool,
@@ -370,17 +371,17 @@ def test_et_request_timeout_is_capped_to_its_cli_contract(tmp_path, monkeypatch)
     tool.write_text("# fixture path; process is injected", encoding="utf-8")
     seen: list[tuple[dict[str, Any], float]] = []
 
-    def fake_run(command, *, input, **kwargs):
-        seen.append((json.loads(input.decode("utf-8")), kwargs["timeout"]))
-        return _completed(
+    def fake_run(command, *, input_bytes=None, timeout_seconds=None, **kwargs):
+        seen.append((json.loads(input_bytes.decode("utf-8")), timeout_seconds))
+        return bounded_response(_completed(
             list(command),
             stdout=json.dumps({
                 "status": "deadline_exceeded",
                 "error_code": "provider_deadline",
             }).encode(),
-        )
+        ))
 
-    monkeypatch.setattr("transcript_tool_transport.subprocess.run", fake_run)
+    monkeypatch.setattr("transcript_tool_transport._run_bounded_json", fake_run)
     transport = EarningsTranscriptsTransport(
         wiki_root=tmp_path,
         transcript_tool=tool,

@@ -9,12 +9,15 @@ gap.  filing-fetch stays thin — it assembles the binding from evidence
 company-wiki already provided (plan hash, envelope policy hash) plus the
 caller's authorization; it never re-derives provider/root/identity rules.
 """
+
 import json
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from support import bounded_side_effect
 
 from test_fetch_filing import FilingFetchTests
 
@@ -31,10 +34,8 @@ class Fc802GapTests(unittest.TestCase):
         root = parent / name
         config = root / "config"
         config.mkdir(parents=True)
-        (config / "source_catalog.yaml").write_text(
-            "schema_version: '1.0'\n", encoding="utf-8")
-        (config / "source_acquisition.yaml").write_text(
-            "schema_version: '1.1'\n", encoding="utf-8")
+        (config / "source_catalog.yaml").write_text("schema_version: '1.0'\n", encoding="utf-8")
+        (config / "source_acquisition.yaml").write_text("schema_version: '1.1'\n", encoding="utf-8")
         return root
 
     def _handle(self, root: Path) -> dict:
@@ -95,10 +96,11 @@ class Fc802GapTests(unittest.TestCase):
 
     def _worker_status_response(self) -> subprocess.CompletedProcess:
         return subprocess.CompletedProcess(
-            args=[], returncode=0,
-            stdout=json.dumps({"desired_state": "enabled",
-                               "runtime_state": "stopped"}),
-            stderr="")
+            args=[],
+            returncode=0,
+            stdout=json.dumps({"desired_state": "enabled", "runtime_state": "stopped"}),
+            stderr="",
+        )
 
     def _gap_ensure(self) -> dict:
         return {
@@ -155,15 +157,16 @@ class Fc802GapTests(unittest.TestCase):
         root = self._wiki_root(self.parent, "company-wiki")
         completed = [
             subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout=json.dumps(self._identity_response()), stderr=""),
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            ),
             subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout=json.dumps(self._gap_ensure()), stderr=""),
+                args=[], returncode=0, stdout=json.dumps(self._gap_ensure()), stderr=""
+            ),
         ]
-        with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
-            result = resolve_filing(
-                request=self._latest_request(), company_wiki_root=root)
+        with patch(
+            "fetch_filing._run_bounded_json", side_effect=bounded_side_effect(completed)
+        ) as run:
+            result = resolve_filing(request=self._latest_request(), company_wiki_root=root)
         self.assertEqual(run.call_count, 2)
         ensure_command = run.call_args_list[1].args[0]
         self.assertIn("ensure", ensure_command)
@@ -181,19 +184,18 @@ class Fc802GapTests(unittest.TestCase):
         plan["newer_revision"] = [{"provider_document_id": "acc-2025-amend"}]
         completed = [
             subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout=json.dumps(self._identity_response()), stderr=""),
-            self._worker_status_response(),
-            subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout=json.dumps(gap), stderr=""),
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            ),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(gap), stderr=""),
         ]
-        with patch("fetch_filing.subprocess.run", side_effect=completed) as run:
+        with patch(
+            "fetch_filing._run_bounded_json", side_effect=bounded_side_effect(completed)
+        ) as run:
             result = resolve_filing(
-                request=self._latest_request(), company_wiki_root=root,
-                allow_download=True)
-        self.assertEqual(run.call_count, 3)
-        ensure_command = run.call_args_list[2].args[0]
+                request=self._latest_request(), company_wiki_root=root, allow_download=True
+            )
+        self.assertEqual(run.call_count, 2)
+        ensure_command = run.call_args_list[1].args[0]
         self.assertIn("--allow-download", ensure_command)
         self.assertNotIn("close-gap", " ".join(ensure_command))
         self.assertEqual(result["status"], "gap")
@@ -226,16 +228,14 @@ class Fc802GapTests(unittest.TestCase):
         }
         completed = [
             subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout=json.dumps(self._identity_response()), stderr=""),
-            self._worker_status_response(),  # ensure pause scope
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            ),
             subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout=json.dumps(self._gap_ensure()), stderr=""),
-            self._worker_status_response(),  # close-gap pause scope
+                args=[], returncode=0, stdout=json.dumps(self._gap_ensure()), stderr=""
+            ),
             subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout=json.dumps(closed), stderr=""),
+                args=[], returncode=0, stdout=json.dumps(closed), stderr=""
+            ),
         ]
         request = self._latest_request()
         request["authorization"] = {
@@ -251,15 +251,13 @@ class Fc802GapTests(unittest.TestCase):
             argv = args[0]
             if "close-gap" in argv:
                 flag = argv[argv.index("--binding-file") + 1]
-                captured["binding"] = json.loads(
-                    Path(flag).read_text(encoding="utf-8"))
-            return completed.pop(0)
+                captured["binding"] = json.loads(Path(flag).read_text(encoding="utf-8"))
+            return bounded_side_effect([completed.pop(0)])[0]
 
-        with patch("fetch_filing.subprocess.run", side_effect=_run) as run:
-            handle = resolve_filing(
-                request=request, company_wiki_root=root, allow_download=True)
-        self.assertEqual(run.call_count, 5)
-        close_command = run.call_args_list[4].args[0]
+        with patch("fetch_filing._run_bounded_json", side_effect=_run) as run:
+            handle = resolve_filing(request=request, company_wiki_root=root, allow_download=True)
+        self.assertEqual(run.call_count, 3)
+        close_command = run.call_args_list[2].args[0]
         self.assertIn("close-gap", close_command)
         binding = captured["binding"]
         self.assertEqual(binding["gap_plan_hash"], "c" * 64)
@@ -305,11 +303,7 @@ class Fc802GapTests(unittest.TestCase):
                 stdout=json.dumps(self._identity_response()),
                 stderr="",
             ),
-            self._worker_status_response(),
-            subprocess.CompletedProcess(
-                args=[], returncode=0, stdout=json.dumps(gap), stderr=""
-            ),
-            self._worker_status_response(),
+            subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(gap), stderr=""),
             subprocess.CompletedProcess(
                 args=[], returncode=0, stdout=json.dumps(closed), stderr=""
             ),
@@ -328,18 +322,14 @@ class Fc802GapTests(unittest.TestCase):
             argv = args[0]
             if "close-gap" in argv:
                 flag = argv[argv.index("--binding-file") + 1]
-                captured["binding"] = json.loads(
-                    Path(flag).read_text(encoding="utf-8"))
-            return completed.pop(0)
+                captured["binding"] = json.loads(Path(flag).read_text(encoding="utf-8"))
+            return bounded_side_effect([completed.pop(0)])[0]
 
-        with patch("fetch_filing.subprocess.run", side_effect=_run) as run:
-            handle = resolve_filing(
-                request=request, company_wiki_root=root, allow_download=True)
-        self.assertEqual(run.call_count, 5)
-        self.assertIn("close-gap", run.call_args_list[4].args[0])
-        self.assertEqual(
-            captured["binding"]["allowed_accessions"], ["acc-2025-amend"]
-        )
+        with patch("fetch_filing._run_bounded_json", side_effect=_run) as run:
+            handle = resolve_filing(request=request, company_wiki_root=root, allow_download=True)
+        self.assertEqual(run.call_count, 3)
+        self.assertIn("close-gap", run.call_args_list[2].args[0])
+        self.assertEqual(captured["binding"]["allowed_accessions"], ["acc-2025-amend"])
         self.assertEqual(handle["request_id"], "urn:req:revision-closed")
 
     def test_exact_mode_missing_still_not_found(self) -> None:
@@ -355,17 +345,15 @@ class Fc802GapTests(unittest.TestCase):
         }
         completed = [
             subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout=json.dumps(self._identity_response()), stderr=""),
+                args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
+            ),
             subprocess.CompletedProcess(
-                args=[], returncode=0,
-                stdout=json.dumps(source_response), stderr=""),
+                args=[], returncode=0, stdout=json.dumps(source_response), stderr=""
+            ),
         ]
-        with patch("fetch_filing.subprocess.run", side_effect=completed):
+        with patch("fetch_filing._run_bounded_json", side_effect=bounded_side_effect(completed)):
             with self.assertRaisesRegex(FilingFetchError, "not reusable"):
-                resolve_filing(
-                    request=FilingFetchTests._request(),
-                    company_wiki_root=root)
+                resolve_filing(request=FilingFetchTests._request(), company_wiki_root=root)
 
     def test_invalid_authorization_block_is_request_error(self) -> None:
         """An authorization block missing required fields is a request
@@ -386,19 +374,26 @@ class Fc802GapTests(unittest.TestCase):
         import fetch_filing
 
         request_file = self.parent / "gap-request.json"
-        request_file.write_text(json.dumps({
-            "schema_version": "1.2",
-            "company_query": "AMD",
-            "document_kind": "annual_report",
-            "mode": "latest_as_of",
-            "as_of_date": "2026-07-18",
-        }), encoding="utf-8")
-        gap = {"status": "gap", "gap_plan": {"gap_hash": "c" * 64},
-               "resolution": {"status": "missing"}}
+        request_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": "1.2",
+                    "company_query": "AMD",
+                    "document_kind": "annual_report",
+                    "mode": "latest_as_of",
+                    "as_of_date": "2026-07-18",
+                }
+            ),
+            encoding="utf-8",
+        )
+        gap = {
+            "status": "gap",
+            "gap_plan": {"gap_hash": "c" * 64},
+            "resolution": {"status": "missing"},
+        }
         with patch("fetch_filing.resolve_filing", return_value=gap):
             with redirect_stdout(io.StringIO()) as buf:
-                rc = fetch_filing.main([
-                    "--config", "x", "--request-file", str(request_file)])
+                rc = fetch_filing.main(["--config", "x", "--request-file", str(request_file)])
         self.assertEqual(rc, 0)
         payload = json.loads(buf.getvalue())
         self.assertEqual(payload["status"], "gap")

@@ -22,7 +22,6 @@ import os
 from pathlib import Path
 import random
 import re
-import subprocess
 import sys
 import time
 from typing import Any
@@ -42,9 +41,17 @@ from filing_contracts import (  # noqa: E402  re-export
     validate_resolution_envelope,
     _required_text,
 )
-# The same output ceiling the ET transport already enforces; both subprocess
-# transports fail closed at one number rather than each growing its own.
-from transcript_tool_transport import MAX_JSON_OUTPUT_BYTES  # noqa: E402
+
+# The shared bounded process layer both JSON runners call; stdout/stderr are
+# bounded DURING read at MAX_JSON_OUTPUT_BYTES, all subprocesses share one
+# request deadline, and each call reaps the process tree it created.
+import ff_process_transport
+from ff_process_transport import (  # noqa: E402
+    ChildFailed as _ProcessChildFailed,
+    ChildTimeout as _ProcessChildTimeout,
+    OutputLimitExceeded as _ProcessOutputLimitExceeded,
+    run_bounded_json as _run_bounded_json,
+)
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
@@ -111,9 +118,20 @@ _SOURCE_REF_FIELDS = frozenset(
     {"schema_version", "document_id", "source_id", "content_sha256", "byte_size", "mime_type"}
 )
 _QUERY_REQUEST_FIELDS = frozenset(
-    {"entity", "market", "security_id", "document_kind", "form_type",
-     "fiscal_year", "fiscal_period", "language", "provider",
-     "provider_document_id", "as_of_date", "mode"}
+    {
+        "entity",
+        "market",
+        "security_id",
+        "document_kind",
+        "form_type",
+        "fiscal_year",
+        "fiscal_period",
+        "language",
+        "provider",
+        "provider_document_id",
+        "as_of_date",
+        "mode",
+    }
 )
 
 
@@ -222,11 +240,14 @@ def _limit_arguments(request: dict[str, Any]) -> list[str]:
     seconds = limits["timeout_seconds"]
     rendered = str(int(seconds)) if float(seconds).is_integer() else str(seconds)
     return [
-        "--max-download-bytes", str(limits["max_bytes"]),
-        "--max-download-seconds", rendered,
+        "--max-download-bytes",
+        str(limits["max_bytes"]),
+        "--max-download-seconds",
+        rendered,
         # The fee ceiling is already a decimal string; pass it through
         # unchanged so the producer sees exactly what the caller wrote.
-        "--max-download-cost-usd", str(limits["max_cost_usd"]),
+        "--max-download-cost-usd",
+        str(limits["max_cost_usd"]),
     ]
 
 
@@ -286,57 +307,72 @@ def _run_company_wiki_json(
     action: str,
     stats: dict[str, int] | None = None,
 ) -> dict[str, Any]:
+    """One company-wiki CLI call through the shared bounded process layer.
+
+    stdout is capped DURING read at ``MAX_JSON_OUTPUT_BYTES`` (actual bytes);
+    stderr is concurrently read with its own finite cap and only used for
+    structured error classification. The timeout is the caller's remaining
+    shared deadline — the layer never renews it. The layer reaps exactly the
+    process tree this call created (no other processes are touched).
+    """
     environment = dict(os.environ)
     environment["PYTHONUTF8"] = "1"
-    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0  # type: ignore[attr-defined]
     if stats is not None:
         stats["calls"] += 1
     try:
-        completed = subprocess.run(
+        stdout, stderr, returncode = _run_bounded_json(
             command,
-            cwd=root,
+            timeout_seconds=timeout_seconds,
+            input_bytes=None,
+            cwd=str(root),
             env=environment,
-            text=True,
-            encoding="utf-8",
-            errors="strict",
-            capture_output=True,
-            timeout=timeout_seconds,
-            check=False,
-            shell=False,
-            creationflags=creationflags,
         )
-    except subprocess.TimeoutExpired as exc:
-        # A subprocess timeout means the attempt outlived the shared deadline
-        # budget.  subprocess.run has already terminated the child it started;
-        # the message stays free of the command line so no root path leaks.
+    except _ProcessChildTimeout as exc:
         raise FilingFetchError(
             f"company-wiki {action} exceeded its deadline budget",
             code="upstream_error",
         ) from exc
-    except OSError as exc:
-        # Never echo `exc`: an OSError message carries the interpreter path.
-        raise FilingFetchError(
-            f"company-wiki {action} failed to start", code="fatal"
-        ) from exc
-    if completed.returncode != 0:
-        # Static failure: report the exit status and the classified code only.
-        # The raw stderr body is consumed for classification but never echoed -
-        # it routinely carries absolute paths and provider credentials.
-        raise FilingFetchError(
-            f"company-wiki {action} exited {completed.returncode}",
-            code=_classify_wiki_error(completed.stderr.strip()),
-            stage=action,
-            attempts=1,
-        )
-    if len(completed.stdout) > MAX_JSON_OUTPUT_BYTES:
+    except _ProcessOutputLimitExceeded as exc:
         raise FilingFetchError(
             f"company-wiki {action} exceeded the output byte cap",
             code="upstream_error",
             stage=action,
             attempts=1,
+        ) from exc
+    except _ProcessChildFailed as exc:
+        # Static child failure: report the exit status and the classified
+        # stderr code only. The raw stderr body is consumed for
+        # classification but never echoed - it routinely carries absolute
+        # paths and provider credentials.
+        raise FilingFetchError(
+            f"company-wiki {action} exited {exc.returncode}",
+            code=_classify_wiki_error(exc.stderr.decode("utf-8", errors="replace").strip()),
+            stage=action,
+            attempts=1,
+        ) from exc
+    except ff_process_transport.TransportError as exc:
+        # Broken pipe / encoding failure during bounded read; message stays
+        # free of the command line so no root path leaks.
+        raise FilingFetchError(
+            f"company-wiki {action} transport failure", code="upstream_error"
+        ) from exc
+    except OSError as exc:
+        # Never echo `exc`: an OSError message carries the interpreter path.
+        raise FilingFetchError(f"company-wiki {action} failed to start", code="fatal") from exc
+    if returncode != 0:
+        # Static failure: report the exit status and the classified code only.
+        # The raw stderr body is consumed for classification but never echoed -
+        # it routinely carries absolute paths and provider credentials.
+        raise FilingFetchError(
+            f"company-wiki {action} exited {returncode}",
+            code=_classify_wiki_error(stderr.decode("utf-8", errors="replace").strip()),
+            stage=action,
+            attempts=1,
         )
     try:
-        payload = json.loads(completed.stdout)
+        payload = json.loads(stdout.decode("utf-8", errors="strict"))
+    except UnicodeError as exc:
+        raise FilingFetchError(f"company-wiki {action} stdout is not valid UTF-8") from exc
     except json.JSONDecodeError as exc:
         raise FilingFetchError(f"company-wiki {action} stdout is not JSON") from exc
     if not isinstance(payload, dict):
@@ -490,222 +526,6 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
     return dict(resolved)
 
 
-# ---------------------------------------------------------------------------
-# Worker pause-around orchestration
-#
-# The company-wiki background worker holds the global catalog `operation.lock`
-# while running long batches (e.g. backfill_text_fingerprints over 20k+
-# documents), which blocks every `ensure --allow-download`. The scope below
-# pauses the worker before the download (releasing the lock; `operation.lock`
-# is auto-reclaimed once the holder pid is dead) and resumes it afterwards so
-# its pending batch continues. Only the worker running and enabled is paused;
-# a user-initiated pause is never resumed.
-# ---------------------------------------------------------------------------
-
-_PAUSE_REFCOUNT_NAME = "filing_fetch_pause.refcount"
-_PAUSE_OWNER_NAME = "filing_fetch_pause.owner"
-_WORKER_STATUS_TIMEOUT = 60.0
-
-
-def _catalog_dir(root: Path) -> Path:
-    return root / ".source_catalog"
-
-
-def _pid_is_alive(pid: int) -> bool:
-    """Best-effort pid liveness; unknown states count as alive (conservative)."""
-    if os.name == "nt":
-        try:
-            probe = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {pid}"],
-                capture_output=True,
-                text=True,
-                errors="replace",
-                creationflags=subprocess.CREATE_NO_WINDOW,  # type: ignore[attr-defined]
-                timeout=20,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return True
-        return f"{pid}" in (probe.stdout or "")
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except OSError:
-        return True
-
-
-def _read_pause_entries(root: Path) -> list[dict[str, Any]]:
-    path = _catalog_dir(root) / _PAUSE_REFCOUNT_NAME
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    if not isinstance(payload, list):
-        return []
-    return [e for e in payload if isinstance(e, dict) and isinstance(e.get("pid"), int)]
-
-
-def _write_pause_entries(root: Path, entries: list[dict[str, Any]]) -> None:
-    path = _catalog_dir(root) / _PAUSE_REFCOUNT_NAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(path)
-
-
-def _prune_pause_entries(root: Path) -> list[dict[str, Any]]:
-    return [e for e in _read_pause_entries(root) if _pid_is_alive(e["pid"])]
-
-
-class PausedWorkerScope:
-    """Context manager pausing the worker around one catalog download.
-
-    - Worker not running or not enabled -> no-op.
-    - Worker already paused by an earlier filing-fetch (owner marker present)
-      -> join the refcount so the last participant resumes it.
-    - Worker already paused by the user (no owner marker) -> respect it: run
-      the download (the paused guard is bypassed via the explicit opt-in flag)
-      but never resume it.
-    - Otherwise (running + enabled) -> the first participant pauses the worker,
-      the last participant resumes it. A crash is self-healing via dead-pid
-      pruning of the refcount.
-    """
-
-    def __init__(
-        self,
-        *,
-        root: Path,
-        command_prefix: list[str],
-        enabled: bool,
-        graceful_timeout_seconds: float,
-        resume_wait_seconds: float,
-        deadline: float,
-        stats: dict[str, int] | None = None,
-    ) -> None:
-        self.root = root
-        self.command_prefix = command_prefix
-        self.enabled = enabled
-        self.graceful = graceful_timeout_seconds
-        self.resume_wait = resume_wait_seconds
-        self.deadline = deadline
-        self.action = "none"
-        self._first = False
-        self.stats = stats
-
-    def _run(self, subcommand: str, *args: str, timeout: float) -> dict[str, Any]:
-        return _run_company_wiki_json(
-            command=[*self.command_prefix, subcommand, *args],
-            root=self.root,
-            timeout_seconds=timeout,
-            action=subcommand,
-            stats=self.stats,
-        )
-
-    def _remaining(self) -> float:
-        return max(
-            10.0,
-            min(self.deadline - time.monotonic(), _WORKER_STATUS_TIMEOUT),
-        )
-
-    def __enter__(self) -> "PausedWorkerScope":
-        if not self.enabled:
-            self.action = "disabled"
-            return self
-        try:
-            status = self._run("worker-status", timeout=self._remaining())
-        except FilingFetchError as exc:
-            print(
-                f"[filing-fetch] worker-status failed; proceeding without pause: {exc}",
-                file=sys.stderr,
-            )
-            self.action = "no_status"
-            return self
-        if status.get("runtime_state") != "running":
-            self.action = "worker_stopped"
-            return self
-        if status.get("desired_state") == "paused":
-            if (_catalog_dir(self.root) / _PAUSE_OWNER_NAME).is_file():
-                self.action = "joined"
-                self._register(joined=True)
-            else:
-                self.action = "respect_paused"
-            return self
-        self._first = self._register(joined=False)
-        if self._first:
-            try:
-                self._run(
-                    "worker-pause",
-                    "--graceful-timeout-seconds",
-                    str(self.graceful),
-                    timeout=self._remaining(),
-                )
-            except FilingFetchError as exc:
-                self.action = "pause_failed"
-                self._unregister()
-                try:
-                    self._run(
-                        "worker-resume",
-                        "--wait-seconds",
-                        str(self.resume_wait),
-                        timeout=self._remaining(),
-                    )
-                except FilingFetchError:
-                    pass  # best-effort cleanup; original error below
-                raise FilingFetchError(
-                    f"worker-pause failed: {exc}", code="worker_pause_failed"
-                ) from exc
-        self.action = "paused_by_us"
-        return self
-
-    def _register(self, *, joined: bool) -> bool:
-        entries = _prune_pause_entries(self.root)
-        first = not entries
-        entries.append({"pid": os.getpid(), "joined": joined})
-        _write_pause_entries(self.root, entries)
-        if first:
-            try:
-                (_catalog_dir(self.root) / _PAUSE_OWNER_NAME).write_text(
-                    "filing-fetch", encoding="utf-8"
-                )
-            except OSError:
-                pass
-        return first
-
-    def _unregister(self) -> bool:
-        entries = _prune_pause_entries(self.root)
-        entries = [e for e in entries if e.get("pid") != os.getpid()]
-        if not entries:
-            try:
-                (_catalog_dir(self.root) / _PAUSE_REFCOUNT_NAME).unlink(missing_ok=True)
-                (_catalog_dir(self.root) / _PAUSE_OWNER_NAME).unlink(missing_ok=True)
-            except OSError:
-                pass
-        else:
-            _write_pause_entries(self.root, entries)
-        return not entries
-
-    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        if self.action not in {"paused_by_us", "joined"}:
-            return
-        if not self._unregister():
-            return  # other participants still active; keep the worker paused
-        try:
-            self._run(
-                "worker-resume",
-                "--wait-seconds",
-                str(self.resume_wait),
-                timeout=self._remaining(),
-            )
-        except FilingFetchError as exc:
-            print(
-                f"[filing-fetch] warning: worker-resume failed; the worker may be "
-                f"paused - resume it manually with: python -m "
-                f"company_wiki.source_catalog.cli worker-resume ({exc})",
-                file=sys.stderr,
-            )
-
-
 def _normalize_stats(stats: dict[str, int] | None) -> dict[str, int]:
     """Return a mutable reconciliation stats dict (ZR-205)."""
     if stats is None:
@@ -727,13 +547,9 @@ def _record_download_events(stats: dict[str, int] | None, handle: dict) -> None:
         stats["downloads"] = events
 
 
-def _source_candidate(
-    handle: dict[str, Any], envelope: dict[str, Any]
-) -> dict[str, Any]:
+def _source_candidate(handle: dict[str, Any], envelope: dict[str, Any]) -> dict[str, Any]:
     """Project one source reference without physical storage or bundle fields."""
-    candidate = {
-        key: value for key, value in handle.items() if key in _SOURCE_CANDIDATE_FIELDS
-    }
+    candidate = {key: value for key, value in handle.items() if key in _SOURCE_CANDIDATE_FIELDS}
     candidate["source_ref"] = {
         "schema_version": "2.0",
         "document_id": handle["document_id"],
@@ -753,66 +569,90 @@ def _candidate_company_identity(identity: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_source_query(
-    *, root: Path, normalized_request: dict[str, Any], deadline: float,
+    *,
+    root: Path,
+    normalized_request: dict[str, Any],
+    deadline: float,
     stats: dict[str, int],
 ) -> dict[str, Any]:
     """Transport one DB-only query and classify its result."""
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        raise FilingFetchError("overall deadline exceeded before source query", code="upstream_error")
+        raise FilingFetchError(
+            "overall deadline exceeded before source query", code="upstream_error"
+        )
     query = {
-        key: value for key, value in normalized_request.items()
-        if key in _QUERY_REQUEST_FIELDS
+        key: value for key, value in normalized_request.items() if key in _QUERY_REQUEST_FIELDS
     }
     query["schema_version"] = "1.0"
     query["allow_download"] = False
     command = [
-        sys.executable, "-m", "company_wiki.source_catalog.source_query_cli",
-        "--config", str(root / "config" / "source_catalog.yaml"),
+        sys.executable,
+        "-m",
+        "company_wiki.source_catalog.source_query_cli",
+        "--config",
+        str(root / "config" / "source_catalog.yaml"),
     ]
     environment = dict(os.environ)
     environment["PYTHONUTF8"] = "1"
     stats["calls"] += 1
-    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0  # type: ignore[attr-defined]
     try:
-        completed = subprocess.run(
-            command, input=json.dumps(query, ensure_ascii=False),
-            cwd=root, env=environment, text=True, encoding="utf-8",
-            errors="strict", capture_output=True, timeout=remaining,
-            check=False, shell=False, creationflags=creationflags,
+        stdout, stderr, returncode = _run_bounded_json(
+            command,
+            timeout_seconds=remaining,
+            input_bytes=json.dumps(query, ensure_ascii=False).encode("utf-8"),
+            cwd=str(root),
+            env=environment,
         )
-    except subprocess.TimeoutExpired as exc:
+    except _ProcessChildTimeout as exc:
         raise FilingFetchError(
             "company-wiki source query exceeded its deadline budget",
             code="upstream_error",
         ) from exc
+    except _ProcessOutputLimitExceeded as exc:
+        raise FilingFetchError(
+            "company-wiki source query exceeded the output byte cap",
+            code="upstream_error",
+        ) from exc
+    except ff_process_transport.TransportError as exc:
+        raise FilingFetchError(
+            "company-wiki source query transport failure", code="upstream_error"
+        ) from exc
     except OSError as exc:
         raise FilingFetchError(
-            "company-wiki source query could not be started", code="upstream_error",
+            "company-wiki source query could not be started",
+            code="upstream_error",
         ) from exc
     try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
+        payload = json.loads(stdout.decode("utf-8", errors="strict"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
         raise FilingFetchError(
-            "company-wiki source query stdout is not JSON", code="upstream_error",
+            "company-wiki source query stdout is not JSON",
+            code="upstream_error",
         ) from exc
     if not isinstance(payload, dict) or payload.get("schema_version") != "2.0":
         raise FilingFetchError(
-            "company-wiki source query schema is unsupported", code="upstream_error",
+            "company-wiki source query schema is unsupported",
+            code="upstream_error",
         )
     status = payload.get("status")
     if status != "found":
         errors = {
-            "not_found": "not_found", "ambiguous": "ambiguous",
-            "blocked": "source_blocked", "unavailable": "upstream_error",
+            "not_found": "not_found",
+            "ambiguous": "ambiguous",
+            "blocked": "source_blocked",
+            "unavailable": "upstream_error",
         }
         if status not in errors:
-            raise FilingFetchError("company-wiki source query status is invalid", code="upstream_error")
+            raise FilingFetchError(
+                "company-wiki source query status is invalid", code="upstream_error"
+            )
         raise FilingFetchError(
             f"company-wiki source query {status}: {payload.get('reason')}",
-            code=errors[status], stage="source_query",
+            code=errors[status],
+            stage="source_query",
         )
-    if completed.returncode != 0:
+    if returncode != 0:
         raise FilingFetchError(
             "company-wiki source query returned found with nonzero exit",
             code="upstream_error",
@@ -821,8 +661,13 @@ def _run_source_query(
 
 
 def _source_query_candidate(
-    *, root: Path, normalized_request: dict[str, Any], request: dict[str, Any],
-    company_identity: dict[str, Any], deadline: float, stats: dict[str, int],
+    *,
+    root: Path,
+    normalized_request: dict[str, Any],
+    request: dict[str, Any],
+    company_identity: dict[str, Any],
+    deadline: float,
+    stats: dict[str, int],
 ) -> dict[str, Any]:
     """Get a provisional pathless candidate from CWP's DB-only query CLI.
 
@@ -830,15 +675,20 @@ def _source_query_candidate(
     ``open_version(filing_reuse)`` remains the sole verified source read.
     """
     payload = _run_source_query(
-        root=root, normalized_request=normalized_request, deadline=deadline,
+        root=root,
+        normalized_request=normalized_request,
+        deadline=deadline,
         stats=stats,
     )
     matches = payload.get("matches")
     candidates = payload.get("candidates")
     if (
-        not isinstance(matches, list) or len(matches) != 1
-        or not isinstance(candidates, list) or len(candidates) != 1
-        or not isinstance(matches[0], dict) or not isinstance(candidates[0], dict)
+        not isinstance(matches, list)
+        or len(matches) != 1
+        or not isinstance(candidates, list)
+        or len(candidates) != 1
+        or not isinstance(matches[0], dict)
+        or not isinstance(candidates[0], dict)
     ):
         raise FilingFetchError(
             "company-wiki source query did not return one candidate",
@@ -852,7 +702,8 @@ def _source_query_candidate(
         or candidate.get("source_ref") != source_ref
     ):
         raise FilingFetchError(
-            "company-wiki source query SourceRef mismatch", code="upstream_error",
+            "company-wiki source query SourceRef mismatch",
+            code="upstream_error",
         )
     if any(
         forbidden in key.lower()
@@ -860,9 +711,11 @@ def _source_query_candidate(
         for forbidden in ("path", "location", "root", "bundle")
     ):
         raise FilingFetchError(
-            "company-wiki source query leaked a physical location", code="upstream_error",
+            "company-wiki source query leaked a physical location",
+            code="upstream_error",
         )
     from ff_v2_envelope import _reference
+
     _reference(source_ref)
     handle = dict(candidate)
     handle["request_id"] = payload.get("request_id")
@@ -878,20 +731,27 @@ def _source_query_candidate(
         or handle.get("mime_type") != source_ref["mime_type"]
     ):
         raise FilingFetchError(
-            "company-wiki source query candidate identity mismatch", code="upstream_error",
+            "company-wiki source query candidate identity mismatch",
+            code="upstream_error",
         )
     if handle.get("document_kind") != request.get("document_kind"):
         raise FilingFetchError(
-            "company-wiki source query document_kind mismatch", code="upstream_error",
+            "company-wiki source query document_kind mismatch",
+            code="upstream_error",
         )
-    if request.get("fiscal_year") is not None and handle.get("fiscal_year") != request["fiscal_year"]:
+    if (
+        request.get("fiscal_year") is not None
+        and handle.get("fiscal_year") != request["fiscal_year"]
+    ):
         raise FilingFetchError(
-            "company-wiki source query fiscal_year mismatch", code="upstream_error",
+            "company-wiki source query fiscal_year mismatch",
+            code="upstream_error",
         )
     for key in ("market", "security_id"):
         if key in handle and handle[key] != company_identity[key]:
             raise FilingFetchError(
-                f"company-wiki source query {key} mismatch", code="upstream_error",
+                f"company-wiki source query {key} mismatch",
+                code="upstream_error",
             )
     handle["company_identity"] = _candidate_company_identity(company_identity)
     handle["resolution_outcome"] = "reused_existing"
@@ -901,16 +761,32 @@ def _source_query_candidate(
     return handle
 
 
-
 _SOURCE_OPERATION_VERSION = "1.0"
-_SOURCE_OPERATION_FIELDS = frozenset({
-    "operation_schema_version", "operation", "status", "request_id",
-    "outcome", "download_events", "policy_hash", "source_ref",
-    "candidate", "gap_plan",
-})
-_SOURCE_OPERATION_STATUSES = frozenset({
-    "completed", "gap", "ambiguous", "not_found", "unavailable",
-})
+_SOURCE_OPERATION_FIELDS = frozenset(
+    {
+        "operation_schema_version",
+        "operation",
+        "status",
+        "request_id",
+        "outcome",
+        "download_events",
+        "policy_hash",
+        "source_ref",
+        "candidate",
+        "gap_plan",
+    }
+)
+_SOURCE_OPERATION_STATUSES = frozenset(
+    {
+        "completed",
+        "gap",
+        "ambiguous",
+        "not_found",
+        "unavailable",
+    }
+)
+
+
 def _contains_physical_field(value: object) -> bool:
     if isinstance(value, dict):
         return any(
@@ -925,30 +801,46 @@ def _contains_physical_field(value: object) -> bool:
 
 def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
-        raise FilingFetchError("company-wiki operation result must be an object", code="upstream_error")
+        raise FilingFetchError(
+            "company-wiki operation result must be an object", code="upstream_error"
+        )
     if (
         payload.get("operation_schema_version") != _SOURCE_OPERATION_VERSION
         or payload.get("operation") != operation
         or not set(payload) <= _SOURCE_OPERATION_FIELDS
     ):
-        raise FilingFetchError("company-wiki operation contract is unsupported", code="upstream_error")
+        raise FilingFetchError(
+            "company-wiki operation contract is unsupported", code="upstream_error"
+        )
     if payload.get("status") not in _SOURCE_OPERATION_STATUSES:
         raise FilingFetchError("company-wiki operation status is invalid", code="upstream_error")
     if _contains_physical_field(payload):
-        raise FilingFetchError("company-wiki operation result leaked a physical location", code="upstream_error")
+        raise FilingFetchError(
+            "company-wiki operation result leaked a physical location", code="upstream_error"
+        )
     request_id = payload.get("request_id")
-    if not isinstance(request_id, str) or not request_id.strip() or request_id != request_id.strip():
-        raise FilingFetchError("company-wiki operation request_id is invalid", code="upstream_error")
+    if (
+        not isinstance(request_id, str)
+        or not request_id.strip()
+        or request_id != request_id.strip()
+    ):
+        raise FilingFetchError(
+            "company-wiki operation request_id is invalid", code="upstream_error"
+        )
     policy_hash = payload.get("policy_hash")
     if policy_hash is not None and (
         not isinstance(policy_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", policy_hash)
     ):
-        raise FilingFetchError("company-wiki operation policy_hash is invalid", code="upstream_error")
+        raise FilingFetchError(
+            "company-wiki operation policy_hash is invalid", code="upstream_error"
+        )
     return payload
 
 
 def _pathless_operation_gap(
-    payload: dict[str, Any], *, operation: str,
+    payload: dict[str, Any],
+    *,
+    operation: str,
 ) -> dict[str, Any]:
     result = _validated_operation(payload, operation)
     if result["status"] != "gap":
@@ -997,16 +889,21 @@ def _pathless_operation_handle(
         code, stage = errors.get(result["status"], ("upstream_error", "source_operation"))
         raise FilingFetchError(
             f"company-wiki {operation} {result['status']}",
-            code=code, stage=stage,
+            code=code,
+            stage=stage,
         )
     outcome = result.get("outcome")
     events = result.get("download_events")
     if outcome not in {"reused_existing", "reused_after_discovery", "downloaded_new"}:
         raise FilingFetchError("company-wiki operation outcome is invalid", code="upstream_error")
     if isinstance(events, bool) or events not in (0, 1):
-        raise FilingFetchError("company-wiki operation download_events is invalid", code="upstream_error")
+        raise FilingFetchError(
+            "company-wiki operation download_events is invalid", code="upstream_error"
+        )
     if (outcome == "downloaded_new") != (events == 1):
-        raise FilingFetchError("company-wiki operation download receipt is inconsistent", code="upstream_error")
+        raise FilingFetchError(
+            "company-wiki operation download receipt is inconsistent", code="upstream_error"
+        )
 
     source_ref = result.get("source_ref")
     candidate = result.get("candidate")
@@ -1027,16 +924,24 @@ def _pathless_operation_handle(
         or handle.get("snapshot_sha256") != source_ref.get("content_sha256")
         or handle.get("byte_size") != source_ref.get("byte_size")
         or handle.get("mime_type") != source_ref.get("mime_type")
-        or handle.get("content_sha256", source_ref.get("content_sha256")) != source_ref.get("content_sha256")
+        or handle.get("content_sha256", source_ref.get("content_sha256"))
+        != source_ref.get("content_sha256")
     ):
-        raise FilingFetchError("company-wiki operation candidate identity mismatch", code="upstream_error")
+        raise FilingFetchError(
+            "company-wiki operation candidate identity mismatch", code="upstream_error"
+        )
     review_status = candidate.get("prompt_injection_status")
     # The operation supplies logical metadata; byte verification remains CWP's
     # verified-open responsibility at the consumer boundary.
     validate_handle_metadata(handle, request)
     if handle.get("document_kind") != request.get("document_kind"):
-        raise FilingFetchError("company-wiki operation document_kind mismatch", code="upstream_error")
-    if request.get("fiscal_year") is not None and handle.get("fiscal_year") != request["fiscal_year"]:
+        raise FilingFetchError(
+            "company-wiki operation document_kind mismatch", code="upstream_error"
+        )
+    if (
+        request.get("fiscal_year") is not None
+        and handle.get("fiscal_year") != request["fiscal_year"]
+    ):
         raise FilingFetchError("company-wiki operation fiscal_year mismatch", code="upstream_error")
     for key in ("market", "security_id"):
         if key in handle and handle[key] != company_identity[key]:
@@ -1069,52 +974,50 @@ def _resolve_source_ref_v2(
     company_identity: dict[str, Any],
     deadline: float,
     allow_download: bool,
-    pause_worker: bool,
-    worker_graceful_timeout_seconds: float,
-    worker_resume_wait_seconds: float,
     stats: dict[str, int],
 ) -> dict[str, Any]:
     # Own every opt-in SourceRef route behind one isolated dispatcher.
     if source_query_route:
         return _source_query_candidate(
-            root=root, normalized_request=normalized_request, request=request,
-            company_identity=company_identity, deadline=deadline, stats=stats,
+            root=root,
+            normalized_request=normalized_request,
+            request=request,
+            company_identity=company_identity,
+            deadline=deadline,
+            stats=stats,
         )
 
     command = [
-        *command_prefix, "ensure", *_command_arguments(normalized_request),
+        *command_prefix,
+        "ensure",
+        *_command_arguments(normalized_request),
         "--source-ref-v2",
     ]
     if allow_download:
         if not normalized_request.get("market") or not normalized_request.get("security_id"):
             raise FilingFetchError("explicit download requires market and security_id")
-        command.extend((
-            "--allow-download", "--acquisition-config",
-            str(root / "config" / "source_acquisition.yaml"),
-        ))
-        if pause_worker:
-            command.append("--allow-acquisition-while-paused")
-        scope = PausedWorkerScope(
-            root=root, command_prefix=command_prefix, enabled=pause_worker,
-            graceful_timeout_seconds=worker_graceful_timeout_seconds,
-            resume_wait_seconds=worker_resume_wait_seconds,
-            deadline=deadline, stats=stats,
-        )
-        with scope:
-            payload = _run_company_wiki_json_retry(
-                command=command, root=root, action="ensure",
-                deadline=deadline, stats=stats,
+        command.extend(
+            (
+                "--allow-download",
+                "--acquisition-config",
+                str(root / "config" / "source_acquisition.yaml"),
             )
-    else:
-        payload = _run_company_wiki_json_retry(
-            command=command, root=root, action="ensure",
-            deadline=deadline, stats=stats,
         )
+    payload = _run_company_wiki_json_retry(
+        command=command,
+        root=root,
+        action="ensure",
+        deadline=deadline,
+        stats=stats,
+    )
 
     if payload.get("status") != "gap":
         return _pathless_operation_handle(
-            payload, operation="ensure", request=request,
-            company_identity=company_identity, stats=stats,
+            payload,
+            operation="ensure",
+            request=request,
+            company_identity=company_identity,
+            stats=stats,
         )
 
     # V2 emits the exact CWP gap as a pathless result. The old five-field
@@ -1135,9 +1038,6 @@ def _run_legacy_filing_command(
     root: Path,
     deadline: float,
     allow_download: bool,
-    pause_worker: bool,
-    worker_graceful_timeout_seconds: float,
-    worker_resume_wait_seconds: float,
     stats: dict[str, int],
 ) -> dict[str, Any]:
     # Keep the legacy path-bearing CLI behind a compatibility boundary.
@@ -1145,26 +1045,19 @@ def _run_legacy_filing_command(
     if allow_download:
         if not normalized_request.get("market") or not normalized_request.get("security_id"):
             raise FilingFetchError("explicit download requires market and security_id")
-        command.extend((
-            "--allow-download", "--acquisition-config",
-            str(root / "config" / "source_acquisition.yaml"),
-        ))
-        if pause_worker:
-            command.append("--allow-acquisition-while-paused")
-        scope = PausedWorkerScope(
-            root=root, command_prefix=command_prefix, enabled=pause_worker,
-            graceful_timeout_seconds=worker_graceful_timeout_seconds,
-            resume_wait_seconds=worker_resume_wait_seconds,
-            deadline=deadline, stats=stats,
-        )
-        with scope:
-            return _run_company_wiki_json_retry(
-                command=command, root=root, action=action,
-                deadline=deadline, stats=stats,
+        command.extend(
+            (
+                "--allow-download",
+                "--acquisition-config",
+                str(root / "config" / "source_acquisition.yaml"),
             )
+        )
     return _run_company_wiki_json_retry(
-        command=command, root=root, action=action,
-        deadline=deadline, stats=stats,
+        command=command,
+        root=root,
+        action=action,
+        deadline=deadline,
+        stats=stats,
     )
 
 
@@ -1232,6 +1125,10 @@ def resolve_filing(
     config_path: Path | None = None,
     allow_download: bool | None = None,
     timeout_seconds: float = 900.0,
+    # P5-FF compat no-ops: the old worker pause-around orchestration was
+    # retired upstream; these kwargs stay accepted because revenue-forecast
+    # reps and older callers still pass them. They no longer probe, pause,
+    # resume, or write any pause state.
     pause_worker: bool = True,
     worker_graceful_timeout_seconds: float = 5.0,
     worker_resume_wait_seconds: float = 5.0,
@@ -1255,13 +1152,17 @@ def resolve_filing(
     smallest of the remaining global deadline, the configured
     ``timeout_seconds`` and the request's own ``acquisition_limits``.
 
+    ``pause_worker`` / ``worker_graceful_timeout_seconds`` /
+    ``worker_resume_wait_seconds`` are accepted as inert compatibility
+    arguments since the CWP worker route was retired; they no longer spawn
+    worker-status/pause/resume subprocesses nor write pause files.
+
     ``stats`` (optional, mutated in place): ZR-205 reconciliation counters.
-    ``stats["calls"]`` counts every company-wiki subprocess invocation
-    (including retries and worker pause/resume orchestration);
-    ``stats["downloads"]`` is the download event count from the final
-    resolution envelope (0 unless a download actually committed).  Final
-    success and failure both preserve these counts in the response envelope
-    (READ-09/READ-10).
+    ``stats["calls"]`` counts every real company-wiki subprocess invocation
+    (including retries); ``stats["downloads"]`` is the download event count
+    from the final resolution envelope (0 unless a download actually
+    committed).  Final success and failure both preserve these counts in the
+    response envelope (READ-09/READ-10).
     """
     stats = _normalize_stats(stats)
 
@@ -1278,11 +1179,10 @@ def resolve_filing(
     source_query_route = _use_source_query(source_ref_v2, allow_download, request)
     if request.get("schema_version") == FILING_V2_REQUEST_SCHEMA_VERSION and not source_ref_v2:
         raise FilingFetchError(
-            "v2 requests require the pathless SourceRef route", code="request_error",
+            "v2 requests require the pathless SourceRef route",
+            code="request_error",
         )
-    deadline = _shared_deadline(
-        request, deadline=deadline, timeout_seconds=timeout_seconds
-    )
+    deadline = _shared_deadline(request, deadline=deadline, timeout_seconds=timeout_seconds)
     root = (
         _validate_company_wiki_root(company_wiki_root)
         if company_wiki_root is not None
@@ -1310,7 +1210,8 @@ def resolve_filing(
     )
     company_identity = _resolved_company_identity(identity_payload)
     normalized_request = {
-        key: value for key, value in request.items()
+        key: value
+        for key, value in request.items()
         if key not in {"company_query", "exchange", "filing_intent", "companion_transcript"}
     }
     normalized_request.update(
@@ -1326,21 +1227,25 @@ def resolve_filing(
     if source_ref_v2:
         return _resolve_source_ref_v2(
             source_query_route=source_query_route,
-            root=root, command_prefix=command_prefix,
-            normalized_request=normalized_request, request=request,
-            company_identity=company_identity, deadline=deadline,
-            allow_download=allow_download, pause_worker=pause_worker,
-            worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
-            worker_resume_wait_seconds=worker_resume_wait_seconds, stats=stats,
+            root=root,
+            command_prefix=command_prefix,
+            normalized_request=normalized_request,
+            request=request,
+            company_identity=company_identity,
+            deadline=deadline,
+            allow_download=allow_download,
+            stats=stats,
         )
 
     action = "ensure" if (allow_download or is_latest) else "resolve"
     payload = _run_legacy_filing_command(
-        action=action, command_prefix=command_prefix,
-        normalized_request=normalized_request, root=root, deadline=deadline,
-        allow_download=allow_download, pause_worker=pause_worker,
-        worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
-        worker_resume_wait_seconds=worker_resume_wait_seconds, stats=stats,
+        action=action,
+        command_prefix=command_prefix,
+        normalized_request=normalized_request,
+        root=root,
+        deadline=deadline,
+        allow_download=allow_download,
+        stats=stats,
     )
     if action == "ensure":
         # FC-802: the ensure payload carries the top-level status; GAP is a
@@ -1372,9 +1277,6 @@ def resolve_filing(
                     root=root,
                     request=request,
                     deadline=deadline,
-                    pause_worker=pause_worker,
-                    worker_graceful_timeout_seconds=worker_graceful_timeout_seconds,
-                    worker_resume_wait_seconds=worker_resume_wait_seconds,
                     stats=stats,
                     source_ref_v2=source_ref_v2,
                 )
@@ -1412,9 +1314,7 @@ def resolve_filing(
         source_ref_v2=source_ref_v2,
     )
     handle["company_identity"] = (
-        _candidate_company_identity(company_identity)
-        if source_ref_v2
-        else company_identity
+        _candidate_company_identity(company_identity) if source_ref_v2 else company_identity
     )
     # ZR-205: record the download event count from the final resolution
     # envelope (0 = pure reuse, 1 = committed download) so the final
@@ -1536,9 +1436,6 @@ def _close_gap_and_return_handle(
     root: Path,
     request: dict,
     deadline: float,
-    pause_worker: bool,
-    worker_graceful_timeout_seconds: float,
-    worker_resume_wait_seconds: float,
     stats: dict[str, int] | None = None,
     source_ref_v2: bool = False,
 ) -> dict:
@@ -1578,25 +1475,13 @@ def _close_gap_and_return_handle(
         ]
         if source_ref_v2:
             command.append("--source-ref-v2")
-        if pause_worker:
-            command.append("--allow-acquisition-while-paused")
-        scope = PausedWorkerScope(
+        closed = _run_company_wiki_json_retry(
+            command=command,
             root=root,
-            command_prefix=command_prefix,
-            enabled=pause_worker,
-            graceful_timeout_seconds=worker_graceful_timeout_seconds,
-            resume_wait_seconds=worker_resume_wait_seconds,
+            action="close-gap",
             deadline=deadline,
             stats=stats,
         )
-        with scope:
-            closed = _run_company_wiki_json_retry(
-                command=command,
-                root=root,
-                action="close-gap",
-                deadline=deadline,
-                stats=stats,
-            )
     finally:
         Path(binding_file.name).unlink(missing_ok=True)
     if source_ref_v2:
@@ -1606,8 +1491,11 @@ def _close_gap_and_return_handle(
                 code="gap_not_closed",
             )
         return _pathless_operation_handle(
-            closed, operation="close-gap", request=request,
-            company_identity=company_identity, stats=stats,
+            closed,
+            operation="close-gap",
+            request=request,
+            company_identity=company_identity,
+            stats=stats,
         )
     if closed.get("status") != "completed":
         raise FilingFetchError(
@@ -1625,9 +1513,7 @@ def _close_gap_and_return_handle(
         source_ref_v2=source_ref_v2,
     )
     handle["company_identity"] = (
-        _candidate_company_identity(company_identity)
-        if source_ref_v2
-        else company_identity
+        _candidate_company_identity(company_identity) if source_ref_v2 else company_identity
     )
     _record_download_events(stats, handle)
     return handle
@@ -1643,24 +1529,33 @@ def _resolve_v2_companion(
 ) -> dict[str, Any]:
     """Resolve one exact-period companion without changing filing success."""
     if handle.get("status") == "gap":
-        return {"status": "not_applicable", "reason": "filing_not_capture_ready",
-                "retryable": False}
+        return {
+            "status": "not_applicable",
+            "reason": "filing_not_capture_ready",
+            "retryable": False,
+        }
     option = request.get("companion_transcript")
     if option is None:
         return {"status": "not_requested", "retryable": False}
-    if not isinstance(option, dict) or option.get("fiscal_year") is None or option.get("fiscal_quarter") is None:
-        return {"status": "period_unresolved", "reason": "exact_fy_q_required",
-                "retryable": False}
+    if (
+        not isinstance(option, dict)
+        or option.get("fiscal_year") is None
+        or option.get("fiscal_quarter") is None
+    ):
+        return {"status": "period_unresolved", "reason": "exact_fy_q_required", "retryable": False}
     try:
         wiki_root = load_company_wiki_root(config_path=config_path)
         from transcript_companion import resolve_companion_transcript
         from transcript_tool_transport import EarningsTranscriptsTransport
 
         transport = EarningsTranscriptsTransport(
-            wiki_root=wiki_root, deadline=deadline,
+            wiki_root=wiki_root,
+            deadline=deadline,
         )
         result = resolve_companion_transcript(
-            request=request, filing_handle=handle, transport=transport,
+            request=request,
+            filing_handle=handle,
+            transport=transport,
         )
         stats["calls"] = stats.get("calls", 0) + transport.company_wiki_calls
         return result
@@ -1670,6 +1565,7 @@ def _resolve_v2_companion(
             "reason": f"transcript_transport_unavailable:{type(exc).__name__}",
             "retryable": True,
         }
+
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for on-demand filing fetch.
@@ -1707,22 +1603,22 @@ def main(argv: list[str] | None = None) -> int:
         "--no-pause-worker",
         action="store_true",
         help=(
-            "do not pause the company-wiki background worker around downloads; "
-            "legacy behavior (the worker's catalog lock can block downloads for "
-            "minutes)"
+            "accepted for compatibility; inert since the company-wiki worker "
+            "pause-around was retired upstream (no worker-status probe, no "
+            "pause files, no resume)"
         ),
     )
     parser.add_argument(
         "--worker-graceful-timeout-seconds",
         type=float,
         default=5.0,
-        help="graceful stop window for worker-pause before it force-kills (default: 5)",
+        help="accepted for compatibility; inert (see --no-pause-worker)",
     )
     parser.add_argument(
         "--worker-resume-wait-seconds",
         type=float,
         default=5.0,
-        help="seconds to wait for the worker to come back after worker-resume (default: 5)",
+        help="accepted for compatibility; inert (see --no-pause-worker)",
     )
     parser.add_argument(
         "--debug",
@@ -1765,9 +1661,7 @@ def main(argv: list[str] | None = None) -> int:
         deadline = time.monotonic() + args.timeout_seconds
         # One derivation point: v2 declares the intent in the request itself
         # (the --allow-download flag only ever applies to v1 requests).
-        allow_download = _download_intent(
-            request, None if v2_response else args.allow_download
-        )
+        allow_download = _download_intent(request, None if v2_response else args.allow_download)
         handle = resolve_filing(
             request=request,
             config_path=args.config,
@@ -1784,10 +1678,14 @@ def main(argv: list[str] | None = None) -> int:
             from ff_v2_envelope import success_envelope
 
             output = success_envelope(
-                request, handle,
+                request,
+                handle,
                 _resolve_v2_companion(
-                    request=request, handle=handle, config_path=args.config,
-                    deadline=deadline, stats=stats,
+                    request=request,
+                    handle=handle,
+                    config_path=args.config,
+                    deadline=deadline,
+                    stats=stats,
                 ),
                 stats,
             )
@@ -1813,7 +1711,9 @@ def main(argv: list[str] | None = None) -> int:
             from ff_v2_envelope import error_envelope
 
             output = error_envelope(
-                exc.code, str(exc), retryable=exc.retryable,
+                exc.code,
+                str(exc),
+                retryable=exc.retryable,
                 stats=stats if "stats" in locals() else None,
                 request=request if "request" in locals() and isinstance(request, dict) else None,
             )
@@ -1858,7 +1758,9 @@ def main(argv: list[str] | None = None) -> int:
             from ff_v2_envelope import error_envelope
 
             output = error_envelope(
-                "fatal", str(exc), retryable=False,
+                "fatal",
+                str(exc),
+                retryable=False,
                 stats=stats if "stats" in locals() else None,
                 request=request if "request" in locals() and isinstance(request, dict) else None,
             )

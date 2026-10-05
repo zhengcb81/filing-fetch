@@ -18,9 +18,14 @@ _LOOKUP_SCHEMA = "company-wiki-transcript-import-lookup-request/1"
 _IMPORT_SCHEMA = "company-wiki-transcript-import-request/2"
 _IMPORT_RESPONSE_SCHEMA = "company-wiki-transcript-import-response/3"
 _SOURCE_REQUEST_SCHEMA = "1.0"
-# One ceiling for every JSON subprocess this repo spawns.  The filing-fetch
-# company-wiki runner imports it so both transports fail closed at one number.
-MAX_JSON_OUTPUT_BYTES = 32 * 1024 * 1024
+# One ceiling for every JSON subprocess this repo spawns; the shared bounded
+# transport enforces it DURING read, so no transport buffers an unbounded child.
+from ff_process_transport import (  # noqa: E402
+    MAX_JSON_OUTPUT_BYTES,
+    TransportError,
+    run_bounded_json as _run_bounded_json,
+)
+
 # The ET CLI supervises a worker whose own deadline is ``timeout_seconds``.
 # FF must leave time for ET to terminate/reap that worker and remove its result
 # directory before the outer subprocess timeout expires.
@@ -114,26 +119,25 @@ class EarningsTranscriptsTransport:
         maximum: int = MAX_JSON_OUTPUT_BYTES,
     ) -> tuple[dict[str, Any], int]:
         self.company_wiki_calls += 1
-        completed = subprocess.run(
+        stdout, stderr, code = _run_bounded_json(
             command,
-            input=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
-            cwd=cwd,
+            timeout_seconds=self._remaining(),
+            input_bytes=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
+            cwd=str(cwd),
             env=env,
-            capture_output=True,
-            timeout=self._remaining(),
-            check=False,
-            shell=False,
-            creationflags=self._creationflags(),
+            stdout_cap_bytes=maximum,
         )
-        if len(completed.stdout) > maximum:
-            raise ValueError("child JSON output exceeded its byte limit")
         try:
-            result = json.loads(completed.stdout.decode("utf-8", errors="strict"))
+            result = json.loads(stdout.decode("utf-8", errors="strict"))
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise ValueError("child output was not bounded UTF-8 JSON") from exc
         if not isinstance(result, dict):
             raise ValueError("child JSON result was not an object")
-        return result, completed.returncode
+        if code != 0:
+            _ = stderr  # bounded; classification stays the caller's job
+        return result, code
 
     def _query(self, source_request: dict[str, Any]) -> dict[str, Any]:
         request = {
@@ -200,25 +204,19 @@ class EarningsTranscriptsTransport:
             "preview",
         ]
         self.company_wiki_calls += 1
-        completed = subprocess.run(
+        stdout, stderr, code = _run_bounded_json(
             command,
-            input=None,
-            cwd=self.wiki_root,
+            timeout_seconds=self._remaining(),
+            input_bytes=None,
+            cwd=str(self.wiki_root),
             env=self._wiki_env(),
-            capture_output=True,
-            timeout=self._remaining(),
-            check=False,
-            shell=False,
-            creationflags=self._creationflags(),
         )
-        if completed.returncode != 0 or len(completed.stdout) != ref["byte_size"]:
+        if code != 0 or len(stdout) != ref["byte_size"]:
             raise ValueError("company-wiki verified open failed")
-        if hashlib.sha256(completed.stdout).hexdigest() != ref["content_sha256"]:
+        if hashlib.sha256(stdout).hexdigest() != ref["content_sha256"]:
             raise ValueError("company-wiki verified bytes do not match SourceRef")
-        if len(completed.stderr) > 64 * 1024:
-            raise ValueError("company-wiki verified-open receipt is oversized")
         try:
-            receipt = json.loads(completed.stderr.decode("utf-8", errors="strict"))
+            receipt = json.loads(stderr.decode("utf-8", errors="strict"))
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise ValueError("company-wiki verified-open receipt is invalid") from exc
         expected = {
@@ -333,21 +331,20 @@ class EarningsTranscriptsTransport:
             "--request-stdin",
             "--include-source-payload",
         ]
-        completed = subprocess.run(
-            command,
-            input=json.dumps(et_request, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
-            cwd=self.transcript_tool.parent,
-            env=dict(os.environ),
-            capture_output=True,
-            timeout=min(
-                float(timeout_seconds) + _ET_CLEANUP_GRACE_SECONDS,
-                self._remaining(),
-            ),
-            check=False,
-            shell=False,
-            creationflags=self._creationflags(),
-        )
-        if len(completed.stdout) > MAX_JSON_OUTPUT_BYTES:
+        try:
+            stdout, _stderr, code = _run_bounded_json(
+                command,
+                timeout_seconds=min(
+                    float(timeout_seconds) + _ET_CLEANUP_GRACE_SECONDS,
+                    self._remaining(),
+                ),
+                input_bytes=json.dumps(
+                    et_request, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8"),
+                cwd=str(self.transcript_tool.parent),
+                env=dict(os.environ),
+            )
+        except (TransportError, ValueError):
             return {
                 "status": "provider_unavailable",
                 "reason": "provider_result_oversized",
@@ -355,7 +352,7 @@ class EarningsTranscriptsTransport:
                 "provider_calls": 1,
             }
         try:
-            result = json.loads(completed.stdout.decode("utf-8", errors="strict"))
+            result = json.loads(stdout.decode("utf-8", errors="strict"))
         except (UnicodeError, json.JSONDecodeError):
             return {
                 "status": "provider_unavailable",
@@ -371,10 +368,10 @@ class EarningsTranscriptsTransport:
                 "provider_calls": 1,
             }
         if result.get("status") != "fetched":
-            code = result.get("error_code")
+            error_code = result.get("error_code")
             safe_code = (
-                code
-                if isinstance(code, str) and code.replace("_", "").isalnum()
+                error_code
+                if isinstance(error_code, str) and error_code.replace("_", "").isalnum()
                 else "provider_unavailable"
             )
             calls = 0 if safe_code in {"provider_credentials_missing", "provider_disabled"} else 1
@@ -385,7 +382,7 @@ class EarningsTranscriptsTransport:
                 in {"deadline_exceeded", "rate_limited", "provider_error"},
                 "provider_calls": calls,
             }
-        if completed.returncode != 0:
+        if code != 0:
             return {
                 "status": "provider_unavailable",
                 "reason": "provider_tool_failed",

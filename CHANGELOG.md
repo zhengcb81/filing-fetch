@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **Bounded process transport for every JSON child (P5-FF).** One shared
+  module (`scripts/ff_process_transport.py`) bounds the filing runner's
+  company-wiki calls and the transcript transport's ET/CWP calls: stdout and
+  stderr are counted in actual read bytes DURING the read (the 32 MiB
+  `MAX_JSON_OUTPUT_BYTES` cap stops the read instead of buffering an
+  unbounded child first, and non-ASCII is counted as UTF-8 bytes, not Python
+  chars); stderr is read concurrently with its own finite 64 KiB cap and its
+  raw body is never echoed; all subprocesses share the caller's remaining
+  deadline with no per-stage renewal; strict UTF-8 decode; the layer reaps
+  exactly the process tree it created (Windows: a kill-on-close job object;
+  POSIX: the child's own process group) so a grandchild holding the pipe
+  cannot hang the caller, and no reader threads linger.
+- **Worker pause-around orchestration retired (P5-FF).**
+  `PausedWorkerScope`, the `filing_fetch_pause.refcount` / `.owner` files,
+  the pid-liveness pruning and every `worker-status` / `worker-pause` /
+  `worker-resume` subprocess are deleted; `resolve_filing()` accepts the old
+  `pause_worker` / `worker_graceful_timeout_seconds` /
+  `worker_resume_wait_seconds` kwargs and the CLI keeps `--no-pause-worker`
+  / `--worker-*` flags as inert no-ops for existing callers (help updated;
+  no new dual gate). `stats["calls"]` now counts real upstream calls only —
+  the ~2 worker-status calls per download are gone, with no synthetic calls
+  added to preserve the old number.
 - **One download intent.** A schema `2.0` request derives its download
   decision from `filing_intent` alone; `resolve_filing()`'s `allow_download`
   becomes an optional confirmation (`None` by default), and an explicit value
