@@ -72,6 +72,17 @@ def alive(pid):
     return not stat.exists() or stat.read_text().split(") ", 1)[1][0] != "Z"
 
 
+original_spawn = fpt._spawn
+
+
+def tracked_spawn(*args, **kwargs):
+    proc, job = original_spawn(*args, **kwargs)
+    (root / "owned.pid").write_text(str(proc.pid))
+    return proc, job
+
+
+fpt._spawn = tracked_spawn
+
 started = time.monotonic()
 try:
     kwargs = {"timeout_seconds": 3.0 if case == "grandchild" else 1.0, "stdout_cap_bytes": 64}

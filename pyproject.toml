@@ -16,3 +16,7 @@ parallel = true
 show_missing = true
 skip_covered = false
 fail_under = 90
+
+[tool.mypy]
+# Match the single Ubuntu CI target on Windows too; runtime tests cover native Windows.
+platform = "linux"

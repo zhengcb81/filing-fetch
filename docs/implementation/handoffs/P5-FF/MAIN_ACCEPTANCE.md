@@ -62,6 +62,16 @@ Normal CI remains one Ubuntu job and one focused suite. Only the short lifecycle
 budget tests are added there to verify the actual POSIX process-group branch. No Windows
 matrix, full historical download suite, daily real-PDF copying, model or provider network.
 
+## CI platform correction
+
+First published MAIN SHA 58568e7 / CI37384744223 failed before tests: Linux typeshed
+has no Windows WinError/get_last_error. Those APIs now sit behind a sys.platform guard.
+The EXISTING local mypy target is configured linux to match Ubuntu CI, without adding a
+second hook or tests per commit. Both linux and win32 type targets passed manually;
+changed grandchild/assignment tests 2 passed, 1.73s. POSIX outer watchdog also retains
+the production-owned PGID because the production child uses a separate session.
+No failed-SHA rerun; the corrected SHA is published normally and monitored separately.
+
 ## Protection and remaining publication
 
 All ffmred/green/green2/base/basegreen/final/fix/e2e/real scratch roots restored absent.

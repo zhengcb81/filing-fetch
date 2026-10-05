@@ -7,6 +7,7 @@ import errno
 import os
 import signal
 import subprocess
+import sys
 from ctypes import wintypes
 
 
@@ -69,6 +70,13 @@ def _kernel():
     return kernel
 
 
+def _win_error() -> OSError:
+    # Typeshed exposes these only for Windows; this function is Windows-only at runtime.
+    if sys.platform == "win32":
+        return ctypes.WinError(ctypes.get_last_error())
+    return OSError("Windows Job API unavailable on this platform")
+
+
 class WindowsJob:
     """The waiting bootstrap is assigned before it can launch the user's command."""
 
@@ -76,28 +84,28 @@ class WindowsJob:
         self.kernel = _kernel()
         self.handle = self.kernel.CreateJobObjectW(None, None)
         if not self.handle:
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise _win_error()
         try:
             info = _ExtendedLimits()
             info.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
             if not self.kernel.SetInformationJobObject(
                 self.handle, 9, ctypes.byref(info), ctypes.sizeof(info)
             ):
-                raise ctypes.WinError(ctypes.get_last_error())
+                raise _win_error()
             if not self.kernel.AssignProcessToJobObject(self.handle, process_handle):
-                raise ctypes.WinError(ctypes.get_last_error())
+                raise _win_error()
         except BaseException:
             self.close()
             raise
 
     def terminate(self) -> None:
         if self.handle and not self.kernel.TerminateJobObject(self.handle, 1):
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise _win_error()
 
     def close(self) -> None:
         handle, self.handle = self.handle, None
         if handle and not self.kernel.CloseHandle(handle):
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise _win_error()
 
 
 def kill_owned_group(group_id: int) -> None:

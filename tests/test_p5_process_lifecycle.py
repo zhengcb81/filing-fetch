@@ -68,12 +68,20 @@ def _watchdog_job(proc):
     return job
 
 
-def _kill_watchdog_tree(proc, job):
+def _kill_watchdog_tree(proc, job, root):
     if os.name == "nt" and job is not None:
         import win32job
 
         win32job.TerminateJobObject(job, 1)
     elif os.name != "nt":
+        # Production owns a separate session. The outer watchdog must also stop
+        # that exact recorded group, rather than only its own probe session.
+        owned = root / "owned.pid"
+        if owned.is_file():
+            try:
+                os.killpg(int(owned.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         try:
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
@@ -105,14 +113,14 @@ def _probe(tmp_path, case):
         try:
             stdout, stderr = proc.communicate(b"G", timeout=8 if case == "grandchild" else 6)
         except subprocess.TimeoutExpired:
-            _kill_watchdog_tree(proc, job)
+            _kill_watchdog_tree(proc, job, root)
             proc.communicate(timeout=3)
             pytest.fail(f"{case}: outer watchdog had to stop the unbounded transport")
         assert proc.returncode == 0, stderr.decode("utf-8", errors="replace")
         return json.loads(stdout)
     finally:
         if proc is not None:
-            _kill_watchdog_tree(proc, job)
+            _kill_watchdog_tree(proc, job, root)
             proc.wait(timeout=3)
             for pipe in (proc.stdin, proc.stdout, proc.stderr):
                 if pipe is not None:
