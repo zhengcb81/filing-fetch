@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Scoped installation (G2-08).** Repeatable `--file`, zero-write `--plan`,
+  one JSON result, physical-target alias coalescing, per-file atomic updates
+  and truthful partial/conflict recovery. Existing user configuration,
+  credentials, output and unknown files survive both full and selective
+  installation; missing config alone is initialized from the template.
+  Missing installations are reported as drift, and only changed files are
+  written. No automatic installation or installed-tree sweep.
+
 - **Complete subprocess lifetime (MAIN P5-FF acceptance).** The deadline
   starts before spawn and covers blocked stdin, both pipes and process exit;
   equal byte limits are valid. Windows runs the actual command only after

@@ -259,18 +259,33 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
 
 ## Installing this skill
 
-Installing copies files into the shared `~/.agents`, `~/.claude` and
-`~/.codex` skill roots, so it is an explicit action:
+Run the installer from the canonical filing-fetch repository; `tools/` is
+repository engineering code and is not copied into skill installations.
+Choose exactly one action. A repeated `--file` selects only those package
+files, and `--json` prints one machine-readable result:
 
 ```bash
-python tools/sync_installs_b3.py --install     # write
-python tools/sync_installs_b3.py --check       # read-only drift report
+python tools/sync_installs_b3.py --plan --json --file SKILL.md --file scripts/fetch_filing.py --file scripts/filing_contracts.py
+python tools/sync_installs_b3.py --install --json --file SKILL.md --file scripts/fetch_filing.py --file scripts/filing_contracts.py
+python tools/sync_installs_b3.py --check --json --file SKILL.md --file scripts/fetch_filing.py --file scripts/filing_contracts.py
 ```
 
-The install surface is an allowlist — `scripts/`, `SKILL.md`, `CHANGELOG.md`,
-`references/` and the one public config template. Credentials, local `.env`
-files, `tests/`, caches and run logs are structurally outside it. The
-pre-push gate reports drift but never performs the install.
+Repeat `--dest DIR` to supply a parent directory holding `filing-fetch/`;
+the defaults are the `.agents/.claude/.codex` skill parents. Aliases are
+coalesced into one physical target. `--plan` and `--check` never create a
+directory or write files; a missing installation is reported as drift.
+Without `--file`, `--install` initializes or updates the package-owned
+runtime surface (`scripts/`, `references/`, `SKILL.md`, `CHANGELOG.md`).
+The public config template initializes only a missing configuration.
+Existing configuration, credentials, `.env`, output, caches and unknown
+files are preserved; no installed-tree cleanup is performed.
+
+Only differing files are atomically replaced. Source changes or target
+conflicts produce accurate `written/not_written/conflicts` facts and a
+nonzero exit; partial completion is not described as rollback. Repeating
+the command repairs the remaining differences without rewriting matching
+files. The pre-push check only reports drift; it never installs or requires
+all installed copies to match before code can be pushed.
 
 ## Notes
 
