@@ -270,6 +270,12 @@ python tools/sync_installs_b3.py --install --json --file SKILL.md --file scripts
 python tools/sync_installs_b3.py --check --json --file SKILL.md --file scripts/fetch_filing.py --file scripts/filing_contracts.py
 ```
 
+The three-file commands above illustrate a delta on an otherwise current
+installation. When upgrading an older or incomplete copy, use `--plan` and
+`--install` without `--file`, or explicitly include the changed files and
+their runtime imports. A selected scope is never silently expanded by the
+tool. Check the actual installed entry point after the update.
+
 Repeat `--dest DIR` to supply a parent directory holding `filing-fetch/`;
 the defaults are the `.agents/.claude/.codex` skill parents. Aliases are
 coalesced into one physical target. `--plan` and `--check` never create a
