@@ -429,49 +429,35 @@ def test_producer_rejecting_the_limit_flags_fails_once_without_stripping_them(
 # --- close-gap carries the same limits --------------------------------------
 
 
-def test_close_gap_argv_carries_the_same_limits(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    captured: dict = {}
+def test_legacy_scope_argv_carries_the_same_limits(tmp_path: Path, monkeypatch) -> None:
+    captured = {}
 
     def fake_run(**kwargs):
         captured.update(kwargs)
-        return {"status": "not_completed", "reason": "fixture"}
+        argv = kwargs["command"]
+        scope_path = Path(argv[argv.index("--binding-file") + 1])
+        captured["scope_path"] = scope_path
+        captured["scope"] = json.loads(scope_path.read_text(encoding="utf-8"))
+        return {"status": "gap"}
 
     monkeypatch.setattr(fetch_filing, "_run_company_wiki_json_retry", fake_run)
     request = _v2_request()
-    normalized = {
-        key: value
-        for key, value in request.items()
-        if key not in {"company_query", "exchange", "filing_intent", "companion_transcript"}
-    }
-    normalized.update(
-        {"entity": "Acme Inc.", "market": "US", "security_id": "ACME"}
-    )
-    with pytest.raises(FilingFetchError) as error:
-        fetch_filing._close_gap_and_return_handle(
-            payload={"resolution": {"resolution_envelope": {}}},
-            gap_plan={"gap_hash": "a" * 64},
-            authorization={
-                "provider": "sec", "allowed_accessions": ["x"], "max_items": 1,
-                "max_bytes": 1, "expires_at": "2099-01-01T00:00:00Z",
-            },
-            company_identity={
-                "canonical_name": "Acme Inc.", "market": "US", "security_id": "ACME",
-            },
-            command_prefix=[sys.executable, "-m", "fixture"],
-            normalized_request=normalized,
-            root=_wiki_root(tmp_path),
-            request=request,
-            deadline=time.monotonic() + 30,
-            stats={"calls": 0, "downloads": 0},
-        )
-    assert error.value.code == "gap_not_closed"
+    normalized = dict(request, entity="Acme Inc.", market="US", security_id="ACME",
+        authorization={"provider": "sec", "allowed_accessions": ["x"], "max_items": 1,
+                       "max_bytes": 1000, "expires_at": "2000-01-01T00:00:00Z"})
+    payload = fetch_filing._run_legacy_filing_command(action="ensure",
+        command_prefix=[sys.executable, "-m", "fixture"], normalized_request=normalized,
+        root=_wiki_root(tmp_path), deadline=time.monotonic() + 30, allow_download=True,
+        stats={"calls": 0, "downloads": 0})
+    assert payload == {"status": "gap"}
     argv = captured["command"]
-    assert argv[argv.index("close-gap") + 1] == "--binding-file"
+    assert "ensure" in argv and "close-gap" not in argv
     assert _flag(argv, "--max-download-bytes") == "5000000"
     assert _flag(argv, "--max-download-seconds") == "3"
     assert _flag(argv, "--max-download-cost-usd") == "1.25"
+    assert captured["scope"]["max_bytes"] == 1000
+    assert "expires_at" not in captured["scope"]
+    assert not captured["scope_path"].exists()
 
 
 # --- limits -> argv golden --------------------------------------------------

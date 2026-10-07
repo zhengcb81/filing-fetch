@@ -4,7 +4,7 @@ SCENARIO: GAP-01 LT-08 DL-02
 filing-fetch no longer maps GAP to not_found: latest_as_of returns the
 structured gap plan (fetch=0); allow_download=True WITH a valid
 authorization block invokes the company-wiki close-gap transaction and
-returns the final handle; without authorization it stays a structured
+returns the final handle; an upstream GAP stays a structured
 gap.  filing-fetch stays thin — it assembles the binding from evidence
 company-wiki already provided (plan hash, envelope policy hash) plus the
 caller's authorization; it never re-derives provider/root/identity rules.
@@ -231,10 +231,8 @@ class Fc802GapTests(unittest.TestCase):
                 args=[], returncode=0, stdout=json.dumps(self._identity_response()), stderr=""
             ),
             subprocess.CompletedProcess(
-                args=[], returncode=0, stdout=json.dumps(self._gap_ensure()), stderr=""
-            ),
-            subprocess.CompletedProcess(
-                args=[], returncode=0, stdout=json.dumps(closed), stderr=""
+                args=[], returncode=0, stdout=json.dumps({"schema_version": "1.0", "status": "imported",
+                    "resolution": dict(closed["resolution"], resolution_envelope=closed["envelope"])}), stderr=""
             ),
         ]
         request = self._latest_request()
@@ -249,19 +247,19 @@ class Fc802GapTests(unittest.TestCase):
 
         def _run(*args, **kwargs):
             argv = args[0]
-            if "close-gap" in argv:
+            if "--binding-file" in argv:
                 flag = argv[argv.index("--binding-file") + 1]
                 captured["binding"] = json.loads(Path(flag).read_text(encoding="utf-8"))
             return bounded_side_effect([completed.pop(0)])[0]
 
         with patch("fetch_filing._run_bounded_json", side_effect=_run) as run:
             handle = resolve_filing(request=request, company_wiki_root=root, allow_download=True)
-        self.assertEqual(run.call_count, 3)
-        close_command = run.call_args_list[2].args[0]
-        self.assertIn("close-gap", close_command)
+        self.assertEqual(run.call_count, 2)
+        close_command = run.call_args_list[1].args[0]
+        self.assertIn("ensure", close_command)
         binding = captured["binding"]
-        self.assertEqual(binding["gap_plan_hash"], "c" * 64)
-        self.assertEqual(binding["policy_hash"], "b" * 64)
+        self.assertNotIn("gap_plan_hash", binding)
+        self.assertNotIn("policy_hash", binding)
         self.assertEqual(binding["allowed_accessions"], ["acc-2025"])
         self.assertEqual(handle["request_id"], "urn:req:closed")
         self.assertEqual(handle["resolution_envelope"]["outcome"], "downloaded_new")
@@ -303,9 +301,9 @@ class Fc802GapTests(unittest.TestCase):
                 stdout=json.dumps(self._identity_response()),
                 stderr="",
             ),
-            subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(gap), stderr=""),
             subprocess.CompletedProcess(
-                args=[], returncode=0, stdout=json.dumps(closed), stderr=""
+                args=[], returncode=0, stdout=json.dumps({"schema_version": "1.0", "status": "imported",
+                    "resolution": dict(closed["resolution"], resolution_envelope=closed["envelope"])}), stderr=""
             ),
         ]
         request = self._latest_request()
@@ -320,15 +318,15 @@ class Fc802GapTests(unittest.TestCase):
 
         def _run(*args, **kwargs):
             argv = args[0]
-            if "close-gap" in argv:
+            if "--binding-file" in argv:
                 flag = argv[argv.index("--binding-file") + 1]
                 captured["binding"] = json.loads(Path(flag).read_text(encoding="utf-8"))
             return bounded_side_effect([completed.pop(0)])[0]
 
         with patch("fetch_filing._run_bounded_json", side_effect=_run) as run:
             handle = resolve_filing(request=request, company_wiki_root=root, allow_download=True)
-        self.assertEqual(run.call_count, 3)
-        self.assertIn("close-gap", run.call_args_list[2].args[0])
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("ensure", run.call_args_list[1].args[0])
         self.assertEqual(captured["binding"]["allowed_accessions"], ["acc-2025-amend"])
         self.assertEqual(handle["request_id"], "urn:req:revision-closed")
 

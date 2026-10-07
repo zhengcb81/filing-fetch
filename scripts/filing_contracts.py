@@ -110,7 +110,7 @@ _REQUEST_SCHEMA_1_1_FIELDS = frozenset(
 )
 
 # WU-4.1: 1.2 adds the explicit mode field; FC-802 adds the optional
-# authorization block (close-gap input: provider/accessions/caps/expiry).
+# legacy authorization field (optional target scope, never a permission receipt).
 _REQUEST_SCHEMA_1_2_FIELDS = _REQUEST_SCHEMA_1_1_FIELDS | {"mode", "authorization"}
 _REQUEST_SCHEMA_2_0_FIELDS = (_REQUEST_SCHEMA_1_2_FIELDS - {"authorization"}) | {
     "filing_intent", "companion_transcript", "acquisition_limits",
@@ -122,7 +122,6 @@ _AUTHORIZATION_REQUIRED_FIELDS = frozenset(
         "allowed_accessions",
         "max_items",
         "max_bytes",
-        "expires_at",
     }
 )
 
@@ -200,8 +199,8 @@ def validate_request(request: dict[str, Any]) -> None:
         _validate_acquisition_limits("fetch_if_missing", request["acquisition_limits"])
     authorization = request.get("authorization")
     if authorization is not None:
-        # FC-802: the close-gap input — provider + accessions + caps +
-        # expiry. Anything missing is a request error (never ignored).
+        # Legacy scope preserves provider/accessions/caps. Expiry and
+        # unsigned policy digests do not determine download permission.
         if not isinstance(authorization, dict):
             raise FilingFetchError("authorization must be an object", code="request_error")
         missing = _AUTHORIZATION_REQUIRED_FIELDS - set(authorization)
@@ -228,7 +227,6 @@ def validate_request(request: dict[str, Any]) -> None:
                     f"authorization.{name} must be a positive integer",
                     code="request_error",
                 )
-        _required_text(authorization.get("expires_at"), "authorization.expires_at")
     fiscal_year = request.get("fiscal_year")
     if mode == "exact" or (
         mode is None and version in {FILING_REQUEST_SCHEMA_VERSION, FILING_V2_REQUEST_SCHEMA_VERSION}

@@ -55,7 +55,9 @@ validated `acquisition_limits` object; existing read-only reuse does not need it
 `filing_intent: "fetch_if_missing"` **requires** `acquisition_limits`, and
 `reuse_only` **forbids** it (except bounded metadata discovery for
 `latest_as_of`). Legacy 1.1/1.2 can also supply this object when explicitly
-acquiring; FF never invents byte, time or fee ceilings:
+acquiring. Explicit limits are never widened. Old schema 1.2 scopes without
+this object retain their supplied byte cap, the remaining FF request deadline,
+and a zero provider-fee cap; schema 2.0 always requires the complete object:
 
 | Field | Rule |
 |---|---|
@@ -63,7 +65,7 @@ acquiring; FF never invents byte, time or fee ceilings:
 | `timeout_seconds` | positive finite number (int or float, not a bool) |
 | `max_cost_usd` | non-negative decimal string, at most two decimals, passed through unchanged |
 
-The three ceilings are forwarded to company-wiki's `ensure` / `close-gap` as
+The three ceilings are forwarded to company-wiki's single `ensure` transaction as
 `--max-download-bytes`, `--max-download-seconds` and
 `--max-download-cost-usd`. They are not decorative: filing-fetch's own
 subprocesses share one deadline, computed as the **smallest** of
@@ -119,7 +121,7 @@ echo '{"schema_version":"2.0","company_query":"AMD","market":"US","document_kind
   | python scripts/fetch_filing.py --timeout-seconds 300
 
 # Legacy (schema 1.2): explicit flag instead of a filing_intent.
-echo '{"schema_version":"1.2","company_query":"贵州茅台","market":"CN","document_kind":"annual_report","mode":"exact","fiscal_year":2024,"as_of_date":"2026-07-18"}' \
+echo '{"schema_version":"1.2","company_query":"贵州茅台","market":"CN","document_kind":"annual_report","mode":"exact","fiscal_year":2024,"as_of_date":"2026-07-18","acquisition_limits":{"max_bytes":5000000,"timeout_seconds":60,"max_cost_usd":"0"}}' \
   | python scripts/fetch_filing.py --allow-download --timeout-seconds 600
 ```
 
@@ -321,3 +323,20 @@ pre-push gate reports drift but never performs the install.
   data-lake refactor audit receipts WU-1303/902/1304).  Fixture-level
   E2E stays green; production claims stay unclaimed until the
   observation period and remediation windows complete.
+
+## One acquisition transaction (G2-12)
+
+`latest_as_of` consults bounded provider metadata once; it does not guess a
+fiscal year. With download intent the unique current candidate is fetched,
+verified and imported in the same CWP transaction. A second identical request
+rechecks metadata and reuses the registered source with zero fetch. An honest
+provider-unavailable/incomplete/ambiguous GAP is returned without a second call.
+
+Schema 1.2's optional `authorization` field is legacy target scope, not a
+permission receipt. Its provider/accessions and lower byte/item caps remain
+effective; `expires_at` is optional and ignored. FF forwards only these scope
+facts with the first `ensure`, then removes its temporary scope file. No policy
+hash, gap hash, expiry, worker-state probe or follow-up `close-gap` is required.
+Schema 2.0 continues to use the existing pathless result and one filing intent.
+The earnings-transcripts companion remains original-language, explicit FY/Q,
+separately bounded and imported/verified by CWP; no translation or Dayu changes.

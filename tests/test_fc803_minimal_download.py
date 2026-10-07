@@ -176,21 +176,22 @@ class Fc803MinimalDownloadTests(unittest.TestCase):
         }), encoding="utf-8")
         request = self._authorized_latest()
         rc, out, err = self.wiki.run_fetch(request, allow_download=True)
-        self.assertEqual(rc, 0, err)
+        self.assertEqual(rc, 0, out + err)
         first = json.loads(out)
         self.assertEqual(first["status"], "capture_ready", out[:300])
         self.assertEqual(self._spy_actions().count("fetch"), 1)
         files_after_first = self._companies_files()
         self.assertTrue(files_after_first, "first download wrote nothing")
 
-        # second identical request: the plan is now empty -> structured
-        # gap (gap closed), zero fetch, zero write
+        # second identical request: current target is reused,
+        # with zero fetch and no new original files
         rc2, out2, err2 = self.wiki.run_fetch(request, allow_download=True)
         self.assertEqual(rc2, 0, err2)
         second = json.loads(out2)
-        self.assertEqual(second["status"], "gap", out2[:300])
-        self.assertEqual(second["gap_plan"]["missing"], [],
-                         "gap not reported closed")
+        self.assertEqual(second["status"], "capture_ready", out2[:300])
+        self.assertEqual(second["handle"]["resolution_envelope"]["download_events"], 0)
+        self.assertEqual(second["handle"]["source_id"], first["handle"]["source_id"])
+        self.assertEqual(second["handle"]["content_sha256"], first["handle"]["content_sha256"])
         self.assertEqual(self._spy_actions().count("fetch"), 1,
                          "second request fetched again")
         self.assertEqual(self._companies_files(), files_after_first,
@@ -206,7 +207,7 @@ class Fc803MinimalDownloadTests(unittest.TestCase):
         }), encoding="utf-8")
         request = self._authorized_latest()
         rc, out, err = self.wiki.run_fetch(request, allow_download=True)
-        self.assertEqual(rc, 0, err)
+        self.assertEqual(rc, 0, out + err)
         payload = json.loads(out)
         self.assertEqual(payload["status"], "capture_ready", out[:300])
         fetches = self._spy_fetches()
@@ -227,7 +228,7 @@ class Fc803MinimalDownloadTests(unittest.TestCase):
         }), encoding="utf-8")
         rc, out, err = self.wiki.run_fetch(self._authorized_latest(),
                                            allow_download=True)
-        self.assertEqual(rc, 0, err)
+        self.assertEqual(rc, 0, out + err)
         payload = json.loads(out)
         self.assertEqual(payload["status"], "gap", out[:300])
         self.assertEqual(payload["gap_plan"]["missing"], [])
@@ -253,14 +254,15 @@ class Fc803MinimalDownloadTests(unittest.TestCase):
         """LT-07: a candidate filed after as_of is excluded from the gap —
         nothing to fetch, nothing downloaded."""
         self.wiki.seed_market("CN")
-        # the discovery is scoped to the derived latest year (2025); a
+        # the explicitly scoped provider candidate is FY2025; a
         # FY2025 filing dated 2027-03-15 (after as_of 2026-07-31) is future
         self.fixture.write_text(json.dumps({
             "CN": [_candidate("acc-2025-future", 2025,
                               filing_date="2027-03-15")],
         }), encoding="utf-8")
-        rc, out, err = self.wiki.run_fetch(self._authorized_latest(),
-                                           allow_download=True)
+        request = self._authorized_latest()
+        request["authorization"]["allowed_accessions"] = ["acc-2025-future"]
+        rc, out, err = self.wiki.run_fetch(request, allow_download=True)
         self.assertEqual(rc, 0, err + " OUT:" + out[:400])
         payload = json.loads(out)
         self.assertEqual(payload["status"], "gap", out[:300])

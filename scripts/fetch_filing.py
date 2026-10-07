@@ -1020,8 +1020,8 @@ def _resolve_source_ref_v2(
             stats=stats,
         )
 
-    # V2 emits the exact CWP gap as a pathless result. The old five-field
-    # authorization/close-gap route remains confined to the default v1 API.
+    # V2 emits the exact CWP gap as a pathless result. All versions use
+    # one ensure transaction; a producer GAP is never a second download.
     # The request's byte/time/fee ceilings are already on this ensure argv;
     # a gap the producer still reports is returned as the honest gap, never
     # rewritten into a capture that did not happen.
@@ -1031,41 +1031,46 @@ def _resolve_source_ref_v2(
 
 
 def _run_legacy_filing_command(
-    *,
-    action: str,
-    command_prefix: list[str],
-    normalized_request: dict[str, Any],
-    root: Path,
-    deadline: float,
-    allow_download: bool,
-    stats: dict[str, int],
+    *, action: str, command_prefix: list[str], normalized_request: dict[str, Any],
+    root: Path, deadline: float, allow_download: bool, stats: dict[str, int],
 ) -> dict[str, Any]:
-    # Keep the legacy path-bearing CLI behind a compatibility boundary.
-    command = [*command_prefix, action, *_command_arguments(normalized_request)]
+    """Send one legacy request; old authorization only narrows target/caps."""
+    scope = normalized_request.get("authorization") if allow_download else None
+    effective_request = normalized_request
+    if scope is not None and "acquisition_limits" not in effective_request:
+        # The old request supplied bytes but no separate provider deadline.
+        # Share the existing request deadline, and allow no provider fees.
+        effective_request = dict(normalized_request, acquisition_limits={
+            "max_bytes": scope["max_bytes"],
+            "timeout_seconds": max(0, deadline - time.monotonic()),
+            "max_cost_usd": "0",
+        })
+    command = [*command_prefix, action, *_command_arguments(effective_request)]
     if allow_download:
         if not normalized_request.get("market") or not normalized_request.get("security_id"):
             raise FilingFetchError("explicit download requires market and security_id")
-        command.extend(
-            (
-                "--allow-download",
-                "--acquisition-config",
-                str(root / "config" / "source_acquisition.yaml"),
-            )
+        command.extend(("--allow-download", "--acquisition-config",
+                        str(root / "config" / "source_acquisition.yaml")))
+    scope_path = None
+    try:
+        if scope is not None:
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False,
+                                             encoding="utf-8") as scope_file:
+                scope_path = Path(scope_file.name)
+                json.dump({key: scope[key] for key in
+                           ("provider", "allowed_accessions", "max_items", "max_bytes")},
+                          scope_file)
+            command.extend(("--binding-file", str(scope_path)))
+        return _run_company_wiki_json_retry(
+            command=command, root=root, action=action, deadline=deadline, stats=stats,
         )
-    return _run_company_wiki_json_retry(
-        command=command,
-        root=root,
-        action=action,
-        deadline=deadline,
-        stats=stats,
-    )
+    finally:
+        if scope_path is not None:
+            scope_path.unlink(missing_ok=True)
 
 
-def _gap_plan_has_actionable_candidate(gap_plan: object) -> bool:
-    """Whether a metadata-only GAP contains an authorized-download target."""
-    if not isinstance(gap_plan, dict):
-        return False
-    return bool(gap_plan.get("missing") or gap_plan.get("newer_revision"))
 
 
 def _use_source_query(source_ref_v2: bool, allow_download: bool, request: dict) -> bool:
@@ -1252,34 +1257,6 @@ def resolve_filing(
         # STRUCTURED result (metadata-only plan), never a not_found error.
         if payload.get("status") == "gap":
             gap_plan = (payload.get("acquisition") or {}).get("gap_plan")
-            authorization = request.get("authorization")
-            # ZR-407: the close-gap transaction only runs when the plan is
-            # ACTIONABLE (a missing period or a newer same-period revision).
-            # An empty plan stays a structured gap so the caller sees the
-            # details — reuse handles
-            # (LT-01), provider_unavailable retryability (LT-05), future
-            # exclusions (LT-07) — never a silently downgraded handle.
-            if (
-                allow_download
-                and authorization is not None
-                and _gap_plan_has_actionable_candidate(gap_plan)
-            ):
-                # The actionable check proves the payload is a dict; narrow
-                # for mypy (FC-1204 F1 fix).
-                assert isinstance(gap_plan, dict)
-                return _close_gap_and_return_handle(
-                    payload=payload,
-                    gap_plan=gap_plan,
-                    authorization=authorization,
-                    company_identity=company_identity,
-                    command_prefix=command_prefix,
-                    normalized_request=normalized_request,
-                    root=root,
-                    request=request,
-                    deadline=deadline,
-                    stats=stats,
-                    source_ref_v2=source_ref_v2,
-                )
             return {
                 "status": "gap",
                 "gap_plan": gap_plan,
@@ -1425,98 +1402,6 @@ def _handle_from_resolution(
     return handle
 
 
-def _close_gap_and_return_handle(
-    *,
-    payload: dict,
-    gap_plan: dict,
-    authorization: dict,
-    company_identity: dict,
-    command_prefix: list[str],
-    normalized_request: dict,
-    root: Path,
-    request: dict,
-    deadline: float,
-    stats: dict[str, int] | None = None,
-    source_ref_v2: bool = False,
-) -> dict:
-    """FC-802: execute the authorized close-gap transaction and return the
-    final handle.  filing-fetch stays thin: the binding is assembled from
-    evidence company-wiki already provided (plan hash, envelope policy
-    hash) plus the caller's authorization — no provider/root/identity
-    rules are re-derived here."""
-    resolution = payload.get("resolution") or {}
-    envelope = resolution.get("resolution_envelope") or {}
-    binding = {
-        "request_id": (gap_plan or {}).get("request_id"),
-        "gap_plan_hash": (gap_plan or {}).get("gap_hash"),
-        "policy_hash": envelope.get("policy_hash"),
-        "provider": authorization["provider"],
-        "allowed_accessions": authorization["allowed_accessions"],
-        "max_items": authorization["max_items"],
-        "max_bytes": authorization["max_bytes"],
-        "expires_at": authorization["expires_at"],
-    }
-    import tempfile
-
-    binding_file = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8"
-    )
-    try:
-        json.dump(binding, binding_file, ensure_ascii=False)
-        binding_file.close()
-        command = [
-            *command_prefix,
-            "close-gap",
-            "--binding-file",
-            str(binding_file.name),
-            *_command_arguments(normalized_request),
-            "--acquisition-config",
-            str(root / "config" / "source_acquisition.yaml"),
-        ]
-        if source_ref_v2:
-            command.append("--source-ref-v2")
-        closed = _run_company_wiki_json_retry(
-            command=command,
-            root=root,
-            action="close-gap",
-            deadline=deadline,
-            stats=stats,
-        )
-    finally:
-        Path(binding_file.name).unlink(missing_ok=True)
-    if source_ref_v2:
-        if closed.get("status") != "completed":
-            raise FilingFetchError(
-                f"close-gap did not complete: {closed.get('status')}",
-                code="gap_not_closed",
-            )
-        return _pathless_operation_handle(
-            closed,
-            operation="close-gap",
-            request=request,
-            company_identity=company_identity,
-            stats=stats,
-        )
-    if closed.get("status") != "completed":
-        raise FilingFetchError(
-            f"close-gap did not complete: {closed.get('status')} / {closed.get('reason')}",
-            code="gap_not_closed",
-        )
-    closed_resolution = closed.get("resolution")
-    if not isinstance(closed_resolution, dict):
-        raise FilingFetchError("close-gap resolution is missing", code="upstream_error")
-    handle = _handle_from_resolution(
-        closed_resolution,
-        request,
-        root,
-        envelope=closed.get("envelope"),
-        source_ref_v2=source_ref_v2,
-    )
-    handle["company_identity"] = (
-        _candidate_company_identity(company_identity) if source_ref_v2 else company_identity
-    )
-    _record_download_events(stats, handle)
-    return handle
 
 
 def _resolve_v2_companion(
