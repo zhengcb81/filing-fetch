@@ -141,13 +141,19 @@ def success_envelope(
 def error_envelope(
     code: str, reason: str, *, retryable: bool, stats: dict[str, int] | None = None,
     request: dict[str, Any] | None = None,
+    upstream_cause: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     stats = stats or {"calls": 0, "downloads": 0}
+    filing: dict[str, Any] = {"status": code, "reason": reason, "retryable": retryable}
+    # R6-FF-CAUSE: the optional safe machine diagnostic rides inside filing
+    # (failures only; success/gap envelopes never carry it).
+    if upstream_cause is not None:
+        filing["upstream_cause"] = upstream_cause
     return {
         "schema_version": FILING_V2_RESPONSE_SCHEMA_VERSION,
         "status": code,
         "request_period": _request_period(request or {}),
-        "filing": {"status": code, "reason": reason, "retryable": retryable},
+        "filing": filing,
         "transcript": {"status": "not_requested", "retryable": False},
         "calls": stats["calls"],
         "downloads": stats["downloads"],

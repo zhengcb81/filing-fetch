@@ -10,6 +10,11 @@ import re
 from pathlib import Path
 from typing import Any, Sequence
 
+# R6-FF-CAUSE: shape validation for the optional upstream diagnostic (the
+# closed-vocabulary builder lives in ff_provider_cause; importing only the
+# validator keeps this module free of parsing logic).
+from ff_provider_cause import validated_cause
+
 
 # ---------------------------------------------------------------------------
 # Versions
@@ -56,6 +61,7 @@ class FilingFetchError(RuntimeError):
         stage: str | None = None,
         attempts: int | None = None,
         resolution_trace: dict | None = None,
+        upstream_cause: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -85,6 +91,15 @@ class FilingFetchError(RuntimeError):
         # (request_id/status/reason) survives a downstream failure — the
         # error never swallows the exact-reuse/download=0 evidence.
         self.resolution_trace = resolution_trace
+        # R6-FF-CAUSE: optional safe machine diagnostic for a failed
+        # company-wiki producer call.  Only a validated
+        # filing-upstream-cause/1 object (built by ff_provider_cause from
+        # closed vocabularies) is accepted — garbage never rides the envelope.
+        if upstream_cause is not None and validated_cause(upstream_cause) is None:
+            raise TypeError(
+                "upstream_cause must be a validated filing-upstream-cause/1 object"
+            )
+        self.upstream_cause = upstream_cause
 
 
 # ---------------------------------------------------------------------------

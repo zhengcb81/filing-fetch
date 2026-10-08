@@ -53,6 +53,10 @@ from ff_process_transport import (  # noqa: E402
     run_bounded_json as _run_bounded_json,
 )
 
+# R6-FF-CAUSE: the single stderr parse + closed-vocabulary diagnostics shared
+# by classification and the optional upstream_cause envelope field.
+import ff_provider_cause
+
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
 
@@ -328,46 +332,75 @@ def _run_company_wiki_json(
             env=environment,
         )
     except _ProcessChildTimeout as exc:
+        code, cause = ff_provider_cause.condition_cause(
+            action, "producer_deadline_exceeded"
+        )
         raise FilingFetchError(
             f"company-wiki {action} exceeded its deadline budget",
-            code="upstream_error",
+            code=code,
+            upstream_cause=cause,
         ) from exc
     except _ProcessOutputLimitExceeded as exc:
+        code, cause = ff_provider_cause.condition_cause(
+            action, "producer_output_exceeded"
+        )
         raise FilingFetchError(
             f"company-wiki {action} exceeded the output byte cap",
-            code="upstream_error",
+            code=code,
             stage=action,
             attempts=1,
+            upstream_cause=cause,
         ) from exc
     except _ProcessChildFailed as exc:
         # Static child failure: report the exit status and the classified
-        # stderr code only. The raw stderr body is consumed for
+        # stderr code + safe cause only. The raw stderr body is consumed for
         # classification but never echoed - it routinely carries absolute
         # paths and provider credentials.
+        code, cause = ff_provider_cause.diagnose_stderr(
+            action, exc.stderr.decode("utf-8", errors="replace").strip()
+        )
         raise FilingFetchError(
             f"company-wiki {action} exited {exc.returncode}",
-            code=_classify_wiki_error(exc.stderr.decode("utf-8", errors="replace").strip()),
+            code=code,
             stage=action,
             attempts=1,
+            upstream_cause=cause,
         ) from exc
     except ff_process_transport.TransportError as exc:
         # Broken pipe / encoding failure during bounded read; message stays
         # free of the command line so no root path leaks.
+        code, cause = ff_provider_cause.condition_cause(
+            action, "producer_transport_failure"
+        )
         raise FilingFetchError(
-            f"company-wiki {action} transport failure", code="upstream_error"
+            f"company-wiki {action} transport failure",
+            code=code,
+            upstream_cause=cause,
         ) from exc
     except OSError as exc:
         # Never echo `exc`: an OSError message carries the interpreter path.
-        raise FilingFetchError(f"company-wiki {action} failed to start", code="fatal") from exc
+        # The producer process never started, so no provider contact was
+        # possible and usage is provably final at zero.
+        code, cause = ff_provider_cause.condition_cause(action, "producer_start_failed")
+        raise FilingFetchError(
+            f"company-wiki {action} failed to start",
+            code=code,
+            upstream_cause=cause,
+        ) from exc
     if returncode != 0:
-        # Static failure: report the exit status and the classified code only.
-        # The raw stderr body is consumed for classification but never echoed -
-        # it routinely carries absolute paths and provider credentials.
+        # Static failure: report the exit status and the classified code +
+        # safe cause only. The raw stderr body is consumed for classification
+        # but never echoed - it routinely carries absolute paths and provider
+        # credentials.
+        code, cause = ff_provider_cause.diagnose_stderr(
+            action, stderr.decode("utf-8", errors="replace").strip()
+        )
         raise FilingFetchError(
             f"company-wiki {action} exited {returncode}",
-            code=_classify_wiki_error(stderr.decode("utf-8", errors="replace").strip()),
+            code=code,
             stage=action,
             attempts=1,
+            upstream_cause=cause,
         )
     try:
         payload = json.loads(stdout.decode("utf-8", errors="strict"))
@@ -389,26 +422,11 @@ def _classify_wiki_error(stderr_text: str) -> str:
     legacy class-name emission shape (``CatalogOperationLockedError``,
     ``RuntimeError`` + paused text).  Unknown / malformed payloads fail
     closed to ``fatal`` (never retryable).
+
+    R6-FF-CAUSE: the single parse now lives in ff_provider_cause so the
+    error code and the optional upstream_cause diagnostic cannot drift apart.
     """
-    try:
-        structured = json.loads(stderr_text)
-    except json.JSONDecodeError:
-        return "fatal"
-    if not isinstance(structured, dict):
-        return "fatal"
-    error_type = structured.get("error_type")
-    if error_type in _CATALOG_RETRY_CODES:
-        return error_type
-    if error_type == "worker_paused":
-        return "worker_paused"
-    if error_type == "fatal":
-        return "fatal"
-    # N-1 legacy emission: exception class names from before the taxonomy.
-    if error_type == "CatalogOperationLockedError":
-        return "catalog_locked"
-    if error_type == "RuntimeError" and "paused" in str(structured.get("error", "")):
-        return "worker_paused"
-    return "fatal"
+    return ff_provider_cause.classify_stderr(stderr_text)
 
 
 def _run_company_wiki_json_retry(
@@ -432,6 +450,9 @@ def _run_company_wiki_json_retry(
     """
     attempt = 1
     backoff = CATALOG_LOCKED_BACKOFF_SECONDS
+    # R6-FF-CAUSE: the last contention attempt's machine cause survives the
+    # deadline exhaustion so the envelope still names what was retried.
+    last_cause: dict[str, Any] | None = None
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -440,6 +461,16 @@ def _run_company_wiki_json_retry(
                 code="upstream_error",
                 stage=action,
                 attempts=attempt - 1,
+                upstream_cause=(
+                    last_cause
+                    if last_cause is not None
+                    else ff_provider_cause.condition_cause(
+                        action,
+                        "producer_deadline_exceeded",
+                        provider_started=False,
+                        usage_complete=True,
+                    )[1]
+                ),
             )
         try:
             return _run_company_wiki_json(
@@ -452,6 +483,7 @@ def _run_company_wiki_json_retry(
         except FilingFetchError as exc:
             if exc.code not in _CATALOG_RETRY_CODES:
                 raise
+            last_cause = exc.upstream_cause
             jittered = backoff * (
                 1.0 + random.uniform(-CATALOG_LOCKED_BACKOFF_JITTER, CATALOG_LOCKED_BACKOFF_JITTER)
             )
@@ -462,6 +494,13 @@ def _run_company_wiki_json_retry(
                     code="upstream_error",
                     stage=action,
                     attempts=attempt,
+                    upstream_cause=(
+                        last_cause
+                        if last_cause is not None
+                        else ff_provider_cause.condition_cause(
+                            action, "producer_deadline_exceeded"
+                        )[1]
+                    ),
                 ) from exc
             print(
                 f"[filing-fetch] {action} blocked by a running catalog operation "
@@ -579,7 +618,14 @@ def _run_source_query(
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise FilingFetchError(
-            "overall deadline exceeded before source query", code="upstream_error"
+            "overall deadline exceeded before source query",
+            code="upstream_error",
+            upstream_cause=ff_provider_cause.condition_cause(
+                "query",
+                "producer_deadline_exceeded",
+                provider_started=False,
+                usage_complete=True,
+            )[1],
         )
     query = {
         key: value for key, value in normalized_request.items() if key in _QUERY_REQUEST_FIELDS
@@ -605,23 +651,43 @@ def _run_source_query(
             env=environment,
         )
     except _ProcessChildTimeout as exc:
+        code, cause = ff_provider_cause.condition_cause(
+            "query", "producer_deadline_exceeded"
+        )
         raise FilingFetchError(
             "company-wiki source query exceeded its deadline budget",
-            code="upstream_error",
+            code=code,
+            upstream_cause=cause,
         ) from exc
     except _ProcessOutputLimitExceeded as exc:
+        code, cause = ff_provider_cause.condition_cause(
+            "query", "producer_output_exceeded"
+        )
         raise FilingFetchError(
             "company-wiki source query exceeded the output byte cap",
-            code="upstream_error",
+            code=code,
+            upstream_cause=cause,
         ) from exc
     except ff_process_transport.TransportError as exc:
+        code, cause = ff_provider_cause.condition_cause(
+            "query", "producer_transport_failure"
+        )
         raise FilingFetchError(
-            "company-wiki source query transport failure", code="upstream_error"
+            "company-wiki source query transport failure",
+            code=code,
+            upstream_cause=cause,
         ) from exc
     except OSError as exc:
+        # Legacy code stays upstream_error here (retryable=true) while the
+        # diagnostic honestly records that the producer never started; this
+        # is the one pre-existing retryable start-failure exception.
+        code, cause = ff_provider_cause.condition_cause(
+            "query", "producer_start_failed"
+        )
         raise FilingFetchError(
             "company-wiki source query could not be started",
             code="upstream_error",
+            upstream_cause=cause,
         ) from exc
     try:
         payload = json.loads(stdout.decode("utf-8", errors="strict"))
@@ -1601,6 +1667,7 @@ def main(argv: list[str] | None = None) -> int:
                 retryable=exc.retryable,
                 stats=stats if "stats" in locals() else None,
                 request=request if "request" in locals() and isinstance(request, dict) else None,
+                upstream_cause=exc.upstream_cause,
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")
@@ -1632,6 +1699,10 @@ def main(argv: list[str] | None = None) -> int:
         # the exact-reuse / download=0 evidence.
         if exc.resolution_trace is not None:
             error_response["resolution_trace"] = exc.resolution_trace
+        # R6-FF-CAUSE: the optional safe machine diagnostic for the failed
+        # producer call (v1 keeps it top-level; absent when no operation ran).
+        if exc.upstream_cause is not None:
+            error_response["upstream_cause"] = exc.upstream_cause
         if "stats" in locals():
             error_response["calls"] = stats["calls"]
             error_response["downloads"] = stats["downloads"]
