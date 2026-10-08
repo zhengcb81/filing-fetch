@@ -48,6 +48,7 @@ from filing_contracts import (  # noqa: E402  re-export
 import ff_process_transport
 from ff_process_transport import (  # noqa: E402
     ChildFailed as _ProcessChildFailed,
+    ChildStartFailed as _ProcessChildStartFailed,
     ChildTimeout as _ProcessChildTimeout,
     OutputLimitExceeded as _ProcessOutputLimitExceeded,
     run_bounded_json as _run_bounded_json,
@@ -366,6 +367,11 @@ def _run_company_wiki_json(
             attempts=1,
             upstream_cause=cause,
         ) from exc
+    except _ProcessChildStartFailed as exc:
+        code, cause = ff_provider_cause.condition_cause(action, "producer_start_failed")
+        raise FilingFetchError(
+            f"company-wiki {action} failed to start", code=code, upstream_cause=cause,
+        ) from exc
     except ff_process_transport.TransportError as exc:
         # Broken pipe / encoding failure during bounded read; message stays
         # free of the command line so no root path leaks.
@@ -378,14 +384,12 @@ def _run_company_wiki_json(
             upstream_cause=cause,
         ) from exc
     except OSError as exc:
-        # Never echo `exc`: an OSError message carries the interpreter path.
-        # The producer process never started, so no provider contact was
-        # possible and usage is provably final at zero.
-        code, cause = ff_provider_cause.condition_cause(action, "producer_start_failed")
+        # May be cleanup after target execution. Only typed ChildStartFailed
+        # proves no start; preserve legacy fatal retry semantics and unknown usage.
+        _, cause = ff_provider_cause.condition_cause(action, "producer_transport_failure")
+        cause["retry_scope"] = "none"
         raise FilingFetchError(
-            f"company-wiki {action} failed to start",
-            code=code,
-            upstream_cause=cause,
+            f"company-wiki {action} transport failed", code="fatal", upstream_cause=cause,
         ) from exc
     if returncode != 0:
         # Static failure: report the exit status and the classified code +
@@ -668,6 +672,12 @@ def _run_source_query(
             code=code,
             upstream_cause=cause,
         ) from exc
+    except _ProcessChildStartFailed as exc:
+        _, cause = ff_provider_cause.condition_cause("query", "producer_start_failed")
+        raise FilingFetchError(
+            "company-wiki source query could not be started",
+            code="upstream_error", upstream_cause=cause,
+        ) from exc
     except ff_process_transport.TransportError as exc:
         code, cause = ff_provider_cause.condition_cause(
             "query", "producer_transport_failure"
@@ -678,16 +688,11 @@ def _run_source_query(
             upstream_cause=cause,
         ) from exc
     except OSError as exc:
-        # Legacy code stays upstream_error here (retryable=true) while the
-        # diagnostic honestly records that the producer never started; this
-        # is the one pre-existing retryable start-failure exception.
-        code, cause = ff_provider_cause.condition_cause(
-            "query", "producer_start_failed"
-        )
+        # A plain OSError may occur after execution; no usage/start guess.
+        _, cause = ff_provider_cause.condition_cause("query", "producer_transport_failure")
         raise FilingFetchError(
-            "company-wiki source query could not be started",
-            code="upstream_error",
-            upstream_cause=cause,
+            "company-wiki source query transport failed",
+            code="upstream_error", upstream_cause=cause,
         ) from exc
     try:
         payload = json.loads(stdout.decode("utf-8", errors="strict"))
@@ -840,6 +845,7 @@ _SOURCE_OPERATION_FIELDS = frozenset(
         "source_ref",
         "candidate",
         "gap_plan",
+        "acquisition_failure",
     }
 )
 _SOURCE_OPERATION_STATUSES = frozenset(
@@ -870,19 +876,29 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
         raise FilingFetchError(
             "company-wiki operation result must be an object", code="upstream_error"
         )
+    upstream_cause = ff_provider_cause.diagnose_acquisition_failure(
+        operation, payload.get("acquisition_failure")
+    )
     if (
         payload.get("operation_schema_version") != _SOURCE_OPERATION_VERSION
         or payload.get("operation") != operation
         or not set(payload) <= _SOURCE_OPERATION_FIELDS
     ):
         raise FilingFetchError(
-            "company-wiki operation contract is unsupported", code="upstream_error"
+            "company-wiki operation contract is unsupported", code="upstream_error",
+            upstream_cause=upstream_cause
         )
     if payload.get("status") not in _SOURCE_OPERATION_STATUSES:
-        raise FilingFetchError("company-wiki operation status is invalid", code="upstream_error")
-    if _contains_physical_field(payload):
         raise FilingFetchError(
-            "company-wiki operation result leaked a physical location", code="upstream_error"
+            "company-wiki operation status is invalid", code="upstream_error",
+            upstream_cause=upstream_cause,
+        )
+    if _contains_physical_field({
+        key: value for key, value in payload.items() if key != "acquisition_failure"
+    }):
+        raise FilingFetchError(
+            "company-wiki operation result leaked a physical location", code="upstream_error",
+            upstream_cause=upstream_cause
         )
     request_id = payload.get("request_id")
     if (
@@ -891,14 +907,16 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
         or request_id != request_id.strip()
     ):
         raise FilingFetchError(
-            "company-wiki operation request_id is invalid", code="upstream_error"
+            "company-wiki operation request_id is invalid", code="upstream_error",
+            upstream_cause=upstream_cause
         )
     policy_hash = payload.get("policy_hash")
     if policy_hash is not None and (
         not isinstance(policy_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", policy_hash)
     ):
         raise FilingFetchError(
-            "company-wiki operation policy_hash is invalid", code="upstream_error"
+            "company-wiki operation policy_hash is invalid", code="upstream_error",
+            upstream_cause=upstream_cause
         )
     return payload
 
@@ -934,7 +952,13 @@ def _pathless_operation_gap(
         "request_id": result["request_id"],
         "resolution_envelope": {"policy_hash": result.get("policy_hash")},
     }
-    return {"status": "gap", "gap_plan": plan, "resolution": resolution}
+    gap = {"status": "gap", "gap_plan": plan, "resolution": resolution}
+    upstream_cause = ff_provider_cause.diagnose_acquisition_failure(
+        operation, result.get("acquisition_failure")
+    )
+    if upstream_cause is not None:
+        gap["upstream_cause"] = upstream_cause
+    return gap
 
 
 def _pathless_operation_handle(
@@ -957,6 +981,9 @@ def _pathless_operation_handle(
             f"company-wiki {operation} {result['status']}",
             code=code,
             stage=stage,
+            upstream_cause=ff_provider_cause.diagnose_acquisition_failure(
+                operation, result.get("acquisition_failure")
+            ),
         )
     outcome = result.get("outcome")
     events = result.get("download_events")
@@ -1323,16 +1350,27 @@ def resolve_filing(
         # STRUCTURED result (metadata-only plan), never a not_found error.
         if payload.get("status") == "gap":
             gap_plan = (payload.get("acquisition") or {}).get("gap_plan")
-            return {
+            gap = {
                 "status": "gap",
                 "gap_plan": gap_plan,
                 "resolution": payload.get("resolution"),
             }
+            upstream_cause = ff_provider_cause.diagnose_acquisition_failure(
+                action, payload.get("acquisition_failure")
+            )
+            if upstream_cause is not None:
+                gap["upstream_cause"] = upstream_cause
+            return gap
         resolution = payload.get("resolution")
     else:
         resolution = payload
     if not isinstance(resolution, dict):
-        raise FilingFetchError("company-wiki resolution is missing", code="upstream_error")
+        raise FilingFetchError(
+            "company-wiki resolution is missing", code="upstream_error",
+            upstream_cause=ff_provider_cause.diagnose_acquisition_failure(
+                action, payload.get("acquisition_failure")
+            ),
+        )
     expected_schema = (
         SUPPORTED_COMPANY_WIKI_CONTRACTS["ensure_schema_version"]
         if allow_download
@@ -1349,6 +1387,9 @@ def resolve_filing(
             code="not_found",
             debug_trace=resolution.get("debug_trace"),
             resolution_trace=_resolution_trace(resolution),
+            upstream_cause=ff_provider_cause.diagnose_acquisition_failure(
+                action, payload.get("acquisition_failure")
+            ),
         )
     handle = _handle_from_resolution(
         resolution,

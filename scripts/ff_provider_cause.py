@@ -15,11 +15,10 @@ Safety rules (card ff_provider_diagnostics.md):
   exception text, commands, physical directories, URL queries and credentials
   never cross this boundary — an unmapped or malformed payload stays
   ``unknown`` and the pre-existing fatal semantics are untouched.
-- ``provider_started`` / ``usage_complete`` are only non-null where FF itself
-  can prove no producer subprocess ran (spawn failure; deadline gone before
-  the first attempt) — usage is then final at zero.  When a producer actually
-  ran they stay ``null``: company-wiki's public stderr emission carries no
-  such fields today (findings G1/G2), and production code never guesses.
+- ``provider_started`` / ``usage_complete`` use a validated operation-scoped
+  acquisition-failure/1 producer diagnostic when present. Otherwise they remain
+  ``null`` unless FF proves a typed pre-start failure or deadline before its
+  first attempt. Arbitrary transport or cleanup errors never prove zero usage.
 - ``retry_scope`` mirrors the pre-existing retry semantics exactly:
   ``catalog_contention`` iff the bounded auto-retry set, ``caller_decision``
   for retryable-but-caller-side classes, ``none`` otherwise.  No failure
@@ -35,6 +34,7 @@ FF-observed producer conditions below, and ``unknown``.
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 UPSTREAM_CAUSE_SCHEMA_VERSION = "filing-upstream-cause/1"
@@ -50,6 +50,26 @@ CAUSE_KEYS = frozenset(
     }
 )
 RETRY_SCOPES = frozenset({"none", "catalog_contention", "caller_decision"})
+
+# Published acquisition-failure/1 vocabulary, shared by versioned wire contract;
+# no runtime import of company-wiki implementation internals.
+ACQUISITION_FAILURE_CODES = frozenset({
+    "adapter_process_failed", "adapter_timeout", "adapter_output_limit",
+    "adapter_response_invalid", "adapter_not_bounded", "upstream_unavailable",
+    "network_failed", "budget_exceeded", "provider_failed", "provider_not_configured",
+    "invalid_request", "invalid_budget", "invalid_candidate", "missing_scratch",
+    "invalid_scratch", "unsupported_language", "unsupported_sec_form", "unsupported_hk_period",
+    "identity_mismatch", "invalid_provider_metadata", "primary_missing",
+    "fiscal_period_unresolved", "missing_response", "staging_conflict", "sdk_asset_mismatch",
+    "deadline_exceeded", "byte_budget_exceeded", "cost_budget_exceeded",
+    "unsupported_content_encoding", "incomplete_response", "acquisition_budget_exceeded",
+    "acquisition_validation_failed", "canonical_import_failed",
+})
+_ACQUISITION_FAILURE_KEYS = frozenset({
+    "schema_version", "code", "retryable", "provider_started", "usage_complete",
+    "acquisition_usage", "usage_scope",
+})
+_USAGE_KEYS = frozenset({"schema_version", "response_bytes", "cost_usd"})
 
 # stderr error_type -> (filing error code, cause code).  These are the only
 # machine codes company-wiki publishes on the failing CLI boundary; anything
@@ -89,6 +109,7 @@ _CALLER_DECISION_CODES = frozenset(
 _KNOWN_CAUSE_CODES = (
     frozenset({cause for _, cause in _CWP_STDERR_CODES.values()})
     | frozenset(_PRODUCER_CONDITIONS)
+    | ACQUISITION_FAILURE_CODES
     | {"unknown"}
 )
 
@@ -118,10 +139,12 @@ def build_cause(
     usage_complete: bool | None = None,
 ) -> dict[str, Any]:
     """Build the fixed six-key diagnostic from closed vocabularies only."""
-    if operation not in OPERATIONS:
+    if not isinstance(operation, str) or operation not in OPERATIONS:
         raise ValueError(f"unknown upstream operation: {operation!r}")
-    if code not in _KNOWN_CAUSE_CODES:
+    if not isinstance(code, str) or code not in _KNOWN_CAUSE_CODES:
         raise ValueError(f"unknown upstream cause code: {code!r}")
+    if not _optional_bool(provider_started) or not _optional_bool(usage_complete):
+        raise ValueError("upstream evidence flags must be bool or null")
     return {
         "schema_version": UPSTREAM_CAUSE_SCHEMA_VERSION,
         "operation": operation,
@@ -132,53 +155,107 @@ def build_cause(
     }
 
 
-def _classified(stderr_text: str) -> tuple[str, str]:
-    """The (filing code, cause code) pair for a bounded stderr payload."""
-    if not stderr_text or len(stderr_text) > _MAX_STDERR_PARSE_BYTES:
-        return ("fatal", "unknown")
-    mapped = _map_structured(stderr_text)
-    if mapped is None:
-        return ("fatal", "unknown")
-    return mapped
-
-
-def _map_structured(stderr_text: str) -> tuple[str, str] | None:
-    """Map one structured error-taxonomy payload; None when not mappable.
-
-    The raw ``error`` text is read ONLY for the legacy RuntimeError+paused
-    classification and never leaves this function.
-    """
+def _parse_structured(stderr_text: str) -> dict[str, Any] | None:
+    """Exactly one bounded JSON parse; never return unstructured error text."""
+    if not stderr_text or len(stderr_text.encode("utf-8")) > _MAX_STDERR_PARSE_BYTES:
+        return None
     try:
         payload = json.loads(stderr_text)
-    except json.JSONDecodeError:
+    except (ValueError, RecursionError):
         return None
-    if not isinstance(payload, dict):
-        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _map_structured(payload: dict[str, Any] | None) -> tuple[str, str]:
+    """Keep legacy generic classification and its bounded retry policy unchanged."""
+    if payload is None:
+        return ("fatal", "unknown")
     error_type = payload.get("error_type")
     if not isinstance(error_type, str):
-        return None
+        return ("fatal", "unknown")
     mapped = _CWP_STDERR_CODES.get(error_type)
     if mapped is not None:
         return mapped
     if error_type == "RuntimeError" and "paused" in str(payload.get("error", "")):
         return ("worker_paused", "worker_paused")
-    return None
+    return ("fatal", "unknown")
+
+
+def _valid_acquisition_usage(value: Any) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, dict) or set(value) != _USAGE_KEYS:
+        return False
+    if value["schema_version"] != "1.0":
+        return False
+    response_bytes = value["response_bytes"]
+    if isinstance(response_bytes, bool) or not isinstance(response_bytes, int) or response_bytes < 0:
+        return False
+    cost = value["cost_usd"]
+    if not isinstance(cost, str):
+        return False
+    try:
+        amount = Decimal(cost)
+    except (InvalidOperation, ValueError):
+        return False
+    return amount.is_finite() and amount >= 0
+
+
+def _acquisition_evidence(value: Any) -> tuple[str, bool | None, bool | None] | None:
+    """Validate the public seven-field producer DTO, projecting safe evidence only.
+
+    Acquisition usage is operation cumulative, including discovery and fetches;
+    incomplete usage is a lower bound. It remains in producer records, not a
+    second FF fee ledger. Malformed or unknown schemas never prove usage flags.
+    """
+    if not isinstance(value, dict) or set(value) != _ACQUISITION_FAILURE_KEYS:
+        return None
+    if value["schema_version"] != "acquisition-failure/1" or value["usage_scope"] != "operation":
+        return None
+    if not all(_optional_bool(value[key]) for key in ("retryable", "provider_started", "usage_complete")):
+        return None
+    if not _valid_acquisition_usage(value["acquisition_usage"]):
+        return None
+    code = value["code"]
+    if not isinstance(code, str):
+        return None
+    safe_code = code if code in ACQUISITION_FAILURE_CODES else "adapter_process_failed"
+    return safe_code, value["provider_started"], value["usage_complete"]
 
 
 def classify_stderr(stderr_text: str) -> str:
-    """The filing error code alone (compat wrapper for the old classifier)."""
-    return _classified(stderr_text)[0]
+    """The unchanged generic filing error code, parsed once."""
+    return _map_structured(_parse_structured(stderr_text))[0]
 
 
 def diagnose_stderr(operation: str, stderr_text: str) -> tuple[str, dict[str, Any]]:
-    """One bounded parse of a failed company-wiki subprocess stderr.
+    """Parse once; prefer validated producer evidence without changing retries."""
+    payload = _parse_structured(stderr_text)
+    ff_code, legacy_cause = _map_structured(payload)
+    evidence = _acquisition_evidence(payload.get("acquisition_failure")) if payload else None
+    if evidence is None:
+        return ff_code, build_cause(operation, legacy_cause)
+    safe_code, started, complete = evidence
+    projected = build_cause(operation, safe_code, provider_started=started, usage_complete=complete)
+    # Generic taxonomy owns retry semantics. Producer retryable is diagnostic,
+    # never authorization for FF to issue a second potentially charged request.
+    projected["retry_scope"] = _retry_scope(legacy_cause)
+    return ff_code, projected
 
-    Returns ``(filing_error_code, upstream_cause)``.  Malformed, oversized,
-    mixed or non-object payloads fail closed: filing code ``fatal`` and cause
-    code ``unknown`` — exactly the pre-lane classifier behavior.
+
+
+def diagnose_acquisition_failure(operation: str, value: Any) -> dict[str, Any] | None:
+    """Project a top-level returned failure DTO using the stderr validator.
+
+    Normal missing/GAP results contain no such DTO and return no cause. The
+    returned object carries no retry authorization; existing result status owns
+    that decision. Never scan nested gap plans or error text for a diagnostic.
     """
-    ff_code, cause_code = _classified(stderr_text)
-    return ff_code, build_cause(operation, cause_code)
+    evidence = _acquisition_evidence(value)
+    if evidence is None:
+        return None
+    code, started, complete = evidence
+    return build_cause(operation, code, provider_started=started, usage_complete=complete)
 
 
 def condition_cause(
@@ -207,6 +284,8 @@ def condition_cause(
 
 
 def _valid_cause_header(value: dict[str, Any]) -> bool:
+    if not all(isinstance(value[key], str) for key in ("schema_version", "operation", "code", "retry_scope")):
+        return False
     if value["schema_version"] != UPSTREAM_CAUSE_SCHEMA_VERSION:
         return False
     if value["operation"] not in OPERATIONS or value["retry_scope"] not in RETRY_SCOPES:
@@ -229,6 +308,7 @@ def validated_cause(value: Any) -> dict[str, Any] | None:
 
 __all__ = [
     "UPSTREAM_CAUSE_SCHEMA_VERSION",
+    "ACQUISITION_FAILURE_CODES",
     "OPERATIONS",
     "CAUSE_KEYS",
     "RETRY_SCOPES",
@@ -236,5 +316,6 @@ __all__ = [
     "classify_stderr",
     "condition_cause",
     "diagnose_stderr",
+    "diagnose_acquisition_failure",
     "validated_cause",
 ]

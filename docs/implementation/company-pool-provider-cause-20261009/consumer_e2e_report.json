@@ -1,0 +1,405 @@
+{
+  "schema_version": "ff-operation-cause-e2e/1",
+  "paid_calls": 0,
+  "checks": [
+    {
+      "check": "fetch_failure_exit",
+      "actual": 2,
+      "expected": 2,
+      "status": "PASS"
+    },
+    {
+      "check": "fetch_failure_generic_unchanged",
+      "actual": "fatal",
+      "expected": "fatal",
+      "status": "PASS"
+    },
+    {
+      "check": "fetch_failure_specific",
+      "actual": "upstream_unavailable",
+      "expected": "upstream_unavailable",
+      "status": "PASS"
+    },
+    {
+      "check": "fetch_failure_started",
+      "actual": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "check": "fetch_failure_complete",
+      "actual": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "check": "fetch_failure_fixed_six_keys",
+      "actual": [
+        "code",
+        "operation",
+        "provider_started",
+        "retry_scope",
+        "schema_version",
+        "usage_complete"
+      ],
+      "expected": [
+        "code",
+        "operation",
+        "provider_started",
+        "retry_scope",
+        "schema_version",
+        "usage_complete"
+      ],
+      "status": "PASS"
+    },
+    {
+      "check": "ff_ensure_not_retried",
+      "actual": 2,
+      "expected": 2,
+      "status": "PASS"
+    },
+    {
+      "check": "cwp_existing_three_fetch_attempts",
+      "actual": 4,
+      "expected": 4,
+      "status": "PASS"
+    },
+    {
+      "check": "failed_has_no_raw",
+      "actual": 0,
+      "expected": 0,
+      "status": "PASS"
+    },
+    {
+      "check": "failure_gap_status_preserved",
+      "actual": "gap",
+      "expected": "gap",
+      "status": "PASS"
+    },
+    {
+      "check": "failure_gap_specific",
+      "actual": "upstream_unavailable",
+      "expected": "upstream_unavailable",
+      "status": "PASS"
+    },
+    {
+      "check": "failure_gap_started",
+      "actual": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "check": "failure_gap_complete",
+      "actual": true,
+      "expected": true,
+      "status": "PASS"
+    },
+    {
+      "check": "failure_gap_zero_downloads",
+      "actual": 0,
+      "expected": 0,
+      "status": "PASS"
+    },
+    {
+      "check": "failure_gap_not_retried",
+      "actual": 1,
+      "expected": 1,
+      "status": "PASS"
+    },
+    {
+      "check": "public_no_secret_or_physical_path",
+      "actual": false,
+      "expected": false,
+      "status": "PASS"
+    },
+    {
+      "check": "success_exit",
+      "actual": 0,
+      "expected": 0,
+      "status": "PASS"
+    },
+    {
+      "check": "success_downloads",
+      "actual": 1,
+      "expected": 1,
+      "status": "PASS"
+    },
+    {
+      "check": "success_no_failure_cause",
+      "actual": false,
+      "expected": false,
+      "status": "PASS"
+    },
+    {
+      "check": "reuse_exit",
+      "actual": 0,
+      "expected": 0,
+      "status": "PASS"
+    },
+    {
+      "check": "reuse_downloads",
+      "actual": 0,
+      "expected": 0,
+      "status": "PASS"
+    },
+    {
+      "check": "reuse_no_provider_call",
+      "actual": [
+        {
+          "event": "provider_started",
+          "action": "discover",
+          "behavior": "ok",
+          "budget": {
+            "max_cost_usd": "0",
+            "max_response_bytes": 10000000,
+            "schema_version": "1.0",
+            "timeout_seconds": 59.94906230000197
+          }
+        },
+        {
+          "event": "http_attempt",
+          "action": "discover",
+          "url": "https://www.cninfo.com.cn/new/disclosure/detail?stockCode=002594&announcementId=1222881496",
+          "status": 200
+        },
+        {
+          "event": "usage",
+          "action": "discover",
+          "response_bytes": 2048,
+          "cost_usd": "0.00",
+          "complete": true
+        },
+        {
+          "event": "provider_started",
+          "action": "fetch",
+          "behavior": "ok",
+          "budget": {
+            "max_cost_usd": "0",
+            "max_response_bytes": 9997952,
+            "schema_version": "1.0",
+            "timeout_seconds": 59.69178809999721
+          }
+        },
+        {
+          "event": "http_attempt",
+          "action": "fetch",
+          "url": "https://static.cninfo.com.cn/finalpage/2025-03-25/1222881496.PDF",
+          "status": 200
+        },
+        {
+          "event": "usage",
+          "action": "fetch",
+          "response_bytes": 2040,
+          "cost_usd": "0.00",
+          "complete": true
+        }
+      ],
+      "expected": [
+        {
+          "event": "provider_started",
+          "action": "discover",
+          "behavior": "ok",
+          "budget": {
+            "max_cost_usd": "0",
+            "max_response_bytes": 10000000,
+            "schema_version": "1.0",
+            "timeout_seconds": 59.94906230000197
+          }
+        },
+        {
+          "event": "http_attempt",
+          "action": "discover",
+          "url": "https://www.cninfo.com.cn/new/disclosure/detail?stockCode=002594&announcementId=1222881496",
+          "status": 200
+        },
+        {
+          "event": "usage",
+          "action": "discover",
+          "response_bytes": 2048,
+          "cost_usd": "0.00",
+          "complete": true
+        },
+        {
+          "event": "provider_started",
+          "action": "fetch",
+          "behavior": "ok",
+          "budget": {
+            "max_cost_usd": "0",
+            "max_response_bytes": 9997952,
+            "schema_version": "1.0",
+            "timeout_seconds": 59.69178809999721
+          }
+        },
+        {
+          "event": "http_attempt",
+          "action": "fetch",
+          "url": "https://static.cninfo.com.cn/finalpage/2025-03-25/1222881496.PDF",
+          "status": 200
+        },
+        {
+          "event": "usage",
+          "action": "fetch",
+          "response_bytes": 2040,
+          "cost_usd": "0.00",
+          "complete": true
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "check": "reuse_original_sha",
+      "actual": "e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+      "expected": "e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+      "status": "PASS"
+    },
+    {
+      "check": "raw_single_original",
+      "actual": 1,
+      "expected": 1,
+      "status": "PASS"
+    },
+    {
+      "check": "raw_unchanged",
+      "actual": "e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+      "expected": "e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+      "status": "PASS"
+    }
+  ],
+  "scenarios": {
+    "fetch_failure": {
+      "schema_version": "2.0",
+      "status": "fatal",
+      "request_period": {
+        "mode": "exact",
+        "fiscal_year": 2024,
+        "fiscal_period": null,
+        "as_of_date": "2026-10-08"
+      },
+      "filing": {
+        "status": "fatal",
+        "reason": "company-wiki ensure exited 1",
+        "retryable": false,
+        "upstream_cause": {
+          "schema_version": "filing-upstream-cause/1",
+          "operation": "ensure",
+          "code": "upstream_unavailable",
+          "provider_started": true,
+          "usage_complete": true,
+          "retry_scope": "none"
+        }
+      },
+      "transcript": {
+        "status": "not_requested",
+        "retryable": false
+      },
+      "calls": 2,
+      "downloads": 0
+    },
+    "failure_gap": {
+      "schema_version": "2.0",
+      "status": "gap",
+      "request_period": {
+        "mode": "latest_as_of",
+        "fiscal_year": null,
+        "fiscal_period": null,
+        "as_of_date": "2026-10-08"
+      },
+      "filing": {
+        "status": "gap",
+        "reason": "metadata_only_gap_plan",
+        "gap_hash": "24591ddf70b8db735b268dacdfb70a251f8f438d7f19b815e74cf8dc515be943",
+        "download_events": 0,
+        "upstream_cause": {
+          "schema_version": "filing-upstream-cause/1",
+          "operation": "ensure",
+          "code": "upstream_unavailable",
+          "provider_started": true,
+          "usage_complete": true,
+          "retry_scope": "none"
+        }
+      },
+      "transcript": {
+        "status": "not_applicable",
+        "reason": "filing_not_capture_ready",
+        "retryable": false
+      },
+      "calls": 2,
+      "downloads": 0
+    },
+    "success": {
+      "schema_version": "2.0",
+      "status": "source_candidate",
+      "request_period": {
+        "mode": "exact",
+        "fiscal_year": 2024,
+        "fiscal_period": null,
+        "as_of_date": "2026-10-08"
+      },
+      "filing": {
+        "status": "source_candidate",
+        "source_ref": {
+          "byte_size": 2040,
+          "content_sha256": "e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+          "document_id": "urn:company-wiki:document:sha256:e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+          "mime_type": "application/pdf",
+          "schema_version": "2.0",
+          "source_id": "urn:company-wiki:source:sha256:e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26"
+        },
+        "byte_verification": "pending_verified_open",
+        "document_kind": "annual_report",
+        "fiscal_year": 2024,
+        "fiscal_period": "FY",
+        "resolution_outcome": "downloaded_new",
+        "download_events": 1
+      },
+      "transcript": {
+        "status": "not_requested",
+        "retryable": false
+      },
+      "calls": 2,
+      "downloads": 1
+    },
+    "reuse": {
+      "schema_version": "2.0",
+      "status": "source_candidate",
+      "request_period": {
+        "mode": "exact",
+        "fiscal_year": 2024,
+        "fiscal_period": null,
+        "as_of_date": "2026-10-08"
+      },
+      "filing": {
+        "status": "source_candidate",
+        "source_ref": {
+          "byte_size": 2040,
+          "content_sha256": "e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+          "document_id": "urn:company-wiki:document:sha256:e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+          "mime_type": "application/pdf",
+          "schema_version": "2.0",
+          "source_id": "urn:company-wiki:source:sha256:e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26"
+        },
+        "byte_verification": "pending_verified_open",
+        "document_kind": "annual_report",
+        "fiscal_year": 2024,
+        "fiscal_period": "FY",
+        "resolution_outcome": "reused_existing",
+        "download_events": 0
+      },
+      "transcript": {
+        "status": "not_requested",
+        "retryable": false
+      },
+      "calls": 2,
+      "downloads": 0
+    }
+  },
+  "temporary_root_restored": true,
+  "failures": [],
+  "result": "PASS",
+  "runtime_sha256": {
+    "ff_provider_cause.py": "7dc4a63344e78c0f482cc4604f43397540e4ed1e4ee755ddffb049212e8cdf7a",
+    "ff_process_transport.py": "a95321ded274556981dc18f494513e344cd3679d7ae75e9bb5eab754c440c43a",
+    "fetch_filing.py": "8912a8cde4316066e045b569406b9acc06bd00d2b3e8e658caa7fd3d6e900c73",
+    "ff_v2_envelope.py": "8a08d234fa5659bf7108a6b6631728ca77d123b4e96489cf6241c2a44c31d4dd"
+  }
+}

@@ -38,6 +38,10 @@ class TransportError(Exception):
     """A bounded transport failed; payloads are never included in its message."""
 
 
+class ChildStartFailed(OSError):
+    """Pre-Popen failure; refines OSError for existing callers without reclassification."""
+
+
 class OutputLimitExceeded(TransportError):
     """A pipe exceeded its exact byte cap."""
 
@@ -80,18 +84,23 @@ def _close_pipes(proc: subprocess.Popen) -> None:
 def _spawn(command, input_bytes, cwd, env):
     windows = os.name == "nt"
     argv = [sys.executable, "-B", "-S", "-c", _WINDOWS_BOOTSTRAP, *command] if windows else command
-    proc = subprocess.Popen(
-        argv,
-        stdin=subprocess.PIPE if windows or input_bytes is not None else subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        cwd=cwd,
-        env=env,
-        shell=False,
-        bufsize=0,
-        start_new_session=not windows,
-        creationflags=subprocess.CREATE_NO_WINDOW if windows else 0,
-    )
+    try:
+        proc = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE if windows or input_bytes is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=cwd,
+            env=env,
+            shell=False,
+            bufsize=0,
+            start_new_session=not windows,
+            creationflags=subprocess.CREATE_NO_WINDOW if windows else 0,
+        )
+    except OSError:
+        # Only this pre-Popen boundary proves no target/provider could run.
+        # Cleanup or pipe errors after this point must retain unknown usage.
+        raise ChildStartFailed("could not start owned process") from None
     try:
         job = _assign_windows_job(proc) if windows else None
     except BaseException:

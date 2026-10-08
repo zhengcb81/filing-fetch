@@ -18,7 +18,7 @@ import transcript_tool_transport
 from transcript_tool_transport import EarningsTranscriptsTransport
 from support import bounded_response
 
-_FIXTURE = Path(__file__).parent / "fixtures" / "et_s0b" / "fmp_v2.fetched.json"
+_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "et_s0b" / "fmp_v2.fetched.json"
 _FIL_REF = {
     "schema_version": "2.0",
     "document_id": "urn:company-wiki:document:sha256:" + "a" * 64,

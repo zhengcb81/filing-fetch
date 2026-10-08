@@ -1,0 +1,57 @@
+{
+  "schema_version": "ff-consumer-handoff/1",
+  "generated_at": "2026-10-08T23:51:03.851562+00:00",
+  "implementation_status": "complete_not_published",
+  "paid_calls": 0,
+  "production_raw_writes": 0,
+  "other_repo_writes": 0,
+  "red": {
+    "initial": {
+      "failed": 46,
+      "passed": 23
+    },
+    "returned_gap": {
+      "failed": 4,
+      "passed": 3
+    },
+    "oserror_compat": {
+      "failed": 1
+    }
+  },
+  "green": {
+    "passed": 239,
+    "skipped": 1,
+    "subtests_passed": 39,
+    "seconds": 22.22,
+    "skip_reason": "production security-master snapshots not present",
+    "skip_test": "tests/test_fetch_filing.py:1636"
+  },
+  "actual_cli": {
+    "passed": 25,
+    "failed": 0,
+    "report": "consumer_e2e_report.json",
+    "temporary_root_restored": true
+  },
+  "ruff": "PASS",
+  "mypy": "PASS (4 runtime files)",
+  "diff_check": "PASS",
+  "code_vocabulary_count": 33,
+  "cleanup": {
+    "worktree_test_tmp_absent": true,
+    "worktree_pytest_cache_absent": true,
+    "worktree_pycache_count": 0
+  },
+  "changed_files_sha256": {
+    "scripts/ff_provider_cause.py": "7dc4a63344e78c0f482cc4604f43397540e4ed1e4ee755ddffb049212e8cdf7a",
+    "scripts/ff_process_transport.py": "a95321ded274556981dc18f494513e344cd3679d7ae75e9bb5eab754c440c43a",
+    "scripts/fetch_filing.py": "8912a8cde4316066e045b569406b9acc06bd00d2b3e8e658caa7fd3d6e900c73",
+    "scripts/ff_v2_envelope.py": "8a08d234fa5659bf7108a6b6631728ca77d123b4e96489cf6241c2a44c31d4dd",
+    "tests/test_acquisition_failure_consumer.py": "4ca15b3a3ae162d3fefde861e4fbdaba9cdf7cdcbfd6570ff9c29f404066617a",
+    "tests/test_provider_cause_contract.py": "28c919577bd2bd0da2d1a326b5beea555632e7aa592a354f7be6da39c031273d",
+    "tests/test_transcript_companion_transport.py": "b2b71eabbf51f2c32fc938acdb02bade482eb10495710bd6d16aab4e03cf4b47"
+  },
+  "remaining": [
+    "root cross-repository RF→FF→CWP milestone integration/review and coordinated publication",
+    "Windows long worktree/canonical filename path limitation observed; short isolated TEMP used without weakening assertions"
+  ]
+}

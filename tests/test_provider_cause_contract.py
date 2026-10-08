@@ -268,7 +268,7 @@ def test_producer_conditions_map_to_honest_causes() -> None:
                 "caller_decision",
             ),
             (
-                OSError(2, "no such file or directory"),
+                fetch_filing._ProcessChildStartFailed("no such file or directory"),
                 "fatal",
                 "producer_start_failed",
                 False,
