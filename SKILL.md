@@ -157,8 +157,17 @@ marks the transcript `not_applicable`.
 | `acquisition_limits` | for an exact-period fetch | same three ceilings as the filing, scoped to the transcript only |
 
 - Language is taken as published — never translated.
-- `max_cost_usd` of `"0.00"` means no paid acquisition: the transcript comes
-  back `provider_unavailable` / `zero_cost_budget` with zero provider calls.
+- `max_cost_usd` of `"0.00"` forbids an incremental request fee. FMP exact
+  fetch can use the existing subscription/API quota at zero incremental fee;
+  ET checks its configured operation capability and the unchanged ceiling
+  before HTTP. This neither buys a plan nor guarantees account entitlement.
+  Missing credentials and actual account rejection remain named outcomes.
+- FF asks ET for `--report-usage`. `provider_requests` counts actual HTTP
+  requests and `provider_response_bytes` counts consumed response bytes when
+  `provider_usage_complete` is true; unknown final usage stays null and is
+  not automatically retried. Legacy `provider_calls` is an acquisition-attempt
+  counter, not an authoritative HTTP count. Result content/SourceRef schemas
+  are unchanged.
 - Configure the provider tool with the `EARNINGS_TRANSCRIPTS_TOOL`
   environment variable (path to the earnings-transcripts entry script). It is
   invoked as `<tool> --request-stdin --include-source-payload`. If it is unset

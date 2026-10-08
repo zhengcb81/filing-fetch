@@ -29,6 +29,33 @@ _FIL_REF = {
 }
 
 
+@pytest.mark.parametrize("requests_used", [0, 1, 3])
+def test_usage_receipt_measures_http_requests_not_tool_processes(requests_used):
+    raw = json.dumps({"schema_version": "earnings-retrieval-usage/1", "request_id": "exact",
+        "usage_complete": True, "usage": {"requests_used": requests_used,
+        "response_bytes_used": 17, "exhausted": None}}).encode()
+    assert transcript_tool_transport._provider_usage(raw, "exact") == {
+        "provider_requests": requests_used, "provider_response_bytes": 17, "provider_usage_complete": True}
+
+
+@pytest.mark.parametrize("raw", [b"", b"not-json", json.dumps({
+    "schema_version": "earnings-retrieval-usage/1", "request_id": "wrong",
+    "usage_complete": True, "usage": {"requests_used": 1, "response_bytes_used": 0}}).encode(),
+    json.dumps({"schema_version": "earnings-retrieval-usage/1", "request_id": "exact",
+    "usage_complete": True, "usage": {"requests_used": True, "response_bytes_used": 0}}).encode()])
+def test_absent_or_invalid_usage_is_unknown_not_an_invented_http_count(raw):
+    assert transcript_tool_transport._provider_usage(raw, "exact") == {
+        "provider_requests": None, "provider_response_bytes": None, "provider_usage_complete": False}
+
+
+def test_public_v2_transcript_preserves_actual_usage_and_unknown_state():
+    from ff_v2_envelope import _transcript_result
+    usage = {"provider_requests": None, "provider_response_bytes": None, "provider_usage_complete": False}
+    result = _transcript_result({"status": "provider_unavailable", "reason": "provider_deadline", **usage})
+    assert all(result.get(key) == value for key, value in usage.items())
+    assert "provider_requests" in result and "provider_response_bytes" in result
+
+
 def _request() -> dict[str, Any]:
     return {
         "as_of_date": "2026-09-30",
@@ -40,7 +67,7 @@ def _request() -> dict[str, Any]:
             "acquisition_limits": {
                 "max_bytes": 1_000_000,
                 "timeout_seconds": 10,
-                "max_cost_usd": "1.00",
+                "max_cost_usd": "0.00",
             },
         },
     }
@@ -109,6 +136,7 @@ def test_fmp_tool_result_is_imported_and_verified_through_cwp(tmp_path, monkeypa
             assert et_request["exchange"] == "nasdaq"
             assert et_request["fiscal_year"] == 2026
             assert et_request["fiscal_quarter"] == 3
+            assert et_request["max_cost_usd"] == "0.00"
             assert "api_key" not in et_request
             result = dict(producer, request_id=et_request["request_id"])
             return bounded_response(_completed(list(command), stdout=json.dumps(result).encode()))

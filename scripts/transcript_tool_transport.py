@@ -6,7 +6,6 @@ import hashlib
 import json
 import math
 import os
-from decimal import Decimal
 from pathlib import Path
 import subprocess
 import sys
@@ -43,6 +42,28 @@ _MAX_REF_FIELDS = frozenset(
 )
 
 
+def _provider_usage(raw: bytes, request_id: str) -> dict[str, Any]:
+    """Read one final supervisor receipt; absent/partial usage stays unknown."""
+    unknown = {"provider_requests": None, "provider_response_bytes": None, "provider_usage_complete": False}
+    if len(raw) > 8192:
+        return unknown
+    try:
+        receipt = json.loads(raw.decode("utf-8", errors="strict"))
+    except (UnicodeError, json.JSONDecodeError):
+        return unknown
+    if not isinstance(receipt, dict) or receipt.get("schema_version") != "earnings-retrieval-usage/1":
+        return unknown
+    if receipt.get("request_id") != request_id or receipt.get("usage_complete") is not True:
+        return unknown
+    usage = receipt.get("usage")
+    if not isinstance(usage, dict):
+        return unknown
+    count, size = usage.get("requests_used"), usage.get("response_bytes_used")
+    if type(count) is not int or count < 0 or type(size) is not int or size < 0:
+        return unknown
+    return {"provider_requests": count, "provider_response_bytes": size, "provider_usage_complete": True}
+
+
 class EarningsTranscriptsTransport:
     """Call the configured ET tool, then let CWP own and verify original bytes."""
 
@@ -63,6 +84,7 @@ class EarningsTranscriptsTransport:
         self.deadline = deadline
         self.company_wiki_calls = 0
         self._pending: dict[str, Any] | None = None
+        self._last_provider_usage: dict[str, Any] = {}
 
     def _remaining(self) -> float:
         remaining = self.deadline - time.monotonic()
@@ -324,15 +346,17 @@ class EarningsTranscriptsTransport:
             "download_authorized": True,
             "timeout_seconds": timeout_seconds,
             "max_body_bytes": limits["max_bytes"],
+            "max_cost_usd": limits["max_cost_usd"],
         }
         command = [
             sys.executable,
             str(self.transcript_tool),
             "--request-stdin",
             "--include-source-payload",
+            "--report-usage",
         ]
         try:
-            stdout, _stderr, code = _run_bounded_json(
+            stdout, usage_stderr, code = _run_bounded_json(
                 command,
                 timeout_seconds=min(
                     float(timeout_seconds) + _ET_CLEANUP_GRACE_SECONDS,
@@ -350,6 +374,7 @@ class EarningsTranscriptsTransport:
                 "reason": "provider_result_oversized",
                 "retryable": False,
                 "provider_calls": 1,
+                **_provider_usage(b"", request["request_id"]),
             }
         try:
             result = json.loads(stdout.decode("utf-8", errors="strict"))
@@ -357,16 +382,19 @@ class EarningsTranscriptsTransport:
             return {
                 "status": "provider_unavailable",
                 "reason": "provider_result_invalid",
-                "retryable": True,
+                "retryable": False,
                 "provider_calls": 1,
+                **_provider_usage(b"", request["request_id"]),
             }
         if not isinstance(result, dict):
             return {
                 "status": "provider_unavailable",
                 "reason": "provider_result_invalid",
-                "retryable": True,
+                "retryable": False,
                 "provider_calls": 1,
+                **_provider_usage(b"", request["request_id"]),
             }
+        self._last_provider_usage = _provider_usage(usage_stderr, request["request_id"])
         if result.get("status") != "fetched":
             error_code = result.get("error_code")
             safe_code = (
@@ -374,20 +402,22 @@ class EarningsTranscriptsTransport:
                 if isinstance(error_code, str) and error_code.replace("_", "").isalnum()
                 else "provider_unavailable"
             )
-            calls = 0 if safe_code in {"provider_credentials_missing", "provider_disabled"} else 1
+            calls = 0 if safe_code in {"provider_credentials_missing", "provider_disabled", "provider_cost_unknown", "provider_cost_budget_exceeded", "candidate_discovery_unavailable", "candidate_fetch_unavailable"} else 1
             return {
                 "status": "provider_unavailable",
                 "reason": safe_code,
-                "retryable": result.get("status")
-                in {"deadline_exceeded", "rate_limited", "provider_error"},
+                "retryable": self._last_provider_usage["provider_usage_complete"] and result.get("status")
+                in {"rate_limited", "provider_error"},
                 "provider_calls": calls,
+                **self._last_provider_usage,
             }
         if code != 0:
             return {
                 "status": "provider_unavailable",
                 "reason": "provider_tool_failed",
-                "retryable": True,
+                "retryable": False,
                 "provider_calls": 1,
+                **self._last_provider_usage,
             }
         return result
 
@@ -434,6 +464,7 @@ class EarningsTranscriptsTransport:
 
     def acquire_exact(self, **kwargs: Any) -> dict[str, Any]:
         limits = kwargs.pop("acquisition_limits")
+        self._last_provider_usage = {}
         pending = self._pending
         if pending is None or pending.get("kwargs") != kwargs:
             source_request = self._source_request(
@@ -467,13 +498,6 @@ class EarningsTranscriptsTransport:
                 "as_of_date": kwargs["as_of_date"],
             }
         )
-        if Decimal(limits["max_cost_usd"]) == 0:
-            return {
-                "status": "provider_unavailable",
-                "reason": "zero_cost_budget",
-                "retryable": False,
-                "provider_calls": 0,
-            }
         if not isinstance(pending.get("request_id"), str):
             return {
                 "status": "upstream_error",
@@ -502,8 +526,9 @@ class EarningsTranscriptsTransport:
             return {
                 "status": "provider_unavailable",
                 "reason": "provider_deadline",
-                "retryable": True,
+                "retryable": False,
                 "provider_calls": 1,
+                **_provider_usage(b"", pending["request_id"]),
             }
         except OSError:
             return {
@@ -575,4 +600,5 @@ class EarningsTranscriptsTransport:
             "publication_date": fetched.get("publication_date"),
             "as_of_cutoff_verified": fetched.get("as_of_cutoff_verified") is True,
             "provider_calls": fetched.get("provider_calls", 1),
+            **self._last_provider_usage,
         }

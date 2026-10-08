@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
 from typing import Any, NamedTuple, Protocol, cast
 
 from ff_v2_envelope import _reference
@@ -150,16 +149,6 @@ def _lookup(
     return _lookup_legacy(existing, year, quarter)
 
 
-def _zero_cost_budget(option: dict[str, Any]) -> bool:
-    limits = option.get("acquisition_limits")
-    if not isinstance(limits, dict):
-        return False
-    try:
-        return Decimal(limits.get("max_cost_usd", "0")) == 0
-    except (InvalidOperation, TypeError):
-        return False
-
-
 def _acquire(
     transport: TranscriptTransport, arguments: dict[str, Any], ready: _Ready,
 ) -> dict[str, Any]:
@@ -183,13 +172,14 @@ def _acquire(
             **_optional_fields(fetched, (
                 "provider", "provider_document_id", "call_date",
                 "publication_date", "as_of_cutoff_verified", "provider_calls",
+                "provider_requests", "provider_response_bytes", "provider_usage_complete",
             )),
         )
     if status in {"provider_unavailable", "not_found", "upstream_error"}:
         return _result(
             status, reason=str(fetched.get("reason") or status),
             retryable=fetched.get("retryable") is True,
-            **_optional_fields(fetched, ("provider_calls",)),
+            **_optional_fields(fetched, ("provider_calls", "provider_requests", "provider_response_bytes", "provider_usage_complete")),
         )
     return _result("upstream_error", reason="transcript_acquisition_contract")
 
@@ -218,9 +208,4 @@ def resolve_companion_transcript(
         return existing
     if prepared.option["intent"] == "reuse_only":
         return _result("not_found", reason="exact_transcript_missing")
-    if _zero_cost_budget(prepared.option):
-        return _result(
-            "provider_unavailable", reason="zero_cost_budget",
-            provider="fmp", provider_calls=0,
-        )
     return _acquire(transport, arguments, prepared)

@@ -104,6 +104,16 @@ def test_missing_exact_transcript_fetches_once_and_replay_reuses() -> None:
     assert [name for name, _ in transport.calls] == ["lookup", "acquire", "lookup"]
 
 
+def test_zero_fee_limit_is_forwarded_to_provider_for_capability_decision():
+    req = request()
+    req["companion_transcript"]["acquisition_limits"]["max_cost_usd"] = "0.00"
+    transport = FakeTransport()
+    result = resolve_companion_transcript(request=req, filing_handle=filing(), transport=transport)
+    assert result["status"] == "downloaded"
+    assert [name for name, _ in transport.calls] == ["lookup", "acquire"]
+    assert transport.calls[-1][1]["acquisition_limits"] == req["companion_transcript"]["acquisition_limits"]
+
+
 def test_provider_unavailable_is_separate_child_result() -> None:
     transport = FakeTransport(acquired={
         "status": "provider_unavailable", "reason": "entitlement_required",
@@ -180,15 +190,13 @@ def test_companion_limits_reach_acquisition_once() -> None:
     assert transport.calls[1][1]["acquisition_limits"] == (
         value["companion_transcript"]["acquisition_limits"]
     )
-def test_zero_cost_budget_reuses_but_never_calls_provider() -> None:
+def test_zero_incremental_fee_ceiling_reaches_provider_without_enlarging_limits() -> None:
     transport = FakeTransport()
     value = request()
     value["companion_transcript"]["acquisition_limits"]["max_cost_usd"] = "0.00"
     result = resolve_companion_transcript(
         request=value, filing_handle=filing(), transport=transport,
     )
-    assert result == {
-        "status": "provider_unavailable", "reason": "zero_cost_budget",
-        "retryable": False, "provider": "fmp", "provider_calls": 0,
-    }
-    assert [name for name, _ in transport.calls] == ["lookup"]
+    assert result["status"] == "downloaded"
+    assert [name for name, _ in transport.calls] == ["lookup", "acquire"]
+    assert transport.calls[1][1]["acquisition_limits"] == value["companion_transcript"]["acquisition_limits"]

@@ -17,6 +17,7 @@ _TRANSCRIPT_KEYS = (
     "fiscal_year", "fiscal_quarter", "content_sha256", "locator",
     "provider_document_id", "call_date", "publication_date",
     "as_of_cutoff_verified", "provider_calls",
+    "provider_requests", "provider_response_bytes", "provider_usage_complete",
 )
 
 
