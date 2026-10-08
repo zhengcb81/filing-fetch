@@ -42,6 +42,16 @@ _MAX_REF_FIELDS = frozenset(
 )
 
 
+def _usage_counters(usage: object) -> tuple[int, int] | None:
+    """Validate the two measured counters independently from receipt identity."""
+    if not isinstance(usage, dict):
+        return None
+    count, size = usage.get("requests_used"), usage.get("response_bytes_used")
+    if type(count) is not int or count < 0 or type(size) is not int or size < 0:
+        return None
+    return count, size
+
+
 def _provider_usage(raw: bytes, request_id: str) -> dict[str, Any]:
     """Read one final supervisor receipt; absent/partial usage stays unknown."""
     unknown = {"provider_requests": None, "provider_response_bytes": None, "provider_usage_complete": False}
@@ -55,12 +65,10 @@ def _provider_usage(raw: bytes, request_id: str) -> dict[str, Any]:
         return unknown
     if receipt.get("request_id") != request_id or receipt.get("usage_complete") is not True:
         return unknown
-    usage = receipt.get("usage")
-    if not isinstance(usage, dict):
+    counters = _usage_counters(receipt.get("usage"))
+    if counters is None:
         return unknown
-    count, size = usage.get("requests_used"), usage.get("response_bytes_used")
-    if type(count) is not int or count < 0 or type(size) is not int or size < 0:
-        return unknown
+    count, size = counters
     return {"provider_requests": count, "provider_response_bytes": size, "provider_usage_complete": True}
 
 
