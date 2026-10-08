@@ -1,0 +1,305 @@
+{
+  "schema_version": "cmrf-ff-cause-e2e/1",
+  "generated_at": "2026-10-08T20:23:36Z",
+  "cwp_src": "C:\\Users\\郑曾波\\Projects\\company-wiki\\src",
+  "ff_cli": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\cmrf-20261008\\ff-diagnostics\\scripts\\fetch_filing.py",
+  "scenarios": {
+    "A_broken_config": {
+      "checks": [
+        {
+          "name": "ff_exits_2",
+          "status": "PASS",
+          "detail": "rc=2"
+        },
+        {
+          "name": "v2_fatal_status",
+          "status": "PASS",
+          "detail": "fatal"
+        },
+        {
+          "name": "cause_present_fatal",
+          "status": "PASS",
+          "detail": "{\"schema_version\": \"filing-upstream-cause/1\", \"operation\": \"ensure\", \"code\": \"fatal\", \"provider_started\": null, \"usage_complete\": null, \"retry_scope\": \"none\"}"
+        },
+        {
+          "name": "honest_nulls",
+          "status": "PASS",
+          "detail": "{\"schema_version\": \"filing-upstream-cause/1\", \"operation\": \"ensure\", \"code\": \"fatal\", \"provider_started\": null, \"usage_complete\": null, \"retry_scope\": \"none\"}"
+        },
+        {
+          "name": "provider_never_started",
+          "status": "PASS",
+          "detail": "0 start events"
+        },
+        {
+          "name": "no_secret_stderr_leak",
+          "status": "PASS",
+          "detail": ""
+        }
+      ],
+      "ff_response": {
+        "schema_version": "2.0",
+        "status": "fatal",
+        "request_period": {
+          "mode": "exact",
+          "fiscal_year": 2024,
+          "fiscal_period": null,
+          "as_of_date": "2026-10-08"
+        },
+        "filing": {
+          "status": "fatal",
+          "reason": "company-wiki ensure exited 1",
+          "retryable": false,
+          "upstream_cause": {
+            "schema_version": "filing-upstream-cause/1",
+            "operation": "ensure",
+            "code": "fatal",
+            "provider_started": null,
+            "usage_complete": null,
+            "retry_scope": "none"
+          }
+        },
+        "transcript": {
+          "status": "not_requested",
+          "retryable": false
+        },
+        "calls": 2,
+        "downloads": 0
+      },
+      "provider_log_lines": 0
+    },
+    "B_typed_provider_failure": {
+      "checks": [
+        {
+          "name": "ff_exits_2",
+          "status": "PASS",
+          "detail": "rc=2"
+        },
+        {
+          "name": "v2_fatal_status",
+          "status": "PASS",
+          "detail": "fatal"
+        },
+        {
+          "name": "cause_code_fatal_or_unknown",
+          "status": "PASS",
+          "detail": "{\"schema_version\": \"filing-upstream-cause/1\", \"operation\": \"ensure\", \"code\": \"fatal\", \"provider_started\": null, \"usage_complete\": null, \"retry_scope\": \"none\"}"
+        },
+        {
+          "name": "honest_nulls_despite_real_start",
+          "status": "PASS",
+          "detail": "{\"schema_version\": \"filing-upstream-cause/1\", \"operation\": \"ensure\", \"code\": \"fatal\", \"provider_started\": null, \"usage_complete\": null, \"retry_scope\": \"none\"}"
+        },
+        {
+          "name": "provider_actually_started",
+          "status": "PASS",
+          "detail": "1 start events (test-report evidence only)"
+        },
+        {
+          "name": "http_attempted",
+          "status": "PASS",
+          "detail": "1 http events"
+        },
+        {
+          "name": "adapter_code_not_leaked",
+          "status": "PASS",
+          "detail": ""
+        }
+      ],
+      "ff_response": {
+        "schema_version": "2.0",
+        "status": "fatal",
+        "request_period": {
+          "mode": "exact",
+          "fiscal_year": 2024,
+          "fiscal_period": null,
+          "as_of_date": "2026-10-08"
+        },
+        "filing": {
+          "status": "fatal",
+          "reason": "company-wiki ensure exited 1",
+          "retryable": false,
+          "upstream_cause": {
+            "schema_version": "filing-upstream-cause/1",
+            "operation": "ensure",
+            "code": "fatal",
+            "provider_started": null,
+            "usage_complete": null,
+            "retry_scope": "none"
+          }
+        },
+        "transcript": {
+          "status": "not_requested",
+          "retryable": false
+        },
+        "calls": 2,
+        "downloads": 0
+      },
+      "provider_log": [
+        {
+          "event": "provider_started",
+          "action": "discover",
+          "behavior": "typed_error",
+          "budget": {
+            "max_cost_usd": "0",
+            "max_response_bytes": 10000000,
+            "schema_version": "1.0",
+            "timeout_seconds": 59.91479999999865
+          }
+        },
+        {
+          "event": "http_attempt",
+          "action": "discover",
+          "url": "https://static.cninfo.com.cn/finalpage/2025-03-25/1222881496.PDF",
+          "status": 503
+        },
+        {
+          "event": "usage",
+          "action": "discover",
+          "response_bytes": 0,
+          "cost_usd": "0.00",
+          "complete": false
+        }
+      ],
+      "note": "provider_started/usage_complete stay null in FF output because CWP's public stderr taxonomy carries no such fields (findings G1/G2); the fake provider's own log proves it started - recorded here only."
+    },
+    "C1_legal_import": {
+      "checks": [
+        {
+          "name": "ff_exits_0",
+          "status": "PASS",
+          "detail": "rc=0 err="
+        },
+        {
+          "name": "source_candidate",
+          "status": "PASS",
+          "detail": "source_candidate"
+        },
+        {
+          "name": "one_download_event",
+          "status": "PASS",
+          "detail": "downloads=1 events=1"
+        },
+        {
+          "name": "no_cause_on_success",
+          "status": "PASS",
+          "detail": ""
+        },
+        {
+          "name": "provider_fetch_200",
+          "status": "PASS",
+          "detail": ""
+        }
+      ],
+      "ff_response": {
+        "schema_version": "2.0",
+        "status": "source_candidate",
+        "request_period": {
+          "mode": "exact",
+          "fiscal_year": 2024,
+          "fiscal_period": null,
+          "as_of_date": "2026-10-08"
+        },
+        "filing": {
+          "status": "source_candidate",
+          "source_ref": {
+            "byte_size": 2040,
+            "content_sha256": "e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+            "document_id": "urn:company-wiki:document:sha256:e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+            "mime_type": "application/pdf",
+            "schema_version": "2.0",
+            "source_id": "urn:company-wiki:source:sha256:e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26"
+          },
+          "byte_verification": "pending_verified_open",
+          "document_kind": "annual_report",
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "resolution_outcome": "downloaded_new",
+          "download_events": 1
+        },
+        "transcript": {
+          "status": "not_requested",
+          "retryable": false
+        },
+        "calls": 2,
+        "downloads": 1
+      }
+    },
+    "C2_legal_reuse": {
+      "checks": [
+        {
+          "name": "ff_exits_0",
+          "status": "PASS",
+          "detail": "rc=0 err="
+        },
+        {
+          "name": "source_candidate_reuse",
+          "status": "PASS",
+          "detail": "reused_existing"
+        },
+        {
+          "name": "zero_download_trace",
+          "status": "PASS",
+          "detail": "downloads=0 events=0"
+        },
+        {
+          "name": "no_provider_invocation",
+          "status": "PASS",
+          "detail": "6 vs 6 provider log lines"
+        },
+        {
+          "name": "source_ref_bytes_verified",
+          "status": "PASS",
+          "detail": "ref=e57b46b7481a canonical=1"
+        },
+        {
+          "name": "source_ref_size_verified",
+          "status": "PASS",
+          "detail": "2040 vs 2040"
+        },
+        {
+          "name": "no_physical_fields",
+          "status": "PASS",
+          "detail": ""
+        }
+      ],
+      "ff_response": {
+        "schema_version": "2.0",
+        "status": "source_candidate",
+        "request_period": {
+          "mode": "exact",
+          "fiscal_year": 2024,
+          "fiscal_period": null,
+          "as_of_date": "2026-10-08"
+        },
+        "filing": {
+          "status": "source_candidate",
+          "source_ref": {
+            "byte_size": 2040,
+            "content_sha256": "e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+            "document_id": "urn:company-wiki:document:sha256:e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26",
+            "mime_type": "application/pdf",
+            "schema_version": "2.0",
+            "source_id": "urn:company-wiki:source:sha256:e57b46b7481a3a263db8e0211e577a45036ba5425edefb893eb8c2579cb64e26"
+          },
+          "byte_verification": "pending_verified_open",
+          "document_kind": "annual_report",
+          "fiscal_year": 2024,
+          "fiscal_period": "FY",
+          "resolution_outcome": "reused_existing",
+          "download_events": 0
+        },
+        "transcript": {
+          "status": "not_requested",
+          "retryable": false
+        },
+        "calls": 2,
+        "downloads": 0
+      }
+    }
+  },
+  "tmp_root": "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\cmrf-ff-cause-e2e-u2y9tsih",
+  "retained": false,
+  "result": "PASS",
+  "failures": []
+}

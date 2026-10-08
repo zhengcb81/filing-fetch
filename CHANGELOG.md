@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **Safe upstream failure-cause diagnostics (R6-FF-CAUSE).** A named
+  company-wiki machine failure no longer collapses to ``ensure exited 1`` +
+  ``fatal``: the already-bounded stderr is parsed once
+  (`scripts/ff_provider_cause.py`) and an optional fixed six-key
+  ``filing-upstream-cause/1`` diagnostic (`operation` / safe `code` /
+  evidence-backed `provider_started` / `usage_complete` / `retry_scope`)
+  rides v1 error envelopes top-level and v2 inside ``filing``. Codes come
+  from the verified CWP public taxonomy plus FF-observed producer
+  conditions; raw stderr, exception text, commands, paths and credentials
+  never cross the boundary, malformed/oversized/mixed payloads fail closed
+  to ``unknown`` + the existing fatal semantics, and ``provider_started`` /
+  ``usage_complete`` stay ``null`` whenever a producer actually ran (CWP
+  publishes no such fields today). Existing status/error_code/retryable/
+  calls/downloads meanings, success/gap envelopes and the catalog-contention
+  auto-retry scope are unchanged; deadline exhaustion during contention
+  keeps the last catalog cause and never re-requests past the hard cutoff.
+
 - **Scoped installation (G2-08).** Repeatable `--file`, zero-write `--plan`,
   one JSON result, physical-target alias coalescing, per-file atomic updates
   and truthful partial/conflict recovery. Existing user configuration,
