@@ -1,0 +1,178 @@
+{
+  "schema_version": "cmrf-lane-handoff/1",
+  "lane_id": "R6-FF-CAUSE",
+  "status": "ready_for_main",
+  "repository": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\cmrf-20261008\\ff-diagnostics",
+  "baseline_commit": "697af966475a4aa7bb0687c78bfb81a7edb54f21",
+  "branch": "codex/cmrf-provider-diagnostics-20261008",
+  "commits": [
+    "5da45dc6c253f7f181569661d430909acdbb3904",
+    "8bb7b85f57ca7effed2a42afe8fbcdbba72c15ff"
+  ],
+  "head": "8bb7b85f57ca7effed2a42afe8fbcdbba72c15ff",
+  "files": [
+    {
+      "path": "scripts/ff_provider_cause.py",
+      "sha256": "d1e66857612f2a7d94bcea5c3f430121f2be0003e83dabdcac25162dc304d413"
+    },
+    {
+      "path": "scripts/fetch_filing.py",
+      "sha256": "0fd2dbf31f2c6bb5aade7e496aacf7da4d3ac39f8a6d42ba8f07927463447b53"
+    },
+    {
+      "path": "scripts/filing_contracts.py",
+      "sha256": "0c010dbaac305fbe32b3129e6af23def4c4f8d15cd143fb0d10190f94777fce7"
+    },
+    {
+      "path": "scripts/ff_v2_envelope.py",
+      "sha256": "de835b09e85bd8d1702523c87fe990c180e35b3187198787ca7ce2ab4f9704dd"
+    },
+    {
+      "path": "tests/test_provider_cause_contract.py",
+      "sha256": "a99316fa76944aa6e0865c10dc52a3d0739823632099844af52e578dd7ecff73"
+    },
+    {
+      "path": "tests/test_provider_diagnostics_cli.py",
+      "sha256": "110f2d75bb1778be54836a59339cb49d99cfb0bf1416281a359ca1c396259ec4"
+    },
+    {
+      "path": "docs/implementation/cmrf-provider-diagnostics-20261008/run_isolated_cause_e2e.py",
+      "sha256": "880f5ed9231ea0f5ab26dcba76b7c7a73310d9ce683e63cebef97663dafaa2f9"
+    },
+    {
+      "path": "docs/implementation/cmrf-provider-diagnostics-20261008/isolated_cause_e2e_report.json",
+      "sha256": "0832ee5c744340da4e01b5e50629525c324e11f242be04f0032d47988472a9c6"
+    },
+    {
+      "path": "docs/implementation/cmrf-provider-diagnostics-20261008/findings.md",
+      "sha256": "8bedd51e29aae81ba9ab60d75f26bd7366996d52ec448b31e614b288c71df62c"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "ff_provider_cause.diagnose_stderr",
+      "version": "filing-upstream-cause/1",
+      "path": "scripts/ff_provider_cause.py",
+      "example": "tests/test_provider_cause_contract.py::test_diagnose_stderr_direct_contract"
+    },
+    {
+      "name": "ff_provider_cause.condition_cause",
+      "version": "filing-upstream-cause/1",
+      "path": "scripts/ff_provider_cause.py",
+      "example": "tests/test_provider_cause_contract.py::test_producer_conditions_map_to_honest_causes"
+    },
+    {
+      "name": "ff_provider_cause.validated_cause",
+      "version": "filing-upstream-cause/1",
+      "path": "scripts/ff_provider_cause.py",
+      "example": "tests/test_provider_cause_contract.py::test_validated_cause_rejects_tampered_shapes"
+    },
+    {
+      "name": "FilingFetchError.upstream_cause (optional kwarg)",
+      "version": "1.2.0-contracts",
+      "path": "scripts/filing_contracts.py",
+      "example": "tests/test_provider_diagnostics_cli.py::test_v1_failure_carries_optional_upstream_cause"
+    },
+    {
+      "name": "ff_v2_envelope.error_envelope(upstream_cause=)",
+      "version": "2.0-response",
+      "path": "scripts/ff_v2_envelope.py",
+      "example": "tests/test_provider_diagnostics_cli.py::test_v2_failure_carries_upstream_cause_inside_filing"
+    }
+  ],
+  "tests": {
+    "red": [
+      {
+        "command": "python -m pytest tests/test_provider_cause_contract.py -q",
+        "exit_code": 1,
+        "mechanism": "named CWP machine causes raised AttributeError (no upstream_cause) and ff_provider_cause did not exist; 24 failed / 2 passed at baseline 697af96"
+      },
+      {
+        "command": "python -m pytest tests/test_provider_diagnostics_cli.py -q",
+        "exit_code": 1,
+        "mechanism": "v1/v2 failure envelopes lacked the optional field (KeyError) and FilingFetchError rejected the kwarg (TypeError); 5 failed / 5 passed"
+      }
+    ],
+    "green": [
+      {
+        "command": "python -m pytest tests/test_provider_cause_contract.py tests/test_provider_diagnostics_cli.py -q",
+        "exit_code": 0,
+        "passed": 36,
+        "seconds": 2.5
+      },
+      {
+        "command": "python -m pytest tests/ -q --ignore=tests/test_e2e_download.py --ignore=tests/test_e2e_isolated_wiki.py --ignore=tests/test_fc805_real_download_t3.py --ignore=tests/test_real_tool_conformance.py",
+        "exit_code": 0,
+        "passed": 552,
+        "seconds": 91.0
+      },
+      {
+        "command": "python -m pytest tests/test_e2e_isolated_wiki.py tests/test_real_tool_conformance.py -q",
+        "exit_code": 0,
+        "passed": 21,
+        "seconds": 56.0
+      },
+      {
+        "command": "ruff check scripts tests",
+        "exit_code": 0,
+        "passed": 0,
+        "seconds": 3.0
+      },
+      {
+        "command": "python -m mypy scripts/filing_contracts.py scripts/fetch_filing.py",
+        "exit_code": 0,
+        "passed": 0,
+        "seconds": 12.0
+      },
+      {
+        "command": "python -m pytest tests/test_complexity_ratchet.py -q",
+        "exit_code": 0,
+        "passed": 2,
+        "seconds": 0.2
+      },
+      {
+        "command": "python tools/host_assumption_guard.py --roots tests tools scripts e2e",
+        "exit_code": 0,
+        "passed": 0,
+        "seconds": 4.0
+      }
+    ],
+    "e2e": [
+      {
+        "command": "python docs/implementation/cmrf-provider-diagnostics-20261008/run_isolated_cause_e2e.py",
+        "mode": "offline",
+        "status": "PASS",
+        "report": "docs/implementation/cmrf-provider-diagnostics-20261008/isolated_cause_e2e_report.json"
+      },
+      {
+        "command": "FILING_FETCH_E2E_DOWNLOAD=1 python -m pytest tests/test_e2e_download.py tests/test_fc805_real_download_t3.py -q",
+        "mode": "live",
+        "status": "NOT_RUN",
+        "report": ""
+      }
+    ]
+  },
+  "isolation": {
+    "test_roots": [
+      "tempfile.mkdtemp(prefix=cmrf-ff-cause-e2e-)",
+      "unittest/pytest TemporaryDirectory roots for unit tests"
+    ],
+    "initial_state": "worktree clean at baseline; canonical FF/CWP untouched; config/FMP_API_KEY.txt absent from worktree (owner WIP, never read)",
+    "restored": true,
+    "retained_bytes": 0,
+    "originals_changed": 0,
+    "production_configs_changed": 0
+  },
+  "model_calls": 0,
+  "limitations": [
+    "provider_started/usage_complete stay null whenever a producer subprocess ran: CWP's public stderr taxonomy publishes no such fields (findings G1/G2); honest unknown by design",
+    "account/entitlement rejection, budget ceiling and post-download verification failure are not machine-distinguishable today (G3): they surface as fatal/unknown and are never auto-retried",
+    "one pre-existing divergence kept: query-route producer start failure remains retryable upstream_error (scope=none) - documented legacy exception",
+    "FMP account entitlement denial remains an external account-side restriction"
+  ],
+  "main_actions": [
+    "merge branch codex/cmrf-provider-diagnostics-20261008 (2 commits) into FF main and sync installed copies",
+    "wire upstream_cause into RF reports/test suites (this lane changed no RF/CWP consumers)",
+    "CWP-side interface additions per findings G1-G3 (error-taxonomy provider_started/usage_complete; adapter error_code/usage passthrough; named codes for account/budget/verification classes) - FF mapping table is the single extension point"
+  ]
+}
