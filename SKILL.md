@@ -1,6 +1,6 @@
 ---
 name: filing-fetch
-description: Fetch a company financial filing into company-wiki on demand. Reuses an existing filing if one is already indexed; otherwise, only when explicitly authorized, downloads via the correct market tool — A-shares (CN) via StockInfoDLSimple/cninfo, HK and US via dayu-agent — and stores the new file under company-wiki's companies/{entity}/raw/financial_reports/{kind}/ with immutable provenance. Use when any skill (revenue-forecast, invest-*, industry-research) needs an annual/quarterly/semi-annual report or regulatory filing and must not blindly re-download.
+description: Fetch or reuse a company financial filing through company-wiki. Use when revenue-forecast, invest-* or industry-research needs an annual, quarterly, semi-annual or regulatory filing. Reuses existing originals first and routes missing filings to configured CN/HK/US providers within the task acquisition intent and resource limits.
 ---
 # Filing Fetch
 
@@ -18,6 +18,22 @@ Two request schemas are accepted:
 New callers use `2.0`. The older schemas keep working for existing callers and
 retain their result shapes. Legacy acquisition requests may provide the same
 validated `acquisition_limits` object; existing read-only reuse does not need it.
+
+## Task authorization and acquisition intent
+
+An authorized company task covers the bounded source acquisition needed for that
+task through the currently configured providers. Carry forward the user's
+existing session authorization; do not ask again for each filing or supplier,
+create an authorization file, or require a canary or human sign-off. Derive
+`reuse_only` or `fetch_if_missing` from that task scope. A reuse-only task stays
+reuse-only.
+
+Use the current provider configuration, credentials and cumulative budget,
+including recorded or unknown prior usage. Keep the request's byte, time and fee
+ceilings and normal platform security review. Missing configuration, unsupported
+capability, account rejection or exhausted budget is a named gap; it does not
+justify selecting an unconfigured provider, purchasing access or inventing a new
+budget.
 
 ## Required workflow (schema 2.0)
 
@@ -336,10 +352,12 @@ all installed copies to match before code can be pushed.
 - Consuming skills convert the returned handle into their own capture schema
   (e.g., revenue-forecast builds its revenue source record from it).
 - Language: Python; request: JSON stdin or `--request-file`; response: JSON stdout.
-- **Indexed ≠ reusable**: a catalog document being indexed (scanned,
-  parsed, fingerprinted) does not make it a reuse handle.  Only active,
-  capture-ready documents under a registered reusable root kind are
-  reused; everything else fails closed (`not_found` with a debug trace).
+- **Indexed ≠ verified**: indexing alone does not establish source identity,
+  period, information date or intact bytes. CWP evaluates current source
+  eligibility. A v2 miss may reconcile metadata for an intact existing original;
+  withdrawn, damaged or ambiguous sources remain named gaps. Registered roots
+  configure storage lookup, not a separate per-document permission. The consumer
+  opens the returned SourceRef through CWP's public verified reader.
 - **exact vs latest**: an `exact` resolve matches identity+kind+period
   deterministically; `latest_as_of` picks the most recent published
   handle not after `as_of_date` (ties broken by provider_document_id,
@@ -350,13 +368,11 @@ all installed copies to match before code can be pushed.
   the original document; a changed producer or document hash invalidates
   only the dependent roles and schedules a minimal recompute — the
   original bytes are never rewritten by a reuse path.
-- **Real-root canary limits**: read-only probes and canaries never write
-  to real roots (Dropbox/dayu/companies).  Production reuse of
-  Dropbox-only filings and binding-valid processed artifacts is NOT yet
-  proven: legacy evidence lacks strong identity/period/binding (see the
-  data-lake refactor audit receipts WU-1303/902/1304).  Fixture-level
-  E2E stays green; production claims stay unclaimed until the
-  observation period and remediation windows complete.
+- **Historical probe evidence**: data-lake audit receipts WU-1303/902/1304
+  record the evidence limits of those past runs. Preserve those records; they do
+  not require a new canary or observation window before an authorized task.
+  Current reuse follows CWP's source eligibility and public reader. Validation
+  probes use owned fixtures and leave existing originals unchanged.
 
 ## One acquisition transaction (G2-12)
 
