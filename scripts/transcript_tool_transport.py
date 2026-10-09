@@ -30,6 +30,9 @@ from ff_process_transport import (  # noqa: E402
 # directory before the outer subprocess timeout expires.
 _ET_CLEANUP_GRACE_SECONDS = 3.0
 _ET_MAX_TIMEOUT_SECONDS = 60
+# Public ET earnings-transcript-request/1 canonical UTF-8 body ceiling.
+# The operation raw-response budget is separate and may legitimately be wider.
+_ET_MAX_BODY_BYTES = 10 * 1024 * 1024
 _MAX_REF_FIELDS = frozenset(
     {
         "schema_version",
@@ -353,7 +356,8 @@ class EarningsTranscriptsTransport:
             "provider": "fmp",
             "download_authorized": True,
             "timeout_seconds": timeout_seconds,
-            "max_body_bytes": limits["max_bytes"],
+            "max_body_bytes": min(limits["max_bytes"], _ET_MAX_BODY_BYTES),
+            "max_response_bytes": limits["max_bytes"],
             "max_cost_usd": limits["max_cost_usd"],
         }
         command = [
@@ -553,7 +557,26 @@ class EarningsTranscriptsTransport:
                 "reason": "provider_request_id_mismatch",
                 "retryable": False,
                 "provider_calls": 1,
+                **self._last_provider_usage,
             }
+        try:
+            result = self._import_fetched(fetched, request, identity, kwargs)
+        except (TransportError, ValueError, OSError, subprocess.TimeoutExpired):
+            result = {
+                "status": "upstream_error",
+                "reason": "transcript_import_failed",
+                "retryable": False,
+                "provider_calls": 1,
+            }
+        # ET has already finished and supplied one measured receipt. Import or
+        # verified-open failures cannot erase it or invite another download.
+        result.update(self._last_provider_usage)
+        return result
+
+    def _import_fetched(
+        self, fetched: dict[str, Any], request: dict[str, Any],
+        identity: dict[str, Any], kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
         candidate = self._candidate(fetched, request, identity)
         envelope = {
             "schema_version": _IMPORT_SCHEMA,

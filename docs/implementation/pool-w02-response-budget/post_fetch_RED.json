@@ -1,0 +1,22 @@
+{
+  "command": [
+    "C:\\Miniconda\\python.exe",
+    "-X",
+    "utf8",
+    "-B",
+    "-m",
+    "pytest",
+    "tests/test_transcript_response_budget.py",
+    "-q",
+    "--tb=short",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffred-wgl80bxb\\pytest"
+  ],
+  "exit_code": 1,
+  "stdout": "..FFFF                                                                   [100%]\n================================== FAILURES ===================================\n_ test_post_fetch_import_failures_keep_measured_usage_and_never_retry[child] __\ntests\\test_transcript_response_budget.py:83: in test_post_fetch_import_failures_keep_measured_usage_and_never_retry\n    result = transport.acquire_exact(**kwargs, acquisition_limits={\"max_bytes\": 4096,\nscripts\\transcript_tool_transport.py:575: in acquire_exact\n    imported, code = self._run_json(\ntests\\test_transcript_response_budget.py:68: in import_result\n    raise ChildFailed(\"rejected\", returncode=2, stdout=b'{\"status\":\"rejected\"}')\nE   ff_process_transport.ChildFailed: rejected\n_ test_post_fetch_import_failures_keep_measured_usage_and_never_retry[rejected] _\ntests\\test_transcript_response_budget.py:88: in test_post_fetch_import_failures_keep_measured_usage_and_never_retry\n    assert all(result.get(key) == value for key, value in usage.items())\nE   assert False\nE    +  where False = all(<generator object test_post_fetch_import_failures_keep_measured_usage_and_never_retry.<locals>.<genexpr> at 0x000002224B45AF80>)\n_ test_post_fetch_import_failures_keep_measured_usage_and_never_retry[bad_ref] _\ntests\\test_transcript_response_budget.py:83: in test_post_fetch_import_failures_keep_measured_usage_and_never_retry\n    result = transport.acquire_exact(**kwargs, acquisition_limits={\"max_bytes\": 4096,\nscripts\\transcript_tool_transport.py:595: in acquire_exact\n    ref = self._valid_ref(imported.get(\"source_ref\"))\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nscripts\\transcript_tool_transport.py:204: in _valid_ref\n    raise ValueError(\"company-wiki SourceRef shape is invalid\")\nE   ValueError: company-wiki SourceRef shape is invalid\n__ test_post_fetch_import_failures_keep_measured_usage_and_never_retry[open] __\ntests\\test_transcript_response_budget.py:83: in test_post_fetch_import_failures_keep_measured_usage_and_never_retry\n    result = transport.acquire_exact(**kwargs, acquisition_limits={\"max_bytes\": 4096,\nscripts\\transcript_tool_transport.py:603: in acquire_exact\n    self._verified_open(ref)\ntests\\test_transcript_response_budget.py:81: in broken_open\n    raise OSError(\"owned read failure after provider finished\")\nE   OSError: owned read failure after provider finished\n=========================== short test summary info ===========================\nFAILED tests/test_transcript_response_budget.py::test_post_fetch_import_failures_keep_measured_usage_and_never_retry[child]\nFAILED tests/test_transcript_response_budget.py::test_post_fetch_import_failures_keep_measured_usage_and_never_retry[rejected]\nFAILED tests/test_transcript_response_budget.py::test_post_fetch_import_failures_keep_measured_usage_and_never_retry[bad_ref]\nFAILED tests/test_transcript_response_budget.py::test_post_fetch_import_failures_keep_measured_usage_and_never_retry[open]\n4 failed, 2 passed in 0.44s\n",
+  "stderr": "",
+  "seconds": 3.222,
+  "temporary_root_restored": true
+}

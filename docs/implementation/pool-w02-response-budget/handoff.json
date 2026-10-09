@@ -1,0 +1,29 @@
+{
+  "work_package": "W02-FF-wiring",
+  "status": "responsibility_and_actual_three_repo_verified_pending_main_merge",
+  "base": "e9b0d0882f46772e333a5b986c7c414733c284cd",
+  "changed_paths": [
+    "scripts/transcript_tool_transport.py",
+    "tests/test_transcript_response_budget.py",
+    ".github/workflows/quality.yml"
+  ],
+  "sha256": {
+    "scripts/transcript_tool_transport.py": "bcc9c5f33d7a249d851f6f43557c95eb0f821e710224eeb13f977888592d3f59",
+    "tests/test_transcript_response_budget.py": "dd73b143621c313cb35eedd35e3ba279dc7899f68621f69b8ca95e40250a3248",
+    ".github/workflows/quality.yml": "2cde088df843772cddf722a7364f5e29605a7d48320fd0848b0f14018fbcb633"
+  },
+  "red": "2failed missing max_response_bytes",
+  "green": "33passed in5.06s; MAIN_GREEN.json",
+  "raw_operation": "limits.max_bytes forwarded unmodified as max_response_bytes",
+  "canonical_body": "min(limits.max_bytes, public ET max_body_bytes ceiling10MiB)",
+  "usage": "Actual1400B over1024cap preserved, not clamped; known usage vs unknown unchanged",
+  "new_CI_cases": 6,
+  "temporary_restored": true,
+  "network_calls": 0,
+  "supplier_calls": 0,
+  "not_done": [
+    "main merge/install/push after ET main merge"
+  ],
+  "post_fetch_red": "4failed/2passed; post_fetch_RED.json",
+  "three_repo_e2e": "C:/Users/郑曾波/Projects/company-wiki/docs/plans/cross-market-rf-e2e-2026-10-08/phase6/transcript_budget_candidate_contract.json"
+}
