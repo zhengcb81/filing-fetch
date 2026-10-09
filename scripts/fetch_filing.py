@@ -745,12 +745,27 @@ def _source_query_candidate(
     No source bytes or root paths cross this boundary. The downstream CWP
     ``open_version(filing_reuse)`` remains the sole verified source read.
     """
-    payload = _run_source_query(
-        root=root,
-        normalized_request=normalized_request,
-        deadline=deadline,
-        stats=stats,
-    )
+    try:
+        payload = _run_source_query(
+            root=root, normalized_request=normalized_request, deadline=deadline, stats=stats,
+        )
+    except FilingFetchError as exc:
+        if (exc.code != "not_found"
+                or request.get("schema_version") != FILING_V2_REQUEST_SCHEMA_VERSION
+                or request.get("filing_intent") != "reuse_only"):
+            raise
+        from ff_local_source_prepare import prepare_existing_local_source
+
+        prepare_existing_local_source(
+            root=root,
+            source_request={key: value for key, value in normalized_request.items()
+                            if key in _QUERY_REQUEST_FIELDS},
+            deadline=deadline, stats=stats, transport=_run_bounded_json,
+            physical_fields=_contains_physical_field,
+        )
+        payload = _run_source_query(
+            root=root, normalized_request=normalized_request, deadline=deadline, stats=stats,
+        )
     matches = payload.get("matches")
     candidates = payload.get("candidates")
     if (
