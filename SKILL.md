@@ -31,9 +31,13 @@ validated `acquisition_limits` object; existing read-only reuse does not need it
    identically whichever entry point is used; an `allow_download` argument
    that contradicts it is a `request_error`, never a second, silently
    different decision.
-4. **Resolve (reuse)** — query company-wiki for an already-indexed,
-   capture-ready filing. If found, return the pathless candidate — no
-   download.
+4. **Reuse existing originals** — query company-wiki for a local source candidate.
+   A hit returns immediately without another preparation or download. For explicit
+   v2 `reuse_only` misses, CWP performs bounded local metadata reconciliation
+   (including legacy metadata-only retirement) and then FF queries again. This may
+   update catalog metadata; it never downloads. Unknown date, withdrawn source,
+   damaged bytes or ambiguous identity remain named gaps. Consumers still verify
+   the exact source bytes through the public reader.
  5. **Pause around downloads (retired)** — filing-fetch no longer probes
     worker-status or writes pause files: the old pause-around orchestration
     was removed in this lane. company-wiki retired the worker routes
@@ -89,8 +93,8 @@ a ceiling is never silently widened, reformatted or dropped.
 
 ## Command
 
-Read the request from stdin (or `--request-file`). Default is **read-only
-reuse**. For schema `1.2`/`1.1` add `--allow-download` only when a missing
+Read the request from stdin (or `--request-file`). Default is **existing-original reuse with zero downloads**. Explicit v2
+reuse may reconcile local catalog metadata; the source-query itself stays read-only. For schema `1.2`/`1.1` add `--allow-download` only when a missing
 filing should actually be fetched; for schema `2.0` the flag is ignored — the
 request's `filing_intent` is the intent.
 
@@ -116,7 +120,7 @@ echo '{
   "acquisition_limits": {"max_bytes": 5000000, "timeout_seconds": 60, "max_cost_usd": "1.00"}
 }' | python scripts/fetch_filing.py --timeout-seconds 300
 
-# Recommended (schema 2.0): read-only reuse, never downloads.
+# Recommended (schema 2.0): existing-original reuse; may reconcile metadata, never downloads.
 echo '{"schema_version":"2.0","company_query":"AMD","market":"US","document_kind":"annual_report","mode":"exact","fiscal_year":2025,"as_of_date":"2026-09-29","filing_intent":"reuse_only"}' \
   | python scripts/fetch_filing.py --timeout-seconds 300
 

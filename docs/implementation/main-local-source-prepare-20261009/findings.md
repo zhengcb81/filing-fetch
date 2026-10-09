@@ -1,0 +1,9 @@
+# Findings
+
+真正缺口：CWP query只看active，旧missing URL治理退休的原件仍存在但不成为reuse候选。普通scan sticky；download后SHA dedup太迟。源修复必须由存储层actual bytes/DEI/metadata原子投影负责，FF只调用公共本地prepare。
+
+首次10FAIL/.60秒仅是测试fixture复用了带acquisition_limits的fetch请求，reuse_only现契约不允许该字段。修正fixture去掉远程limits后实际9FAIL/1PASS/.1.29秒来自缺少prepare。没有改这个请求契约或装作真正RED。
+
+新增模块只运输有限请求、检查CWP结构与0download结果；根/metadata/byteverification不重复实现。正常queryhit不加一次昂贵原件读。本地prepare无supplier，不自动换provider、许可或字段版本。
+
+静态通过，影响回归204PASS/2SKIP/39subtests；实际四原件节点仍待CWP owner。CI仅把新测试加入原单一集中套件，不新增job、不每commit重跑付费六家公司。
