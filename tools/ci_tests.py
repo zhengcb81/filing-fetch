@@ -46,9 +46,34 @@ GIT_REPOSITORY_CONTEXT = (
 )
 
 
+def _wiki_source_directory() -> Path:
+    """Honor CI's pin override, otherwise use the public FF project locator."""
+    source = os.environ.get("FILING_FETCH_V2_WIKI_SRC")
+    if source:
+        directory = Path(source)
+    else:
+        scripts = str(PROJECT_ROOT / "scripts")
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        from fetch_filing import load_company_wiki_root
+
+        directory = load_company_wiki_root(
+            config_path=PROJECT_ROOT / "config" / "company_wiki.json",
+        ) / "src"
+    directory = directory.resolve(strict=True)
+    if not (directory / "company_wiki" / "source_catalog" / "cli.py").is_file():
+        raise FileNotFoundError(f"company-wiki runtime lacks source_catalog CLI: {directory}")
+    return directory
+
+
 def run_tests() -> int:
     """Keep scratch owned, child Git relative to its cwd, and failures visible."""
     environment = os.environ.copy()
+    try:
+        environment["FILING_FETCH_V2_WIKI_SRC"] = str(_wiki_source_directory())
+    except (OSError, RuntimeError) as exc:
+        print(f"company-wiki runtime unavailable for CI behavior tests: {exc}", file=sys.stderr)
+        return 2
     for key in GIT_REPOSITORY_CONTEXT:
         environment.pop(key, None)
     # CI installs plain pytest; unrelated host plugins can write checkout state.
@@ -57,7 +82,7 @@ def run_tests() -> int:
     with tempfile.TemporaryDirectory(prefix="ff-ci-") as scratch:
         result = subprocess.run(
             [sys.executable, "-B", "-m", "pytest", *CI_TESTS,
-             "-q", "--tb=short", "-p", "no:cacheprovider", "--basetemp", scratch],
+             "-q", "-rs", "--tb=short", "-p", "no:cacheprovider", "--basetemp", scratch],
             cwd=PROJECT_ROOT,
             env=environment,
             capture_output=True,

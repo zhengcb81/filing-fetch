@@ -1,6 +1,7 @@
 """Offline, real-process filing-fetch SourceRef v2 candidate handoff.
 
-Run with FILING_FETCH_V2_WIKI_SRC pointing to the checkout's ``src`` directory.
+CI may select a pinned ``src`` with FILING_FETCH_V2_WIKI_SRC; local runs use
+filing-fetch's configured company-wiki project when no override is provided.
 All state lives under pytest's temporary directory. No acquisition is enabled.
 """
 
@@ -14,6 +15,7 @@ import subprocess
 import sys
 
 import pytest
+import fetch_filing
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -24,8 +26,11 @@ SHA = hashlib.sha256(BODY).hexdigest()
 def _environment() -> dict[str, str]:
     source = os.environ.get("FILING_FETCH_V2_WIKI_SRC")
     if not source:
-        pytest.skip("set FILING_FETCH_V2_WIKI_SRC to run the isolated v2 E2E")
-    source_dir = Path(source).resolve(strict=True)
+        source = str(fetch_filing.load_company_wiki_root() / "src")
+    try:
+        source_dir = Path(source).resolve(strict=True)
+    except OSError as exc:
+        pytest.fail(f"company-wiki source runtime unavailable: {exc}", pytrace=False)
     if not (source_dir / "company_wiki" / "source_catalog" / "cli.py").is_file():
         pytest.fail("FILING_FETCH_V2_WIKI_SRC lacks source catalog CLI")
     environment = dict(os.environ)
