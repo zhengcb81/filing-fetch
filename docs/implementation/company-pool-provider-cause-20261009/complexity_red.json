@@ -1,0 +1,54 @@
+{
+  "schema_version": "ff-complexity-ci/1",
+  "stage": "RED",
+  "generated_at": "2026-10-09T00:15:57.289349+00:00",
+  "temporary_root": "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffcx_red_zl8g4nqv",
+  "temporary_root_restored": true,
+  "paid_calls": 0,
+  "records": [
+    {
+      "label": "prior_numeric_gate",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "pytest",
+        "tests/test_complexity_ratchet.py",
+        "-q",
+        "--tb=short",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp",
+        "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffcx_red_zl8g4nqv\\prior_numeric_gate"
+      ],
+      "exit_code": 1,
+      "seconds": 2.729,
+      "stdout": ".F                                                                       [100%]\n================================== FAILURES ===================================\n_________________________ test_new_files_stay_simple __________________________\ntests\\test_complexity_ratchet.py:65: in test_new_files_stay_simple\n    assert actual <= NEW_FILE_MAX, f\"{rel} max {actual} > {NEW_FILE_MAX}\"\nE   AssertionError: ff_provider_cause.py max 14 > 10\nE   assert 14 <= 10\n=========================== short test summary info ===========================\nFAILED tests/test_complexity_ratchet.py::test_new_files_stay_simple - Asserti...\n1 failed, 1 passed in 0.38s\n",
+      "stderr": ""
+    },
+    {
+      "label": "new_diagnostic_contract",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "pytest",
+        "tests/test_complexity_diagnostics.py",
+        "-q",
+        "--tb=short",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp",
+        "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffcx_red_zl8g4nqv\\new_diagnostic_contract"
+      ],
+      "exit_code": 1,
+      "seconds": 2.659,
+      "stdout": "FFFFFFF                                                                  [100%]\n================================== FAILURES ===================================\n__________ test_scores_measure_changes_without_a_numeric_permission ___________\ntests\\test_complexity_diagnostics.py:33: in test_scores_measure_changes_without_a_numeric_permission\n    tool = _tool()\n           ^^^^^^^\ntests\\test_complexity_diagnostics.py:19: in _tool\n    assert TOOL.is_file(), \"runnable diagnostic missing\"\nE   AssertionError: runnable diagnostic missing\nE   assert False\nE    +  where False = is_file()\nE    +    where is_file = WindowsPath('C:/Users/郑曾波/Projects/_harness_worktrees/cmrf-20261008/ff-diagnostics/tools/complexity_diagnostics.py').is_file\n_____________ test_invalid_syntax_is_not_a_zero_complexity_score ______________\ntests\\test_complexity_diagnostics.py:42: in test_invalid_syntax_is_not_a_zero_complexity_score\n    tool = _tool()\n           ^^^^^^^\ntests\\test_complexity_diagnostics.py:19: in _tool\n    assert TOOL.is_file(), \"runnable diagnostic missing\"\nE   AssertionError: runnable diagnostic missing\nE   assert False\nE    +  where False = is_file()\nE    +    where is_file = WindowsPath('C:/Users/郑曾波/Projects/_harness_worktrees/cmrf-20261008/ff-diagnostics/tools/complexity_diagnostics.py').is_file\n_____________ test_valid_source_exit_is_independent_of_score[low] _____________\ntests\\test_complexity_diagnostics.py:49: in test_valid_source_exit_is_independent_of_score\n    tool = _tool()\n           ^^^^^^^\ntests\\test_complexity_diagnostics.py:19: in _tool\n    assert TOOL.is_file(), \"runnable diagnostic missing\"\nE   AssertionError: runnable diagnostic missing\nE   assert False\nE    +  where False = is_file()\nE    +    where is_file = WindowsPath('C:/Users/郑曾波/Projects/_harness_worktrees/cmrf-20261008/ff-diagnostics/tools/complexity_diagnostics.py').is_file\n_______ test_valid_source_exit_is_independent_of_score[above-reference] _______\ntests\\test_complexity_diagnostics.py:49: in test_valid_source_exit_is_independent_of_score\n    tool = _tool()\n           ^^^^^^^\ntests\\test_complexity_diagnostics.py:19: in _tool\n    assert TOOL.is_file(), \"runnable diagnostic missing\"\nE   AssertionError: runnable diagnostic missing\nE   assert False\nE    +  where False = is_file()\nE    +    where is_file = WindowsPath('C:/Users/郑曾波/Projects/_harness_worktrees/cmrf-20261008/ff-diagnostics/tools/complexity_diagnostics.py').is_file\n___ test_syntax_error_has_nonzero_exit_and_does_not_hide_other_measurements ___\ntests\\test_complexity_diagnostics.py:63: in test_syntax_error_has_nonzero_exit_and_does_not_hide_other_measurements\n    _tool()\ntests\\test_complexity_diagnostics.py:19: in _tool\n    assert TOOL.is_file(), \"runnable diagnostic missing\"\nE   AssertionError: runnable diagnostic missing\nE   assert False\nE    +  where False = is_file()\nE    +    where is_file = WindowsPath('C:/Users/郑曾波/Projects/_harness_worktrees/cmrf-20261008/ff-diagnostics/tools/complexity_diagnostics.py').is_file\n_________ test_missing_input_fails_instead_of_silently_reporting_zero _________\ntests\\test_complexity_diagnostics.py:80: in test_missing_input_fails_instead_of_silently_reporting_zero\n    _tool()\ntests\\test_complexity_diagnostics.py:19: in _tool\n    assert TOOL.is_file(), \"runnable diagnostic missing\"\nE   AssertionError: runnable diagnostic missing\nE   assert False\nE    +  where False = is_file()\nE    +    where is_file = WindowsPath('C:/Users/郑曾波/Projects/_harness_worktrees/cmrf-20261008/ff-diagnostics/tools/complexity_diagnostics.py').is_file\n________ test_current_sources_are_measurable_without_score_thresholds _________\ntests\\test_complexity_diagnostics.py:89: in test_current_sources_are_measurable_without_score_thresholds\n    report = _tool().measure([ROOT / \"scripts\"])\n             ^^^^^^^\ntests\\test_complexity_diagnostics.py:19: in _tool\n    assert TOOL.is_file(), \"runnable diagnostic missing\"\nE   AssertionError: runnable diagnostic missing\nE   assert False\nE    +  where False = is_file()\nE    +    where is_file = WindowsPath('C:/Users/郑曾波/Projects/_harness_worktrees/cmrf-20261008/ff-diagnostics/tools/complexity_diagnostics.py').is_file\n=========================== short test summary info ===========================\nFAILED tests/test_complexity_diagnostics.py::test_scores_measure_changes_without_a_numeric_permission\nFAILED tests/test_complexity_diagnostics.py::test_invalid_syntax_is_not_a_zero_complexity_score\nFAILED tests/test_complexity_diagnostics.py::test_valid_source_exit_is_independent_of_score[low]\nFAILED tests/test_complexity_diagnostics.py::test_valid_source_exit_is_independent_of_score[above-reference]\nFAILED tests/test_complexity_diagnostics.py::test_syntax_error_has_nonzero_exit_and_does_not_hide_other_measurements\nFAILED tests/test_complexity_diagnostics.py::test_missing_input_fails_instead_of_silently_reporting_zero\nFAILED tests/test_complexity_diagnostics.py::test_current_sources_are_measurable_without_score_thresholds\n7 failed in 0.38s\n",
+      "stderr": ""
+    }
+  ]
+}

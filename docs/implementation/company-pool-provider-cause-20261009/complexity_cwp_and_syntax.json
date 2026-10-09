@@ -1,0 +1,77 @@
+{
+  "schema_version": "ff-complexity-ci/1",
+  "stage": "CWP_ENV_AND_SYNTAX",
+  "generated_at": "2026-10-09T00:19:58.957127+00:00",
+  "candidate_cwp_root": "C:\\Users\\郑曾波\\.codex\\worktrees\\audit-provider-cause\\company-wiki",
+  "candidate_cwp_sha": "d7923191",
+  "temporary_root": "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffcx_cwp_7fu7be7u",
+  "temporary_root_restored": true,
+  "paid_calls": 0,
+  "records": [
+    {
+      "label": "two_explicit_cwp_contracts",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "pytest",
+        "e2e/test_source_ref_v2_cli.py::test_same_sha_duplicate_returns_pathless_candidate_without_reading_pdf",
+        "tests/test_source_ref_v2_db_query.py::test_real_db_only_reuse_accepts_configured_root_with_legacy_labels_false",
+        "-q",
+        "--tb=short",
+        "-rs",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp",
+        "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffcx_cwp_7fu7be7u\\pytest"
+      ],
+      "exit_code": 0,
+      "seconds": 38.631,
+      "stdout": "..                                                                       [100%]\n2 passed in 16.65s\n",
+      "stderr": ""
+    },
+    {
+      "label": "compileall_ci_scope",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-X",
+        "utf8",
+        "-m",
+        "compileall",
+        "-q",
+        "scripts",
+        "tests",
+        "tools",
+        "e2e"
+      ],
+      "exit_code": 0,
+      "seconds": 0.493,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "label": "import_smoke_ci_scope",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-c",
+        "import sys; sys.path.insert(0, 'scripts'); import fetch_filing, filing_contracts"
+      ],
+      "exit_code": 0,
+      "seconds": 0.224,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "duplicate_test_symbols": [],
+  "versions": {
+    "ruff": "0.15.18",
+    "mypy": "1.19.0",
+    "pytest": "9.1.1",
+    "PyYAML": "6.0.3"
+  }
+}

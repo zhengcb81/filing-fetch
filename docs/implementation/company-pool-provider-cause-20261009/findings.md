@@ -10,3 +10,11 @@
 - 测试 paid_calls=0，无真实 market/model API，无生产原件、config、owner key、installed skill 写入。
 
 - CWP现有 `_stage_with_retry` 最多3次fetch且仅完整usage/retryable=true才重试；FF自身generic fatal不重试。真实链的4provider starts=1discovery+3fetch，FF calls=2。FF不将adapter内部的有界重试误记为自身重试；操作累计费用责任仍在CWP。
+
+## Complexity policy correction (2026-10-09)
+
+- Root identified CI37861936346 as numeric-only: old ratchet required ff_provider_cause max14<=10. Locally reproduced1 FAIL/1 PASS; no business failing assertion was removed. Search found only tests/test_complexity_ratchet.py enforcing numeric complexity; pre-commit/pre-push have no other complexity threshold. Historical PWF statements are preserved as history.
+- The legacy AST estimate is not graph-theoretic McCabe: it counts branch-like nodes in module-level synchronous functions, including nested blocks, excludes test_ functions and does not assess classes/async functions. Tool explicitly reports this scope; no claim that a low score proves code quality.
+- Old parser caught SyntaxError and returned0, conflating unreadable code with simple code. New diagnostic propagates the direct parser error and reports CLI syntax/read failures with exit1; score changes do not affect exit0. Historical10/34/39 comparisons are retained only as observable fields.
+- quality.yml's curated list now includes existing tests/test_provider_cause_contract.py and tests/test_acquisition_failure_consumer.py, plus seven new diagnostic contracts. No new full-suite invocation or real provider dependency.
+- Initial full focused run had5 skips; explicit candidate CWP root d7923191 enabled the2 environment-dependent cases, both passed. Remaining2 production snapshot cases and1 Windows symlink capability case are honest limitations, not green assertions. No paid/model/network provider requests.

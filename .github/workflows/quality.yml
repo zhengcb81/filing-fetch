@@ -32,6 +32,8 @@ jobs:
           ruff check scripts tests tools e2e
           python -m compileall -q scripts tests tools e2e
           python -c "import sys; sys.path.insert(0, 'scripts'); import fetch_filing, filing_contracts"
+      - name: Complexity maintenance diagnostic (scores never block)
+        run: python tools/complexity_diagnostics.py
       - name: Strict type check on public contracts (FC-1204-c)
         run: python -m mypy scripts/filing_contracts.py scripts/fetch_filing.py
       - name: Unique test symbols gate (WU-7.1)
@@ -68,6 +70,8 @@ jobs:
           tests/test_selective_installation.py
           e2e/test_source_ref_v2_cli.py
           tests/test_ff_v2_contract.py
+          tests/test_provider_cause_contract.py
+          tests/test_acquisition_failure_consumer.py
           tests/test_ff_golden.py
           tests/test_source_ref_v2.py
           tests/test_source_ref_v2_db_query.py
@@ -78,7 +82,7 @@ jobs:
           tests/test_fc1204_coverage_gap.py
           tests/test_p5_process_lifecycle.py
           tests/test_p5_legacy_request_limits.py
-          tests/test_complexity_ratchet.py
+          tests/test_complexity_diagnostics.py
           tests/test_verify_plan_claims.py
           tests/test_latest_mode.py
           tests/test_dropbox_config_invariants.py

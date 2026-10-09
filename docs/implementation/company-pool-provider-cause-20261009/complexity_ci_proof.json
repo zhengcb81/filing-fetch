@@ -1,0 +1,81 @@
+{
+  "schema_version": "ff-complexity-ci/1",
+  "generated_at": "2026-10-09T00:21:10.976671+00:00",
+  "status": "local_green_awaiting_coordinated_publication",
+  "base_candidate": "afbef65",
+  "prior_ci_run": 37861936346,
+  "policy": "numeric_complexity_is_maintenance_diagnostic_not_permission",
+  "score": {
+    "path": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\cmrf-20261008\\ff-diagnostics\\scripts\\ff_provider_cause.py",
+    "max_score": 14,
+    "historical_reference": 10,
+    "above_reference": true
+  },
+  "red": {
+    "old_gate_failed": 1,
+    "old_gate_passed": 1,
+    "diagnostic_failed": 7,
+    "collection_errors": 0,
+    "evidence": "complexity_red.json"
+  },
+  "green": {
+    "diagnostic_contract_passed": 7,
+    "curated_passed": 527,
+    "curated_skipped": 5,
+    "subtests_passed": 78,
+    "curated_seconds": 53.5,
+    "evidence": "complexity_green.json"
+  },
+  "supplemental": {
+    "previously_skipped_cwp_tests_passed": 2,
+    "seconds": 16.65,
+    "evidence": "complexity_cwp_and_syntax.json",
+    "note": "Separate rerun of exactly two formerly skipped cases, not a second full curated run or duplicate pass-count total"
+  },
+  "remaining_skips": [
+    {
+      "test": "tests/test_fetch_filing.py:1636",
+      "count": 2,
+      "reason": "production security-master snapshots not present"
+    },
+    {
+      "test": "tests/test_bundle_compat.py:156",
+      "count": 1,
+      "reason": "symlink unsupported on Windows host"
+    }
+  ],
+  "ci_preserved": [
+    "ruff scripts tests tools e2e",
+    "compileall scripts tests tools e2e",
+    "import smoke",
+    "mypy public contracts",
+    "unique test symbols",
+    "actual behavior regression",
+    "config doctor",
+    "plan claim verifier"
+  ],
+  "ci_new_responsibility_tests": [
+    "tests/test_provider_cause_contract.py",
+    "tests/test_acquisition_failure_consumer.py",
+    "tests/test_complexity_diagnostics.py"
+  ],
+  "ruff": "PASS 0.15.18 all CI roots",
+  "mypy": "PASS 1.19.0 both CI public modules",
+  "syntax_and_import": "PASS",
+  "unique_test_symbols": "PASS",
+  "temporary_roots_restored": true,
+  "paid_calls": 0,
+  "external_fees_usd": "0",
+  "production_raw_writes": 0,
+  "production_config_writes": 0,
+  "installed_skill_writes": 0,
+  "pushes": 0,
+  "changed_files_sha256": {
+    ".github/workflows/quality.yml": "544950a69da704e663a8ef902f3f50bebd9f842589b97878b7c34adc73f9c344",
+    "tests/test_complexity_diagnostics.py": "e3e9702971325e2c4e51ff5a2233fbb19ba9a10525ef9739b383590fd26999fb",
+    "tools/complexity_diagnostics.py": "aa8df19d9b22850358732600737d8a1add63888816a3cbb5e6fd4e26f85a5fed"
+  },
+  "deleted": [
+    "tests/test_complexity_ratchet.py"
+  ]
+}

@@ -35,3 +35,9 @@ No provider/model calls in these tests. The parent milestone also must run RF→
 ## Final result
 
 239 PASS /1 production snapshot SKIP /39 subtests（22.22s）。Actual CLI driver25/25 PASS，`consumer_e2e_report.json`10,983 bytes，临时根恢复true。Ruff/mypy4 runtime/diff--check PASS。No paid calls/Dayu writes/production raw/config/owner key/installation changes. No commit/merge/push. Worktree test/caches removed. Root cross-repository RF→FF→CWP gate remains the milestone publication responsibility.
+
+## CI numeric-gate follow-up delivered (2026-10-09)
+
+Additional card removes all numeric complexity permit checks, preserves a runnable legacy-score diagnostic and invalid-syntax failure, and closes the curated-test omission for provider-cause/operation-consumer responsibility tests. No business function split or threshold increase. Proof: complexity_ci_proof.json plus original RED/GREEN command records.
+
+Actual results: diagnostic7 PASS; focused527 PASS/5 SKIP/78 subtests; explicit2 previously skipped CWP cases2 PASS; Ruff/mypy/compile/import/unique names PASS. Remaining3 capability/sample skips detailed in proof. All owned TEMP restored; supplier calls/fees0. Local commit may be read from git log after normal hook acceptance. Root must push and confirm exact-SHA remote CI; this lane does not publish/merge/install or claim full product completion.

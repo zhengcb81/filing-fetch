@@ -1,0 +1,125 @@
+{
+  "schema_version": "ff-complexity-ci/1",
+  "stage": "GREEN_ATTEMPT",
+  "generated_at": "2026-10-09T00:18:10.027739+00:00",
+  "temporary_root": "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffcx_green_u8qe64sl",
+  "temporary_root_restored": true,
+  "paid_calls": 0,
+  "records": [
+    {
+      "label": "diagnostic_contract",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "pytest",
+        "tests/test_complexity_diagnostics.py",
+        "-q",
+        "--tb=short",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp",
+        "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffcx_green_u8qe64sl\\contract"
+      ],
+      "exit_code": 0,
+      "seconds": 2.998,
+      "stdout": ".......                                                                  [100%]\n7 passed in 0.60s\n",
+      "stderr": ""
+    },
+    {
+      "label": "ruff_ci_scope",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-m",
+        "ruff",
+        "check",
+        "scripts",
+        "tests",
+        "tools",
+        "e2e"
+      ],
+      "exit_code": 0,
+      "seconds": 0.152,
+      "stdout": "All checks passed!\n",
+      "stderr": ""
+    },
+    {
+      "label": "mypy_ci_scope",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-m",
+        "mypy",
+        "scripts/filing_contracts.py",
+        "scripts/fetch_filing.py",
+        "--cache-dir",
+        "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffcx_green_u8qe64sl\\mypy"
+      ],
+      "exit_code": 0,
+      "seconds": 1.724,
+      "stdout": "Success: no issues found in 2 source files\n",
+      "stderr": ""
+    },
+    {
+      "label": "modified_curated_suite",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "-m",
+        "pytest",
+        "tests/test_s3_single_request_limits.py",
+        "tests/test_single_intent_acquisition.py",
+        "tests/test_s3_install_surface.py",
+        "tests/test_selective_installation.py",
+        "e2e/test_source_ref_v2_cli.py",
+        "tests/test_ff_v2_contract.py",
+        "tests/test_provider_cause_contract.py",
+        "tests/test_acquisition_failure_consumer.py",
+        "tests/test_ff_golden.py",
+        "tests/test_source_ref_v2.py",
+        "tests/test_source_ref_v2_db_query.py",
+        "tests/test_transcript_companion.py",
+        "tests/test_transcript_companion_transport.py",
+        "tests/test_fetch_filing.py",
+        "tests/test_fc802_gap_orchestration.py",
+        "tests/test_fc1204_coverage_gap.py",
+        "tests/test_p5_process_lifecycle.py",
+        "tests/test_p5_legacy_request_limits.py",
+        "tests/test_complexity_diagnostics.py",
+        "tests/test_verify_plan_claims.py",
+        "tests/test_latest_mode.py",
+        "tests/test_dropbox_config_invariants.py",
+        "tests/test_bundle_compat.py",
+        "tests/e2e_support/test_spy_log.py",
+        "-q",
+        "--tb=short",
+        "-rs",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp",
+        "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ffcx_green_u8qe64sl\\curated"
+      ],
+      "exit_code": 0,
+      "seconds": 55.869,
+      "stdout": ".............................................s.......................... [ 13%]\n........................................................................ [ 27%]\n.........................................s.............................. [ 40%]\n....................s............................. [ 50%]\n......................................................... [ 60%]\n.........................s...................... [ 69%]\n............................................................................................................................... [ 93%]\n............................s.....                                       [100%]\n=========================== short test summary info ===========================\nSKIPPED [1] e2e\\test_source_ref_v2_cli.py:27: set FILING_FETCH_V2_WIKI_SRC to run the isolated v2 E2E\nSKIPPED [1] tests\\test_source_ref_v2_db_query.py:268: set CWP_V2_CODE_ROOT to the isolated CWP checkout\nSKIPPED [2] tests\\test_fetch_filing.py:1636: production security-master snapshots not present\nSKIPPED [1] tests\\test_bundle_compat.py:156: symlink unsupported on this platform\n527 passed, 5 skipped, 78 subtests passed in 53.50s\n",
+      "stderr": ""
+    },
+    {
+      "label": "current_source_diagnostic",
+      "command": [
+        "C:\\Miniconda\\python.exe",
+        "-X",
+        "utf8",
+        "-B",
+        "tools/complexity_diagnostics.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.137,
+      "stdout": "{\n  \"diagnostic_only\": true,\n  \"metric\": \"legacy_ast_branch_count\",\n  \"scope\": \"module_level_sync_functions_except_test_prefix\",\n  \"files\": [\n    {\n      \"path\": \"C:\\\\Users\\\\郑曾波\\\\Projects\\\\_harness_worktrees\\\\cmrf-20261008\\\\ff-diagnostics\\\\scripts\\\\et_v2_contract.py\",\n      \"max_score\": 10,\n      \"historical_reference\": 10,\n      \"above_reference\": false\n    },\n    {\n      \"path\": \"C:\\\\Users\\\\郑曾波\\\\Projects\\\\_harness_worktrees\\\\cmrf-20261008\\\\ff-diagnostics\\\\scripts\\\\fetch_filing.py\",\n      \"max_score\": 33,\n      \"historical_reference\": 34,\n      \"above_reference\": false\n    },\n    {\n      \"path\": \"C:\\\\Users\\\\郑曾波\\\\Projects\\\\_harness_worktrees\\\\cmrf-20261008\\\\ff-diagnostics\\\\scripts\\\\ff_process_transport.py\",\n      \"max_score\": 10,\n      \"historical_reference\": 10,\n      \"above_reference\": false\n    },\n    {\n      \"path\": \"C:\\\\Users\\\\郑曾波\\\\Projects\\\\_harness_worktrees\\\\cmrf-20261008\\\\ff-diagnostics\\\\scripts\\\\ff_process_tree.py\",\n      \"max_score\": 7,\n      \"historical_reference\": 10,\n      \"above_reference\": false\n    },\n    {\n      \"path\": \"C:\\\\Users\\\\郑曾波\\\\Projects\\\\_harness_worktrees\\\\cmrf-20261008\\\\ff-diagnostics\\\\scripts\\\\ff_provider_cause.py\",\n      \"max_score\": 14,\n      \"historical_reference\": 10,\n      \"above_reference\": true\n    },\n    {\n      \"path\": \"C:\\\\Users\\\\郑曾波\\\\Projects\\\\_harness_worktrees\\\\cmrf-20261008\\\\ff-diagnostics\\\\scripts\\\\ff_v2_envelope.py\",\n      \"max_score\": 10,\n      \"historical_reference\": 10,\n      \"above_reference\": false\n    },\n    {\n      \"path\": \"C:\\\\Users\\\\郑曾波\\\\Projects\\\\_harness_worktrees\\\\cmrf-20261008\\\\ff-diagnostics\\\\scripts\\\\filing_contracts.py\",\n      \"max_score\": 39,\n      \"historical_reference\": 39,\n      \"above_reference\": false\n    },\n    {\n      \"path\": \"C:\\\\Users\\\\郑曾波\\\\Projects\\\\_harness_worktrees\\\\cmrf-20261008\\\\ff-diagnostics\\\\scripts\\\\transcript_companion.py\",\n      \"max_score\": 9,\n      \"historical_reference\": 10,\n      \"above_reference\": false\n    },\n    {\n      \"path\": \"C:\\\\Users\\\\郑曾波\\\\Projects\\\\_harness_worktrees\\\\cmrf-20261008\\\\ff-diagnostics\\\\scripts\\\\transcript_tool_transport.py\",\n      \"max_score\": 10,\n      \"historical_reference\": 10,\n      \"above_reference\": false\n    }\n  ],\n  \"errors\": []\n}\n",
+      "stderr": ""
+    }
+  ]
+}
