@@ -13,7 +13,7 @@ cause/1 remains six fields. Finite new operation local_prepare and source reason
 
 ## State
 
-- TDD, implementation and concentrated validation complete; normal-hook source commit07cd3a2 completed. Independent major review final verification is in progress (RF consumer fixes); MAIN handoff/publication follows it.
+- This worker's implementation/TDD/concentrated validation/independent major review are complete. Normal-hook source07cd3a2 and handoffbb0fe920 committed. MAIN owns integration, publication, targeted installed synchronization and larger M3/M4 acceptance.
 - Actual root diagnosis: eleven new boundary checks fail, five cause/null checks pass; existing CWP48/FF26/RF14 pass. This is not FF product acceptance.
 
 ## Delivery limits
