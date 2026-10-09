@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import math
@@ -75,6 +77,25 @@ def _provider_usage(raw: bytes, request_id: str) -> dict[str, Any]:
     return {"provider_requests": count, "provider_response_bytes": size, "provider_usage_complete": True}
 
 
+def _credential_exposed(stdout: bytes, stderr: bytes, credential: str | None) -> bool:
+    """Reject a contaminated original intact, including its encoded wire body."""
+    if not credential:
+        return False
+    raw_key = credential.encode("utf-8")
+    escaped = json.dumps(credential, ensure_ascii=True)[1:-1].encode("ascii")
+    if any(token in raw for token in (raw_key, escaped) for raw in (stdout, stderr)):
+        return True
+    try:
+        result = json.loads(stdout)
+        encoded = result.get("provider_payload_base64") if isinstance(result, dict) else None
+        if not isinstance(encoded, str):
+            return False
+        payload = base64.b64decode(encoded, validate=True)
+        return raw_key in payload or escaped in payload
+    except (ValueError, binascii.Error, UnicodeError):
+        return False
+
+
 class EarningsTranscriptsTransport:
     """Call the configured ET tool, then let CWP own and verify original bytes."""
 
@@ -83,6 +104,8 @@ class EarningsTranscriptsTransport:
         *,
         wiki_root: Path,
         transcript_tool: Path | None = None,
+        config_path: Path | None = None,
+        fmp_api_key_file: Path | None = None,
         deadline: float,
     ) -> None:
         self.wiki_root = wiki_root.resolve(strict=True)
@@ -92,6 +115,8 @@ class EarningsTranscriptsTransport:
             else None
         )
         self.transcript_tool = configured.resolve(strict=True) if configured else None
+        self.config_path = config_path
+        self.fmp_api_key_file = fmp_api_key_file
         self.deadline = deadline
         self.company_wiki_calls = 0
         self._pending: dict[str, Any] | None = None
@@ -132,11 +157,82 @@ class EarningsTranscriptsTransport:
     def _wiki_env(self) -> dict[str, str]:
         env = dict(os.environ)
         env.pop("FMP_API_KEY", None)
+        env.pop("FMP_API_KEY_FILE", None)
         env["PYTHONUTF8"] = "1"
         src = str(self.wiki_root / "src")
         existing = env.get("PYTHONPATH")
         env["PYTHONPATH"] = src if not existing else src + os.pathsep + existing
         return env
+
+    def _credential_file(self) -> Path | None:
+        """Explicit source wins; otherwise reuse the selected config's known file."""
+        if self.fmp_api_key_file is not None:
+            return self.fmp_api_key_file
+        if "FMP_API_KEY_FILE" in os.environ:
+            value = os.environ["FMP_API_KEY_FILE"]
+            if not value.strip():
+                raise ValueError("provider_credentials_file_unavailable")
+            return Path(value)
+        if "FMP_API_KEY" in os.environ or self.config_path is None:
+            return None
+        selected = self.config_path.resolve(strict=True)
+        try:
+            with selected.open("rb") as stream:
+                raw = stream.read(65537)
+            if len(raw) > 65536:
+                raise ValueError
+            config = json.loads(raw)
+        except (OSError, ValueError):
+            raise ValueError("provider_credentials_config_invalid") from None
+        if not isinstance(config, dict):
+            raise ValueError("provider_credentials_config_invalid")
+        if "fmp_api_key_file" in config:
+            configured = config["fmp_api_key_file"]
+            if not isinstance(configured, str) or not configured.strip():
+                raise ValueError("provider_credentials_file_unavailable")
+            path = Path(configured)
+            return path if path.is_absolute() else selected.parent / path
+        # This is the fixed source previously configured by the user, not a
+        # recursive/cwd/key-pattern scan or a copy of production configuration.
+        known = selected.parent / "FMP_API_KEY.txt"
+        return known if known.exists() else None
+
+    def _et_environment(self) -> tuple[dict[str, str], str | None]:
+        env = dict(os.environ)
+        credential_file = self._credential_file()
+        env.pop("FMP_API_KEY_FILE", None)
+        if credential_file is not None:
+            try:
+                with credential_file.open("rb") as stream:
+                    raw = stream.read(4097)
+            except OSError:
+                raise ValueError("provider_credentials_file_unavailable") from None
+            if len(raw) > 4096:
+                raise ValueError("provider_credentials_file_invalid")
+            try:
+                value = raw.decode("utf-8-sig").strip()
+            except UnicodeError:
+                raise ValueError("provider_credentials_file_invalid") from None
+            if not value:
+                raise ValueError("provider_credentials_file_empty")
+            if any(not 33 <= ord(char) <= 126 for char in value):
+                raise ValueError("provider_credentials_file_invalid")
+            env["FMP_API_KEY"] = value
+        key = env.get("FMP_API_KEY")
+        return env, key.strip() if key and key.strip() else None
+
+    @staticmethod
+    def _provider_started(usage: dict[str, Any]) -> bool | None:
+        count = usage.get("provider_requests")
+        return count > 0 if type(count) is int else None
+
+    @staticmethod
+    def _local_unavailable(reason: str) -> dict[str, Any]:
+        return {"status": "provider_unavailable", "reason": reason, "retryable": False,
+                "provider_calls": 0, "provider_started": False,
+                "provider_requests": 0, "provider_response_bytes": 0,
+                "provider_usage_complete": True}
+
 
     @staticmethod
     def _creationflags() -> int:
@@ -360,6 +456,11 @@ class EarningsTranscriptsTransport:
             "max_response_bytes": limits["max_bytes"],
             "max_cost_usd": limits["max_cost_usd"],
         }
+        try:
+            et_env, credential = self._et_environment()
+        except (ValueError, OSError) as exc:
+            safe = str(exc) if isinstance(exc, ValueError) else "provider_credentials_config_invalid"
+            return self._local_unavailable(safe)
         command = [
             sys.executable,
             str(self.transcript_tool),
@@ -378,7 +479,7 @@ class EarningsTranscriptsTransport:
                     et_request, ensure_ascii=False, separators=(",", ":")
                 ).encode("utf-8"),
                 cwd=str(self.transcript_tool.parent),
-                env=dict(os.environ),
+                env=et_env,
             )
         except (TransportError, ValueError):
             return {
@@ -388,6 +489,12 @@ class EarningsTranscriptsTransport:
                 "provider_calls": 1,
                 **_provider_usage(b"", request["request_id"]),
             }
+        self._last_provider_usage = _provider_usage(usage_stderr, request["request_id"])
+        if _credential_exposed(stdout, usage_stderr, credential):
+            return {"status": "provider_unavailable", "reason": "provider_credentials_leaked",
+                    "retryable": False, "provider_calls": 1,
+                    "provider_started": self._provider_started(self._last_provider_usage),
+                    **self._last_provider_usage}
         try:
             result = json.loads(stdout.decode("utf-8", errors="strict"))
         except (UnicodeError, json.JSONDecodeError):
@@ -414,13 +521,14 @@ class EarningsTranscriptsTransport:
                 if isinstance(error_code, str) and error_code.replace("_", "").isalnum()
                 else "provider_unavailable"
             )
-            calls = 0 if safe_code in {"provider_credentials_missing", "provider_disabled", "provider_cost_unknown", "provider_cost_budget_exceeded", "candidate_discovery_unavailable", "candidate_fetch_unavailable"} else 1
+            calls = 0 if safe_code in {"provider_credentials_missing", "provider_disabled", "provider_cost_unknown", "provider_cost_budget_exceeded", "candidate_discovery_unavailable", "candidate_fetch_unavailable", "unsupported_market", "unsupported_exchange", "provider_credentials_file_unavailable", "provider_credentials_file_empty", "provider_credentials_file_invalid"} else 1
             return {
                 "status": "provider_unavailable",
                 "reason": safe_code,
                 "retryable": self._last_provider_usage["provider_usage_complete"] and result.get("status")
                 in {"rate_limited", "provider_error"},
                 "provider_calls": calls,
+                "provider_started": self._provider_started(self._last_provider_usage),
                 **self._last_provider_usage,
             }
         if code != 0:

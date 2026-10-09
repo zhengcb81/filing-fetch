@@ -172,14 +172,14 @@ def _acquire(
             **_optional_fields(fetched, (
                 "provider", "provider_document_id", "call_date",
                 "publication_date", "as_of_cutoff_verified", "provider_calls",
-                "provider_requests", "provider_response_bytes", "provider_usage_complete",
+                "provider_requests", "provider_response_bytes", "provider_usage_complete", "provider_started",
             )),
         )
     if status in {"provider_unavailable", "not_found", "upstream_error"}:
         return _result(
             status, reason=str(fetched.get("reason") or status),
             retryable=fetched.get("retryable") is True,
-            **_optional_fields(fetched, ("provider_calls", "provider_requests", "provider_response_bytes", "provider_usage_complete")),
+            **_optional_fields(fetched, ("provider_calls", "provider_requests", "provider_response_bytes", "provider_usage_complete", "provider_started")),
         )
     return _result("upstream_error", reason="transcript_acquisition_contract")
 

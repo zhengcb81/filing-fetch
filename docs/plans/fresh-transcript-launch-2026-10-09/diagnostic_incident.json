@@ -1,0 +1,12 @@
+{
+  "schema_version": "diagnostic-incident/1",
+  "occurred_at": "2026-10-09",
+  "tool_chunk_id": "52ee39",
+  "field_name": "ANTHROPIC_AUTH_TOKEN",
+  "classification": "suspected_actual_credential_unverified",
+  "authentication_attempted": false,
+  "values_or_hashes_retained": false,
+  "raw_red_log_retained": false,
+  "historical_tool_output_retractable": false,
+  "mitigation": "Synthetic launch environment plus boolean assertions; no credential values in handoff; root notified to recommend rotation."
+}

@@ -33,6 +33,13 @@ _FAILURE_KEYS = frozenset({
 _FAILURES = {
     ("unavailable", "provider_credentials_missing"): "provider_unavailable",
     ("unavailable", "provider_entitlement_required"): "provider_unavailable",
+    ("unavailable", "provider_credentials_rejected"): "provider_unavailable",
+    ("unavailable", "provider_credentials_file_unavailable"): "provider_unavailable",
+    ("unavailable", "provider_credentials_file_empty"): "provider_unavailable",
+    ("unavailable", "provider_credentials_file_invalid"): "provider_unavailable",
+    ("unsupported", "unsupported_market"): "provider_unavailable",
+    ("unsupported", "unsupported_exchange"): "provider_unavailable",
+    ("provider_error", "provider_credentials_leaked"): "provider_unavailable",
     ("provenance_rejected", "provider_identity_or_host"): "provenance_rejected",
     ("invalid_request", "request_schema"): "request_error",
 }

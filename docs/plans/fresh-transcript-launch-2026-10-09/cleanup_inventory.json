@@ -1,0 +1,13 @@
+{
+  "schema_version": "w07-owned-fixtures/1",
+  "temp_root": "C:\\Users\\郑曾波\\AppData\\Local\\Temp",
+  "targets": [
+    "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\pytest-of-郑曾波\\pytest-0",
+    "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\pytest-of-郑曾波\\pytest-1",
+    "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\w07-ff-wire-fixtures-20261009"
+  ],
+  "evidence": "Each default pytest root includes a unique new W07 test fixture; its exec session is terminal. Final dedicated --basetemp is explicit. Worktrees are retained for MAIN commit acceptance.",
+  "state": "restored_absent",
+  "previously_released_bytes": 718052,
+  "removed_bytes": 1549
+}

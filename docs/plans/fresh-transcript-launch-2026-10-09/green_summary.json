@@ -1,0 +1,55 @@
+{
+  "schema_version": "w07-validation/1",
+  "status": "green_local_main_acceptance_pending",
+  "ff_affected": {
+    "passed": 203,
+    "skipped": 1,
+    "subtests_passed": 39,
+    "seconds": 22.9,
+    "skip_reason": "production security-master snapshots not present; tests/test_fetch_filing.py:1636"
+  },
+  "ff_final_wire": {
+    "passed": 42,
+    "skipped": 0,
+    "seconds": 2.54,
+    "coverage": "new launch module and existing ET S0b wire contracts"
+  },
+  "et_affected": {
+    "passed": 116,
+    "skipped": 0,
+    "seconds": 44.72
+  },
+  "static": {
+    "ruff": "green_both",
+    "mypy": "green_ff_two_public_modules",
+    "host_assumption_guard_new_violations": 0
+  },
+  "real_cli": {
+    "HKEX": "unsupported_market",
+    "NASDAQ_without_credentials": "provider_credentials_missing",
+    "TOKYO": "unsupported_exchange",
+    "all_requests_used": 0,
+    "all_response_bytes_used": 0,
+    "all_usage_complete": true,
+    "all_provider_started": false,
+    "filing_preserved": "source_candidate/source_ref"
+  },
+  "credentials": {
+    "explicit_file_sentinel": "green",
+    "fixed_selected_config_file": "green",
+    "relative_config_path": "green",
+    "explicit_bad_file_no_fallback": "green",
+    "missing_empty_invalid": "named_zero_usage",
+    "stdout_secret_rejected_usage": "measured_preserved",
+    "stderr_secret_rejected_usage": "unknown_null",
+    "encoded_raw_payload_secret_rejected": "green",
+    "cwp_key_and_keyfile_env_stripped": "green"
+  },
+  "external_http": 0,
+  "paid_calls": 0,
+  "real_authentication": "NOT_RUN_MAIN_M3",
+  "production_configs_modified": false,
+  "raw_documents_modified": false,
+  "et_commit": "1d03de61e681c3769102d634f6dfb45498044962",
+  "ff_commit": "recorded_by_MAIN_from_git"
+}

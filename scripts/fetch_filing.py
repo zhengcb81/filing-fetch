@@ -186,15 +186,26 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
     if not isinstance(payload, dict):
         raise FilingFetchError("company-wiki config must be an object", code="config_error")
     required = {"schema_version", "company_wiki_root"}
-    if not set(payload) <= required or not required <= set(payload):
+    if not set(payload) <= required | {"fmp_api_key_file"} or not required <= set(payload):
         raise FilingFetchError(
-            "company-wiki config must contain exactly schema_version/company_wiki_root "
+            "company-wiki config must contain schema_version/company_wiki_root "
+            "and only optional fmp_api_key_file "
             "(FC-501: no independent allowed_handle_roots allowlist)",
             code="config_error",
         )
     if payload["schema_version"] != COMPANY_WIKI_CONFIG_SCHEMA_VERSION:
         raise FilingFetchError(
             f"company-wiki config schema_version must be {COMPANY_WIKI_CONFIG_SCHEMA_VERSION}",
+            code="config_error",
+        )
+    credential_source = payload.get("fmp_api_key_file")
+    if "fmp_api_key_file" in payload and (
+        not isinstance(credential_source, str)
+        or not credential_source.strip()
+        or credential_source != credential_source.strip()
+    ):
+        raise FilingFetchError(
+            "company-wiki config fmp_api_key_file must be non-empty trimmed text",
             code="config_error",
         )
     configured = payload["company_wiki_root"]
@@ -1559,6 +1570,7 @@ def _resolve_v2_companion(
 
         transport = EarningsTranscriptsTransport(
             wiki_root=wiki_root,
+            config_path=config_path or DEFAULT_COMPANY_WIKI_CONFIG,
             deadline=deadline,
         )
         result = resolve_companion_transcript(

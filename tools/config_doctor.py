@@ -8,8 +8,9 @@ FC-501 removed (that block was stale and would always fail).
 
 Checks:
 
-1. filing-fetch ``config/company_wiki.json``: exactly {schema_version,
-   company_wiki_root}; absolute after token expansion; the wiki root exists
+1. filing-fetch ``config/company_wiki.json``: required {schema_version,
+   company_wiki_root}, optional fmp_api_key_file (location only, never contents);
+   the wiki root is absolute after token expansion and exists
    and carries ``config/source_catalog.yaml``; must NOT carry
    ``allowed_handle_roots`` (FC-501 / CONFIG-DBX-03).
 2. company-wiki ``source_catalog.yaml``: schema_version present;
@@ -77,10 +78,11 @@ def _check_filing_config(
             "filing-fetch config must NOT carry allowed_handle_roots "
             "(FC-501: the policy snapshot is the single source)"
         )
-    if set(payload) != {"schema_version", "company_wiki_root"}:
+    required = {"schema_version", "company_wiki_root"}
+    if not required <= set(payload) or not set(payload) <= required | {"fmp_api_key_file"}:
         problems.append(
-            "filing-fetch config must contain exactly "
-            "schema_version/company_wiki_root"
+            "filing-fetch config must contain schema_version/company_wiki_root "
+            "and only optional fmp_api_key_file"
         )
         return None
     if payload["schema_version"] != "1.0":
@@ -88,6 +90,14 @@ def _check_filing_config(
             f"filing-fetch config schema_version must be 1.0, got "
             f"{payload['schema_version']!r}"
         )
+        return None
+    credential_source = payload.get("fmp_api_key_file")
+    if "fmp_api_key_file" in payload and (
+        not isinstance(credential_source, str)
+        or not credential_source.strip()
+        or credential_source != credential_source.strip()
+    ):
+        problems.append("filing-fetch config fmp_api_key_file must be non-empty trimmed text")
         return None
     configured = payload["company_wiki_root"]
     if not isinstance(configured, str) or not configured.strip():

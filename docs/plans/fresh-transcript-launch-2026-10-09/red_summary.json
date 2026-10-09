@@ -1,0 +1,46 @@
+{
+  "schema_version": "w07-validation/1",
+  "stage": "red",
+  "ff": {
+    "failed": 6,
+    "passed": 1
+  },
+  "et": {
+    "failed": 8,
+    "passed": 0
+  },
+  "root_cause": [
+    "explicit key file not resolved",
+    "ET capability missing market/exchange",
+    "uppercase canonical exchange rejected as schema",
+    "child secret echo not rejected"
+  ],
+  "raw_failure_log_retained": false,
+  "additional_red": [
+    {
+      "case": "FF encoded provider payload echo",
+      "failed": 1,
+      "passed": 0
+    },
+    {
+      "case": "ET echoed key becomes immutable original",
+      "failed": 1,
+      "passed": 0
+    },
+    {
+      "case": "FF real config loader rejects additive credential source",
+      "failed": 1,
+      "passed": 4
+    },
+    {
+      "case": "FF doctor rejects otherwise runtime-supported additive source field",
+      "failed": 1,
+      "passed": 0
+    },
+    {
+      "case": "FF actual normalize_et_v2_result rejects new typed producer failure enums",
+      "failed": 7,
+      "passed": 0
+    }
+  ]
+}
