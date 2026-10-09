@@ -289,3 +289,98 @@ def test_wire_validator_accepts_typed_capability_and_credential_failures(status,
     validated = normalize_et_v2_result(result, request)
     assert validated["status"] == "provider_unavailable"
     assert validated["reason"] == reason
+
+
+
+def _unicode_wire(value, key=SENTINEL):
+    escaped = "".join("\\u%04x" % ord(char) for char in key)
+    return json.dumps(value).replace(key, escaped).encode()
+
+
+@pytest.mark.parametrize("location", ["reason", "object_key", "array", "provider_json", "duplicate_key"])
+def test_decoded_credential_anywhere_rejects_original_preserves_clean_usage(tmp_path, monkeypatch, location):
+    monkeypatch.setenv("FMP_API_KEY", SENTINEL)
+    out, receipt, code = _failure()
+    result = json.loads(out)
+    if location == "reason":
+        result["error_code"] = SENTINEL
+    elif location == "object_key":
+        result[SENTINEL] = "safe"
+    elif location == "array":
+        result["metadata"] = [{"nested": [SENTINEL]}]
+    elif location == "provider_json":
+        payload = _unicode_wire([{"nested": {SENTINEL: ["safe"]}}])
+        result = {"status": "fetched", "provider_payload_base64": base64.b64encode(payload).decode()}
+    elif location == "duplicate_key":
+        out = _unicode_wire({"status": "provider_error", "detail": SENTINEL})[:-1] + b',"detail":"clean"}'
+    if location != "duplicate_key":
+        out = _unicode_wire(result)
+    monkeypatch.setattr(transport_module, "_run_bounded_json", lambda *args, **kwargs: (out, receipt, code))
+    result = _transport(tmp_path)._et_result(request=_request(), limits=_limits())
+    assert result["reason"] == "provider_credentials_leaked"
+    assert SENTINEL not in json.dumps(result)
+    assert "provider_payload_base64" not in result
+    assert result["provider_requests"] == 1
+    assert result["provider_response_bytes"] == 12
+    assert result["provider_usage_complete"] is True
+    assert result["provider_started"] is True
+
+
+@pytest.mark.parametrize("location", ["plain_detail", "escaped_detail", "escaped_counter_metadata", "duplicate_key"])
+def test_contaminated_valid_receipt_cannot_claim_complete_measured_usage(tmp_path, monkeypatch, location):
+    monkeypatch.setenv("FMP_API_KEY", SENTINEL)
+    out, raw, code = _failure()
+    receipt = json.loads(raw)
+    if location == "escaped_counter_metadata":
+        receipt["usage"]["exhausted"] = SENTINEL
+    else:
+        receipt["detail"] = SENTINEL
+    contaminated = json.dumps(receipt).encode() if location == "plain_detail" else _unicode_wire(receipt)
+    if location == "duplicate_key":
+        contaminated = contaminated[:-1] + b',"detail":"clean"}'
+    monkeypatch.setattr(transport_module, "_run_bounded_json", lambda *args, **kwargs: (out, contaminated, code))
+    result = _transport(tmp_path)._et_result(request=_request(), limits=_limits())
+    assert result["reason"] == "provider_credentials_leaked"
+    assert SENTINEL not in json.dumps(result)
+    assert result["provider_requests"] is None
+    assert result["provider_response_bytes"] is None
+    assert result["provider_started"] is None
+    assert result["provider_usage_complete"] is False
+
+
+def test_child_chosen_safe_looking_text_is_not_a_public_diagnostic_enum(tmp_path, monkeypatch):
+    out, receipt, code = _failure("not_a_real_provider_error")
+    monkeypatch.setattr(transport_module, "_run_bounded_json", lambda *args, **kwargs: (out, receipt, code))
+    result = _transport(tmp_path)._et_result(request=_request(), limits=_limits())
+    assert result["reason"] == "provider_unavailable"
+    assert "not_a_real_provider_error" not in json.dumps(result)
+    assert result["provider_requests"] == 1
+
+
+
+@pytest.mark.parametrize("contaminated_receipt", [False, True])
+def test_real_child_unicode_error_code_cannot_escape_public_reason(tmp_path, monkeypatch, contaminated_receipt):
+    key = "w07syntheticAlphanumericCredential012345"
+    monkeypatch.setenv("FMP_API_KEY", key)
+    tool = tmp_path / "unicode_child.py"
+    tool.write_text(
+        "import json,os,sys\n"
+        "r=json.loads(sys.stdin.read())\n"
+        "key=os.environ['FMP_API_KEY']\n"
+        "escaped=''.join('\\\\u%04x'%ord(c) for c in key)\n"
+        "result={'schema_version':'earnings-transcript-result/2','request_id':r['request_id'],"
+        "'provider':'fmp','status':'provider_error','error_code':key}\n"
+        "print(json.dumps(result).replace(key,escaped))\n"
+        "receipt={'schema_version':'earnings-retrieval-usage/1','request_id':r['request_id'],"
+        "'usage_complete':True,'usage':{'requests_used':1,'response_bytes_used':12}}\n"
+        f"contaminated={contaminated_receipt!r}\n"
+        "if contaminated: receipt['detail']=key\n"
+        "print(json.dumps(receipt).replace(key,escaped),file=sys.stderr)\n", encoding="utf-8")
+    transport = transport_module.EarningsTranscriptsTransport(wiki_root=tmp_path,
+        transcript_tool=tool, deadline=time.monotonic()+20)
+    result = transport._et_result(request=_request(), limits=_limits())
+    assert result["reason"] == "provider_credentials_leaked"
+    assert key not in json.dumps(result)
+    assert result["provider_requests"] == (None if contaminated_receipt else 1)
+    assert result["provider_started"] is (None if contaminated_receipt else True)
+    assert result["provider_usage_complete"] is (not contaminated_receipt)

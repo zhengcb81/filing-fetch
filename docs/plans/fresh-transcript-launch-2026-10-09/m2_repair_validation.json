@@ -1,0 +1,77 @@
+{
+  "schema_version": "w07-m2-repair-validation/1",
+  "status": "local_green_pending_independent_rereview",
+  "review": "CWP phase6/fresh_root_implementation_2026-10-09/transcript_independent_review.md",
+  "original_rejected_commits": {
+    "ff": "f2182732f1ad8363b2d10d947042c924319db0f5",
+    "et": "1d03de61e681c3769102d634f6dfb45498044962"
+  },
+  "red": {
+    "ff": {
+      "failed": 10,
+      "deselected": 29
+    },
+    "et": {
+      "failed": 10,
+      "deselected": 9
+    },
+    "raw_logs_retained": false
+  },
+  "green": {
+    "ff": {
+      "tests": [
+        "tests/test_transcript_launch_contract.py",
+        "tests/test_transcript_companion_transport.py",
+        "tests/test_et_s0b_contract.py"
+      ],
+      "passed": 67,
+      "skipped": 0,
+      "seconds": 7.0,
+      "tool_chunk_id": "fd8b3f"
+    },
+    "et": {
+      "tests": [
+        "tests/test_launch_capability_contract.py",
+        "tests/test_transcript_api.py",
+        "tests/test_provider_cost_capability.py"
+      ],
+      "passed": 73,
+      "skipped": 0,
+      "seconds": 11.35
+    },
+    "static": {
+      "ff_ruff": true,
+      "et_ruff": true,
+      "ff_diff_check": true,
+      "et_diff_check": true
+    }
+  },
+  "actual_cli_cases": {
+    "ff_alphanumeric_unicode_failure_clean_receipt": "safe leak reason; clean fixture requests=1,started=true,complete=true",
+    "ff_alphanumeric_unicode_failure_contaminated_receipt": "safe leak reason; requests=null,started=null,complete=false",
+    "et_supervised_v1_v2_unicode_content": "safe leak failure; no text/base64 source; fake measured request=1; runtime empty"
+  },
+  "semantic_variants": [
+    "content",
+    "decoded_error_code",
+    "object_key",
+    "nested_array",
+    "base64_provider_json",
+    "duplicate_object_key",
+    "receipt_detail_plain",
+    "receipt_detail_unicode",
+    "receipt_counter_metadata_unicode"
+  ],
+  "real_external_http_calls": 0,
+  "paid_provider_calls": 0,
+  "real_authentication_verified": false,
+  "real_entitlement_verified": false,
+  "merge_performed": false,
+  "push_performed": false,
+  "installation_performed": false,
+  "production_config_changed": false,
+  "production_key_changed": false,
+  "prior_evidence_changed": false,
+  "credential_values_or_hashes_retained": false,
+  "full_host_environment_recorded": false
+}

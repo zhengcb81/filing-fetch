@@ -1,0 +1,34 @@
+{
+  "schema_version": "w07-m2-owned-fixtures/1",
+  "state": "restored_absent",
+  "terminal_test_processes": true,
+  "raw_red_logs_retained": false,
+  "worktrees_retained": true,
+  "targets": [
+    {
+      "name": "w07-m2-ff-red-fixtures-20261009",
+      "removed_bytes": 180,
+      "state": "restored_absent"
+    },
+    {
+      "name": "w07-m2-et-red-fixtures-20261009",
+      "removed_bytes": 916,
+      "state": "restored_absent"
+    },
+    {
+      "name": "w07-m2-ff-green-fixtures-20261009",
+      "removed_bytes": 309968,
+      "state": "restored_absent"
+    },
+    {
+      "name": "w07-m2-et-green-fixtures-20261009",
+      "removed_bytes": 1424,
+      "state": "restored_absent"
+    },
+    {
+      "name": "w07-m2-ff-final-fixtures-20261009",
+      "removed_bytes": 311191,
+      "state": "restored_absent"
+    }
+  ]
+}

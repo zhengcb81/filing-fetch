@@ -47,6 +47,56 @@ _MAX_REF_FIELDS = frozenset(
 )
 
 
+_KNOWN_ET_ERRORS = frozenset({
+    "provider_credentials_missing", "provider_credentials_rejected",
+    "provider_credentials_file_unavailable", "provider_credentials_file_empty",
+    "provider_credentials_file_invalid", "provider_credentials_leaked",
+    "provider_entitlement_required", "provider_entitlement_denied",
+    "provider_disabled", "provider_cost_unknown", "provider_cost_budget_exceeded",
+    "candidate_discovery_unavailable", "candidate_fetch_unavailable",
+    "unsupported_market", "unsupported_exchange", "provider_unavailable",
+    "provider_deadline", "byte_limit", "provider_response", "unexpected_provider_failure",
+    "retrieval_worker_failure", "request_schema", "invalid_json", "request_too_large",
+    "source_payload_flag", "source_payload_not_valid_for_discovery",
+    "candidate_request_schema_or_identity", "candidate_effective_url_or_mime",
+    "provider_identity_or_host",
+}) | frozenset(f"provider_http_{code}" for code in range(100, 600))
+
+
+class _CredentialExposed(ValueError):
+    pass
+
+
+def _decoded_string_exposed(value: Any, credential: str) -> bool:
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str) and credential in item:
+            return True
+        if isinstance(item, (list, tuple)):
+            pending.extend(item)
+    return False
+
+
+def _stream_credential_exposed(raw: bytes, credential: str | None) -> bool:
+    if not credential:
+        return False
+    if credential.encode("utf-8") in raw:
+        return True
+    def checked_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        for name, value in pairs:
+            if credential in name or _decoded_string_exposed(value, credential):
+                raise _CredentialExposed
+        return dict(pairs)
+    try:
+        decoded = json.loads(raw, object_pairs_hook=checked_pairs)
+        return _decoded_string_exposed(decoded, credential)
+    except _CredentialExposed:
+        return True
+    except (ValueError, UnicodeError, RecursionError):
+        return False
+
+
 def _usage_counters(usage: object) -> tuple[int, int] | None:
     """Validate the two measured counters independently from receipt identity."""
     if not isinstance(usage, dict):
@@ -57,16 +107,16 @@ def _usage_counters(usage: object) -> tuple[int, int] | None:
     return count, size
 
 
-def _provider_usage(raw: bytes, request_id: str) -> dict[str, Any]:
+def _provider_usage(raw: bytes, request_id: str, credential: str | None = None) -> dict[str, Any]:
     """Read one final supervisor receipt; absent/partial usage stays unknown."""
     unknown = {"provider_requests": None, "provider_response_bytes": None, "provider_usage_complete": False}
-    if len(raw) > 8192:
+    if len(raw) > 8192 or _stream_credential_exposed(raw, credential):
         return unknown
     try:
         receipt = json.loads(raw.decode("utf-8", errors="strict"))
     except (UnicodeError, json.JSONDecodeError):
         return unknown
-    if not isinstance(receipt, dict) or receipt.get("schema_version") != "earnings-retrieval-usage/1":
+    if not isinstance(receipt, dict) or set(receipt) != {"schema_version", "request_id", "usage_complete", "usage"} or receipt.get("schema_version") != "earnings-retrieval-usage/1":
         return unknown
     if receipt.get("request_id") != request_id or receipt.get("usage_complete") is not True:
         return unknown
@@ -78,12 +128,10 @@ def _provider_usage(raw: bytes, request_id: str) -> dict[str, Any]:
 
 
 def _credential_exposed(stdout: bytes, stderr: bytes, credential: str | None) -> bool:
-    """Reject a contaminated original intact, including its encoded wire body."""
+    """Check wire semantics and unchanged decoded original, not one byte encoding."""
     if not credential:
         return False
-    raw_key = credential.encode("utf-8")
-    escaped = json.dumps(credential, ensure_ascii=True)[1:-1].encode("ascii")
-    if any(token in raw for token in (raw_key, escaped) for raw in (stdout, stderr)):
+    if _stream_credential_exposed(stdout, credential) or _stream_credential_exposed(stderr, credential):
         return True
     try:
         result = json.loads(stdout)
@@ -91,8 +139,8 @@ def _credential_exposed(stdout: bytes, stderr: bytes, credential: str | None) ->
         if not isinstance(encoded, str):
             return False
         payload = base64.b64decode(encoded, validate=True)
-        return raw_key in payload or escaped in payload
-    except (ValueError, binascii.Error, UnicodeError):
+        return _stream_credential_exposed(payload, credential)
+    except (ValueError, binascii.Error, UnicodeError, RecursionError):
         return False
 
 
@@ -489,7 +537,7 @@ class EarningsTranscriptsTransport:
                 "provider_calls": 1,
                 **_provider_usage(b"", request["request_id"]),
             }
-        self._last_provider_usage = _provider_usage(usage_stderr, request["request_id"])
+        self._last_provider_usage = _provider_usage(usage_stderr, request["request_id"], credential)
         if _credential_exposed(stdout, usage_stderr, credential):
             return {"status": "provider_unavailable", "reason": "provider_credentials_leaked",
                     "retryable": False, "provider_calls": 1,
@@ -513,12 +561,12 @@ class EarningsTranscriptsTransport:
                 "provider_calls": 1,
                 **_provider_usage(b"", request["request_id"]),
             }
-        self._last_provider_usage = _provider_usage(usage_stderr, request["request_id"])
+        self._last_provider_usage = _provider_usage(usage_stderr, request["request_id"], credential)
         if result.get("status") != "fetched":
             error_code = result.get("error_code")
             safe_code = (
                 error_code
-                if isinstance(error_code, str) and error_code.replace("_", "").isalnum()
+                if isinstance(error_code, str) and error_code in _KNOWN_ET_ERRORS
                 else "provider_unavailable"
             )
             calls = 0 if safe_code in {"provider_credentials_missing", "provider_disabled", "provider_cost_unknown", "provider_cost_budget_exceeded", "candidate_discovery_unavailable", "candidate_fetch_unavailable", "unsupported_market", "unsupported_exchange", "provider_credentials_file_unavailable", "provider_credentials_file_empty", "provider_credentials_file_invalid"} else 1
