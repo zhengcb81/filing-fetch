@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -162,9 +163,24 @@ class EarningsTranscriptsTransport:
             if os.environ.get("EARNINGS_TRANSCRIPTS_TOOL")
             else None
         )
-        self.transcript_tool = configured.resolve(strict=True) if configured else None
         self.config_path = config_path
         self.fmp_api_key_file = fmp_api_key_file
+        self._launch_config_cache: tuple[Path, dict[str, Any]] | None = None
+        self._tool_configuration_error = "transcript_tool_not_configured"
+        self.transcript_tool = configured.resolve(strict=True) if configured else None
+        if configured is None and config_path is not None:
+            try:
+                launch_config = self._selected_launch_config()
+                if "earnings_transcripts_tool" in launch_config:
+                    tool = self._launch_path(launch_config["earnings_transcripts_tool"])
+                    self.transcript_tool = tool.resolve(strict=True)
+                    if not self.transcript_tool.is_file():
+                        self.transcript_tool = None
+                        self._tool_configuration_error = "transcript_tool_unavailable"
+            except ValueError:
+                self._tool_configuration_error = "transcript_tool_config_invalid"
+            except OSError:
+                self._tool_configuration_error = "transcript_tool_unavailable"
         self.deadline = deadline
         self.company_wiki_calls = 0
         self._pending: dict[str, Any] | None = None
@@ -212,6 +228,45 @@ class EarningsTranscriptsTransport:
         env["PYTHONPATH"] = src if not existing else src + os.pathsep + existing
         return env
 
+    def _selected_launch_config(self) -> dict[str, Any]:
+        """One bounded configuration snapshot per selected file and transport."""
+        if self.config_path is None:
+            return {}
+        try:
+            selected = self.config_path.expanduser().resolve(strict=True)
+            if self._launch_config_cache and self._launch_config_cache[0] == selected:
+                return self._launch_config_cache[1]
+            with selected.open("rb") as stream:
+                raw = stream.read(65537)
+            if len(raw) > 65536:
+                raise ValueError
+            config = json.loads(raw)
+            if not isinstance(config, dict):
+                raise ValueError
+        except (OSError, ValueError):
+            raise ValueError("provider_credentials_config_invalid") from None
+        self._launch_config_cache = selected, config
+        return config
+
+    def _launch_path(self, value: object) -> Path:
+        if not isinstance(value, str) or not value.strip() or value != value.strip():
+            raise ValueError("provider_credentials_config_invalid")
+        tokens = {"USER_PROFILE": os.environ.get("USERPROFILE") or str(Path.home()),
+                  "SKILL_ROOT": str(Path(__file__).resolve().parents[1])}
+        def replace(match: re.Match[str]) -> str:
+            if match.group(1) not in tokens:
+                raise ValueError("provider_credentials_config_invalid")
+            return tokens[match.group(1)]
+        expanded = re.sub(r"\$\{([^}]+)\}", replace, value)
+        if "${" in expanded:
+            raise ValueError("provider_credentials_config_invalid")
+        path = Path(expanded).expanduser()
+        if path.is_absolute():
+            return path
+        if self.config_path is None:
+            raise ValueError("provider_credentials_config_invalid")
+        return self.config_path.expanduser().resolve(strict=True).parent / path
+
     def _credential_file(self) -> Path | None:
         """Explicit source wins; otherwise reuse the selected config's known file."""
         if self.fmp_api_key_file is not None:
@@ -223,26 +278,14 @@ class EarningsTranscriptsTransport:
             return Path(value)
         if "FMP_API_KEY" in os.environ or self.config_path is None:
             return None
-        selected = self.config_path.resolve(strict=True)
-        try:
-            with selected.open("rb") as stream:
-                raw = stream.read(65537)
-            if len(raw) > 65536:
-                raise ValueError
-            config = json.loads(raw)
-        except (OSError, ValueError):
-            raise ValueError("provider_credentials_config_invalid") from None
-        if not isinstance(config, dict):
-            raise ValueError("provider_credentials_config_invalid")
+        config = self._selected_launch_config()
         if "fmp_api_key_file" in config:
             configured = config["fmp_api_key_file"]
             if not isinstance(configured, str) or not configured.strip():
                 raise ValueError("provider_credentials_file_unavailable")
-            path = Path(configured)
-            return path if path.is_absolute() else selected.parent / path
-        # This is the fixed source previously configured by the user, not a
-        # recursive/cwd/key-pattern scan or a copy of production configuration.
-        known = selected.parent / "FMP_API_KEY.txt"
+            return self._launch_path(configured)
+        # Reuse the user's existing known source; no recursive/key-pattern scan.
+        known = self.config_path.expanduser().resolve(strict=True).parent / "FMP_API_KEY.txt"
         return known if known.exists() else None
 
     def _et_environment(self) -> tuple[dict[str, str], str | None]:
@@ -458,13 +501,10 @@ class EarningsTranscriptsTransport:
         request: dict[str, Any],
         limits: dict[str, Any],
     ) -> dict[str, Any]:
-        if self.transcript_tool is None or not self.transcript_tool.is_file():
-            return {
-                "status": "provider_unavailable",
-                "reason": "transcript_tool_not_configured",
-                "retryable": False,
-                "provider_calls": 0,
-            }
+        if self.transcript_tool is None:
+            return self._local_unavailable(self._tool_configuration_error)
+        if not self.transcript_tool.is_file():
+            return self._local_unavailable("transcript_tool_unavailable")
         remaining = self._remaining()
         # The provider deadline is a cap; reserve bounded time for the ET
         # process to start, enforce its worker deadline and clean up. If the
@@ -674,12 +714,7 @@ class EarningsTranscriptsTransport:
                 "provider_calls": 0,
             }
         if self.transcript_tool is None:
-            return {
-                "status": "provider_unavailable",
-                "reason": "transcript_tool_not_configured",
-                "retryable": False,
-                "provider_calls": 0,
-            }
+            return self._local_unavailable(self._tool_configuration_error)
         et_request = {
             "request_id": pending["request_id"],
             "security_id": identity["security_id"],

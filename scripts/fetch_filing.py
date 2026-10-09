@@ -186,10 +186,10 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
     if not isinstance(payload, dict):
         raise FilingFetchError("company-wiki config must be an object", code="config_error")
     required = {"schema_version", "company_wiki_root"}
-    if not set(payload) <= required | {"fmp_api_key_file"} or not required <= set(payload):
+    if not set(payload) <= required | {"fmp_api_key_file", "earnings_transcripts_tool"} or not required <= set(payload):
         raise FilingFetchError(
             "company-wiki config must contain schema_version/company_wiki_root "
-            "and only optional fmp_api_key_file "
+            "and only optional fmp_api_key_file/earnings_transcripts_tool "
             "(FC-501: no independent allowed_handle_roots allowlist)",
             code="config_error",
         )
@@ -198,16 +198,16 @@ def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
             f"company-wiki config schema_version must be {COMPANY_WIKI_CONFIG_SCHEMA_VERSION}",
             code="config_error",
         )
-    credential_source = payload.get("fmp_api_key_file")
-    if "fmp_api_key_file" in payload and (
-        not isinstance(credential_source, str)
-        or not credential_source.strip()
-        or credential_source != credential_source.strip()
-    ):
-        raise FilingFetchError(
-            "company-wiki config fmp_api_key_file must be non-empty trimmed text",
-            code="config_error",
-        )
+    for path_field in ("fmp_api_key_file", "earnings_transcripts_tool"):
+        configured_path = payload.get(path_field)
+        if path_field in payload and (
+            not isinstance(configured_path, str) or not configured_path.strip()
+            or configured_path != configured_path.strip()
+        ):
+            raise FilingFetchError(
+                f"company-wiki config {path_field} must be non-empty trimmed text",
+                code="config_error",
+            )
     configured = payload["company_wiki_root"]
     if (
         not isinstance(configured, str)

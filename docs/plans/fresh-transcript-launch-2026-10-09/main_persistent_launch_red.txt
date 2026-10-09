@@ -1,0 +1,46 @@
+FF.FFF....                                                               [100%]
+================================== FAILURES ===================================
+___ test_persistent_tool_path_starts_real_child_without_launch_environment ____
+tests\test_transcript_launch_contract.py:416: in test_persistent_tool_path_starts_real_child_without_launch_environment
+    assert transport.transcript_tool == tool.resolve()
+E   AssertionError: assert None == WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/ff-launch-main-cew696gp/test_persistent_tool_path_star0/tools/et.py')
+E    +  where None = <transcript_tool_transport.EarningsTranscriptsTransport object at 0x000001570B59C980>.transcript_tool
+E    +  and   WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/ff-launch-main-cew696gp/test_persistent_tool_path_star0/tools/et.py') = resolve()
+E    +    where resolve = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/ff-launch-main-cew696gp/test_persistent_tool_path_star0/tools/et.py').resolve
+_______ test_persistent_tool_user_profile_token_uses_configured_profile _______
+tests\test_transcript_launch_contract.py:431: in test_persistent_tool_user_profile_token_uses_configured_profile
+    assert transport.transcript_tool == tool.resolve()
+E   AssertionError: assert None == WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/ff-launch-main-cew696gp/test_persistent_tool_user_prof0/tools/et.py')
+E    +  where None = <transcript_tool_transport.EarningsTranscriptsTransport object at 0x0000015709BAE5D0>.transcript_tool
+E    +  and   WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/ff-launch-main-cew696gp/test_persistent_tool_user_prof0/tools/et.py') = resolve()
+E    +    where resolve = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/ff-launch-main-cew696gp/test_persistent_tool_user_prof0/tools/et.py').resolve
+_ test_bad_persistent_tool_has_measured_pre_http_zero[absent/et.py-transcript_tool_unavailable] _
+tests\test_transcript_launch_contract.py:455: in test_bad_persistent_tool_has_measured_pre_http_zero
+    assert result["reason"] == reason
+E   AssertionError: assert 'transcript_t...ot_configured' == 'transcript_tool_unavailable'
+E     
+E     - transcript_tool_unavailable
+E     + transcript_tool_not_configured
+_ test_bad_persistent_tool_has_measured_pre_http_zero[${UNKNOWN}/et.py-transcript_tool_config_invalid] _
+tests\test_transcript_launch_contract.py:455: in test_bad_persistent_tool_has_measured_pre_http_zero
+    assert result["reason"] == reason
+E   AssertionError: assert 'transcript_t...ot_configured' == 'transcript_t...onfig_invalid'
+E     
+E     - transcript_tool_config_invalid
+E     ?                       ^^^^^^^
+E     + transcript_tool_not_configured
+E     ?                 ++++      ^^^
+__ test_public_loader_and_doctor_accept_persistent_tool_without_reading_key ___
+tests\test_transcript_launch_contract.py:465: in test_public_loader_and_doctor_accept_persistent_tool_without_reading_key
+    assert load_company_wiki_root(config_path=config) == wiki.resolve()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\fetch_filing.py:190: in load_company_wiki_root
+    raise FilingFetchError(
+E   filing_contracts.FilingFetchError: company-wiki config must contain schema_version/company_wiki_root and only optional fmp_api_key_file (FC-501: no independent allowed_handle_roots allowlist)
+=========================== short test summary info ===========================
+FAILED tests/test_transcript_launch_contract.py::test_persistent_tool_path_starts_real_child_without_launch_environment
+FAILED tests/test_transcript_launch_contract.py::test_persistent_tool_user_profile_token_uses_configured_profile
+FAILED tests/test_transcript_launch_contract.py::test_bad_persistent_tool_has_measured_pre_http_zero[absent/et.py-transcript_tool_unavailable]
+FAILED tests/test_transcript_launch_contract.py::test_bad_persistent_tool_has_measured_pre_http_zero[${UNKNOWN}/et.py-transcript_tool_config_invalid]
+FAILED tests/test_transcript_launch_contract.py::test_public_loader_and_doctor_accept_persistent_tool_without_reading_key
+5 failed, 5 passed, 41 deselected in 0.36s

@@ -60,8 +60,10 @@ def test_config_dbx_03_no_independent_allowlist() -> None:
             }),
             encoding="utf-8",
         )
-        with pytest.raises(FilingFetchError, match="exactly schema_version"):
+        with pytest.raises(FilingFetchError) as error:
             load_company_wiki_root(config_path=cfg)
+        assert error.value.code == "config_error"
+        assert "allowed_handle_roots" in str(error.value)
 
 
 def test_config_dbx_04_dropbox_root_defined_in_wiki_policy_only() -> None:

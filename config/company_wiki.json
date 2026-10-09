@@ -1,4 +1,5 @@
 {
   "schema_version": "1.0",
-  "company_wiki_root": "${USER_PROFILE}/Projects/company-wiki"
+  "company_wiki_root": "${USER_PROFILE}/Projects/company-wiki",
+  "earnings_transcripts_tool": "${USER_PROFILE}/Projects/earnings-transcripts/earnings-transcripts/transcript_tool.py"
 }

@@ -79,10 +79,10 @@ def _check_filing_config(
             "(FC-501: the policy snapshot is the single source)"
         )
     required = {"schema_version", "company_wiki_root"}
-    if not required <= set(payload) or not set(payload) <= required | {"fmp_api_key_file"}:
+    if not required <= set(payload) or not set(payload) <= required | {"fmp_api_key_file", "earnings_transcripts_tool"}:
         problems.append(
             "filing-fetch config must contain schema_version/company_wiki_root "
-            "and only optional fmp_api_key_file"
+            "and only optional fmp_api_key_file/earnings_transcripts_tool"
         )
         return None
     if payload["schema_version"] != "1.0":
@@ -91,14 +91,14 @@ def _check_filing_config(
             f"{payload['schema_version']!r}"
         )
         return None
-    credential_source = payload.get("fmp_api_key_file")
-    if "fmp_api_key_file" in payload and (
-        not isinstance(credential_source, str)
-        or not credential_source.strip()
-        or credential_source != credential_source.strip()
-    ):
-        problems.append("filing-fetch config fmp_api_key_file must be non-empty trimmed text")
-        return None
+    for path_field in ("fmp_api_key_file", "earnings_transcripts_tool"):
+        configured_path = payload.get(path_field)
+        if path_field in payload and (
+            not isinstance(configured_path, str) or not configured_path.strip()
+            or configured_path != configured_path.strip()
+        ):
+            problems.append(f"filing-fetch config {path_field} must be non-empty trimmed text")
+            return None
     configured = payload["company_wiki_root"]
     if not isinstance(configured, str) or not configured.strip():
         problems.append(

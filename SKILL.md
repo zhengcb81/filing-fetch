@@ -188,11 +188,15 @@ marks the transcript `not_applicable`.
   not automatically retried. Legacy `provider_calls` is an acquisition-attempt
   counter, not an authoritative HTTP count. Result content/SourceRef schemas
   are unchanged.
-- Configure the provider tool with the `EARNINGS_TRANSCRIPTS_TOOL`
-  environment variable (path to the earnings-transcripts entry script). It is
-  invoked as `<tool> --request-stdin --include-source-payload`. If it is unset
-  or missing, the transcript reports `provider_unavailable` /
-  `transcript_tool_not_configured` — the filing result is unaffected.
+- Set optional `earnings_transcripts_tool` and `fmp_api_key_file` in the
+  selected `config/company_wiki.json`. These are location metadata; keys stay
+  in their original file. Absolute paths, paths relative to this config,
+  `${USER_PROFILE}` and `${SKILL_ROOT}` are supported. Tool and key locations
+  use one bounded config snapshot per transport. This works without per-run
+  environment exports. Explicit tool/credential arguments and existing
+  `EARNINGS_TRANSCRIPTS_TOOL` / `FMP_API_KEY_FILE` / `FMP_API_KEY` overrides retain
+  precedence. Unconfigured or unavailable tools return a named, measured
+  pre-HTTP zero result; the filing result remains available.
 
 ### Response (schema 2.0)
 

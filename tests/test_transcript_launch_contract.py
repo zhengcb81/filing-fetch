@@ -384,3 +384,102 @@ def test_real_child_unicode_error_code_cannot_escape_public_reason(tmp_path, mon
     assert result["provider_requests"] == (None if contaminated_receipt else 1)
     assert result["provider_started"] is (None if contaminated_receipt else True)
     assert result["provider_usage_complete"] is (not contaminated_receipt)
+
+
+# MAIN: the public configured launch must work without per-run environment setup.
+def _persistent_launch_config(tmp_path, *, tool_value=None):
+    wiki = tmp_path / "wiki"
+    (wiki / "config").mkdir(parents=True)
+    (wiki / "config/source_catalog.yaml").write_text("schema_version: '1.0'\n", encoding="utf-8")
+    tool = tmp_path / "tools" / "et.py"
+    tool.parent.mkdir()
+    tool.write_text(
+        "import json, sys\n"
+        "r=json.load(sys.stdin)\n"
+        "print(json.dumps({'schema_version':'earnings-transcript-result/2',"
+        "'request_id':r['request_id'],'status':'unsupported','provider':'fmp',"
+        "'error_code':'unsupported_exchange'}))\n"
+        "sys.stderr.write(json.dumps({'schema_version':'earnings-retrieval-usage/1',"
+        "'request_id':r['request_id'],'usage_complete':True,'usage':"
+        "{'requests_used':0,'response_bytes_used':0}})+'\\n')\n", encoding="utf-8")
+    config = tmp_path / "company_wiki.json"
+    config.write_text(json.dumps({"schema_version":"1.0", "company_wiki_root":str(wiki),
+        "earnings_transcripts_tool":tool_value if tool_value is not None else "tools/et.py"}), encoding="utf-8")
+    return wiki, tool, config
+
+
+def test_persistent_tool_path_starts_real_child_without_launch_environment(tmp_path, monkeypatch):
+    monkeypatch.delenv("EARNINGS_TRANSCRIPTS_TOOL", raising=False)
+    wiki, tool, config = _persistent_launch_config(tmp_path)
+    transport = transport_module.EarningsTranscriptsTransport(wiki_root=wiki,
+        config_path=config, deadline=time.monotonic()+20)
+    assert transport.transcript_tool == tool.resolve()
+    result = transport._et_result(request=_request(), limits=_limits())
+    assert result["reason"] == "unsupported_exchange"
+    assert result["provider_calls"] == 0 and result["provider_requests"] == 0
+    assert result["provider_started"] is False and result["provider_usage_complete"] is True
+    assert str(tool) not in json.dumps(result)
+
+
+def test_persistent_tool_user_profile_token_uses_configured_profile(tmp_path, monkeypatch):
+    monkeypatch.delenv("EARNINGS_TRANSCRIPTS_TOOL", raising=False)
+    wiki, tool, config = _persistent_launch_config(tmp_path,
+        tool_value="${USER_PROFILE}/tools/et.py")
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    transport = transport_module.EarningsTranscriptsTransport(wiki_root=wiki,
+        config_path=config, deadline=time.monotonic()+20)
+    assert transport.transcript_tool == tool.resolve()
+
+
+def test_explicit_tool_override_preserves_precedence_over_persistent_tool(tmp_path, monkeypatch):
+    wiki, tool, config = _persistent_launch_config(tmp_path, tool_value="absent/et.py")
+    monkeypatch.setenv("EARNINGS_TRANSCRIPTS_TOOL", str(tool))
+    transport = transport_module.EarningsTranscriptsTransport(wiki_root=wiki,
+        config_path=config, deadline=time.monotonic()+20)
+    assert transport.transcript_tool == tool.resolve()
+
+
+@pytest.mark.parametrize("tool_value,reason", [
+    ("absent/et.py", "transcript_tool_unavailable"),
+    ("${UNKNOWN}/et.py", "transcript_tool_config_invalid"),
+])
+def test_bad_persistent_tool_has_measured_pre_http_zero(tmp_path, monkeypatch, tool_value, reason):
+    monkeypatch.delenv("EARNINGS_TRANSCRIPTS_TOOL", raising=False)
+    wiki, _, config = _persistent_launch_config(tmp_path, tool_value=tool_value)
+    def forbidden(*args, **kwargs):
+        pytest.fail("unavailable configured tool must not start a child")
+    monkeypatch.setattr(transport_module, "_run_bounded_json", forbidden)
+    transport = transport_module.EarningsTranscriptsTransport(wiki_root=wiki,
+        config_path=config, deadline=time.monotonic()+20)
+    result = transport._et_result(request=_request(), limits=_limits())
+    assert result["reason"] == reason
+    assert result["provider_calls"] == 0 and result["provider_requests"] == 0
+    assert result["provider_started"] is False and result["provider_usage_complete"] is True
+    assert str(config) not in json.dumps(result)
+
+
+def test_public_loader_and_doctor_accept_persistent_tool_without_reading_key(tmp_path):
+    import importlib.util
+    from fetch_filing import load_company_wiki_root
+    wiki, _, config = _persistent_launch_config(tmp_path)
+    assert load_company_wiki_root(config_path=config) == wiki.resolve()
+    spec=importlib.util.spec_from_file_location("main_launch_doctor",
+        Path(__file__).resolve().parents[1]/"tools/config_doctor.py")
+    doctor=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(doctor)
+    problems, notes=[], []
+    assert doctor._check_filing_config(config, problems, notes) == wiki
+    assert problems == []
+
+
+@pytest.mark.parametrize("invalid", [None, {}, "", "  "])
+def test_public_loader_rejects_malformed_persistent_tool(tmp_path, invalid):
+    from fetch_filing import load_company_wiki_root
+    from filing_contracts import FilingFetchError
+    wiki, _, config = _persistent_launch_config(tmp_path)
+    payload=json.loads(config.read_text(encoding="utf-8"))
+    payload["earnings_transcripts_tool"]=invalid
+    config.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(FilingFetchError) as error:
+        load_company_wiki_root(config_path=config)
+    assert error.value.code == "config_error"
