@@ -1,0 +1,21 @@
+{
+  "exit_code": 0,
+  "seconds": 14.49,
+  "argv": [
+    "C:\\Miniconda\\python.exe",
+    "-X",
+    "utf8",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "C:\\Users\\\u90d1\u66fe\u6ce2\\AppData\\Local\\Temp\\ff-fresh-transcript-launch-20261009\\docs\\plans\\fresh-typed-cause-2026-10-09\\w08-legacy-core-6e444xau\\pytest",
+    "tests/test_fetch_filing.py"
+  ],
+  "external_http_requests": 0,
+  "paid_calls": 0,
+  "temp_root_exists_after_cleanup": false
+}

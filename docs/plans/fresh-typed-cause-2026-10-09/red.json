@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "C:\\Miniconda\\python.exe",
+    "-X",
+    "utf8",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "C:\\Users\\\u90d1\u66fe\u6ce2\\AppData\\Local\\Temp\\w08-red-af974e86\\pytest",
+    "tests/test_failure_usage_continuity.py"
+  ],
+  "exit_code": 1,
+  "seconds": 2.639308899990283,
+  "scope": "new_W08_tests_before_source_implementation"
+}

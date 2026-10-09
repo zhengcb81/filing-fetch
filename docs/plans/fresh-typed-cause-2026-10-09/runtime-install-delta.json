@@ -1,0 +1,131 @@
+{
+  "schema_version": "w08-runtime-install-delta/1",
+  "installed_files_written": 0,
+  "source_worktree": "C:\\Users\\\u90d1\u66fe\u6ce2\\AppData\\Local\\Temp\\ff-fresh-transcript-launch-20261009",
+  "selected_code_files": [
+    {
+      "relative_path": "scripts/fetch_filing.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\fetch_filing.py",
+      "source_sha256": "9e0ae4dc11b12367b7498e3f80599f63df48e27efd3eebba9e6ca59e4be8de51",
+      "installed_sha256": "8ba2d75aea623c19d2b1289dbb610ba2244a4ebf7fd13edabcd1e305e668a51a",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\fetch_filing.py"
+    },
+    {
+      "relative_path": "scripts/fetch_filing.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.claude\\skills\\filing-fetch\\scripts\\fetch_filing.py",
+      "source_sha256": "9e0ae4dc11b12367b7498e3f80599f63df48e27efd3eebba9e6ca59e4be8de51",
+      "installed_sha256": "8ba2d75aea623c19d2b1289dbb610ba2244a4ebf7fd13edabcd1e305e668a51a",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\fetch_filing.py"
+    },
+    {
+      "relative_path": "scripts/fetch_filing.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\fetch_filing.py",
+      "source_sha256": "9e0ae4dc11b12367b7498e3f80599f63df48e27efd3eebba9e6ca59e4be8de51",
+      "installed_sha256": "8ba2d75aea623c19d2b1289dbb610ba2244a4ebf7fd13edabcd1e305e668a51a",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\fetch_filing.py"
+    },
+    {
+      "relative_path": "scripts/ff_local_source_prepare.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\ff_local_source_prepare.py",
+      "source_sha256": "2120ee7bb00a7ad2476fc7032db593024b0d4441c2c07a1c4529021fc21f0653",
+      "installed_sha256": "417540c65b8c6d83e438aa60db29c3a4ea35f4ae9d1a44d26e1402e1c424ce71",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\ff_local_source_prepare.py"
+    },
+    {
+      "relative_path": "scripts/ff_local_source_prepare.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.claude\\skills\\filing-fetch\\scripts\\ff_local_source_prepare.py",
+      "source_sha256": "2120ee7bb00a7ad2476fc7032db593024b0d4441c2c07a1c4529021fc21f0653",
+      "installed_sha256": "417540c65b8c6d83e438aa60db29c3a4ea35f4ae9d1a44d26e1402e1c424ce71",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\ff_local_source_prepare.py"
+    },
+    {
+      "relative_path": "scripts/ff_local_source_prepare.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\ff_local_source_prepare.py",
+      "source_sha256": "2120ee7bb00a7ad2476fc7032db593024b0d4441c2c07a1c4529021fc21f0653",
+      "installed_sha256": "417540c65b8c6d83e438aa60db29c3a4ea35f4ae9d1a44d26e1402e1c424ce71",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\ff_local_source_prepare.py"
+    },
+    {
+      "relative_path": "scripts/ff_provider_cause.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\ff_provider_cause.py",
+      "source_sha256": "49f6ae540b2068ab6a6c9f5c9c823128adc9095a3bce4094fcec64302e724f18",
+      "installed_sha256": "7dc4a63344e78c0f482cc4604f43397540e4ed1e4ee755ddffb049212e8cdf7a",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\ff_provider_cause.py"
+    },
+    {
+      "relative_path": "scripts/ff_provider_cause.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.claude\\skills\\filing-fetch\\scripts\\ff_provider_cause.py",
+      "source_sha256": "49f6ae540b2068ab6a6c9f5c9c823128adc9095a3bce4094fcec64302e724f18",
+      "installed_sha256": "7dc4a63344e78c0f482cc4604f43397540e4ed1e4ee755ddffb049212e8cdf7a",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\ff_provider_cause.py"
+    },
+    {
+      "relative_path": "scripts/ff_provider_cause.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\ff_provider_cause.py",
+      "source_sha256": "49f6ae540b2068ab6a6c9f5c9c823128adc9095a3bce4094fcec64302e724f18",
+      "installed_sha256": "7dc4a63344e78c0f482cc4604f43397540e4ed1e4ee755ddffb049212e8cdf7a",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\ff_provider_cause.py"
+    },
+    {
+      "relative_path": "scripts/ff_v2_envelope.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py",
+      "source_sha256": "8bca27f2acfdb4f4ba00342fcf4b9a783da6328ed69018c2b0286ff464fda534",
+      "installed_sha256": "c936f7cdb18bb5b59f218a387c944faf520f222a8242d72397407c3a7eb0ea02",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py"
+    },
+    {
+      "relative_path": "scripts/ff_v2_envelope.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.claude\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py",
+      "source_sha256": "8bca27f2acfdb4f4ba00342fcf4b9a783da6328ed69018c2b0286ff464fda534",
+      "installed_sha256": "c936f7cdb18bb5b59f218a387c944faf520f222a8242d72397407c3a7eb0ea02",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py"
+    },
+    {
+      "relative_path": "scripts/ff_v2_envelope.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py",
+      "source_sha256": "8bca27f2acfdb4f4ba00342fcf4b9a783da6328ed69018c2b0286ff464fda534",
+      "installed_sha256": "c936f7cdb18bb5b59f218a387c944faf520f222a8242d72397407c3a7eb0ea02",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py"
+    },
+    {
+      "relative_path": "scripts/filing_contracts.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\filing_contracts.py",
+      "source_sha256": "814c63bd8b684d946e7b3a18f194ed441da375070e822eb370ec9c3a136536eb",
+      "installed_sha256": "0c010dbaac305fbe32b3129e6af23def4c4f8d15cd143fb0d10190f94777fce7",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\filing_contracts.py"
+    },
+    {
+      "relative_path": "scripts/filing_contracts.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.claude\\skills\\filing-fetch\\scripts\\filing_contracts.py",
+      "source_sha256": "814c63bd8b684d946e7b3a18f194ed441da375070e822eb370ec9c3a136536eb",
+      "installed_sha256": "0c010dbaac305fbe32b3129e6af23def4c4f8d15cd143fb0d10190f94777fce7",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.agents\\skills\\filing-fetch\\scripts\\filing_contracts.py"
+    },
+    {
+      "relative_path": "scripts/filing_contracts.py",
+      "installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\filing_contracts.py",
+      "source_sha256": "814c63bd8b684d946e7b3a18f194ed441da375070e822eb370ec9c3a136536eb",
+      "installed_sha256": "0c010dbaac305fbe32b3129e6af23def4c4f8d15cd143fb0d10190f94777fce7",
+      "state": "different",
+      "resolved_installed_path": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\skills\\filing-fetch\\scripts\\filing_contracts.py"
+    }
+  ],
+  "config_keys_output_read": false,
+  "logical_observation_count": 15,
+  "physical_target_count_observed": 10,
+  "publication_owner": "MAIN; recheck physical/junction resolution before targeted sync"
+}

@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "C:\\Miniconda\\python.exe",
+    "-X",
+    "utf8",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "C:\\Users\\\u90d1\u66fe\u6ce2\\AppData\\Local\\Temp\\w08-final-focused-8elfjoxl\\pytest",
+    "tests/test_failure_usage_continuity.py",
+    "tests/test_provider_cause_contract.py",
+    "tests/test_local_source_prepare.py",
+    "tests/test_source_ref_v2.py",
+    "tests/test_source_ref_v2_db_query.py",
+    "tests/test_fc802_gap_orchestration.py",
+    "tests/test_transcript_companion.py",
+    "tests/test_transcript_launch_contract.py"
+  ],
+  "exit_code": 0,
+  "seconds": 18.75142680000863
+}

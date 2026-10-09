@@ -370,7 +370,7 @@ def _run_company_wiki_json(
         # stderr code + safe cause only. The raw stderr body is consumed for
         # classification but never echoed - it routinely carries absolute
         # paths and provider credentials.
-        code, cause = ff_provider_cause.diagnose_stderr(
+        code, cause, receipt = ff_provider_cause.diagnose_stderr_observation(
             action, exc.stderr.decode("utf-8", errors="replace").strip()
         )
         raise FilingFetchError(
@@ -379,6 +379,7 @@ def _run_company_wiki_json(
             stage=action,
             attempts=1,
             upstream_cause=cause,
+            acquisition_failure=receipt,
         ) from exc
     except _ProcessChildStartFailed as exc:
         code, cause = ff_provider_cause.condition_cause(action, "producer_start_failed")
@@ -409,7 +410,7 @@ def _run_company_wiki_json(
         # safe cause only. The raw stderr body is consumed for classification
         # but never echoed - it routinely carries absolute paths and provider
         # credentials.
-        code, cause = ff_provider_cause.diagnose_stderr(
+        code, cause, receipt = ff_provider_cause.diagnose_stderr_observation(
             action, stderr.decode("utf-8", errors="replace").strip()
         )
         raise FilingFetchError(
@@ -418,15 +419,19 @@ def _run_company_wiki_json(
             stage=action,
             attempts=1,
             upstream_cause=cause,
+            acquisition_failure=receipt,
         )
     try:
         payload = json.loads(stdout.decode("utf-8", errors="strict"))
     except UnicodeError as exc:
-        raise FilingFetchError(f"company-wiki {action} stdout is not valid UTF-8") from exc
+        raise FilingFetchError(f"company-wiki {action} stdout is not valid UTF-8", stage=action,
+            upstream_cause=ff_provider_cause.source_condition(action, "invalid_producer_schema")) from exc
     except json.JSONDecodeError as exc:
-        raise FilingFetchError(f"company-wiki {action} stdout is not JSON") from exc
+        raise FilingFetchError(f"company-wiki {action} stdout is not JSON", stage=action,
+            upstream_cause=ff_provider_cause.source_condition(action, "invalid_producer_schema")) from exc
     if not isinstance(payload, dict):
-        raise FilingFetchError(f"company-wiki {action} response must be an object")
+        raise FilingFetchError(f"company-wiki {action} response must be an object", stage=action,
+            upstream_cause=ff_provider_cause.source_condition(action, "invalid_producer_schema"))
     return payload
 
 
@@ -713,11 +718,15 @@ def _run_source_query(
         raise FilingFetchError(
             "company-wiki source query stdout is not JSON",
             code="upstream_error",
+            stage="source_query",
+            upstream_cause=ff_provider_cause.source_condition("query", "invalid_producer_schema"),
         ) from exc
     if not isinstance(payload, dict) or payload.get("schema_version") != "2.0":
         raise FilingFetchError(
             "company-wiki source query schema is unsupported",
             code="upstream_error",
+            stage="source_query",
+            upstream_cause=ff_provider_cause.source_condition("query", "invalid_producer_schema"),
         )
     status = payload.get("status")
     if status != "found":
@@ -732,9 +741,10 @@ def _run_source_query(
                 "company-wiki source query status is invalid", code="upstream_error"
             )
         raise FilingFetchError(
-            f"company-wiki source query {status}: {payload.get('reason')}",
+            f"company-wiki source query {status}",
             code=errors[status],
             stage="source_query",
+            upstream_cause=ff_provider_cause.source_condition("query", payload.get("reason")),
         )
     if returncode != 0:
         raise FilingFetchError(
@@ -902,11 +912,13 @@ def _contains_physical_field(value: object) -> bool:
 def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise FilingFetchError(
-            "company-wiki operation result must be an object", code="upstream_error"
+            "company-wiki operation result must be an object", code="upstream_error",
+            upstream_cause=ff_provider_cause.source_condition(operation, "invalid_producer_schema"),
         )
     upstream_cause = ff_provider_cause.diagnose_acquisition_failure(
         operation, payload.get("acquisition_failure")
     )
+    receipt = ff_provider_cause.validated_acquisition_failure(payload.get("acquisition_failure"))
     if (
         payload.get("operation_schema_version") != _SOURCE_OPERATION_VERSION
         or payload.get("operation") != operation
@@ -914,19 +926,22 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
     ):
         raise FilingFetchError(
             "company-wiki operation contract is unsupported", code="upstream_error",
-            upstream_cause=upstream_cause
+            upstream_cause=upstream_cause or ff_provider_cause.source_condition(operation, "invalid_producer_schema"),
+            acquisition_failure=receipt,
         )
     if payload.get("status") not in _SOURCE_OPERATION_STATUSES:
         raise FilingFetchError(
             "company-wiki operation status is invalid", code="upstream_error",
-            upstream_cause=upstream_cause,
+            upstream_cause=upstream_cause or ff_provider_cause.source_condition(operation, "invalid_producer_schema"),
+            acquisition_failure=receipt,
         )
     if _contains_physical_field({
         key: value for key, value in payload.items() if key != "acquisition_failure"
     }):
         raise FilingFetchError(
             "company-wiki operation result leaked a physical location", code="upstream_error",
-            upstream_cause=upstream_cause
+            upstream_cause=upstream_cause,
+            acquisition_failure=receipt,
         )
     request_id = payload.get("request_id")
     if (
@@ -936,7 +951,8 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
     ):
         raise FilingFetchError(
             "company-wiki operation request_id is invalid", code="upstream_error",
-            upstream_cause=upstream_cause
+            upstream_cause=upstream_cause,
+            acquisition_failure=receipt,
         )
     policy_hash = payload.get("policy_hash")
     if policy_hash is not None and (
@@ -944,7 +960,8 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
     ):
         raise FilingFetchError(
             "company-wiki operation policy_hash is invalid", code="upstream_error",
-            upstream_cause=upstream_cause
+            upstream_cause=upstream_cause,
+            acquisition_failure=receipt,
         )
     return payload
 
@@ -986,6 +1003,9 @@ def _pathless_operation_gap(
     )
     if upstream_cause is not None:
         gap["upstream_cause"] = upstream_cause
+    receipt = ff_provider_cause.validated_acquisition_failure(result.get("acquisition_failure"))
+    if receipt is not None:
+        gap["acquisition_failure"] = receipt
     return gap
 
 
@@ -1011,7 +1031,8 @@ def _pathless_operation_handle(
             stage=stage,
             upstream_cause=ff_provider_cause.diagnose_acquisition_failure(
                 operation, result.get("acquisition_failure")
-            ),
+            ) or ff_provider_cause.source_condition(operation, "source_not_found" if result["status"] == "not_found" else "unknown"),
+            acquisition_failure=ff_provider_cause.validated_acquisition_failure(result.get("acquisition_failure")),
         )
     outcome = result.get("outcome")
     events = result.get("download_events")
@@ -1388,6 +1409,9 @@ def resolve_filing(
             )
             if upstream_cause is not None:
                 gap["upstream_cause"] = upstream_cause
+            receipt = ff_provider_cause.validated_acquisition_failure(payload.get("acquisition_failure"))
+            if receipt is not None:
+                gap["acquisition_failure"] = receipt
             return gap
         resolution = payload.get("resolution")
     else:
@@ -1398,6 +1422,7 @@ def resolve_filing(
             upstream_cause=ff_provider_cause.diagnose_acquisition_failure(
                 action, payload.get("acquisition_failure")
             ),
+            acquisition_failure=ff_provider_cause.validated_acquisition_failure(payload.get("acquisition_failure")),
         )
     expected_schema = (
         SUPPORTED_COMPANY_WIKI_CONTRACTS["ensure_schema_version"]
@@ -1408,6 +1433,8 @@ def resolve_filing(
         raise FilingFetchError(
             "company-wiki resolution schema_version is unsupported",
             code="upstream_error",
+            upstream_cause=ff_provider_cause.source_condition(action, "invalid_producer_schema"),
+            acquisition_failure=ff_provider_cause.validated_acquisition_failure(payload.get("acquisition_failure")),
         )
     if resolution.get("status") not in {"reused_exact", "reused_equivalent"}:
         raise FilingFetchError(
@@ -1417,7 +1444,8 @@ def resolve_filing(
             resolution_trace=_resolution_trace(resolution),
             upstream_cause=ff_provider_cause.diagnose_acquisition_failure(
                 action, payload.get("acquisition_failure")
-            ),
+            ) or ff_provider_cause.source_condition(action, resolution.get("reason") if resolution.get("reason") == "local_metadata_gap" else "source_not_found"),
+            acquisition_failure=ff_provider_cause.validated_acquisition_failure(payload.get("acquisition_failure")),
         )
     handle = _handle_from_resolution(
         resolution,
@@ -1738,6 +1766,9 @@ def main(argv: list[str] | None = None) -> int:
                 stats=stats if "stats" in locals() else None,
                 request=request if "request" in locals() and isinstance(request, dict) else None,
                 upstream_cause=exc.upstream_cause,
+                acquisition_failure=exc.acquisition_failure,
+                stage=exc.stage,
+                attempts=exc.attempts,
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")
@@ -1773,6 +1804,8 @@ def main(argv: list[str] | None = None) -> int:
         # producer call (v1 keeps it top-level; absent when no operation ran).
         if exc.upstream_cause is not None:
             error_response["upstream_cause"] = exc.upstream_cause
+        if exc.acquisition_failure is not None:
+            error_response["acquisition_failure"] = exc.acquisition_failure
         if "stats" in locals():
             error_response["calls"] = stats["calls"]
             error_response["downloads"] = stats["downloads"]

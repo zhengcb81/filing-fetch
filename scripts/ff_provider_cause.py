@@ -38,7 +38,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 UPSTREAM_CAUSE_SCHEMA_VERSION = "filing-upstream-cause/1"
-OPERATIONS = frozenset({"identify", "ensure", "resolve", "close-gap", "query"})
+OPERATIONS = frozenset({"identify", "ensure", "resolve", "close-gap", "query", "local_prepare"})
 CAUSE_KEYS = frozenset(
     {
         "schema_version",
@@ -50,6 +50,7 @@ CAUSE_KEYS = frozenset(
     }
 )
 RETRY_SCOPES = frozenset({"none", "catalog_contention", "caller_decision"})
+STAGES = OPERATIONS | {"source_query", "source_operation", "ambiguous", "not_found", "upstream_error"}
 
 # Published acquisition-failure/1 vocabulary, shared by versioned wire contract;
 # no runtime import of company-wiki implementation internals.
@@ -110,7 +111,8 @@ _KNOWN_CAUSE_CODES = (
     frozenset({cause for _, cause in _CWP_STDERR_CODES.values()})
     | frozenset(_PRODUCER_CONDITIONS)
     | ACQUISITION_FAILURE_CODES
-    | {"unknown"}
+    | {"unknown", "local_metadata_gap", "no_registered_local_source", "no_local_match",
+       "source_not_found", "invalid_producer_schema"}
 )
 
 # Defense-in-depth on top of the transport layer's own stderr cap: payloads
@@ -223,6 +225,26 @@ def _acquisition_evidence(value: Any) -> tuple[str, bool | None, bool | None] | 
     return safe_code, value["provider_started"], value["usage_complete"]
 
 
+def validated_acquisition_failure(value: Any) -> dict[str, Any] | None:
+    """Copy an existing operation observation; no accounting or inferred zero."""
+    if _acquisition_evidence(value) is None or value["code"] not in ACQUISITION_FAILURE_CODES:
+        return None
+    result = dict(value)
+    usage = value["acquisition_usage"]
+    result["acquisition_usage"] = dict(usage) if usage is not None else None
+    return result
+
+
+def source_condition(operation: str, reason: Any) -> dict[str, Any]:
+    """Finite source condition, independent of provider acquisition failures."""
+    reasons = {"local_metadata_gap", "no_registered_local_source", "no_local_match",
+               "source_not_found", "invalid_producer_schema"}
+    code = reason if isinstance(reason, str) and reason in reasons else "unknown"
+    local_only = operation in {"query", "local_prepare"} and code != "invalid_producer_schema"
+    return build_cause(operation, code, provider_started=False if local_only else None,
+                       usage_complete=True if local_only else None)
+
+
 def classify_stderr(stderr_text: str) -> str:
     """The unchanged generic filing error code, parsed once."""
     return _map_structured(_parse_structured(stderr_text))[0]
@@ -230,17 +252,24 @@ def classify_stderr(stderr_text: str) -> str:
 
 def diagnose_stderr(operation: str, stderr_text: str) -> tuple[str, dict[str, Any]]:
     """Parse once; prefer validated producer evidence without changing retries."""
+    code, cause, _ = diagnose_stderr_observation(operation, stderr_text)
+    return code, cause
+
+
+def diagnose_stderr_observation(operation: str, stderr_text: str) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
+    """Decode cause and the same existing producer receipt in one bounded parse."""
     payload = _parse_structured(stderr_text)
     ff_code, legacy_cause = _map_structured(payload)
     evidence = _acquisition_evidence(payload.get("acquisition_failure")) if payload else None
+    receipt = validated_acquisition_failure(payload.get("acquisition_failure")) if payload else None
     if evidence is None:
-        return ff_code, build_cause(operation, legacy_cause)
+        return ff_code, build_cause(operation, legacy_cause), receipt
     safe_code, started, complete = evidence
     projected = build_cause(operation, safe_code, provider_started=started, usage_complete=complete)
     # Generic taxonomy owns retry semantics. Producer retryable is diagnostic,
     # never authorization for FF to issue a second potentially charged request.
     projected["retry_scope"] = _retry_scope(legacy_cause)
-    return ff_code, projected
+    return ff_code, projected, receipt
 
 
 

@@ -13,7 +13,7 @@ from typing import Any, Sequence
 # R6-FF-CAUSE: shape validation for the optional upstream diagnostic (the
 # closed-vocabulary builder lives in ff_provider_cause; importing only the
 # validator keeps this module free of parsing logic).
-from ff_provider_cause import validated_cause
+from ff_provider_cause import STAGES, validated_acquisition_failure, validated_cause
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +62,7 @@ class FilingFetchError(RuntimeError):
         attempts: int | None = None,
         resolution_trace: dict | None = None,
         upstream_cause: dict[str, Any] | None = None,
+        acquisition_failure: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -85,8 +86,8 @@ class FilingFetchError(RuntimeError):
         # ZR-205 stage transparency: which company-wiki call failed
         # (identify/ensure/resolve/close-gap) and how many attempts were made,
         # so the final envelope stays reconcilable (READ-09).
-        self.stage = stage
-        self.attempts = attempts
+        self.stage = stage if isinstance(stage, str) and stage in STAGES else None
+        self.attempts = attempts if type(attempts) is int and attempts >= 0 else None
         # ZR-307 staged-evidence visibility: the upstream resolution summary
         # (request_id/status/reason) survives a downstream failure — the
         # error never swallows the exact-reuse/download=0 evidence.
@@ -100,6 +101,7 @@ class FilingFetchError(RuntimeError):
                 "upstream_cause must be a validated filing-upstream-cause/1 object"
             )
         self.upstream_cause = upstream_cause
+        self.acquisition_failure = validated_acquisition_failure(acquisition_failure)
 
 
 # ---------------------------------------------------------------------------

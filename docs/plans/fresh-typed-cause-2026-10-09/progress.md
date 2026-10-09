@@ -1,0 +1,13 @@
+# W08 progress
+
+## 2026-10-09
+
+1. Assigned clean worktree44c778b4 verified. Parent confirmed additive observation interface; existing six-field cause unchanged.
+2. Tests first: red.txt/json10failures/5passes; schema-red.txt3failures/1pass. These are product REDs before source fixes.
+3. Implemented one pure exact acquisition-failure/1 copier; retained valid receipts on exceptions/returned GAP and optional v1/v2 observed stage/attempts. Local metadata versus absent source has distinct finite causes. No provider/budget/accounting/retry changes.
+4. first-focused41passes; concentrated258passes/5explicit optional-environment skips/39subtests,18.33seconds. All19new W08 cases ran. Optional CWP/ET live-checkout controls were not enabled.
+5. legacy-core111passes/1existing skip/39subtests,14.14seconds. First unsanitized invocation had102sandbox-TEMP fixture permission failures; rerun used owned TEMP/minimum environment with unchanged source/tests. This was an invocation error, not a product RED. legacy-core.json records restored absent TEMP.
+6. ruff changed five source files/newtest passed; mypy filing_contracts.py/fetch_filing.py passed2files; diff--check passed.
+7. Actual isolated CWP→FF→RF public CLI:17bytes/$0.01 complete;92/$0.02 validation failure;36/$0.03 incomplete lower-bound; malformed usage remains null. Six actual scenarios plus six wire controls ran. Local metadata/absent original distinct; real stage/attempts/calls/downloads retained; no synthetic secret in tested final payload. Reader failure retains2calls/1download without replay. Root repaired-cross-cli.json SHA2563191c96399d74176d0f700c30d29bb0bf81db89d5ea28fcb1d13775839f64521; TEMP absent. Numeric costs are synthetic observations, not paid calls.
+8. Independent major review assigned by MAIN. It exposed an RF candidate nested-body leak; that consumer fix is in RF only. Legacy FF unrelated free-text fields are explicitly outside the safe claim. Normal-hook source commit pending review. No push/merge/install/externalHTTP/paid/config/raw changes.
+9. runtime-install-delta.json hashes only five changed code files across three logical .agents/.claude/.codex paths:15logical differences/0missing/0same. Logical paths may share junction targets; resolved_installed_path records physical observations for MAIN to recheck/deduplicate before targeted sync. Installed writes0; config/keys/output preserved.

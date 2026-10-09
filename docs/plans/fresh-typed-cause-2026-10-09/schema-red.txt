@@ -1,0 +1,51 @@
+FF.F                                                                     [100%]
+================================== FAILURES ===================================
+_____ test_invalid_provider_wire_keeps_named_schema_diagnostic[not-json] ______
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/w08-schema-red-iic641yb/pytest/test_invalid_provider_wire_kee0')
+body = 'not-json'
+
+    @pytest.mark.parametrize("body", ["not-json", "[]", '{"unexpected":"body"}'])
+    def test_invalid_provider_wire_keeps_named_schema_diagnostic(tmp_path, body):
+        script = tmp_path / "producer.py"
+        script.write_text("print(" + repr(body) + ")\n", encoding="utf-8")
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            result = fetch._run_company_wiki_json(command=[sys.executable, "-B", str(script)], root=tmp_path, action="ensure", timeout_seconds=10)
+            fetch._validated_operation(result, "ensure")
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_failure_usage_continuity.py:115: TypeError
+________ test_invalid_provider_wire_keeps_named_schema_diagnostic[[]] _________
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/w08-schema-red-iic641yb/pytest/test_invalid_provider_wire_kee1')
+body = '[]'
+
+    @pytest.mark.parametrize("body", ["not-json", "[]", '{"unexpected":"body"}'])
+    def test_invalid_provider_wire_keeps_named_schema_diagnostic(tmp_path, body):
+        script = tmp_path / "producer.py"
+        script.write_text("print(" + repr(body) + ")\n", encoding="utf-8")
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            result = fetch._run_company_wiki_json(command=[sys.executable, "-B", str(script)], root=tmp_path, action="ensure", timeout_seconds=10)
+            fetch._validated_operation(result, "ensure")
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_failure_usage_continuity.py:115: TypeError
+_________ test_invalid_local_wire_is_different_from_real_metadata_gap _________
+
+    def test_invalid_local_wire_is_different_from_real_metadata_gap():
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            local._validated({"schema_version": "unknown"}, lambda value: False)
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_failure_usage_continuity.py:122: TypeError
+=========================== short test summary info ===========================
+FAILED tests/test_failure_usage_continuity.py::test_invalid_provider_wire_keeps_named_schema_diagnostic[not-json]
+FAILED tests/test_failure_usage_continuity.py::test_invalid_provider_wire_keeps_named_schema_diagnostic[[]]
+FAILED tests/test_failure_usage_continuity.py::test_invalid_local_wire_is_different_from_real_metadata_gap
+3 failed, 1 passed, 15 deselected in 0.73s

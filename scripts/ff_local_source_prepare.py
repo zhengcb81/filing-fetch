@@ -10,6 +10,7 @@ import time
 from typing import Any
 
 import ff_process_transport
+from ff_provider_cause import condition_cause, source_condition
 from ff_v2_envelope import _reference
 from filing_contracts import FilingFetchError
 
@@ -29,7 +30,7 @@ def _validated(payload: Any, physical_fields: Callable[[object], bool]) -> bool:
             or not isinstance(payload.get("reason"), str)
             or physical_fields(payload)):
         raise FilingFetchError("invalid local preparation receipt", code="upstream_error",
-                               stage="local_prepare")
+                               stage="local_prepare", upstream_cause=source_condition("local_prepare", "invalid_producer_schema"))
     status = payload["status"]
     if status == "ready":
         _reference(payload["source_ref"])
@@ -42,8 +43,10 @@ def _validated(payload: Any, physical_fields: Callable[[object], bool]) -> bool:
     if status not in errors or payload["source_ref"] is not None:
         raise FilingFetchError("invalid local preparation status", code="upstream_error",
                                stage="local_prepare")
-    raise FilingFetchError(f"local source preparation {status}: {payload['reason']}",
-                           code=errors[status], stage="local_prepare")
+    cause = source_condition("local_prepare", payload["reason"])
+    raise FilingFetchError(f"local source preparation {status}: {cause['code']}",
+                           code=errors[status], stage="local_prepare",
+                           upstream_cause=cause)
 
 
 def prepare_existing_local_source(
@@ -73,10 +76,23 @@ def prepare_existing_local_source(
             input_bytes=json.dumps(request, ensure_ascii=False).encode("utf-8"),
             cwd=str(root), env=environment,
         )
-        payload = json.loads(stdout.decode("utf-8", errors="strict"))
-    except (ff_process_transport.TransportError, OSError, ValueError) as exc:
+    except ff_process_transport.ChildTimeout as exc:
+        raise FilingFetchError("local preparation exceeded deadline", code="upstream_error", stage="local_prepare",
+                               upstream_cause=condition_cause("local_prepare", "producer_deadline_exceeded")[1]) from exc
+    except ff_process_transport.OutputLimitExceeded as exc:
+        raise FilingFetchError("local preparation exceeded output limit", code="upstream_error", stage="local_prepare",
+                               upstream_cause=condition_cause("local_prepare", "producer_output_exceeded")[1]) from exc
+    except ff_process_transport.ChildStartFailed as exc:
+        raise FilingFetchError("local preparation failed to start", code="upstream_error", stage="local_prepare",
+                               upstream_cause=condition_cause("local_prepare", "producer_start_failed")[1]) from exc
+    except (ff_process_transport.TransportError, OSError) as exc:
         raise FilingFetchError("local preparation transport failed", code="upstream_error",
-                               stage="local_prepare") from exc
+                               stage="local_prepare", upstream_cause=condition_cause("local_prepare", "producer_transport_failure")[1]) from exc
+    try:
+        payload = json.loads(stdout.decode("utf-8", errors="strict"))
+    except (UnicodeError, ValueError) as exc:
+        raise FilingFetchError("invalid local preparation receipt", code="upstream_error", stage="local_prepare",
+                               upstream_cause=source_condition("local_prepare", "invalid_producer_schema")) from exc
     _validated(payload, physical_fields)
     if returncode != 0:
         raise FilingFetchError("ready local preparation returned nonzero exit",

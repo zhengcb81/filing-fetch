@@ -1,0 +1,187 @@
+FFFFFFFFFF.....                                                          [100%]
+================================== FAILURES ===================================
+_ test_actual_child_failure_keeps_scoped_receipt_without_replay[True-17-upstream_unavailable] _
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/w08-red-af974e86/pytest/test_actual_child_failure_keep0')
+complete = True, count = 17, code = 'upstream_unavailable'
+
+    @pytest.mark.parametrize("complete,count,code", [(True, 17, "upstream_unavailable"),
+        (False, 36, "adapter_timeout"), (None, None, "provider_failed"), (True, 92, "canonical_import_failed")])
+    def test_actual_child_failure_keeps_scoped_receipt_without_replay(tmp_path, complete, count, code):
+        dto = diagnostic(complete=complete, count=count, code=code)
+        output = {"status": "failed", "error_type": "fatal", "error": "https://invalid/?api_key=synthetic-w08-secret", "acquisition_failure": dto}
+        marker = tmp_path / "attempts.txt"
+        script = tmp_path / "producer.py"
+        script.write_text("import sys\nfrom pathlib import Path\np=Path(" + repr(str(marker)) + ")\np.write_text(p.read_text()+'x' if p.exists() else 'x')\nsys.stderr.write(" + repr(json.dumps(output)) + ")\nraise SystemExit(1)\n", encoding="utf-8")
+        stats = {"calls": 0, "downloads": 0}
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            fetch._run_company_wiki_json_retry(command=[sys.executable, "-B", str(script)], root=tmp_path,
+                                              action="ensure", deadline=time.monotonic() + 10, stats=stats)
+        error = caught.value
+>       assert getattr(error, "acquisition_failure", None) == dto
+E       AssertionError: assert None == {'schema_version': 'acquisition-failure/1', 'code': 'upstream_unavailable', 'retryable': False, 'provider_started': True, ...}
+E        +  where None = getattr(FilingFetchError('company-wiki ensure exited 1'), 'acquisition_failure', None)
+
+tests\test_failure_usage_continuity.py:37: AssertionError
+_ test_actual_child_failure_keeps_scoped_receipt_without_replay[False-36-adapter_timeout] _
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/w08-red-af974e86/pytest/test_actual_child_failure_keep1')
+complete = False, count = 36, code = 'adapter_timeout'
+
+    @pytest.mark.parametrize("complete,count,code", [(True, 17, "upstream_unavailable"),
+        (False, 36, "adapter_timeout"), (None, None, "provider_failed"), (True, 92, "canonical_import_failed")])
+    def test_actual_child_failure_keeps_scoped_receipt_without_replay(tmp_path, complete, count, code):
+        dto = diagnostic(complete=complete, count=count, code=code)
+        output = {"status": "failed", "error_type": "fatal", "error": "https://invalid/?api_key=synthetic-w08-secret", "acquisition_failure": dto}
+        marker = tmp_path / "attempts.txt"
+        script = tmp_path / "producer.py"
+        script.write_text("import sys\nfrom pathlib import Path\np=Path(" + repr(str(marker)) + ")\np.write_text(p.read_text()+'x' if p.exists() else 'x')\nsys.stderr.write(" + repr(json.dumps(output)) + ")\nraise SystemExit(1)\n", encoding="utf-8")
+        stats = {"calls": 0, "downloads": 0}
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            fetch._run_company_wiki_json_retry(command=[sys.executable, "-B", str(script)], root=tmp_path,
+                                              action="ensure", deadline=time.monotonic() + 10, stats=stats)
+        error = caught.value
+>       assert getattr(error, "acquisition_failure", None) == dto
+E       AssertionError: assert None == {'schema_version': 'acquisition-failure/1', 'code': 'adapter_timeout', 'retryable': False, 'provider_started': True, ...}
+E        +  where None = getattr(FilingFetchError('company-wiki ensure exited 1'), 'acquisition_failure', None)
+
+tests\test_failure_usage_continuity.py:37: AssertionError
+_ test_actual_child_failure_keeps_scoped_receipt_without_replay[None-None-provider_failed] _
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/w08-red-af974e86/pytest/test_actual_child_failure_keep2')
+complete = None, count = None, code = 'provider_failed'
+
+    @pytest.mark.parametrize("complete,count,code", [(True, 17, "upstream_unavailable"),
+        (False, 36, "adapter_timeout"), (None, None, "provider_failed"), (True, 92, "canonical_import_failed")])
+    def test_actual_child_failure_keeps_scoped_receipt_without_replay(tmp_path, complete, count, code):
+        dto = diagnostic(complete=complete, count=count, code=code)
+        output = {"status": "failed", "error_type": "fatal", "error": "https://invalid/?api_key=synthetic-w08-secret", "acquisition_failure": dto}
+        marker = tmp_path / "attempts.txt"
+        script = tmp_path / "producer.py"
+        script.write_text("import sys\nfrom pathlib import Path\np=Path(" + repr(str(marker)) + ")\np.write_text(p.read_text()+'x' if p.exists() else 'x')\nsys.stderr.write(" + repr(json.dumps(output)) + ")\nraise SystemExit(1)\n", encoding="utf-8")
+        stats = {"calls": 0, "downloads": 0}
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            fetch._run_company_wiki_json_retry(command=[sys.executable, "-B", str(script)], root=tmp_path,
+                                              action="ensure", deadline=time.monotonic() + 10, stats=stats)
+        error = caught.value
+>       assert getattr(error, "acquisition_failure", None) == dto
+E       AssertionError: assert None == {'schema_version': 'acquisition-failure/1', 'code': 'provider_failed', 'retryable': False, 'provider_started': True, ...}
+E        +  where None = getattr(FilingFetchError('company-wiki ensure exited 1'), 'acquisition_failure', None)
+
+tests\test_failure_usage_continuity.py:37: AssertionError
+_ test_actual_child_failure_keeps_scoped_receipt_without_replay[True-92-canonical_import_failed] _
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/w08-red-af974e86/pytest/test_actual_child_failure_keep3')
+complete = True, count = 92, code = 'canonical_import_failed'
+
+    @pytest.mark.parametrize("complete,count,code", [(True, 17, "upstream_unavailable"),
+        (False, 36, "adapter_timeout"), (None, None, "provider_failed"), (True, 92, "canonical_import_failed")])
+    def test_actual_child_failure_keeps_scoped_receipt_without_replay(tmp_path, complete, count, code):
+        dto = diagnostic(complete=complete, count=count, code=code)
+        output = {"status": "failed", "error_type": "fatal", "error": "https://invalid/?api_key=synthetic-w08-secret", "acquisition_failure": dto}
+        marker = tmp_path / "attempts.txt"
+        script = tmp_path / "producer.py"
+        script.write_text("import sys\nfrom pathlib import Path\np=Path(" + repr(str(marker)) + ")\np.write_text(p.read_text()+'x' if p.exists() else 'x')\nsys.stderr.write(" + repr(json.dumps(output)) + ")\nraise SystemExit(1)\n", encoding="utf-8")
+        stats = {"calls": 0, "downloads": 0}
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            fetch._run_company_wiki_json_retry(command=[sys.executable, "-B", str(script)], root=tmp_path,
+                                              action="ensure", deadline=time.monotonic() + 10, stats=stats)
+        error = caught.value
+>       assert getattr(error, "acquisition_failure", None) == dto
+E       AssertionError: assert None == {'schema_version': 'acquisition-failure/1', 'code': 'canonical_import_failed', 'retryable': False, 'provider_started': True, ...}
+E        +  where None = getattr(FilingFetchError('company-wiki ensure exited 1'), 'acquisition_failure', None)
+
+tests\test_failure_usage_continuity.py:37: AssertionError
+_____________ test_returned_gap_keeps_same_producer_receipt_in_v2 _____________
+
+    def test_returned_gap_keeps_same_producer_receipt_in_v2():
+        dto = diagnostic(complete=False, count=36)
+        handle = fetch._pathless_operation_gap(gap(dto), operation="ensure")
+        result = envelope.success_envelope({}, handle, {"status": "not_applicable"}, {"calls": 2, "downloads": 0})
+>       assert result["filing"].get("acquisition_failure") == dto
+E       AssertionError: assert None == {'schema_version': 'acquisition-failure/1', 'code': 'upstream_unavailable', 'retryable': False, 'provider_started': True, ...}
+E        +  where None = <built-in method get of dict object at 0x0000024DAE852800>('acquisition_failure')
+E        +    where <built-in method get of dict object at 0x0000024DAE852800> = {'status': 'gap', 'reason': 'metadata_only_gap_plan', 'gap_hash': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'download_events': 0, ...}.get
+
+tests\test_failure_usage_continuity.py:54: AssertionError
+__________ test_v2_error_restores_existing_stage_attempt_and_receipt __________
+
+    def test_v2_error_restores_existing_stage_attempt_and_receipt():
+        dto = diagnostic()
+        cause = {"schema_version": "filing-upstream-cause/1", "operation": "ensure", "code": "upstream_unavailable",
+                 "provider_started": True, "usage_complete": True, "retry_scope": "none"}
+>       error = fetch.FilingFetchError("safe fixed text", code="fatal", stage="ensure", attempts=1,
+                                       upstream_cause=cause, acquisition_failure=dto)
+E       TypeError: FilingFetchError.__init__() got an unexpected keyword argument 'acquisition_failure'
+
+tests\test_failure_usage_continuity.py:63: TypeError
+_ test_local_condition_is_safe_machine_subtype[local_metadata_gap-local_metadata_gap] _
+
+reason = 'local_metadata_gap', expected = 'local_metadata_gap'
+
+    @pytest.mark.parametrize("reason,expected", [("local_metadata_gap", "local_metadata_gap"),
+        ("no_registered_local_source", "no_registered_local_source"), ("api_key=synthetic-w08-secret", "unknown")])
+    def test_local_condition_is_safe_machine_subtype(reason, expected):
+        payload = {"schema_version": "local-source-prepare/1", "status": "blocked", "reason": reason,
+                   "source_ref": None, "blocks_download": True, "operations": [], "diagnostics": [], "download_events": 0}
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            local._validated(payload, lambda value: False)
+>       assert caught.value.upstream_cause["operation"] == "local_prepare"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_failure_usage_continuity.py:78: TypeError
+_ test_local_condition_is_safe_machine_subtype[no_registered_local_source-no_registered_local_source] _
+
+reason = 'no_registered_local_source', expected = 'no_registered_local_source'
+
+    @pytest.mark.parametrize("reason,expected", [("local_metadata_gap", "local_metadata_gap"),
+        ("no_registered_local_source", "no_registered_local_source"), ("api_key=synthetic-w08-secret", "unknown")])
+    def test_local_condition_is_safe_machine_subtype(reason, expected):
+        payload = {"schema_version": "local-source-prepare/1", "status": "blocked", "reason": reason,
+                   "source_ref": None, "blocks_download": True, "operations": [], "diagnostics": [], "download_events": 0}
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            local._validated(payload, lambda value: False)
+>       assert caught.value.upstream_cause["operation"] == "local_prepare"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_failure_usage_continuity.py:78: TypeError
+_ test_local_condition_is_safe_machine_subtype[api_key=synthetic-w08-secret-unknown] _
+
+reason = 'api_key=synthetic-w08-secret', expected = 'unknown'
+
+    @pytest.mark.parametrize("reason,expected", [("local_metadata_gap", "local_metadata_gap"),
+        ("no_registered_local_source", "no_registered_local_source"), ("api_key=synthetic-w08-secret", "unknown")])
+    def test_local_condition_is_safe_machine_subtype(reason, expected):
+        payload = {"schema_version": "local-source-prepare/1", "status": "blocked", "reason": reason,
+                   "source_ref": None, "blocks_download": True, "operations": [], "diagnostics": [], "download_events": 0}
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            local._validated(payload, lambda value: False)
+>       assert caught.value.upstream_cause["operation"] == "local_prepare"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_failure_usage_continuity.py:78: TypeError
+_ test_invalid_operation_schema_has_finite_condition_without_usage_inference __
+
+    def test_invalid_operation_schema_has_finite_condition_without_usage_inference():
+        with pytest.raises(fetch.FilingFetchError) as caught:
+            fetch._validated_operation({"operation_schema_version": "new-unsupported"}, "ensure")
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_failure_usage_continuity.py:88: TypeError
+=========================== short test summary info ===========================
+FAILED tests/test_failure_usage_continuity.py::test_actual_child_failure_keeps_scoped_receipt_without_replay[True-17-upstream_unavailable]
+FAILED tests/test_failure_usage_continuity.py::test_actual_child_failure_keeps_scoped_receipt_without_replay[False-36-adapter_timeout]
+FAILED tests/test_failure_usage_continuity.py::test_actual_child_failure_keeps_scoped_receipt_without_replay[None-None-provider_failed]
+FAILED tests/test_failure_usage_continuity.py::test_actual_child_failure_keeps_scoped_receipt_without_replay[True-92-canonical_import_failed]
+FAILED tests/test_failure_usage_continuity.py::test_returned_gap_keeps_same_producer_receipt_in_v2
+FAILED tests/test_failure_usage_continuity.py::test_v2_error_restores_existing_stage_attempt_and_receipt
+FAILED tests/test_failure_usage_continuity.py::test_local_condition_is_safe_machine_subtype[local_metadata_gap-local_metadata_gap]
+FAILED tests/test_failure_usage_continuity.py::test_local_condition_is_safe_machine_subtype[no_registered_local_source-no_registered_local_source]
+FAILED tests/test_failure_usage_continuity.py::test_local_condition_is_safe_machine_subtype[api_key=synthetic-w08-secret-unknown]
+FAILED tests/test_failure_usage_continuity.py::test_invalid_operation_schema_has_finite_condition_without_usage_inference
+10 failed, 5 passed in 2.22s

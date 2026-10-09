@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from filing_contracts import FilingFetchError, FILING_V2_RESPONSE_SCHEMA_VERSION
-from ff_provider_cause import validated_cause
+from ff_provider_cause import STAGES, validated_acquisition_failure, validated_cause
 
 
 _REF_KEYS = frozenset({
@@ -109,6 +109,9 @@ def success_envelope(
         upstream_cause = validated_cause(handle.get("upstream_cause"))
         if upstream_cause is not None:
             filing["upstream_cause"] = dict(upstream_cause)
+        receipt = validated_acquisition_failure(handle.get("acquisition_failure"))
+        if receipt is not None:
+            filing["acquisition_failure"] = receipt
         return {
             "schema_version": FILING_V2_RESPONSE_SCHEMA_VERSION,
             "status": "gap",
@@ -148,6 +151,9 @@ def error_envelope(
     code: str, reason: str, *, retryable: bool, stats: dict[str, int] | None = None,
     request: dict[str, Any] | None = None,
     upstream_cause: dict[str, Any] | None = None,
+    acquisition_failure: dict[str, Any] | None = None,
+    stage: str | None = None,
+    attempts: int | None = None,
 ) -> dict[str, Any]:
     stats = stats or {"calls": 0, "downloads": 0}
     filing: dict[str, Any] = {"status": code, "reason": reason, "retryable": retryable}
@@ -155,6 +161,13 @@ def error_envelope(
     # (failures only; a diagnosed failure GAP may carry the same object).
     if upstream_cause is not None:
         filing["upstream_cause"] = upstream_cause
+    receipt = validated_acquisition_failure(acquisition_failure)
+    if receipt is not None:
+        filing["acquisition_failure"] = receipt
+    if isinstance(stage, str) and stage in STAGES:
+        filing["stage"] = stage
+    if type(attempts) is int and attempts >= 0:
+        filing["attempts"] = attempts
     return {
         "schema_version": FILING_V2_RESPONSE_SCHEMA_VERSION,
         "status": code,
