@@ -13,7 +13,7 @@ This gate mirrors the CI fast surface locally:
   3. import smoke (scripts/fetch_filing, scripts/filing_contracts)
   4. mypy on the FC-1204-c contract set          (mirrors CI exactly)
   5. unique test symbols                          (CI WU-1.1 inline gate)
-  6. optional hermetic test suite                  (manual ``--run-tests`` only)
+  6. shared focused CI suite (``--ci-tests``), or manual full ``--run-tests``
   7. tools/config_doctor.py three-repo doctor     (CI FC-1202)
   8. installed-skill drift report (FF-S3): the copies under ~/.agents,
      ~/.claude, ~/.codex are COMPARED with this repo and any drift is
@@ -24,11 +24,11 @@ This gate mirrors the CI fast surface locally:
   9. tools/verify_plan_claims.py                  (CI WU-8.3)
  10. UTF-8 BOM scan                               (CA-304/final_ratchet class)
 
-Exit non-zero on the first red check. The pre-push hook runs fast checks only;
-CI runs one focused regression suite. Run the full suite manually for broad
+Exit non-zero on the first red check. The pre-push hook and CI use the same
+focused regression runner. Run the full suite manually for broad
 changes or provider-contract migrations.
 
-Usage: python tools/pre_push_gate.py [--run-tests] [--skip-mypy]
+Usage: python tools/pre_push_gate.py [--ci-tests | --run-tests] [--skip-mypy]
        [--skip-install-sync]
 """
 
@@ -178,7 +178,10 @@ def _install_check() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run-tests", action="store_true")
+    behavior = parser.add_mutually_exclusive_group()
+    behavior.add_argument("--run-tests", action="store_true")
+    behavior.add_argument("--ci-tests", action="store_true",
+                          help="run the shared focused offline CI behavior suite")
     parser.add_argument("--skip-mypy", action="store_true")
     parser.add_argument("--skip-install-sync", action="store_true")
     args = parser.parse_args(argv)
@@ -283,6 +286,14 @@ def main(argv: list[str] | None = None) -> int:
     print("\n=== UTF-8 BOM scan (CA-304/final_ratchet surface) ===")
     if _no_bom_check() != 0:
         return 1
+
+    if args.ci_tests:
+        import ci_tests
+
+        print("\n=== shared focused CI behavior tests ===")
+        rc = ci_tests.run_tests()
+        if rc != 0:
+            return rc
 
     print("\npre-push gate GREEN — safe to push (then self-monitor CI).")
     return 0

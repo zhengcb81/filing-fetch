@@ -62,35 +62,7 @@ jobs:
           sys.exit(1 if problems else 0)
           PY
       - name: Run focused regression suite once
-        run: >-
-          python -m pytest
-          tests/test_s3_single_request_limits.py
-          tests/test_single_intent_acquisition.py
-          tests/test_s3_install_surface.py
-          tests/test_selective_installation.py
-          e2e/test_source_ref_v2_cli.py
-          tests/test_ff_v2_contract.py
-          tests/test_provider_cause_contract.py
-          tests/test_acquisition_failure_consumer.py
-          tests/test_ff_golden.py
-          tests/test_source_ref_v2.py
-          tests/test_source_ref_v2_db_query.py
-          tests/test_local_source_prepare.py
-          tests/test_transcript_companion.py
-          tests/test_transcript_companion_transport.py
-          tests/test_transcript_response_budget.py
-          tests/test_fetch_filing.py
-          tests/test_fc802_gap_orchestration.py
-          tests/test_fc1204_coverage_gap.py
-          tests/test_p5_process_lifecycle.py
-          tests/test_p5_legacy_request_limits.py
-          tests/test_complexity_diagnostics.py
-          tests/test_verify_plan_claims.py
-          tests/test_latest_mode.py
-          tests/test_dropbox_config_invariants.py
-          tests/test_bundle_compat.py
-          tests/e2e_support/test_spy_log.py
-          -q --tb=short
+        run: python tools/ci_tests.py
       - name: "Config doctor (FC-1202: three-repo contract compatibility)"
         run: python tools/config_doctor.py --revenue-root "$HOME/Projects/revenue-forecast" --require-revenue-config
       - name: Plan claim verifier (WU-8.3)

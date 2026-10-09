@@ -1,9 +1,9 @@
 #!/bin/sh
-# Fast pre-push checks only. The focused regression suite runs once in CI;
-# run the full hermetic suite manually for broad changes.
+# Fast static checks plus the same focused regression runner used by CI.
+# Run the full hermetic suite manually for broad changes.
 #
 # Installed as .githooks/pre-push (git config core.hooksPath .githooks).
-# Every `git push` runs fast static/config checks before GitHub CI.
+# Every `git push` runs static/config and focused behavior checks before CI.
 #
 # NOTE: shebang MUST be #!/bin/sh (git-for-windows spawns /bin/sh hooks
 # natively; /usr/bin/env bash failed with "cannot spawn").  Use
@@ -16,7 +16,7 @@ if [ ! -f "$ROOT/tools/pre_push_gate.py" ]; then
   exit 0
 fi
 
-python "$ROOT/tools/pre_push_gate.py" --skip-install-sync
+python "$ROOT/tools/pre_push_gate.py" --skip-install-sync --ci-tests
 rc=$?
 if [ "$rc" -ne 0 ]; then
   echo "" >&2
