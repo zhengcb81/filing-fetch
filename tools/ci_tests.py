@@ -25,6 +25,7 @@ CI_TESTS = (
     "tests/test_local_source_prepare.py",
     "tests/test_transcript_companion.py",
     "tests/test_transcript_companion_transport.py",
+    "tests/test_transcript_launch_contract.py",
     "tests/test_transcript_response_budget.py",
     "tests/test_fetch_filing.py",
     "tests/test_fc802_gap_orchestration.py",

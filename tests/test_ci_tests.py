@@ -59,7 +59,8 @@ def test_hook_and_ci_use_the_same_behavior_runner():
     runner = _load("ff_ci_list", "tools/ci_tests.py")
     assert len(runner.CI_TESTS) == len(set(runner.CI_TESTS))
     for name in ("tests/test_provider_cause_contract.py", "tests/test_acquisition_failure_consumer.py",
-                 "tests/test_transcript_companion_transport.py", "tests/test_ci_tests.py"):
+                 "tests/test_transcript_companion_transport.py", "tests/test_transcript_launch_contract.py",
+                 "tests/test_ci_tests.py"):
         assert name in runner.CI_TESTS
     assert all((ROOT / relative).is_file() for relative in runner.CI_TESTS)
 
