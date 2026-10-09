@@ -1,9 +1,11 @@
 """On-demand company filing fetcher (market-routed, reuse-first).
 
 This is a thin client over company-wiki's acquisition engine. It identifies a
-company, then resolves (reuses) an existing filing in company-wiki, or — only
-when explicitly authorized — delegates a missing-source download to company-wiki
-which routes by market: A-share (CN) -> StockInfoDLSimple/cninfo, HK/US ->
+company, then resolves (reuses) an existing filing in company-wiki, or delegates
+a missing-source download according to the task's acquisition intent and limits.
+Existing company/session authorization carries forward without another
+per-document permission receipt. company-wiki routes by market:
+A-share (CN) -> StockInfoDLSimple/cninfo, HK/US ->
 dayu-agent. Newly downloaded bytes are written into company-wiki under
 ``companies/{entity}/raw/{kind}/`` with immutable provenance; the calculation
 engines of consuming skills never import a downloader.
