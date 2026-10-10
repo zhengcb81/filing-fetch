@@ -284,7 +284,7 @@ def validated_acquisition_observation(value: Any) -> dict[str, Any] | None:
             or value["usage_scope"] != "operation"):
         return None
     outcome = value.get("outcome")
-    if outcome not in _OBSERVATION_OUTCOMES:
+    if not isinstance(outcome, str) or outcome not in _OBSERVATION_OUTCOMES:
         return None
     result: dict[str, Any] = {
         "schema_version": ACQUISITION_OBSERVATION_SCHEMA,

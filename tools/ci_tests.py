@@ -11,6 +11,9 @@ import tempfile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CI_TESTS = (
+    "tests/test_m3_acquisition_usage_ff.py",
+    "tests/test_m3_acquisition_usage_acceptance.py",
+    "tests/test_failure_usage_continuity.py",
     "tests/test_s3_single_request_limits.py",
     "tests/test_single_intent_acquisition.py",
     "tests/test_s3_install_surface.py",
