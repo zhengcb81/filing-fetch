@@ -370,7 +370,7 @@ def _run_company_wiki_json(
         # stderr code + safe cause only. The raw stderr body is consumed for
         # classification but never echoed - it routinely carries absolute
         # paths and provider credentials.
-        code, cause, receipt = ff_provider_cause.diagnose_stderr_observation(
+        code, cause, receipt, observation = ff_provider_cause.diagnose_stderr_observation(
             action, exc.stderr.decode("utf-8", errors="replace").strip()
         )
         raise FilingFetchError(
@@ -380,6 +380,7 @@ def _run_company_wiki_json(
             attempts=1,
             upstream_cause=cause,
             acquisition_failure=receipt,
+            acquisition_observation=observation,
         ) from exc
     except _ProcessChildStartFailed as exc:
         code, cause = ff_provider_cause.condition_cause(action, "producer_start_failed")
@@ -410,7 +411,7 @@ def _run_company_wiki_json(
         # safe cause only. The raw stderr body is consumed for classification
         # but never echoed - it routinely carries absolute paths and provider
         # credentials.
-        code, cause, receipt = ff_provider_cause.diagnose_stderr_observation(
+        code, cause, receipt, observation = ff_provider_cause.diagnose_stderr_observation(
             action, stderr.decode("utf-8", errors="replace").strip()
         )
         raise FilingFetchError(
@@ -420,6 +421,7 @@ def _run_company_wiki_json(
             attempts=1,
             upstream_cause=cause,
             acquisition_failure=receipt,
+            acquisition_observation=observation,
         )
     try:
         payload = json.loads(stdout.decode("utf-8", errors="strict"))
@@ -884,6 +886,7 @@ _SOURCE_OPERATION_FIELDS = frozenset(
         "candidate",
         "gap_plan",
         "acquisition_failure",
+        "acquisition_observation",
     }
 )
 _SOURCE_OPERATION_STATUSES = frozenset(
@@ -919,6 +922,8 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
         operation, payload.get("acquisition_failure")
     )
     receipt = ff_provider_cause.validated_acquisition_failure(payload.get("acquisition_failure"))
+    observation = ff_provider_cause.validated_acquisition_observation(
+        payload.get("acquisition_observation"))
     if (
         payload.get("operation_schema_version") != _SOURCE_OPERATION_VERSION
         or payload.get("operation") != operation
@@ -928,12 +933,14 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             "company-wiki operation contract is unsupported", code="upstream_error",
             upstream_cause=upstream_cause or ff_provider_cause.source_condition(operation, "invalid_producer_schema"),
             acquisition_failure=receipt,
+            acquisition_observation=observation,
         )
     if payload.get("status") not in _SOURCE_OPERATION_STATUSES:
         raise FilingFetchError(
             "company-wiki operation status is invalid", code="upstream_error",
             upstream_cause=upstream_cause or ff_provider_cause.source_condition(operation, "invalid_producer_schema"),
             acquisition_failure=receipt,
+            acquisition_observation=observation,
         )
     if _contains_physical_field({
         key: value for key, value in payload.items() if key != "acquisition_failure"
@@ -942,6 +949,7 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             "company-wiki operation result leaked a physical location", code="upstream_error",
             upstream_cause=upstream_cause,
             acquisition_failure=receipt,
+            acquisition_observation=observation,
         )
     request_id = payload.get("request_id")
     if (
@@ -953,6 +961,7 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             "company-wiki operation request_id is invalid", code="upstream_error",
             upstream_cause=upstream_cause,
             acquisition_failure=receipt,
+            acquisition_observation=observation,
         )
     policy_hash = payload.get("policy_hash")
     if policy_hash is not None and (
@@ -962,6 +971,7 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             "company-wiki operation policy_hash is invalid", code="upstream_error",
             upstream_cause=upstream_cause,
             acquisition_failure=receipt,
+            acquisition_observation=observation,
         )
     return payload
 
@@ -1006,6 +1016,10 @@ def _pathless_operation_gap(
     receipt = ff_provider_cause.validated_acquisition_failure(result.get("acquisition_failure"))
     if receipt is not None:
         gap["acquisition_failure"] = receipt
+    observation = ff_provider_cause.validated_acquisition_observation(
+        result.get("acquisition_observation"))
+    if observation is not None:
+        gap["acquisition_observation"] = observation
     return gap
 
 
@@ -1033,6 +1047,8 @@ def _pathless_operation_handle(
                 operation, result.get("acquisition_failure")
             ) or ff_provider_cause.source_condition(operation, "source_not_found" if result["status"] == "not_found" else "unknown"),
             acquisition_failure=ff_provider_cause.validated_acquisition_failure(result.get("acquisition_failure")),
+            acquisition_observation=ff_provider_cause.validated_acquisition_observation(
+                result.get("acquisition_observation")),
         )
     outcome = result.get("outcome")
     events = result.get("download_events")
@@ -1102,6 +1118,10 @@ def _pathless_operation_handle(
         "download_events": events,
         "policy_hash": result.get("policy_hash"),
     }
+    observation = ff_provider_cause.validated_acquisition_observation(
+        result.get("acquisition_observation"))
+    if observation is not None:
+        handle["acquisition_observation"] = observation
     _record_download_events(stats, handle)
     return handle
 
@@ -1769,6 +1789,7 @@ def main(argv: list[str] | None = None) -> int:
                 acquisition_failure=exc.acquisition_failure,
                 stage=exc.stage,
                 attempts=exc.attempts,
+                acquisition_observation=exc.acquisition_observation,
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")
