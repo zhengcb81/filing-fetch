@@ -13,7 +13,12 @@ from typing import Any, Sequence
 # R6-FF-CAUSE: shape validation for the optional upstream diagnostic (the
 # closed-vocabulary builder lives in ff_provider_cause; importing only the
 # validator keeps this module free of parsing logic).
-from ff_provider_cause import STAGES, validated_acquisition_failure, validated_cause
+from ff_provider_cause import (
+    STAGES,
+    validated_acquisition_failure,
+    validated_acquisition_observation,
+    validated_cause,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +68,7 @@ class FilingFetchError(RuntimeError):
         resolution_trace: dict | None = None,
         upstream_cause: dict[str, Any] | None = None,
         acquisition_failure: dict[str, Any] | None = None,
+        acquisition_observation: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -102,6 +108,9 @@ class FilingFetchError(RuntimeError):
             )
         self.upstream_cause = upstream_cause
         self.acquisition_failure = validated_acquisition_failure(acquisition_failure)
+        # M3-USAGE: same fail-closed pass-through as the failure receipt —
+        # only a validated operation observation rides, garbage is dropped.
+        self.acquisition_observation = validated_acquisition_observation(acquisition_observation)
 
 
 # ---------------------------------------------------------------------------

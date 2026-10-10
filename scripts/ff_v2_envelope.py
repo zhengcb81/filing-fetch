@@ -6,7 +6,12 @@ import re
 from typing import Any
 
 from filing_contracts import FilingFetchError, FILING_V2_RESPONSE_SCHEMA_VERSION
-from ff_provider_cause import STAGES, validated_acquisition_failure, validated_cause
+from ff_provider_cause import (
+    STAGES,
+    validated_acquisition_failure,
+    validated_acquisition_observation,
+    validated_cause,
+)
 
 
 _REF_KEYS = frozenset({
@@ -112,7 +117,7 @@ def success_envelope(
         receipt = validated_acquisition_failure(handle.get("acquisition_failure"))
         if receipt is not None:
             filing["acquisition_failure"] = receipt
-        return {
+        result = {
             "schema_version": FILING_V2_RESPONSE_SCHEMA_VERSION,
             "status": "gap",
             "request_period": _request_period(request),
@@ -122,6 +127,13 @@ def success_envelope(
             "calls": stats["calls"],
             "downloads": stats["downloads"],
         }
+        # M3-USAGE: the operation observation is an operation-level account
+        # (like calls/downloads), so it rides the envelope top level and never
+        # the closed source_candidate filing shape.
+        observation = validated_acquisition_observation(handle.get("acquisition_observation"))
+        if observation is not None:
+            result["acquisition_observation"] = observation
+        return result
     ref = _reference(handle.get("source_ref"))
     events = handle.get("download_events", stats["downloads"])
     if type(events) is not int or events not in (0, 1):
@@ -136,7 +148,7 @@ def success_envelope(
         "resolution_outcome": handle.get("resolution_outcome"),
         "download_events": events,
     }
-    return {
+    result = {
         "schema_version": FILING_V2_RESPONSE_SCHEMA_VERSION,
         "status": "source_candidate",
         "request_period": _request_period(request),
@@ -145,6 +157,11 @@ def success_envelope(
         "calls": stats["calls"],
         "downloads": stats["downloads"],
     }
+    # M3-USAGE: operation-level observation sibling at the envelope top level.
+    observation = validated_acquisition_observation(handle.get("acquisition_observation"))
+    if observation is not None:
+        result["acquisition_observation"] = observation
+    return result
 
 
 def error_envelope(
@@ -154,6 +171,7 @@ def error_envelope(
     acquisition_failure: dict[str, Any] | None = None,
     stage: str | None = None,
     attempts: int | None = None,
+    acquisition_observation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     stats = stats or {"calls": 0, "downloads": 0}
     filing: dict[str, Any] = {"status": code, "reason": reason, "retryable": retryable}
@@ -168,7 +186,7 @@ def error_envelope(
         filing["stage"] = stage
     if type(attempts) is int and attempts >= 0:
         filing["attempts"] = attempts
-    return {
+    result = {
         "schema_version": FILING_V2_RESPONSE_SCHEMA_VERSION,
         "status": code,
         "request_period": _request_period(request or {}),
@@ -177,3 +195,8 @@ def error_envelope(
         "calls": stats["calls"],
         "downloads": stats["downloads"],
     }
+    # M3-USAGE: operation-level observation sibling at the envelope top level.
+    observation = validated_acquisition_observation(acquisition_observation)
+    if observation is not None:
+        result["acquisition_observation"] = observation
+    return result

@@ -72,6 +72,26 @@ _ACQUISITION_FAILURE_KEYS = frozenset({
 })
 _USAGE_KEYS = frozenset({"schema_version", "response_bytes", "cost_usd"})
 
+# M3-USAGE: observed-usage sibling, passed through verbatim once validated.
+# FF never recomputes totals, never infers a fee, never re-verifies MIME or
+# company identity; producer values survive or the whole object is dropped.
+ACQUISITION_OBSERVATION_SCHEMA = "acquisition-observation/1"
+_OBSERVATION_OUTCOMES = frozenset({
+    "downloaded_new", "deduplicated_after_download",
+    "reused_before_download", "reused_after_discovery",
+    "missing", "ambiguous", "gap_plan", "gap_plan_provider_unavailable",
+    "failed",
+})
+_ACQUISITION_OBSERVATION_KEYS = frozenset({
+    "schema_version", "usage_scope", "outcome", "provider_started",
+    "usage_complete", "wire_body_bytes", "wire_usage_complete",
+    "entity_body_bytes", "http_exchanges", "http_exchanges_complete",
+    "cost_usd", "http_observation",
+})
+_HTTP_OBSERVATION_KEYS = frozenset({
+    "status_code", "mime_type", "content_encoding", "wire_content_length",
+})
+
 # stderr error_type -> (filing error code, cause code).  These are the only
 # machine codes company-wiki publishes on the failing CLI boundary; anything
 # absent here fails closed to fatal/unknown (never copy unverified strings).
@@ -235,6 +255,77 @@ def validated_acquisition_failure(value: Any) -> dict[str, Any] | None:
     return result
 
 
+def _validated_http_observation(value: Any) -> dict[str, Any] | None:
+    """Finite four-field protocol metadata, or None; no arbitrary headers."""
+    if not isinstance(value, dict) or set(value) != _HTTP_OBSERVATION_KEYS:
+        return None
+    status = value.get("status_code")
+    if isinstance(status, bool) or not isinstance(status, int) or status < 0:
+        return None
+    result: dict[str, Any] = {"status_code": status}
+    for key in ("mime_type", "content_encoding"):
+        text = value.get(key)
+        if not isinstance(text, str) or not text or len(text) > 128:
+            return None
+        result[key] = text
+    length = value.get("wire_content_length")
+    if length is not None and (isinstance(length, bool)
+                               or not isinstance(length, int) or length < 0):
+        return None
+    result["wire_content_length"] = length
+    return result
+
+
+def validated_acquisition_observation(value: Any) -> dict[str, Any] | None:
+    """Copy the producer operation observation; any deviation drops it whole."""
+    if not isinstance(value, dict) or set(value) != _ACQUISITION_OBSERVATION_KEYS:
+        return None
+    if (value["schema_version"] != ACQUISITION_OBSERVATION_SCHEMA
+            or value["usage_scope"] != "operation"):
+        return None
+    outcome = value.get("outcome")
+    if outcome not in _OBSERVATION_OUTCOMES:
+        return None
+    result: dict[str, Any] = {
+        "schema_version": ACQUISITION_OBSERVATION_SCHEMA,
+        "usage_scope": "operation",
+        "outcome": outcome,
+    }
+    for key in ("provider_started", "usage_complete", "wire_usage_complete",
+                "http_exchanges_complete"):
+        flag = value.get(key)
+        if flag is not None and not isinstance(flag, bool):
+            return None
+        result[key] = flag
+    for key in ("wire_body_bytes", "entity_body_bytes"):
+        count = value.get(key)
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            return None
+        result[key] = count
+    exchanges = value.get("http_exchanges")
+    if isinstance(exchanges, bool) or not isinstance(exchanges, int) or exchanges < 0:
+        return None
+    result["http_exchanges"] = exchanges
+    cost = value.get("cost_usd")
+    if cost is not None:
+        if not isinstance(cost, str):
+            return None
+        try:
+            amount = Decimal(cost)
+        except (InvalidOperation, ValueError):
+            return None
+        if not amount.is_finite() or amount < 0:
+            return None
+    result["cost_usd"] = cost
+    http_observation = value.get("http_observation")
+    if http_observation is not None:
+        http_observation = _validated_http_observation(http_observation)
+        if http_observation is None:
+            return None
+    result["http_observation"] = http_observation
+    return result
+
+
 def source_condition(operation: str, reason: Any) -> dict[str, Any]:
     """Finite source condition, independent of provider acquisition failures."""
     reasons = {"local_metadata_gap", "no_registered_local_source", "no_local_match",
@@ -252,24 +343,26 @@ def classify_stderr(stderr_text: str) -> str:
 
 def diagnose_stderr(operation: str, stderr_text: str) -> tuple[str, dict[str, Any]]:
     """Parse once; prefer validated producer evidence without changing retries."""
-    code, cause, _ = diagnose_stderr_observation(operation, stderr_text)
+    code, cause, _receipt, _observation = diagnose_stderr_observation(operation, stderr_text)
     return code, cause
 
 
-def diagnose_stderr_observation(operation: str, stderr_text: str) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
-    """Decode cause and the same existing producer receipt in one bounded parse."""
+def diagnose_stderr_observation(operation: str, stderr_text: str) -> tuple[str, dict[str, Any], dict[str, Any] | None, dict[str, Any] | None]:
+    """Decode cause, producer receipt and the usage observation in one parse."""
     payload = _parse_structured(stderr_text)
     ff_code, legacy_cause = _map_structured(payload)
     evidence = _acquisition_evidence(payload.get("acquisition_failure")) if payload else None
     receipt = validated_acquisition_failure(payload.get("acquisition_failure")) if payload else None
+    observation = (validated_acquisition_observation(payload.get("acquisition_observation"))
+                   if payload else None)
     if evidence is None:
-        return ff_code, build_cause(operation, legacy_cause), receipt
+        return ff_code, build_cause(operation, legacy_cause), receipt, observation
     safe_code, started, complete = evidence
     projected = build_cause(operation, safe_code, provider_started=started, usage_complete=complete)
     # Generic taxonomy owns retry semantics. Producer retryable is diagnostic,
     # never authorization for FF to issue a second potentially charged request.
     projected["retry_scope"] = _retry_scope(legacy_cause)
-    return ff_code, projected, receipt
+    return ff_code, projected, receipt, observation
 
 
 
@@ -338,6 +431,8 @@ def validated_cause(value: Any) -> dict[str, Any] | None:
 __all__ = [
     "UPSTREAM_CAUSE_SCHEMA_VERSION",
     "ACQUISITION_FAILURE_CODES",
+    "ACQUISITION_OBSERVATION_SCHEMA",
+    "validated_acquisition_observation",
     "OPERATIONS",
     "CAUSE_KEYS",
     "RETRY_SCOPES",
