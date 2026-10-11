@@ -1,0 +1,8 @@
+{
+  "schema_version": "2.0",
+  "company_query": "Apple Inc.",
+  "market": "US",
+  "document_kind": "annual_report",
+  "as_of_date": "2026-01-01",
+  "filing_intent": "reuse_only"
+}
