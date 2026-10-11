@@ -5,3 +5,6 @@
 *.md text eol=lf
 *.py text eol=lf
 /.githooks/** text eol=lf
+# Exact W04 diagnostics review carriers.
+/.planning/w04-wp04/** -text -eol -diff
+/tests/test_w04_failure_observation.py -text -eol

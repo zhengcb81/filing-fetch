@@ -1,0 +1,55 @@
+{
+  "schema_version": "w04-independent-evidence-manifest/1",
+  "files": [
+    {
+      "path": "companion_invalid-stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_size": 0
+    },
+    {
+      "path": "companion_invalid-stdout.json",
+      "sha256": "36e97625bc1085bd00a173cea9694d11db68e82eb30fc4532b42f416a9b215a9",
+      "byte_size": 447
+    },
+    {
+      "path": "noncanonical_money-stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_size": 0
+    },
+    {
+      "path": "noncanonical_money-stdout.json",
+      "sha256": "c1f15876f1a399ea3a8274684062f4da3bc45265993ee71af652d789457fbd6b",
+      "byte_size": 645
+    },
+    {
+      "path": "nonfinite_time-stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_size": 0
+    },
+    {
+      "path": "nonfinite_time-stdout.json",
+      "sha256": "e500e956497847a7825528f68b797b9631ad066a747c4fb441fd78bdbe3b0619",
+      "byte_size": 651
+    },
+    {
+      "path": "probe.log",
+      "sha256": "a1ddea63c91ed7f2b24c6fc9c203168802855bd6dc91ee77327589753473020a",
+      "byte_size": 5264
+    },
+    {
+      "path": "report-finalization-error.json",
+      "sha256": "de974fe44745ecb637e09c2fc24c57409384b8a0b2834113fb1ffbac0558d9d5",
+      "byte_size": 615
+    },
+    {
+      "path": "review.json",
+      "sha256": "ead43be1df2a5dfee7c770798297c0a8c3cfa62280cb1bf5de9ec880cc675a9b",
+      "byte_size": 10866
+    },
+    {
+      "path": "review.md",
+      "sha256": "d252a8248e8142f634b1ece31165eb643d3c84edf25c91805ea04eccc6dd5710",
+      "byte_size": 1485
+    }
+  ]
+}

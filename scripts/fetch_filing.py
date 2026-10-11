@@ -1790,6 +1790,7 @@ def main(argv: list[str] | None = None) -> int:
                 stage=exc.stage,
                 attempts=exc.attempts,
                 acquisition_observation=exc.acquisition_observation,
+                request_diagnostic=exc.request_diagnostic,
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")
@@ -1827,6 +1828,9 @@ def main(argv: list[str] | None = None) -> int:
             error_response["upstream_cause"] = exc.upstream_cause
         if exc.acquisition_failure is not None:
             error_response["acquisition_failure"] = exc.acquisition_failure
+        diagnostic = ff_provider_cause.validated_request_diagnostic(exc.request_diagnostic)
+        if diagnostic is not None:
+            error_response["request_diagnostic"] = diagnostic
         if "stats" in locals():
             error_response["calls"] = stats["calls"]
             error_response["downloads"] = stats["downloads"]

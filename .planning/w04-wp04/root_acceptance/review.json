@@ -1,0 +1,275 @@
+{
+  "schema_version": "w04-independent-review/1",
+  "status": "PASS_WITH_SCOPE_LIMITS_STOP",
+  "reviewer": "/root/w04_g1_ff_review",
+  "recorded_at": "2026-10-11T06:25:57.204001+00:00",
+  "scope": "W04 WP04 producer and native FF→RF typed request failure interface; no acquisition or economic acceptance",
+  "handoff": {
+    "sha256": "b6c4bb7b268b8f52693b746e448eabf78f965d23596e40d5eb385123065d233b",
+    "manifest_sha256": "83906a26c7497724eed903a39b59b5823ebce11ef4486b321b2ab5c52dde0490",
+    "diff_sha256": "c1b35ab2a2bfc367804ff73bc30718f84896d560f7641d4214296f36414ec1a3"
+  },
+  "source_before": {
+    "scripts/filing_contracts.py": {
+      "sha256": "18745e3fb395c398e7b00530b5228c8ccdce0bdf6fc876c609d71cd97e3b3245",
+      "byte_size": 32231
+    },
+    "scripts/fetch_filing.py": {
+      "sha256": "ccdb9bff89b35dce0066df2804a716649213762017e3992f9a0c81896233f331",
+      "byte_size": 75954
+    },
+    "scripts/ff_provider_cause.py": {
+      "sha256": "351c7e3c6a917a4339a6a744eb009ca1ac8bef2449d054e4752ce618c320922a",
+      "byte_size": 20791
+    },
+    "scripts/ff_v2_envelope.py": {
+      "sha256": "6cade6e377fc01e680a88c2911e72099d095bada110b28e3c255d211eef89e34",
+      "byte_size": 8635
+    },
+    "tests/test_w04_failure_observation.py": {
+      "sha256": "4dc0c42bde27162faba12774dd6f0b8476561e7c57474af4730d1ef033d6c521",
+      "byte_size": 7786
+    }
+  },
+  "source_after": {
+    "scripts/filing_contracts.py": {
+      "sha256": "18745e3fb395c398e7b00530b5228c8ccdce0bdf6fc876c609d71cd97e3b3245",
+      "byte_size": 32231
+    },
+    "scripts/fetch_filing.py": {
+      "sha256": "ccdb9bff89b35dce0066df2804a716649213762017e3992f9a0c81896233f331",
+      "byte_size": 75954
+    },
+    "scripts/ff_provider_cause.py": {
+      "sha256": "351c7e3c6a917a4339a6a744eb009ca1ac8bef2449d054e4752ce618c320922a",
+      "byte_size": 20791
+    },
+    "scripts/ff_v2_envelope.py": {
+      "sha256": "6cade6e377fc01e680a88c2911e72099d095bada110b28e3c255d211eef89e34",
+      "byte_size": 8635
+    },
+    "tests/test_w04_failure_observation.py": {
+      "sha256": "4dc0c42bde27162faba12774dd6f0b8476561e7c57474af4730d1ef033d6c521",
+      "byte_size": 7786
+    }
+  },
+  "rf_consumer_source_before": {
+    "scripts/filing_fetch_client.py": {
+      "sha256": "c44ed08c7ebcc5ae41a88671fc4e535752d0ad0f5d91f5f28fdba514550d8757",
+      "byte_size": 19426
+    },
+    "scripts/filing_upstream_cause.py": {
+      "sha256": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95",
+      "byte_size": 16962
+    }
+  },
+  "rf_consumer_source_after": {
+    "scripts/filing_fetch_client.py": {
+      "sha256": "c44ed08c7ebcc5ae41a88671fc4e535752d0ad0f5d91f5f28fdba514550d8757",
+      "byte_size": 19426
+    },
+    "scripts/filing_upstream_cause.py": {
+      "sha256": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95",
+      "byte_size": 16962
+    }
+  },
+  "probes": [
+    {
+      "id": "G1-FF-DEFAULT-SERIALIZER-COMPAT",
+      "status": "PASS",
+      "assertions": 7,
+      "details": {
+        "base_commit": "e1e3ad8679e21264258e48006786fbf01a6991bd",
+        "default_comparisons": 5,
+        "encoded_sha256": [
+          "5e576785f2bca14f633a61f6b29eb6c930699c1989f7de0baec68fcd80247ada",
+          "ae09bee51d13ff84c7255c5860265ad594c89fbb7072d161427e8847cac758cd",
+          "94de115046af71573261850fa81ca6718cb08b74c7019a036c419386c4c2e979",
+          "4d4d7a4e36f7ce09e41f7adfa28dc4e78f200744fe50f63dd932c0167e6d293b",
+          "56ca326deda9f952729a3ea61668d07db028c0d468a3442ffa696715a7c818f5"
+        ],
+        "no_config_read": true
+      }
+    },
+    {
+      "id": "G1-FF-CLOSED-DIAGNOSTIC",
+      "status": "PASS",
+      "assertions": 26,
+      "details": {
+        "valid_pairs": 7,
+        "old_unknown_preserved": true,
+        "no_config_read": true
+      }
+    },
+    {
+      "id": "G1-FF-EARLY-CLI-RF",
+      "status": "PASS",
+      "assertions": 22,
+      "details": [
+        {
+          "case": "nonfinite_time",
+          "request_sha256": "374867fa29a27fa6ef69895977d6c652c5a77f90188500290e163a6748d8400c",
+          "command": [
+            "C:\\Miniconda\\python.exe",
+            "-B",
+            "C:\\Users\\郑曾波\\.codex\\worktrees\\m3-acceptance-20261010\\filing-fetch\\scripts\\fetch_filing.py",
+            "--request-file",
+            "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\w4ffr-iq13a4g8\\nonfinite_time.json",
+            "--config",
+            "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\w4ffr-iq13a4g8\\does-not-exist.json",
+            "--timeout-seconds",
+            "5"
+          ],
+          "exit_code": 2,
+          "stdout_sha256": "e500e956497847a7825528f68b797b9631ad066a747c4fb441fd78bdbe3b0619",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "diagnostic": {
+            "schema_version": "filing-request-diagnostic/1",
+            "reason": "acquisition_limits_invalid",
+            "field_path": "acquisition_limits.timeout_seconds"
+          },
+          "config_absent": true,
+          "native_ff_processes": 2
+        },
+        {
+          "case": "noncanonical_money",
+          "request_sha256": "fec1dd427823bff94ede6ff500e0c896dc8354f4e4adbc4d5a214b129879be6b",
+          "command": [
+            "C:\\Miniconda\\python.exe",
+            "-B",
+            "C:\\Users\\郑曾波\\.codex\\worktrees\\m3-acceptance-20261010\\filing-fetch\\scripts\\fetch_filing.py",
+            "--request-file",
+            "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\w4ffr-iq13a4g8\\noncanonical_money.json",
+            "--config",
+            "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\w4ffr-iq13a4g8\\does-not-exist.json",
+            "--timeout-seconds",
+            "5"
+          ],
+          "exit_code": 2,
+          "stdout_sha256": "c1f15876f1a399ea3a8274684062f4da3bc45265993ee71af652d789457fbd6b",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "diagnostic": {
+            "schema_version": "filing-request-diagnostic/1",
+            "reason": "acquisition_limits_invalid",
+            "field_path": "acquisition_limits.max_cost_usd"
+          },
+          "config_absent": true,
+          "native_ff_processes": 2
+        },
+        {
+          "case": "companion_invalid",
+          "request_sha256": "9e4c77b4521eb6afda4a4ec3d19d6a6f095c9c640443d2820c2acee98b733a4e",
+          "command": [
+            "C:\\Miniconda\\python.exe",
+            "-B",
+            "C:\\Users\\郑曾波\\.codex\\worktrees\\m3-acceptance-20261010\\filing-fetch\\scripts\\fetch_filing.py",
+            "--request-file",
+            "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\w4ffr-iq13a4g8\\companion_invalid.json",
+            "--config",
+            "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\w4ffr-iq13a4g8\\does-not-exist.json",
+            "--timeout-seconds",
+            "5"
+          ],
+          "exit_code": 2,
+          "stdout_sha256": "36e97625bc1085bd00a173cea9694d11db68e82eb30fc4532b42f416a9b215a9",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "diagnostic": null,
+          "config_absent": true,
+          "native_ff_processes": 2
+        }
+      ]
+    }
+  ],
+  "actual_assertions": 94,
+  "material_findings": [],
+  "implementation_test_receipts": {
+    "red": "26 cases, 24 failed/2 passed; verified artifact bytes; not rerun",
+    "green": "200 passed in 5.69s; verified artifact bytes; not rerun",
+    "public_cli": "four classes: 2 semantic sealed original replay, 2 derived HK negative tests; verified artifacts, source semantics, exact protected original bytes"
+  },
+  "sealed_original_observations": {
+    "exact": {
+      "sha256": "fd63ecb486be15d516b3c8f524ade6fa976383d94730f147ef9267a759e40e44",
+      "byte_size": 300
+    },
+    "latest_limits": {
+      "sha256": "649804bf5d5fb23c90d40b3aa4a39530caaea5199a926904636e8be37c79ddca",
+      "byte_size": 307
+    },
+    "hk_base": {
+      "sha256": "4cf71bdfe26bad67ebffafb23549792acbb07ef15910310cdd2860569d75db9d",
+      "byte_size": 225
+    },
+    "us_sealed_validation": {
+      "sha256": "4b14731e38d8ed8b1072ddb230f9bd1aa0117d8586caf5f38e0adb38ff0247e3",
+      "byte_size": 5798
+    }
+  },
+  "sealed_replay_classification": {
+    "exact": {
+      "json_semantic_equal": true,
+      "original": {
+        "sha256": "fd63ecb486be15d516b3c8f524ade6fa976383d94730f147ef9267a759e40e44",
+        "byte_size": 300
+      },
+      "replay": {
+        "sha256": "8641d64c47c579740b50cddfe356dbf2d2661414d2c7badd678c860dc4678f41",
+        "byte_size": 292
+      },
+      "classification": "semantic replay of sealed request; normalized serialization, not byte-identical replay"
+    },
+    "latest_limits": {
+      "json_semantic_equal": true,
+      "original": {
+        "sha256": "649804bf5d5fb23c90d40b3aa4a39530caaea5199a926904636e8be37c79ddca",
+        "byte_size": 307
+      },
+      "replay": {
+        "sha256": "d0409a35f691bd9e3648b3ea96fe17ebfe017005d4e4e5d3a6a09b250a1c31d9",
+        "byte_size": 299
+      },
+      "classification": "semantic replay of sealed request; normalized serialization, not byte-identical replay"
+    }
+  },
+  "usage": {
+    "network_calls": 0,
+    "provider_calls": 0,
+    "model_calls": 0,
+    "local_test_cost_usd": "0",
+    "historical_invoice_cost_usd": null
+  },
+  "cleanup": {
+    "owned_temp": "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\w4ffr-iq13a4g8",
+    "status": "restored_absent",
+    "production_originals_deleted": 0
+  },
+  "log": {
+    "path": "probe.log",
+    "sha256": "a1ddea63c91ed7f2b24c6fc9c203168802855bd6dc91ee77327589753473020a",
+    "byte_size": 5264
+  },
+  "not_executed": [
+    "new acquisition HTTP and actual byte/cost accounting",
+    "historical invoice settlement",
+    "115-byte remote SEC reconciliation",
+    "per-document historical source ledger join repair",
+    "old 200-case suite repeat",
+    "new company research acceptance",
+    "commit/push/exact CI/install"
+  ],
+  "boundary_notes": [
+    "Narrow ff_v2_envelope owner seam preserves unrelated functions and exact default serialized output; optional None does not add keys.",
+    "Existing six-key cause remains closed; request sibling contains only closed reason/path, no arbitrary request/secret.",
+    "Valid latest_as_of reuse_only still uses bounded discovery route; this change does not reinterpret zero call counts as historical free usage.",
+    "Typed companion field paths remain absent rather than mislabeled as filing limits.",
+    "Old sealed failures and review results are not rewritten by new engineering proof."
+  ],
+  "tooling_errors": [
+    {
+      "path": "report-finalization-error.json",
+      "sha256": "de974fe44745ecb637e09c2fc24c57409384b8a0b2834113fb1ffbac0558d9d5",
+      "byte_size": 615
+    }
+  ],
+  "report_finalization_recovery": "PASS_metadata_only_no_probes_repeated"
+}

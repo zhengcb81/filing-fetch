@@ -1,0 +1,146 @@
+{
+  "schema_version": "w04-wp04-handoff/1",
+  "status": "STOP_ENGINEERING_COMPLETE_PENDING_ROOT_ACCEPTANCE",
+  "recorded_at": "2026-10-11T06:22:30.532186+00:00",
+  "worktree": "C:\\Users\\郑曾波\\.codex\\worktrees\\m3-acceptance-20261010\\filing-fetch",
+  "base_head": "e1e3ad8679e21264258e48006786fbf01a6991bd",
+  "head_unchanged": true,
+  "product_files": [
+    {
+      "path": "scripts/filing_contracts.py",
+      "sha256": "18745e3fb395c398e7b00530b5228c8ccdce0bdf6fc876c609d71cd97e3b3245",
+      "byte_size": 32231
+    },
+    {
+      "path": "scripts/fetch_filing.py",
+      "sha256": "ccdb9bff89b35dce0066df2804a716649213762017e3992f9a0c81896233f331",
+      "byte_size": 75954
+    },
+    {
+      "path": "scripts/ff_provider_cause.py",
+      "sha256": "351c7e3c6a917a4339a6a744eb009ca1ac8bef2449d054e4752ce618c320922a",
+      "byte_size": 20791
+    },
+    {
+      "path": "scripts/ff_v2_envelope.py",
+      "sha256": "6cade6e377fc01e680a88c2911e72099d095bada110b28e3c255d211eef89e34",
+      "byte_size": 8635
+    },
+    {
+      "path": "tests/test_w04_failure_observation.py",
+      "sha256": "4dc0c42bde27162faba12774dd6f0b8476561e7c57474af4730d1ef033d6c521",
+      "byte_size": 7786
+    }
+  ],
+  "write_set_amendment": {
+    "owner": "ROOT",
+    "file": "scripts/ff_v2_envelope.py",
+    "scope": "error_envelope necessary import, optional signature, validated filing child only",
+    "original_sha256": "c83b92dddba7cad223f64bc1aa573e88312a0676a85e073e05c43f1b9fae9ed3",
+    "approval": "ROOT direct collaboration message; independent WP04_INTERFACE_AMENDMENT owned by ROOT"
+  },
+  "interface": {
+    "schema_version": "filing-request-diagnostic/1",
+    "exact_keys": [
+      "schema_version",
+      "reason",
+      "field_path"
+    ],
+    "paths": {
+      "exact_requires_fiscal_year": [
+        "fiscal_year"
+      ],
+      "latest_forbids_fiscal_year": [
+        "fiscal_year"
+      ],
+      "latest_reuse_requires_acquisition_limits": [
+        "acquisition_limits"
+      ],
+      "acquisition_limits_invalid": [
+        "acquisition_limits",
+        "acquisition_limits.max_bytes",
+        "acquisition_limits.timeout_seconds",
+        "acquisition_limits.max_cost_usd"
+      ]
+    },
+    "producer": "validate_request/_validate_acquisition_limits→build_request_diagnostic→FilingFetchError.request_diagnostic",
+    "serializer": "fetch passes typed attribute to ff_v2_envelope.error_envelope; validator emits verified copy inside filing child. Legacy v1 fetch-owned serializer validates before top-level placement.",
+    "consumer": "actual RF resolve_filing_result→failure_observation→_ClientError.request_diagnostic",
+    "legacy_six_key_cause": "unchanged",
+    "companion_scope": "no filing diagnostic emitted; companion paths outside frozen sibling vocabulary",
+    "latest_discovery": "unchanged; bounded latest_as_of reuse_only goes ensure not direct source_query",
+    "status_retry": "request_error/retryable=false unchanged",
+    "unknown_legacy": "never parse error string; absent typed property remains absent/null"
+  },
+  "red": {
+    "tests": 26,
+    "failed": 24,
+    "passed": 2,
+    "source_unchanged": true,
+    "receipt": "red.json",
+    "log_sha256": "dd5b4e0eeae45415d798ad19623942ddc15184d0849bd89867385039846b712d"
+  },
+  "green": {
+    "tests": 200,
+    "passed": 200,
+    "elapsed_pytest_seconds": 5.69,
+    "elapsed_wall_seconds": 8.177795399999013,
+    "receipt": "green.json",
+    "log_sha256": "32e370b1d5f47e2f9fec5d3ba2badbb72b604bbe460121c65d1329de9a473ebd",
+    "new_test_cases": 26
+  },
+  "integration": {
+    "actual_native_ff_cli_and_rf_consumer_cases": 4,
+    "sealed_actual_failure_classes": 2,
+    "derived_actual_request_negative_classes": 2,
+    "source_requests_and_sealed_capture_sha_unchanged": true,
+    "receipt": "public-cli/integration-receipt.json",
+    "receipt_sha256": "dd2fd2508df7541851816c1106123722d145b31f94a4ccd210b3ac3267fdec44",
+    "elapsed_seconds": 1.38433090000035
+  },
+  "static": {
+    "ruff": "PASS five files",
+    "ast": "PASS five files",
+    "git_diff_check": "PASS",
+    "receipt": "static.json"
+  },
+  "evidence": {
+    "root": "C:\\Users\\郑曾波\\.codex\\worktrees\\m3-acceptance-20261010\\company-wiki\\docs\\plans\\cross-market-rf-e2e-2026-10-08\\phase6\\w04_post_pw03_common_roots_2026-10-11\\evidence\\implementation\\wp04",
+    "manifest_sha256": "83906a26c7497724eed903a39b59b5823ebce11ef4486b321b2ab5c52dde0490",
+    "diff_sha256": "c1b35ab2a2bfc367804ff73bc30718f84896d560f7641d4214296f36414ec1a3"
+  },
+  "usage": {
+    "network_calls": 0,
+    "provider_calls": 0,
+    "model_calls": 0,
+    "local_test_cost_usd": "0",
+    "historical_invoice_cost_usd": null,
+    "no_usage_observation_invented": true
+  },
+  "cleanup": {
+    "public_cli_owned_temp": "restored_absent",
+    "pytest_owned_session": "pytest-243 restored_absent after time/module/no-link/no-lock ownership proof",
+    "pytest_files_deleted": 44,
+    "pytest_apparent_bytes_deleted": 11182,
+    "other_sessions": "untouched",
+    "production_originals_deleted": 0,
+    "full_backup_or_lake_copy": false
+  },
+  "not_executed": [
+    "independent WP04 review",
+    "commit/push/exact CI/install",
+    "new acquisition HTTP including metadata+primary budget conformance",
+    "historical invoice settlement",
+    "SEC index-primary115B remote version reconciliation",
+    "new company research acceptance",
+    "per-source original HK ledger/capture join rewrite (audit/executor owner)"
+  ],
+  "scope_limits": "200 engineering cases and four negative CLI cases do not change sealed original run status or prove economic/model acceptance. Four typed classes are not four old actual failures; only two were observed in sealed input. Remaining RC07 historical acquisition/reconciliation keys stay NOT_RUN/unknown absent native evidence.",
+  "protected": [
+    "canonical FMP_API_KEY not read/copied/staged",
+    "production configs not read/write in these invalid-request probes",
+    "Dayu no code changes",
+    "old sealed original requests/capture bytes unchanged",
+    "canonical and installed roots untouched"
+  ]
+}

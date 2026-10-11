@@ -15,6 +15,8 @@ from typing import Any, Sequence
 # validator keeps this module free of parsing logic).
 from ff_provider_cause import (
     STAGES,
+    build_request_diagnostic,
+    validated_request_diagnostic,
     validated_acquisition_failure,
     validated_acquisition_observation,
     validated_cause,
@@ -69,6 +71,7 @@ class FilingFetchError(RuntimeError):
         upstream_cause: dict[str, Any] | None = None,
         acquisition_failure: dict[str, Any] | None = None,
         acquisition_observation: dict[str, Any] | None = None,
+        request_diagnostic: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -111,6 +114,12 @@ class FilingFetchError(RuntimeError):
         # M3-USAGE: same fail-closed pass-through as the failure receipt —
         # only a validated operation observation rides, garbage is dropped.
         self.acquisition_observation = validated_acquisition_observation(acquisition_observation)
+        # A request subtype is separate from the unchanged producer cause.
+        # Keep a verified copy; serializers validate again before emission.
+        diagnostic = validated_request_diagnostic(request_diagnostic)
+        if request_diagnostic is not None and diagnostic is None:
+            raise TypeError("request_diagnostic must be a validated filing-request-diagnostic/1 object")
+        self.request_diagnostic = diagnostic
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +275,7 @@ def validate_request(request: dict[str, Any]) -> None:
                 "schema 1.2 requests require mode or fiscal_year: pass "
                 "mode=exact with fiscal_year, or mode=latest_as_of",
                 code="request_error",
+                request_diagnostic=build_request_diagnostic("exact_requires_fiscal_year", "fiscal_year"),
             )
     elif mode == "latest_as_of":
         if fiscal_year is not None:
@@ -273,6 +283,7 @@ def validate_request(request: dict[str, Any]) -> None:
                 "mode=latest_as_of forbids fiscal_year; the latest period is "
                 "derived from as_of_date + document_kind",
                 code="request_error",
+                request_diagnostic=build_request_diagnostic("latest_forbids_fiscal_year", "fiscal_year"),
             )
     if fiscal_year is not None:
         if isinstance(fiscal_year, bool) or not isinstance(fiscal_year, int):
@@ -285,42 +296,52 @@ def validate_request(request: dict[str, Any]) -> None:
 
 
 def _validate_acquisition_limits(
-    intent: Any, value: Any, *, required_for_reuse_only: bool = False
+    intent: Any, value: Any, *, required_for_reuse_only: bool = False,
+    request_diagnostics: bool = True,
 ) -> None:
     """Bind provider work to explicit byte, time and fee ceilings.
 
     Ordinary reuse_only requests stay provider-free and forbid limits. A
     latest_as_of reuse_only request performs a bounded metadata lookup to prove
     whether the local filing is current, but still cannot download bytes.
+    Companion limits have no filing field_path in this sibling contract.
     """
+    def invalid(message: str, reason: str, field_path: str) -> FilingFetchError:
+        diagnostic = build_request_diagnostic(reason, field_path) if request_diagnostics else None
+        return FilingFetchError(message, code="request_error", request_diagnostic=diagnostic)
+
     if intent == "reuse_only" and not required_for_reuse_only:
         if value is not None:
-            raise FilingFetchError(
-                "reuse_only forbids acquisition_limits", code="request_error"
-            )
+            raise invalid("reuse_only forbids acquisition_limits",
+                          "acquisition_limits_invalid", "acquisition_limits")
         return
     if not isinstance(value, dict) or set(value) != {
         "max_bytes", "timeout_seconds", "max_cost_usd"
     }:
         if intent == "reuse_only":
             message = "latest_as_of reuse_only requires max_bytes, timeout_seconds and max_cost_usd limits"
+            reason = "latest_reuse_requires_acquisition_limits"
         else:
             message = "fetch_if_missing requires max_bytes, timeout_seconds and max_cost_usd"
-        raise FilingFetchError(message, code="request_error")
+            reason = "acquisition_limits_invalid"
+        raise invalid(message, reason, "acquisition_limits")
     size = value["max_bytes"]
     if type(size) is not int or size <= 0:
-        raise FilingFetchError("invalid acquisition_limits.max_bytes", code="request_error")
+        raise invalid("invalid acquisition_limits.max_bytes",
+                      "acquisition_limits_invalid", "acquisition_limits.max_bytes")
     seconds = value["timeout_seconds"]
     if (
         isinstance(seconds, bool) or not isinstance(seconds, (int, float))
         or not math.isfinite(seconds) or seconds <= 0
     ):
-        raise FilingFetchError("invalid acquisition_limits.timeout_seconds", code="request_error")
+        raise invalid("invalid acquisition_limits.timeout_seconds",
+                      "acquisition_limits_invalid", "acquisition_limits.timeout_seconds")
     cost = value["max_cost_usd"]
     if not isinstance(cost, str) or not re.fullmatch(
         r"(?:0|[1-9][0-9]*)(?:\.[0-9]{1,2})?", cost
     ):
-        raise FilingFetchError("invalid acquisition_limits.max_cost_usd", code="request_error")
+        raise invalid("invalid acquisition_limits.max_cost_usd",
+                      "acquisition_limits_invalid", "acquisition_limits.max_cost_usd")
 
 
 def _validate_companion_request(value: Any) -> None:
@@ -347,11 +368,11 @@ def _validate_companion_request(value: Any) -> None:
     intent = value["intent"]
     limits = value.get("acquisition_limits")
     if intent == "reuse_only":
-        _validate_acquisition_limits(intent, limits)
+        _validate_acquisition_limits(intent, limits, request_diagnostics=False)
     elif year is not None and quarter is not None:
-        _validate_acquisition_limits(intent, limits)
+        _validate_acquisition_limits(intent, limits, request_diagnostics=False)
     elif limits is not None:
-        _validate_acquisition_limits(intent, limits)
+        _validate_acquisition_limits(intent, limits, request_diagnostics=False)
     provider = value.get("provider")
     if provider is not None and (
         not isinstance(provider, str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", provider)

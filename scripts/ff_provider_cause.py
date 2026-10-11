@@ -38,6 +38,39 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 UPSTREAM_CAUSE_SCHEMA_VERSION = "filing-upstream-cause/1"
+REQUEST_DIAGNOSTIC_SCHEMA = "filing-request-diagnostic/1"
+REQUEST_DIAGNOSTIC_PATHS = {
+    "exact_requires_fiscal_year": frozenset({"fiscal_year"}),
+    "latest_forbids_fiscal_year": frozenset({"fiscal_year"}),
+    "latest_reuse_requires_acquisition_limits": frozenset({"acquisition_limits"}),
+    "acquisition_limits_invalid": frozenset({
+        "acquisition_limits", "acquisition_limits.max_bytes",
+        "acquisition_limits.timeout_seconds", "acquisition_limits.max_cost_usd",
+    }),
+}
+
+
+def validated_request_diagnostic(value: Any) -> dict[str, Any] | None:
+    """Copy an optional closed request sibling without inspecting error text."""
+    if not isinstance(value, dict) or set(value) != {"schema_version", "reason", "field_path"}:
+        return None
+    if value["schema_version"] != REQUEST_DIAGNOSTIC_SCHEMA or not isinstance(value["reason"], str):
+        return None
+    paths = REQUEST_DIAGNOSTIC_PATHS.get(value["reason"])
+    if paths is None or not isinstance(value["field_path"], str) or value["field_path"] not in paths:
+        return None
+    return dict(value)
+
+
+def build_request_diagnostic(reason: str, field_path: str) -> dict[str, Any]:
+    """Build only a named validator outcome; never copy request or provider data."""
+    value = validated_request_diagnostic({
+        "schema_version": REQUEST_DIAGNOSTIC_SCHEMA, "reason": reason, "field_path": field_path,
+    })
+    if value is None:
+        raise ValueError("unsupported request diagnostic reason or field path")
+    return value
+
 OPERATIONS = frozenset({"identify", "ensure", "resolve", "close-gap", "query", "local_prepare"})
 CAUSE_KEYS = frozenset(
     {
@@ -430,6 +463,10 @@ def validated_cause(value: Any) -> dict[str, Any] | None:
 
 __all__ = [
     "UPSTREAM_CAUSE_SCHEMA_VERSION",
+    "REQUEST_DIAGNOSTIC_SCHEMA",
+    "REQUEST_DIAGNOSTIC_PATHS",
+    "build_request_diagnostic",
+    "validated_request_diagnostic",
     "ACQUISITION_FAILURE_CODES",
     "ACQUISITION_OBSERVATION_SCHEMA",
     "validated_acquisition_observation",

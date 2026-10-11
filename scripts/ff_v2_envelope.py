@@ -11,6 +11,7 @@ from ff_provider_cause import (
     validated_acquisition_failure,
     validated_acquisition_observation,
     validated_cause,
+    validated_request_diagnostic,
 )
 
 
@@ -172,9 +173,13 @@ def error_envelope(
     stage: str | None = None,
     attempts: int | None = None,
     acquisition_observation: dict[str, Any] | None = None,
+    request_diagnostic: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     stats = stats or {"calls": 0, "downloads": 0}
     filing: dict[str, Any] = {"status": code, "reason": reason, "retryable": retryable}
+    diagnostic = validated_request_diagnostic(request_diagnostic)
+    if diagnostic is not None:
+        filing["request_diagnostic"] = diagnostic
     # R6-FF-CAUSE: the optional safe machine diagnostic rides inside filing
     # (failures only; a diagnosed failure GAP may carry the same object).
     if upstream_cause is not None:
