@@ -1,0 +1,30 @@
+{
+  "schema_version": "2.0",
+  "status": "source_blocked",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": 2032,
+    "fiscal_period": "FY",
+    "as_of_date": "2033-12-31"
+  },
+  "filing": {
+    "status": "source_blocked",
+    "reason": "local source preparation blocked: local_metadata_gap",
+    "retryable": false,
+    "upstream_cause": {
+      "schema_version": "filing-upstream-cause/1",
+      "operation": "local_prepare",
+      "code": "local_metadata_gap",
+      "provider_started": false,
+      "usage_complete": true,
+      "retry_scope": "none"
+    },
+    "stage": "local_prepare"
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 3,
+  "downloads": 0
+}

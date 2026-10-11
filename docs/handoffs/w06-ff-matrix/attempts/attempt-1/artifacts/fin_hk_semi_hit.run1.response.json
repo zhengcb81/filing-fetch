@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0",
+  "status": "fatal",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": 2024,
+    "fiscal_period": "S1",
+    "as_of_date": "2026-01-01"
+  },
+  "filing": {
+    "status": "fatal",
+    "reason": "Could not determine home directory.",
+    "retryable": false
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 0,
+  "downloads": 0
+}

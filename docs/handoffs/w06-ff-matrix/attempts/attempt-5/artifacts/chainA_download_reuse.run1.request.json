@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0",
+  "company_query": "Apple Inc.",
+  "market": "US",
+  "document_kind": "annual_report",
+  "fiscal_year": 2025,
+  "as_of_date": "2026-12-31",
+  "filing_intent": "reuse_only",
+  "fiscal_period": "FY",
+  "companion_transcript": {
+    "intent": "fetch_if_missing",
+    "fiscal_year": 2025,
+    "provider": "fmp",
+    "fiscal_quarter": 1,
+    "acquisition_limits": {
+      "max_bytes": 1000000,
+      "timeout_seconds": 25,
+      "max_cost_usd": "0"
+    }
+  }
+}

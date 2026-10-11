@@ -1,0 +1,26 @@
+{
+  "schema_version": "w06-case-authority-handoff/1",
+  "author_state": "FROZEN_STOP",
+  "engineering": "GREEN",
+  "product": "PARTIAL_PRODUCT_FAILURES",
+  "tests": {
+    "passed": 195,
+    "seconds": 4.42,
+    "authority_red_failed": 3,
+    "assertion_red_failed": 21,
+    "ruff": "passed"
+  },
+  "original_result_counts": {
+    "FAIL": 21,
+    "PASS": 19,
+    "PARTIAL": 1
+  },
+  "re_audit": "C:\\Users\\郑曾波\\Projects\\company-wiki\\docs\\plans\\cross-market-rf-e2e-2026-10-08\\phase6\\w06_parallel_verification_2026-10-11\\evidence\\root-ff-matrix-acceptance\\fix\\case-authority\\frozen-matrix-re-audit.json",
+  "canonical_evidence": "C:\\Users\\郑曾波\\Projects\\company-wiki\\docs\\plans\\cross-market-rf-e2e-2026-10-08\\phase6\\w06_parallel_verification_2026-10-11\\evidence\\root-ff-matrix-acceptance\\fix\\case-authority",
+  "old_manifest_sha256": "e098e5bca867a33802d8fcf6945af7370bb092aec13a4397be475244c43e1246",
+  "original_report_sha256": "aa2ab10add76f89e6e259fa0a05c8ad961f562f46b3fd21a1e94c1b2a3acc72f",
+  "old_bundle_sha256": "dd8fc402a337ef02b3db456a760162f59129c9e7ae5667c62d281294d903bea3",
+  "producer_calls_new": 0,
+  "commit_install_push": false,
+  "next_owner": "ROOT"
+}

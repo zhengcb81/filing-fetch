@@ -1,0 +1,15 @@
+{
+  "schema_version": "2.0",
+  "company_query": "Apple Inc.",
+  "market": "US",
+  "document_kind": "quarterly_report",
+  "fiscal_year": 2026,
+  "as_of_date": "2026-12-31",
+  "filing_intent": "fetch_if_missing",
+  "fiscal_period": "Q1",
+  "acquisition_limits": {
+    "max_bytes": 2000000,
+    "timeout_seconds": 25,
+    "max_cost_usd": "0"
+  }
+}
