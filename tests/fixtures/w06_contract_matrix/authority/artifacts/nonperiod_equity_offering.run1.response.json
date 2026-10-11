@@ -1,0 +1,47 @@
+{
+  "schema_version": "2.0",
+  "status": "source_candidate",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": 2025,
+    "fiscal_period": null,
+    "as_of_date": "2026-12-31"
+  },
+  "filing": {
+    "status": "source_candidate",
+    "source_ref": {
+      "byte_size": 639,
+      "content_sha256": "7cc4725ecda898644da552b117e18a207fcc086214a661538d15866558038b8e",
+      "document_id": "urn:company-wiki:document:sha256:7cc4725ecda898644da552b117e18a207fcc086214a661538d15866558038b8e",
+      "mime_type": "application/pdf",
+      "schema_version": "2.0",
+      "source_id": "urn:company-wiki:source:sha256:7cc4725ecda898644da552b117e18a207fcc086214a661538d15866558038b8e"
+    },
+    "byte_verification": "pending_verified_open",
+    "document_kind": "equity_offering_prospectus",
+    "fiscal_year": 2025,
+    "fiscal_period": null,
+    "resolution_outcome": "downloaded_new",
+    "download_events": 1
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 2,
+  "downloads": 1,
+  "acquisition_observation": {
+    "schema_version": "acquisition-observation/1",
+    "usage_scope": "operation",
+    "outcome": "downloaded_new",
+    "provider_started": true,
+    "usage_complete": true,
+    "wire_usage_complete": false,
+    "http_exchanges_complete": null,
+    "wire_body_bytes": 0,
+    "entity_body_bytes": 639,
+    "http_exchanges": 0,
+    "cost_usd": null,
+    "http_observation": null
+  }
+}

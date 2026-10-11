@@ -1,0 +1,2 @@
+artifacts/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+original-41-report.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

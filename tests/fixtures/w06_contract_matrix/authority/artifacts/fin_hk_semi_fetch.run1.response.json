@@ -1,0 +1,44 @@
+{
+  "schema_version": "2.0",
+  "status": "not_found",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": 2026,
+    "fiscal_period": "S1",
+    "as_of_date": "2026-12-31"
+  },
+  "filing": {
+    "status": "not_found",
+    "reason": "company-wiki ensure not_found",
+    "retryable": false,
+    "upstream_cause": {
+      "schema_version": "filing-upstream-cause/1",
+      "operation": "ensure",
+      "code": "source_not_found",
+      "provider_started": null,
+      "usage_complete": null,
+      "retry_scope": "none"
+    },
+    "stage": "not_found"
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 2,
+  "downloads": 0,
+  "acquisition_observation": {
+    "schema_version": "acquisition-observation/1",
+    "usage_scope": "operation",
+    "outcome": "missing",
+    "provider_started": false,
+    "usage_complete": true,
+    "wire_usage_complete": true,
+    "http_exchanges_complete": true,
+    "wire_body_bytes": 0,
+    "entity_body_bytes": 0,
+    "http_exchanges": 0,
+    "cost_usd": null,
+    "http_observation": null
+  }
+}

@@ -1,0 +1,367 @@
+{
+  "schema_version": "w06-root-handoff/1",
+  "delivery_status": "PARTIAL_PRODUCT_FAILURES",
+  "engineering_tests": {
+    "passed": 34,
+    "seconds": 2.95,
+    "red_oracle_failed": 7,
+    "red_runtime_failed": 3,
+    "fixture_collision_red_failed": 1,
+    "ruff": "passed"
+  },
+  "matrix_counts": {
+    "FAIL": 21,
+    "PASS": 19,
+    "PARTIAL": 1
+  },
+  "matrix_seconds": 132.5406,
+  "actual_report": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.tmp\\w06-matrix-evidence\\attempt-1bb98380f75347e7b792e5966c11867e\\report.json",
+  "actual_report_sha256": "aa2ab10add76f89e6e259fa0a05c8ad961f562f46b3fd21a1e94c1b2a3acc72f",
+  "canonical_evidence": "C:\\Users\\郑曾波\\Projects\\company-wiki\\docs\\plans\\cross-market-rf-e2e-2026-10-08\\phase6\\w06_parallel_verification_2026-10-11\\evidence\\root-ff-matrix-acceptance\\fix",
+  "bundle": "C:\\Users\\郑曾波\\Projects\\company-wiki\\docs\\plans\\cross-market-rf-e2e-2026-10-08\\phase6\\w06_parallel_verification_2026-10-11\\evidence\\root-ff-matrix-acceptance\\fix\\offline-evidence.zip",
+  "bundle_sha256": "dd8fc402a337ef02b3db456a760162f59129c9e7ae5667c62d281294d903bea3",
+  "bundle_bytes": 526986,
+  "producer_bindings": [
+    {
+      "repository": "ff",
+      "root": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix-root",
+      "head": "08ec85b27133cdf8a8d3b38fdba15255fc1ebac2",
+      "modules": [
+        {
+          "path": "scripts/fetch_filing.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix-root\\scripts\\fetch_filing.py",
+          "sha256": "ccdb9bff89b35dce0066df2804a716649213762017e3992f9a0c81896233f331"
+        },
+        {
+          "path": "scripts/transcript_tool_transport.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix-root\\scripts\\transcript_tool_transport.py",
+          "sha256": "013c905b88e4d936d9fd0d2f88a67bb8204378a7e091b29f5ccfb58bed30e847"
+        },
+        {
+          "path": "scripts/transcript_companion.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix-root\\scripts\\transcript_companion.py",
+          "sha256": "1f373148043d66502d9c1316036597c09a2c1071981ce38a17ba06fa9b13db14"
+        }
+      ]
+    },
+    {
+      "repository": "cwp",
+      "root": "C:\\Users\\郑曾波\\Projects\\company-wiki",
+      "head": "8862372f714209cff1b218d77b5c4b8af6bc74dc",
+      "modules": [
+        {
+          "path": "src/company_wiki/source_catalog/source_reader.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\company-wiki\\src\\company_wiki\\source_catalog\\source_reader.py",
+          "sha256": "be753a61cafd1b5d876f59c7e3f63f5f3724dc537d18e9cac58ff35795fab472"
+        },
+        {
+          "path": "src/company_wiki/source_catalog/service.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\company-wiki\\src\\company_wiki\\source_catalog\\service.py",
+          "sha256": "b308b935067e9a08fd4aee6c8c1cd56964447dadaed9f8401a6fe12fd684b1aa"
+        },
+        {
+          "path": "src/company_wiki/source_catalog/config.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\company-wiki\\src\\company_wiki\\source_catalog\\config.py",
+          "sha256": "beb07a6d0e97942c81c0ab7a1f82904d0fdcb3ef5447f01659773431b2839064"
+        }
+      ]
+    },
+    {
+      "repository": "et",
+      "root": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts\\earnings-transcripts",
+      "head": "c91f5f54bc2a24e7b5d6e648dba3f9d578f5fa52",
+      "modules": [
+        {
+          "path": "transcript_tool.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts\\earnings-transcripts\\transcript_tool.py",
+          "sha256": "1684c922c8bff9a6ecc26fa5502a5abdc147e6c273619c5817e16325d7449003"
+        },
+        {
+          "path": "transcript_api.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts\\earnings-transcripts\\transcript_api.py",
+          "sha256": "0bf6bbc8d316ae8878b2f4cae27686862af378c8682963404613bbbf349b6292"
+        },
+        {
+          "path": "retrieval_runtime.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts\\earnings-transcripts\\retrieval_runtime.py",
+          "sha256": "2655bbadeccc98e74c51df1f3e49171f0a827f7699abee0afc4e7d665ffb1957"
+        }
+      ]
+    }
+  ],
+  "source_proof_count": 13,
+  "restore": {
+    "owned_parent_shape_preserved": true,
+    "output_parent_initially_existed": true,
+    "retained_output_is_explicit_evidence": true,
+    "scratch_torn_down": true,
+    "preexisting_parent_entries_preserved": true,
+    "restored": true,
+    "output": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.tmp\\w06-matrix-evidence\\attempt-1bb98380f75347e7b792e5966c11867e",
+    "production_metadata_unchanged": true
+  },
+  "scope": {
+    "batch_elapsed_seconds": 132.5406,
+    "case_limit_seconds": 30,
+    "network_guard_boots": 217,
+    "network_attempts_denied": 0,
+    "translation_attempts": 0,
+    "provider_boundary": "fixture response only; real supplier reachability/coverage is not proven",
+    "error": null,
+    "production_baseline_scope": "stat only; no real key/config bytes read or hashed"
+  },
+  "cost": {
+    "real_provider_calls": 0,
+    "paid_usd": 0,
+    "unknown_charge": null,
+    "fixture_requests": 14,
+    "fixture_counter_scope": "observed local fixture GETs only; producer unknown usage stays null"
+  },
+  "matrix_failures": [
+    {
+      "case_id": "chainA_download_reuse",
+      "result": "FAIL",
+      "request_ref": "chainA_download_reuse.run1.request.json",
+      "response_ref": "chainA_download_reuse.run1.response.json",
+      "diagnostics": [
+        "run1 transcript downloaded: FAIL",
+        "run1 one fixture provider request: FAIL",
+        "run2 transcript hit: FAIL",
+        "run2 zero provider requests: ok",
+        "ET usage receipt present: FAIL",
+        "real three-layer evidence complete: FAIL"
+      ]
+    },
+    {
+      "case_id": "fin_cn_annual_fetch",
+      "result": "FAIL",
+      "request_ref": "fin_cn_annual_fetch.run1.request.json",
+      "response_ref": "fin_cn_annual_fetch.run1.response.json",
+      "diagnostics": [
+        "run1 resolves: FAIL",
+        "run1 imported: FAIL",
+        "run2 exact source reuses without re-download: FAIL"
+      ]
+    },
+    {
+      "case_id": "fin_cn_semi_fetch",
+      "result": "FAIL",
+      "request_ref": "fin_cn_semi_fetch.run1.request.json",
+      "response_ref": "fin_cn_semi_fetch.run1.response.json",
+      "diagnostics": [
+        "run1 resolves: FAIL",
+        "run1 imported: FAIL",
+        "run2 exact source reuses without re-download: FAIL"
+      ]
+    },
+    {
+      "case_id": "fin_cn_quarterly_fetch",
+      "result": "FAIL",
+      "request_ref": "fin_cn_quarterly_fetch.run1.request.json",
+      "response_ref": "fin_cn_quarterly_fetch.run1.response.json",
+      "diagnostics": [
+        "run1 resolves: FAIL",
+        "run1 imported: FAIL",
+        "run2 exact source reuses without re-download: FAIL"
+      ]
+    },
+    {
+      "case_id": "fin_hk_annual_fetch",
+      "result": "FAIL",
+      "request_ref": "fin_hk_annual_fetch.run1.request.json",
+      "response_ref": "fin_hk_annual_fetch.run1.response.json",
+      "diagnostics": [
+        "run1 resolves: FAIL",
+        "run1 imported: FAIL",
+        "run2 exact source reuses without re-download: FAIL"
+      ]
+    },
+    {
+      "case_id": "fin_hk_semi_fetch",
+      "result": "FAIL",
+      "request_ref": "fin_hk_semi_fetch.run1.request.json",
+      "response_ref": "fin_hk_semi_fetch.run1.response.json",
+      "diagnostics": [
+        "run1 resolves: FAIL",
+        "run1 imported: FAIL",
+        "run2 exact source reuses without re-download: FAIL"
+      ]
+    },
+    {
+      "case_id": "fin_hk_quarterly_fetch",
+      "result": "FAIL",
+      "request_ref": "fin_hk_quarterly_fetch.run1.request.json",
+      "response_ref": "fin_hk_quarterly_fetch.run1.response.json",
+      "diagnostics": [
+        "run1 resolves: FAIL",
+        "run1 imported: FAIL",
+        "run2 exact source reuses without re-download: FAIL"
+      ]
+    },
+    {
+      "case_id": "fin_us_annual_fetch",
+      "result": "FAIL",
+      "request_ref": "fin_us_annual_fetch.run1.request.json",
+      "response_ref": "fin_us_annual_fetch.run1.response.json",
+      "diagnostics": [
+        "run1 resolves: FAIL",
+        "run1 imported: FAIL",
+        "run2 exact source reuses without re-download: FAIL"
+      ]
+    },
+    {
+      "case_id": "fin_us_semi_fetch",
+      "result": "FAIL",
+      "request_ref": "fin_us_semi_fetch.run1.request.json",
+      "response_ref": "fin_us_semi_fetch.run1.response.json",
+      "diagnostics": [
+        "run1 resolves: FAIL",
+        "run1 imported: FAIL",
+        "run2 exact source reuses without re-download: FAIL"
+      ]
+    },
+    {
+      "case_id": "fin_us_quarterly_fetch",
+      "result": "FAIL",
+      "request_ref": "fin_us_quarterly_fetch.run1.request.json",
+      "response_ref": "fin_us_quarterly_fetch.run1.response.json",
+      "diagnostics": [
+        "run1 resolves: FAIL",
+        "run1 imported: FAIL",
+        "run2 exact source reuses without re-download: FAIL"
+      ]
+    },
+    {
+      "case_id": "call_fy_only_no_q",
+      "result": "FAIL",
+      "request_ref": "call_fy_only_no_q.run1.request.json",
+      "response_ref": "call_fy_only_no_q.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "call_past_cutoff",
+      "result": "FAIL",
+      "request_ref": "call_past_cutoff.run1.request.json",
+      "response_ref": "call_past_cutoff.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "call_wrong_quarter",
+      "result": "FAIL",
+      "request_ref": "call_wrong_quarter.run1.request.json",
+      "response_ref": "call_wrong_quarter.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "err_402_entitlement",
+      "result": "FAIL",
+      "request_ref": "err_402_entitlement.run1.request.json",
+      "response_ref": "err_402_entitlement.run1.response.json",
+      "diagnostics": [
+        "reason=None"
+      ]
+    },
+    {
+      "case_id": "err_missing_creds",
+      "result": "FAIL",
+      "request_ref": "err_missing_creds.run1.request.json",
+      "response_ref": "err_missing_creds.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "err_unknown_usage",
+      "result": "FAIL",
+      "request_ref": "err_unknown_usage.run1.request.json",
+      "response_ref": "err_unknown_usage.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "local_txt_exact_reuse",
+      "result": "PARTIAL",
+      "request_ref": "local_txt_exact_reuse.run1.request.json",
+      "response_ref": "local_txt_exact_reuse.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "call_wrong_symbol",
+      "result": "FAIL",
+      "request_ref": "call_wrong_symbol.run1.request.json",
+      "response_ref": "call_wrong_symbol.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "call_wrong_mime",
+      "result": "FAIL",
+      "request_ref": "call_wrong_mime.run1.request.json",
+      "response_ref": "call_wrong_mime.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "call_max_bytes",
+      "result": "FAIL",
+      "request_ref": "call_max_bytes.run1.request.json",
+      "response_ref": "call_max_bytes.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "call_hard_timeout",
+      "result": "FAIL",
+      "request_ref": "call_hard_timeout.run1.request.json",
+      "response_ref": "call_hard_timeout.run1.response.json",
+      "diagnostics": []
+    },
+    {
+      "case_id": "request_after_failure_retry",
+      "result": "FAIL",
+      "request_ref": "request_after_failure_retry.run1.request.json",
+      "response_ref": "request_after_failure_retry.run1.response.json",
+      "diagnostics": []
+    }
+  ],
+  "oracle_diagnostics": {
+    "pass": false,
+    "findings": [
+      {
+        "vector": "fake_layer_claimed_real",
+        "case_id": "chainA_download_reuse",
+        "detail": "declared real-3layer but ff_public_cli/et_supervisor_worker/cwp_import evidence is not all present (got {'ff_public_cli': True, 'et_supervisor_worker': False, 'cwp_import': False})"
+      },
+      {
+        "vector": "wrong_cutoff",
+        "case_id": "call_past_cutoff",
+        "detail": "past-cutoff case did not report the actual cutoff diagnostic"
+      },
+      {
+        "vector": "fake_zero_cost",
+        "case_id": "err_unknown_usage",
+        "detail": "unknown usage/cost was reported as 0 or the provider call was swallowed"
+      }
+    ]
+  },
+  "oracle_attribution": "failed intended ET checks due primary2025 precondition; not proof of three ET defects",
+  "cross_period_repro": "C:\\Users\\郑曾波\\Projects\\company-wiki\\docs\\plans\\cross-market-rf-e2e-2026-10-08\\phase6\\w06_parallel_verification_2026-10-11\\evidence\\root-ff-matrix-acceptance\\fix\\cross-period-repro.json",
+  "actual_verified_facts": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.tmp\\w06-repro-evidence\\attempt-0df01e0fe1ee42918edd21e0fa299a20\\artifacts\\actual-verified-source-facts.json",
+  "source_fact_findings": [
+    {
+      "source_id": "urn:company-wiki:source:sha256:6cfb919f52dfdb5f8be431db296f74d554a4c318b439fdcc1057d5c5d60428de",
+      "document_id": "urn:company-wiki:document:sha256:6cfb919f52dfdb5f8be431db296f74d554a4c318b439fdcc1057d5c5d60428de",
+      "actual_verified_assertion": null,
+      "actual_evidence_payload": null
+    },
+    {
+      "source_id": "urn:company-wiki:source:sha256:ec4b1c6b418644c8a4d9979212d83cff0e9171d19f5bd9cae0c1fd98cb5a8803",
+      "document_id": "urn:company-wiki:document:sha256:ec4b1c6b418644c8a4d9979212d83cff0e9171d19f5bd9cae0c1fd98cb5a8803",
+      "actual_verified_assertion": null,
+      "actual_evidence_payload": null
+    }
+  ],
+  "limitations": [
+    "Acquisition writer imported bytes/metadata; actual steady verified fact assertion null. ROOT must diagnose whether real public preparation setup or producer registration/reconciliation is missing.",
+    "ET stages blocked in final matrix by missing primary2025; no ET-specific defect proven.",
+    "Supplier responses are fixtures; actual configured StockInfoDLSimple/Dayu network invocation is unverified.",
+    "Original HOME failure and fixture SHA collision retained, not production proof."
+  ],
+  "next_owner": "ROOT",
+  "author_state": "FROZEN_STOP",
+  "commit_install_push": false
+}

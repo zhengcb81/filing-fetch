@@ -1,0 +1,662 @@
+{
+  "schema_version": "ff-et-cwp-offline-matrix/1",
+  "runner": {
+    "tool": "tools/offline_contract_matrix",
+    "version": "1.0.0"
+  },
+  "dependencies": [
+    {
+      "repository": "ff",
+      "root": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix",
+      "head": "d9c5383eaa15214083099b4628cabe473cad31db",
+      "modules": [
+        {
+          "path": "scripts/fetch_filing.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix\\scripts\\fetch_filing.py",
+          "sha256": "ccdb9bff89b35dce0066df2804a716649213762017e3992f9a0c81896233f331"
+        },
+        {
+          "path": "scripts/transcript_tool_transport.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix\\scripts\\transcript_tool_transport.py",
+          "sha256": "013c905b88e4d936d9fd0d2f88a67bb8204378a7e091b29f5ccfb58bed30e847"
+        },
+        {
+          "path": "scripts/transcript_companion.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix\\scripts\\transcript_companion.py",
+          "sha256": "1f373148043d66502d9c1316036597c09a2c1071981ce38a17ba06fa9b13db14"
+        }
+      ]
+    },
+    {
+      "repository": "cwp",
+      "root": "C:\\Users\\郑曾波\\Projects\\company-wiki",
+      "head": "c145da9bde681790a63235b3cf99809edbbbf7ba",
+      "modules": [
+        {
+          "path": "src/company_wiki/source_catalog/source_reader.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\company-wiki\\src\\company_wiki\\source_catalog\\source_reader.py",
+          "sha256": "be753a61cafd1b5d876f59c7e3f63f5f3724dc537d18e9cac58ff35795fab472"
+        },
+        {
+          "path": "src/company_wiki/source_catalog/service.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\company-wiki\\src\\company_wiki\\source_catalog\\service.py",
+          "sha256": "b308b935067e9a08fd4aee6c8c1cd56964447dadaed9f8401a6fe12fd684b1aa"
+        },
+        {
+          "path": "src/company_wiki/source_catalog/config.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\company-wiki\\src\\company_wiki\\source_catalog\\config.py",
+          "sha256": "beb07a6d0e97942c81c0ab7a1f82904d0fdcb3ef5447f01659773431b2839064"
+        }
+      ]
+    },
+    {
+      "repository": "et",
+      "root": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts\\earnings-transcripts",
+      "head": "c91f5f54bc2a24e7b5d6e648dba3f9d578f5fa52",
+      "modules": [
+        {
+          "path": "transcript_tool.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts\\earnings-transcripts\\transcript_tool.py",
+          "sha256": "1684c922c8bff9a6ecc26fa5502a5abdc147e6c273619c5817e16325d7449003"
+        },
+        {
+          "path": "transcript_api.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts\\earnings-transcripts\\transcript_api.py",
+          "sha256": "0bf6bbc8d316ae8878b2f4cae27686862af378c8682963404613bbbf349b6292"
+        },
+        {
+          "path": "retrieval_runtime.py",
+          "file": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts\\earnings-transcripts\\retrieval_runtime.py",
+          "sha256": "2655bbadeccc98e74c51df1f3e49171f0a827f7699abee0afc4e7d665ffb1957"
+        }
+      ]
+    }
+  ],
+  "scope": {
+    "network": "all real HTTP refused; only in-process fixture responses",
+    "downloads": "synthetic valid PDF/HTML/TXT originals, metadata marked synthetic",
+    "translation": "0 (TranslatorFactory never constructed)",
+    "caveat": "offline synthetic run proves contract wiring only; it does not prove external reachability, real supplier completeness, or economic quality",
+    "batch_elapsed_seconds": 86.76
+  },
+  "cost": {
+    "real_provider_calls": 0,
+    "paid_usd": 0,
+    "unknown_charge": null,
+    "fixture_requests": 9,
+    "note": "fixture requests are offline synthetic and excluded from the real-cost ledger"
+  },
+  "cases": [
+    {
+      "id": "chainA_download_reuse",
+      "title": "FF→ET→CWP real three-layer transcript download then reuse",
+      "declared_layer": "real-3layer",
+      "observed_layer": "real-3layer(ff-cli + et-supervisor/worker + cwp-import)",
+      "result": "PASS",
+      "scope": "chain-A transcript three-layer; test-proxy replaces only worker HTTP",
+      "expected": {
+        "run_twice": true
+      },
+      "actual": {
+        "run1_status": "downloaded",
+        "run2_status": "unknown_publication",
+        "run2_reason": "publication_date_unknown",
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": true,
+          "cwp_import": true
+        },
+        "et_usage_receipt": true
+      },
+      "provider_counters": {
+        "fixture_requests": 1,
+        "run2_fixture_requests": 0,
+        "downloads": 1,
+        "translations": 0
+      },
+      "request_ref": "chainA_download_reuse.run1.request.json",
+      "response_ref": "chainA_download_reuse.run1.response.json",
+      "receipt_refs": [
+        "chainA_download_reuse_run1.usage.json",
+        "chainA_download_reuse_run1.result.json"
+      ],
+      "diagnostics": [
+        "run1 transcript downloaded: ok",
+        "run1 one fixture provider request: ok",
+        "run2 transcript hit: ok",
+        "run2 zero provider requests: ok",
+        "ET usage receipt present: ok",
+        "real three-layer evidence complete: ok",
+        "elapsed_seconds=17.10"
+      ]
+    },
+    {
+      "id": "fin_cn_annual_hit",
+      "title": "CN annual_report local hit (reuse_only)",
+      "declared_layer": "ff+cwp",
+      "observed_layer": "ff-cli + cwp-source-query",
+      "result": "PASS",
+      "scope": "periodic financial report local reuse, zero provider requests",
+      "expected": {
+        "status": "source_candidate",
+        "download_events": 0
+      },
+      "actual": {
+        "status": "source_candidate",
+        "resolution_outcome": "reused_existing",
+        "download_events": 0,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": true
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 0,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "fin_cn_annual_hit.run1.request.json",
+      "response_ref": "fin_cn_annual_hit.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=2.29"
+      ]
+    },
+    {
+      "id": "fin_hk_semi_hit",
+      "title": "HK semi_annual_report local hit (reuse_only)",
+      "declared_layer": "ff+cwp",
+      "observed_layer": "ff-cli + cwp-source-query",
+      "result": "PASS",
+      "scope": "periodic financial report local reuse, zero provider requests",
+      "expected": {
+        "status": "source_candidate",
+        "download_events": 0
+      },
+      "actual": {
+        "status": "source_candidate",
+        "resolution_outcome": "reused_existing",
+        "download_events": 0,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": true
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 0,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "fin_hk_semi_hit.run1.request.json",
+      "response_ref": "fin_hk_semi_hit.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=2.32"
+      ]
+    },
+    {
+      "id": "fin_us_quarterly_hit",
+      "title": "US quarterly_report local hit (reuse_only)",
+      "declared_layer": "ff+cwp",
+      "observed_layer": "ff-cli + cwp-source-query",
+      "result": "PASS",
+      "scope": "periodic financial report local reuse, zero provider requests",
+      "expected": {
+        "status": "source_candidate",
+        "download_events": 0
+      },
+      "actual": {
+        "status": "source_candidate",
+        "resolution_outcome": "reused_existing",
+        "download_events": 0,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": true
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 0,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "fin_us_quarterly_hit.run1.request.json",
+      "response_ref": "fin_us_quarterly_hit.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=3.12"
+      ]
+    },
+    {
+      "id": "fin_hk_annual_fetch",
+      "title": "HK annual_report fetch_if_missing via fixture provider",
+      "declared_layer": "ff+cwp",
+      "observed_layer": "ff-cli + cwp-ensure/import + fixture-adapter",
+      "result": "PASS",
+      "scope": "financial report download at the configured fixture provider boundary; real CWP ensure/import, only the supplier response is simulated",
+      "expected": {
+        "run_twice": true
+      },
+      "actual": {
+        "run1_outcome": "downloaded_new",
+        "run2_outcome": "reused_existing",
+        "run1_kind": "annual_report",
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": true
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 1,
+        "run2_fixture_requests": 0,
+        "downloads": 1,
+        "translations": 0
+      },
+      "request_ref": "fin_hk_annual_fetch.run1.request.json",
+      "response_ref": "fin_hk_annual_fetch.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "run1 resolves: ok",
+        "run1 imported: ok",
+        "run2 reuses without re-download: ok",
+        "elapsed_seconds=9.20"
+      ]
+    },
+    {
+      "id": "nonperiod_prospectus",
+      "title": "non-periodic prospectus",
+      "declared_layer": "ff+cwp",
+      "observed_layer": "ff-cli + cwp-ensure/import + fixture-adapter",
+      "result": "PASS",
+      "scope": "non-periodic kind imported from its correct tool/class, never as annual/FY",
+      "expected": {
+        "supported": true,
+        "stored_kind": "prospectus"
+      },
+      "actual": {
+        "status": "source_candidate",
+        "stored_kind": "prospectus",
+        "supported": true,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": true
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 1,
+        "run2_fixture_requests": 0,
+        "downloads": 1,
+        "translations": 0
+      },
+      "request_ref": "nonperiod_prospectus.run1.request.json",
+      "response_ref": "nonperiod_prospectus.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=3.69"
+      ]
+    },
+    {
+      "id": "nonperiod_equity_offering",
+      "title": "non-periodic equity_offering_prospectus",
+      "declared_layer": "ff+cwp",
+      "observed_layer": "ff-cli + cwp-ensure/import + fixture-adapter",
+      "result": "PASS",
+      "scope": "non-periodic kind imported from its correct tool/class, never as annual/FY",
+      "expected": {
+        "supported": true,
+        "stored_kind": "equity_offering_prospectus"
+      },
+      "actual": {
+        "status": "source_candidate",
+        "stored_kind": "equity_offering_prospectus",
+        "supported": true,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": true
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 1,
+        "run2_fixture_requests": 0,
+        "downloads": 1,
+        "translations": 0
+      },
+      "request_ref": "nonperiod_equity_offering.run1.request.json",
+      "response_ref": "nonperiod_equity_offering.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=4.42"
+      ]
+    },
+    {
+      "id": "nonperiod_convertible_bond",
+      "title": "non-periodic convertible_bond_prospectus",
+      "declared_layer": "ff+cwp",
+      "observed_layer": "ff-cli + cwp-ensure/import + fixture-adapter",
+      "result": "PASS",
+      "scope": "non-periodic kind imported from its correct tool/class, never as annual/FY",
+      "expected": {
+        "supported": true,
+        "stored_kind": "convertible_bond_prospectus"
+      },
+      "actual": {
+        "status": "source_candidate",
+        "stored_kind": "convertible_bond_prospectus",
+        "supported": true,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": true
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 1,
+        "run2_fixture_requests": 0,
+        "downloads": 1,
+        "translations": 0
+      },
+      "request_ref": "nonperiod_convertible_bond.run1.request.json",
+      "response_ref": "nonperiod_convertible_bond.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=5.81"
+      ]
+    },
+    {
+      "id": "nonperiod_investor_relations",
+      "title": "non-periodic investor_relations",
+      "declared_layer": "ff+cwp",
+      "observed_layer": "ff-cli + cwp-ensure/import + fixture-adapter",
+      "result": "PASS",
+      "scope": "non-periodic kind imported from its correct tool/class, never as annual/FY",
+      "expected": {
+        "supported": true,
+        "stored_kind": "investor_relations"
+      },
+      "actual": {
+        "status": "source_candidate",
+        "stored_kind": "investor_relations",
+        "supported": true,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": true
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 1,
+        "run2_fixture_requests": 0,
+        "downloads": 1,
+        "translations": 0
+      },
+      "request_ref": "nonperiod_investor_relations.run1.request.json",
+      "response_ref": "nonperiod_investor_relations.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=3.82"
+      ]
+    },
+    {
+      "id": "call_fy_only_no_q",
+      "title": "companion FY-only does not infer Q4",
+      "declared_layer": "ff-only",
+      "observed_layer": "ff-cli (companion period gate)",
+      "result": "PASS",
+      "scope": "exact FY without quarter must not be guessed as Q4",
+      "expected": {
+        "status": "period_unresolved",
+        "reason": "exact_fy_q_required"
+      },
+      "actual": {
+        "status": "period_unresolved",
+        "reason": "exact_fy_q_required",
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": false
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 0,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "call_fy_only_no_q.run1.request.json",
+      "response_ref": "call_fy_only_no_q.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=2.67"
+      ]
+    },
+    {
+      "id": "call_past_cutoff",
+      "title": "past-cutoff transcript surfaces the cutoff diagnostic",
+      "declared_layer": "ff+et",
+      "observed_layer": "ff-cli + et-supervisor/worker (test-proxy)",
+      "result": "PASS",
+      "scope": "publication/call after as_of_date is never reported historical-eligible",
+      "expected": {
+        "past_cutoff": true
+      },
+      "actual": {
+        "status": "provider_unavailable",
+        "reason": "provider_unavailable",
+        "as_of_cutoff_verified": null,
+        "cutoff_diagnostic": true,
+        "eligible": false,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": true,
+          "cwp_import": false
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 1,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "call_past_cutoff.run1.request.json",
+      "response_ref": "call_past_cutoff.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=5.24"
+      ]
+    },
+    {
+      "id": "call_wrong_quarter",
+      "title": "wrong-quarter provider response is not accepted as the requested quarter",
+      "declared_layer": "ff+et",
+      "observed_layer": "ff-cli + et-supervisor/worker (test-proxy)",
+      "result": "PASS",
+      "scope": "quarter provenance is enforced; a mismatch is not silently accepted",
+      "expected": {
+        "quarter_provenance": true
+      },
+      "actual": {
+        "status": "provider_unavailable",
+        "reason": "provider_identity_or_host",
+        "fiscal_quarter": null,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": true,
+          "cwp_import": false
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 1,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "call_wrong_quarter.run1.request.json",
+      "response_ref": "call_wrong_quarter.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=5.36"
+      ]
+    },
+    {
+      "id": "err_request_error",
+      "title": "malformed request yields request_error",
+      "declared_layer": "ff-only",
+      "observed_layer": "ff-cli (request validator)",
+      "result": "PASS",
+      "scope": "request validation diagnostics preserved",
+      "expected": {
+        "status": "request_error"
+      },
+      "actual": {
+        "status": "request_error",
+        "reason": null,
+        "request_diagnostic": null,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": false
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 0,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "err_request_error.run1.request.json",
+      "response_ref": "err_request_error.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=0.20"
+      ]
+    },
+    {
+      "id": "err_402_entitlement",
+      "title": "ET 402 entitlement surfaces provider_entitlement_required",
+      "declared_layer": "ff+et",
+      "observed_layer": "ff-cli + et-supervisor/worker (test-proxy)",
+      "result": "PASS",
+      "scope": "HTTP 402 → provider_entitlement_required diagnostic",
+      "expected": {
+        "status": "provider_unavailable",
+        "reason_contains": "entitlement"
+      },
+      "actual": {
+        "status": "provider_unavailable",
+        "reason": "provider_entitlement_required",
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": true,
+          "cwp_import": false
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 1,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "err_402_entitlement.run1.request.json",
+      "response_ref": "err_402_entitlement.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "reason=provider_entitlement_required",
+        "elapsed_seconds=7.53"
+      ]
+    },
+    {
+      "id": "err_missing_creds",
+      "title": "missing provider credentials diagnosed, zero provider requests",
+      "declared_layer": "ff+et",
+      "observed_layer": "ff-cli + et-credential-preflight (test-proxy)",
+      "result": "PASS",
+      "scope": "missing credential is a named diagnostic with zero provider requests",
+      "expected": {
+        "reason_contains": "credentials"
+      },
+      "actual": {
+        "status": "provider_unavailable",
+        "reason": "provider_credentials_file_unavailable",
+        "provider_requests": 0,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": false
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 0,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "err_missing_creds.run1.request.json",
+      "response_ref": "err_missing_creds.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=4.26"
+      ]
+    },
+    {
+      "id": "err_unknown_usage",
+      "title": "unknown usage/cost kept null, provider call not swallowed",
+      "declared_layer": "ff+et",
+      "observed_layer": "ff-cli + et-supervisor/worker-failure (test-proxy)",
+      "result": "PASS",
+      "scope": "unknown usage is null (never 0); the failed call is preserved",
+      "expected": {
+        "unknown_usage": true
+      },
+      "actual": {
+        "status": "provider_unavailable",
+        "reason": "retrieval_worker_failure",
+        "provider_usage_complete": false,
+        "provider_requests": null,
+        "unknown_usage_reported_as_zero": false,
+        "calls_swallowed": false,
+        "real_layer_evidence": {
+          "ff_public_cli": true,
+          "et_supervisor_worker": false,
+          "cwp_import": false
+        }
+      },
+      "provider_counters": {
+        "fixture_requests": 0,
+        "run2_fixture_requests": 0,
+        "downloads": 0,
+        "translations": 0
+      },
+      "request_ref": "err_unknown_usage.run1.request.json",
+      "response_ref": "err_unknown_usage.run1.response.json",
+      "receipt_refs": [],
+      "diagnostics": [
+        "elapsed_seconds=7.74"
+      ]
+    }
+  ],
+  "restore": {
+    "baseline_unchanged": true,
+    "sentinel_intact": true,
+    "scratch_torn_down": true,
+    "restored": true
+  },
+  "code_binding": {
+    "company_wiki_file": "C:\\Users\\郑曾波\\Projects\\company-wiki\\src\\company_wiki\\__init__.py",
+    "company_wiki_sha256": "39921253e7b65e89c49eca2f8904b24c39b2425af79fb8f1ab8edc61e4c69ad2",
+    "transcript_tool_file": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts\\earnings-transcripts\\transcript_tool.py",
+    "transcript_tool_sha256": "1684c922c8bff9a6ecc26fa5502a5abdc147e6c273619c5817e16325d7449003",
+    "verified": true
+  },
+  "oracle": {
+    "findings": [],
+    "pass": true
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "schema_version": "2.0",
+  "status": "fatal",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": 2031,
+    "fiscal_period": null,
+    "as_of_date": "2026-12-31"
+  },
+  "filing": {
+    "status": "fatal",
+    "reason": "company-wiki ensure exited 1",
+    "retryable": false,
+    "upstream_cause": {
+      "schema_version": "filing-upstream-cause/1",
+      "operation": "ensure",
+      "code": "acquisition_validation_failed",
+      "provider_started": true,
+      "usage_complete": true,
+      "retry_scope": "none"
+    },
+    "acquisition_failure": {
+      "acquisition_usage": {
+        "cost_usd": "0",
+        "response_bytes": 310,
+        "schema_version": "1.0"
+      },
+      "code": "acquisition_validation_failed",
+      "provider_started": true,
+      "retryable": null,
+      "schema_version": "acquisition-failure/1",
+      "usage_complete": true,
+      "usage_scope": "operation"
+    },
+    "stage": "ensure",
+    "attempts": 1
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 2,
+  "downloads": 0,
+  "acquisition_observation": {
+    "schema_version": "acquisition-observation/1",
+    "usage_scope": "operation",
+    "outcome": "failed",
+    "provider_started": true,
+    "usage_complete": true,
+    "wire_usage_complete": false,
+    "http_exchanges_complete": null,
+    "wire_body_bytes": 0,
+    "entity_body_bytes": 310,
+    "http_exchanges": 0,
+    "cost_usd": null,
+    "http_observation": null
+  }
+}
