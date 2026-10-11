@@ -36,11 +36,17 @@ from fixture_builder import (  # noqa: E402
 )
 from runtime import Deadline, run_process, synthetic_env  # noqa: E402
 from report import sha256_file  # noqa: E402
+from measurement import PhaseTimer  # noqa: E402
 
 SENTINEL_NAME = ".w06_matrix_sentinel"
 SENTINEL_CONTENT = b"w06-matrix-sentinel-do-not-modify\n"
 CASE_TIMEOUT = 30          # seconds per FF child (bounded, no fixed sleeps)
 BATCH_DEADLINE = 180       # seconds for the whole in-process batch (excluding manual run)
+# Scheduling reserve (not a new timeout): case work may never consume the tail
+# of the single batch deadline that the mandatory final fresh source proof needs.
+# The deadline's start, value and remaining time are unchanged; cases simply
+# stop before the reserve instead of starving the proof.
+PROOF_RESERVE_SECONDS = 10.0
 
 
 # ── small helpers ──────────────────────────────────────────────────────────
@@ -98,10 +104,12 @@ class ProductionGuard:
 
 class Context:
     def __init__(self, *, ff_root: Path, cwp_root: Path, et_root: Path,
-                 scratch: Path, out_root: Path, deadline: Deadline | None = None) -> None:
+                 scratch: Path, out_root: Path, deadline: Deadline | None = None,
+                 artifact_prefix: str = "", pycache_root: Path | None = None) -> None:
         self.batch_deadline = deadline or Deadline()
         self.deadline = self.batch_deadline
         self.traces: dict[str, list[dict]] = {}
+        self.phases = PhaseTimer()
         self.ff_root = ff_root
         self.cwp_root = cwp_root
         self.et_root = et_root
@@ -109,20 +117,36 @@ class Context:
         self.artifacts = out_root / "artifacts"
         self.artifacts.mkdir(parents=True, exist_ok=True)
         self.scratch = scratch
+        # Concurrent worker groups keep independent wikis/proxies/counters but
+        # share one flat evidence dir, so group-owned files carry a prefix.
+        self.artifact_prefix = artifact_prefix
+        self._pycache_root = pycache_root
         self.env = ScratchEnvironment(
             scratch,
             adapter_script=HERE / "fixture_provider_adapter.py",
             et_proxy=HERE / "et_transcript_proxy.py",
         )
         self.scans = 0
+        self._env_cache: dict[bool, dict[str, str]] = {}
 
     # -- environment -------------------------------------------------------
 
     def child_env(self, *, with_fmp_key: bool = True) -> dict[str, str]:
-        return synthetic_env(self.scratch, self.cwp_root, self.et_root, with_fmp_key=with_fmp_key)
+        # Reuse one prepared synthetic env per credential variant; repeated
+        # per-launch setup is pure preparation overhead (W07 measurement).
+        cache = self.__dict__.setdefault("_env_cache", {})
+        key = bool(with_fmp_key)
+        if key not in cache:
+            cache[key] = synthetic_env(self.scratch, self.cwp_root, self.et_root, with_fmp_key=key,
+                                       pycache_root=getattr(self, "_pycache_root", None)
+                                       or (self.scratch.parent / "pc"))
+        return dict(cache[key])
 
     def begin_case(self) -> None:
-        self.deadline = self.batch_deadline.case(CASE_TIMEOUT)
+        # Same 30s/case cap and same batch start/end; the case window is only
+        # cut off before the reserved final-proof tail (see PROOF_RESERVE_SECONDS).
+        per_case = self.batch_deadline.case(CASE_TIMEOUT)
+        self.deadline = Deadline(end=min(per_case.end, self.batch_deadline.end - PROOF_RESERVE_SECONDS))
 
     def write_state(self, *, scenario: str, calls_file: Path, content_utf8: str = "",
                     call_date: str = "2025-12-01", response_bytes: int = 512,
@@ -146,25 +170,38 @@ class Context:
 
     def scan(self) -> None:
         self.scans += 1
+        self.phases.count_launch("cwp_cli")
         proc = run_process(
-            [sys.executable, "-B", "-m", "company_wiki.source_catalog.cli",
+            [sys.executable, "-m", "company_wiki.source_catalog.cli",
              "--config", str(self.env.wiki / "config/source_catalog.yaml"), "scan"],
             env=self.child_env(), cwd=self.env.wiki, deadline=self.deadline)
-        (self.artifacts / "seed-scan.stdout.txt").write_bytes(proc.stdout)
-        (self.artifacts / "seed-scan.stderr.txt").write_bytes(proc.stderr)
+        (self.artifacts / f"{self.artifact_prefix}seed-scan.stdout.txt").write_bytes(proc.stdout)
+        (self.artifacts / f"{self.artifact_prefix}seed-scan.stderr.txt").write_bytes(proc.stderr)
         if proc.returncode != 0:
             raise RuntimeError(f"CWP seed scan failed ({proc.returncode}): {proc.stderr.decode('utf-8', errors='replace')[:1000]}")
 
+    def _ensure_argv(self, identity: Identity, kind: str, year: int, period: str) -> list[str]:
+        return ["--config", str(self.env.wiki / "config/source_catalog.yaml"), "ensure",
+                "--entity", identity.canonical_name, "--market", identity.market, "--security-id", identity.security_id,
+                "--document-kind", kind, "--fiscal-year", str(year), "--fiscal-period", period,
+                "--as-of-date", "2026-12-31", "--source-ref-v2", "--allow-download",
+                "--acquisition-config", str(self.env.wiki / "config/source_acquisition.yaml"),
+                "--max-download-bytes", "2000000", "--max-download-seconds", "10", "--max-download-cost-usd", "0"]
+
+    def _seed_state(self, tag: str) -> dict:
+        return {
+            "scenario": "success", "provider_scenario": "serve", "content_utf8": "",
+            "call_date": "2025-12-01", "response_bytes": 512,
+            "calls_file": str(self.env.calls_file(tag)),
+            "et_temp_root": str(self.env.et_temp_root()),
+            "receipts_dir": str(self.artifacts),
+            "receipt_tag": tag,
+        }
+
     def warm_seed(self, identity: Identity, kind: str, year: int, period: str) -> dict:
-        tag = f"seed_{identity.market.lower()}_{kind}_{year}_{period}"
+        tag = f"{self.artifact_prefix}seed_{identity.market.lower()}_{kind}_{year}_{period}"
         self.write_state(scenario="success", provider_scenario="serve", calls_file=self.env.calls_file(tag), receipt_tag=tag)
-        cmd = [sys.executable, "-B", "-m", "company_wiki.source_catalog.cli",
-               "--config", str(self.env.wiki / "config/source_catalog.yaml"), "ensure",
-               "--entity", identity.canonical_name, "--market", identity.market, "--security-id", identity.security_id,
-               "--document-kind", kind, "--fiscal-year", str(year), "--fiscal-period", period,
-               "--as-of-date", "2026-12-31", "--source-ref-v2", "--allow-download",
-               "--acquisition-config", str(self.env.wiki / "config/source_acquisition.yaml"),
-               "--max-download-bytes", "2000000", "--max-download-seconds", "10", "--max-download-cost-usd", "0"]
+        cmd = [sys.executable, "-m", "company_wiki.source_catalog.cli"] + self._ensure_argv(identity, kind, year, period)
         proc = run_process(cmd, env=self.child_env(), cwd=self.scratch, deadline=self.batch_deadline)
         path = self.artifacts / f"{tag}.response.json"
         path.write_bytes(proc.stdout)
@@ -172,6 +209,53 @@ class Context:
         payload = json.loads(proc.stdout)
         return {"command":cmd, "exit_code":proc.returncode, "response":payload,
                 "response_ref":path.name, "response_sha256":sha256_file(path), "scope":"fixture-only initial CWP acquisition/import; separate from local reuse counters"}
+
+    def warm_seed_batch(self, seeds: list[tuple]) -> list[dict]:
+        """Run the warm-seed ensures sequentially in ONE bounded helper process.
+
+        Each request still executes the same real CWP ``ensure`` service with the
+        same argv, and keeps its own request/response/receipt/source-ref/count
+        record; only the repeated interpreter/CLI startup is removed (W07).
+        """
+        entries = []
+        for identity, kind, year, period in seeds:
+            tag = f"{self.artifact_prefix}seed_{identity.market.lower()}_{kind}_{year}_{period}"
+            entries.append({
+                "tag": tag,
+                "state_file": str(self.env.proxy_state / "state.json"),
+                "state": self._seed_state(tag),
+                "argv": self._ensure_argv(identity, kind, year, period),
+            })
+        payload = {"artifacts": str(self.artifacts), "requests": entries,
+                   "adapter_log": str(self.scratch / "adapter_invocations.log")}
+        self.phases.count_launch("seed_batch")
+        with self.phases.span("seed_helper"):
+            proc = run_process(
+                [sys.executable, str(HERE / "seed_batch.py")],
+                input=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                env=self.child_env(), cwd=self.scratch, deadline=self.batch_deadline)
+        (self.artifacts / f"{self.artifact_prefix}seed-batch.stdout.json").write_bytes(proc.stdout)
+        (self.artifacts / f"{self.artifact_prefix}seed-batch.stderr.txt").write_bytes(proc.stderr)
+        if proc.returncode != 0:
+            raise RuntimeError(f"seed batch helper failed ({proc.returncode}): {proc.stderr.decode('utf-8', errors='replace')[:1000]}")
+        summary = json.loads(proc.stdout)
+        receipts = []
+        for entry, row in zip(entries, summary.get("requests", [])):
+            receipts.append({
+                "tag": entry["tag"],
+                "request_argv": row["request_argv"],
+                "execution": {"mode": "in_process_cli_service_single_helper",
+                              "helper": "tools/offline_contract_matrix/seed_batch.py",
+                              "helper_processes": 1},
+                "exit_code": row["exit_code"],
+                "response": row["response"],
+                "response_ref": row["response_ref"],
+                "response_sha256": row["response_sha256"],
+                "source_ref": row["source_ref"],
+                "counts": row["counts"],
+                "scope": "fixture-only initial CWP acquisition/import; separate from local reuse counters",
+            })
+        return receipts
 
     # -- FF public CLI -----------------------------------------------------
 
@@ -201,11 +285,14 @@ class Context:
             sys.executable, str(self.ff_root / "scripts" / "fetch_filing.py"),
             "--config", str(self.env.ff_config), "--timeout-seconds", str(timeout),
         ]
-        proc = run_process(
-            cmd, input=json.dumps(request, ensure_ascii=False).encode("utf-8"),
-            env=self.child_env(with_fmp_key=with_fmp_key),
-            cwd=self.scratch, deadline=self.deadline.case(timeout),
-        )
+        proc = None
+        self.phases.count_launch("ff_cli")
+        with self.phases.span("ff_cli"):
+            proc = run_process(
+                cmd, input=json.dumps(request, ensure_ascii=False).encode("utf-8"),
+                env=self.child_env(with_fmp_key=with_fmp_key),
+                cwd=self.scratch, deadline=self.deadline.case(timeout),
+            )
         resp_path = self.artifacts / f"{case_id}.{run_label}.response.json"
         try:
             response = json.loads(proc.stdout.decode("utf-8", errors="replace"))

@@ -59,11 +59,16 @@ def seed_all(ctx: Context) -> None:
     """
     # Establish legitimate warm state through the real acquisition writer first.
     # A scanned sidecar is intentionally a separate legacy/incomplete control.
-    ctx.seed_receipts = []
-    for identity in (CN, HK, US):
-        for kind, period in (("annual_report", "FY"), ("semi_annual_report", "S1"), ("quarterly_report", "Q1")):
-            ctx.seed_receipts.append(ctx.warm_seed(identity, kind, 2024, period))
-    ctx.seed_receipts.append(ctx.warm_seed(US, "annual_report", 2025, "FY"))
+    # W07 efficiency: the ten identical CWP ensure writes run sequentially inside
+    # ONE bounded helper process calling the same real ensure service; every
+    # request keeps its own request/response/receipt/source-ref/count record.
+    seeds = [
+        (identity, kind, 2024, period)
+        for identity in (CN, HK, US)
+        for kind, period in (("annual_report", "FY"), ("semi_annual_report", "S1"), ("quarterly_report", "Q1"))
+    ]
+    seeds.append((US, "annual_report", 2025, "FY"))
+    ctx.seed_receipts = ctx.warm_seed_batch(seeds)
     (ctx.artifacts / "warm-seed-receipts.json").write_text(json.dumps(ctx.seed_receipts, ensure_ascii=False, indent=2), encoding="utf-8")
     from dataclasses import replace
     txt_identity = replace(US, provider="fmp", source_url="https://financialmodelingprep.com/stable/earning-call-transcript?symbol=AAPL&year=2024&quarter=2")

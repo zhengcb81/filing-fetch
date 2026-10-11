@@ -68,6 +68,8 @@ class OwnedAttempt:
     owned_existed: bool
     out_existed: bool
     created_owned_dirs: list[Path]
+    cache: Path | None = None
+    cache_created: bool = False
 
     @classmethod
     def create(cls, owned_parent: Path, out_parent: Path, protected: tuple[Path, ...] = ()):
@@ -89,6 +91,12 @@ class OwnedAttempt:
                 record.append(item)
         token = "attempt-" + uuid.uuid4().hex
         scratch, output = owned_parent / token, out_parent / token
+        # Short shared bytecode-cache root (sibling of the attempt dir). Python's
+        # PYTHONPYCACHEPREFIX mirrors full source paths under the prefix; nested
+        # under the attempt scratch those mirror paths exceed Windows MAX_PATH
+        # and the producer tree silently recompiles on every child launch.
+        cache = owned_parent / "pc"
+        cache_created = not cache.exists()
         created = []
         try:
             mkdir_chain(owned_parent, created_owned_dirs)
@@ -97,7 +105,11 @@ class OwnedAttempt:
             created.append(scratch)
             output.mkdir()
             created.append(output)
-            return cls(scratch, output, owned_parent, out_parent, before_owned, before_out, owned_existed, out_existed, created_owned_dirs)
+            if cache_created:
+                cache.mkdir()
+                created.append(cache)
+            return cls(scratch, output, owned_parent, out_parent, before_owned, before_out,
+                       owned_existed, out_existed, created_owned_dirs, cache, cache_created)
         except Exception:
             for path in reversed(created):
                 if path.parent in {owned_parent, out_parent} and not _reparse(path):
@@ -116,6 +128,13 @@ class OwnedAttempt:
         if not safe:
             raise ValueError("owned scratch identity changed; refusing cleanup")
         shutil.rmtree(self.scratch)
+        # Only a cache dir created by this attempt is removed; a pre-existing one
+        # is non-owned and stays untouched (which is a preserved state, not a leak).
+        cache_torn_down = True
+        if self.cache_created and self.cache is not None and self.cache.exists() and not _reparse(self.cache):
+            shutil.rmtree(self.cache)
+        if self.cache_created:
+            cache_torn_down = self.cache is not None and not self.cache.exists()
         owned_after, out_after = _children_metadata(self.owned_parent), _children_metadata(self.out_parent)
         preserved = all(owned_after.get(k) == v for k, v in self.before_owned.items())
         preserved &= all(out_after.get(k) == v for k, v in self.before_out.items())
@@ -126,15 +145,24 @@ class OwnedAttempt:
         return {"owned_parent_shape_preserved":shape_preserved,
                 "output_parent_initially_existed":self.out_existed,
                 "retained_output_is_explicit_evidence":True,
-                "scratch_torn_down": not self.scratch.exists(), "preexisting_parent_entries_preserved": preserved,
-                "restored": preserved and shape_preserved and not self.scratch.exists(), "output": str(self.output)}
+                "scratch_torn_down": not self.scratch.exists(),
+                "bytecode_cache_torn_down": cache_torn_down,
+                "preexisting_parent_entries_preserved": preserved,
+                "restored": preserved and shape_preserved and not self.scratch.exists() and cache_torn_down,
+                "output": str(self.output)}
 
 
-GUARD_SOURCE = r'''import builtins, json, os, socket, sys
+GUARD_SOURCE = r'''import atexit, builtins, json, os, socket, sys, time
 _log = os.environ["W06_GUARD_LOG"]
+_launch_log = os.environ.get("W06_LAUNCH_LOG")
 def _event(op):
     with open(_log, "a", encoding="utf-8") as f:
         f.write(json.dumps({"op":op,"pid":os.getpid()})+"\n")
+def _launch(event):
+    if not _launch_log:
+        return
+    with open(_launch_log, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"event":event,"at":time.time(),"pid":os.getpid(),"argv":sys.argv[:4]})+"\n")
 def _deny(*a, **kw):
     _event("network_denied")
     raise RuntimeError("W06 offline test: network is forbidden")
@@ -156,6 +184,8 @@ def _import(*a, **kw):
     return result
 builtins.__import__ = _import
 _event("guard_boot")
+atexit.register(_launch, "exit")
+_launch("boot")
 '''
 
 
@@ -168,22 +198,72 @@ def prepare_guard(scratch: Path) -> Path:
     return guard
 
 
-def synthetic_env(scratch: Path, cwp_root: Path, et_root: Path, *, with_fmp_key: bool = True) -> dict[str, str]:
+def _short_path(path: Path) -> Path:
+    """Best-effort 8.3 short form on Windows (pure display/mirror shortening)."""
+    if os.name != "nt":
+        return path
+    try:
+        import ctypes
+        from ctypes import wintypes
+        fn = ctypes.windll.kernel32.GetShortPathNameW
+        fn.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        fn.restype = wintypes.DWORD
+        buf = ctypes.create_unicode_buffer(1024)
+        if fn(str(path), buf, 1024):
+            return Path(buf.value)
+    except Exception:
+        pass
+    return path
+
+
+def synthetic_env(scratch: Path, cwp_root: Path, et_root: Path, *, with_fmp_key: bool = True,
+                  pycache_root: Path | None = None) -> dict[str, str]:
     # Explicit launch allowlist, never copy the host environment wholesale.
     env = {key: os.environ[key] for key in ("SystemRoot", "WINDIR", "COMSPEC", "PATH", "PATHEXT") if key in os.environ}
     home, temp = scratch / "home", scratch / "tmp"
-    for path in (home, temp, home / "AppData/Roaming", home / "AppData/Local"):
+    # Bytecode cache root must be SHORT: PYTHONPYCACHEPREFIX mirrors the source
+    # path (as loaded) under the prefix, and mirrored paths near Windows MAX_PATH
+    # (260) are silently not written (the atomic write temp name overflows), which
+    # recompiles the whole producer tree on every child launch. Both the prefix
+    # and the module search paths are therefore used in 8.3 short form.
+    pycache = Path(pycache_root) if pycache_root is not None else scratch / "pycache"
+    for path in (home, temp, home / "AppData/Roaming", home / "AppData/Local", pycache):
         path.mkdir(parents=True, exist_ok=True)
+    code_roots = [_short_path(Path(cwp_root) / "src"), _short_path(Path(et_root))]
+    pycache = _short_path(pycache)
     guard = prepare_guard(scratch)
     env.update({"HOME":str(home), "USERPROFILE":str(home), "APPDATA":str(home / "AppData/Roaming"),
                 "LOCALAPPDATA":str(home / "AppData/Local"), "TEMP":str(temp), "TMP":str(temp),
-                "PYTHONUTF8":"1", "PYTHONDONTWRITEBYTECODE":"1", "PYTHONIOENCODING":"utf-8",
-                "PYTHONPATH":os.pathsep.join([str(guard), str(cwp_root / "src"), str(et_root)]),
-                "W06_ET_ROOT":str(et_root), "W06_MATRIX_SCRATCH":str(scratch),
-                "W06_MATRIX_STATE":str(scratch / "proxy/state.json"), "W06_GUARD_LOG":str(scratch / "guard.jsonl")})
+                "PYTHONUTF8":"1", "PYTHONIOENCODING":"utf-8",
+                # Bytecode cache lives in owned scratch only: producer code roots
+                # stay pristine while repeated child imports stop recompiling the
+                # full company_wiki/ET trees on every launch.
+                "PYTHONPYCACHEPREFIX":str(pycache),
+                "PYTHONPATH":os.pathsep.join([str(guard), *(str(p) for p in code_roots)]),
+                "W06_ET_ROOT":str(code_roots[1]), "W06_MATRIX_SCRATCH":str(scratch),
+                "W06_MATRIX_STATE":str(scratch / "proxy/state.json"), "W06_GUARD_LOG":str(scratch / "guard.jsonl"),
+                "W06_LAUNCH_LOG":str(scratch / "launches.jsonl")})
     if with_fmp_key:
         env["FMP_API_KEY"] = "offline-w06-not-a-real-fmp-key"
     return env
+
+
+def _terminate_tree(proc: subprocess.Popen, env: dict[str, str]) -> None:
+    # FF owns nested provider/ET workers; reap only this process tree. The
+    # reaping must survive failures in the killer itself so no child leaks.
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], env=env,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        else:
+            import signal
+            os.killpg(proc.pid, signal.SIGKILL)
+    except Exception:
+        pass
+    try:
+        proc.kill()
+    except Exception:
+        pass
 
 
 def run_process(command: list[str], *, env: dict[str, str], cwd: Path,
@@ -195,15 +275,20 @@ def run_process(command: list[str], *, env: dict[str, str], cwd: Path,
     try:
         stdout, stderr = proc.communicate(input, timeout=min(remaining, deadline.remaining()))
     except (subprocess.TimeoutExpired, DeadlineExceeded) as exc:
-        # FF owns nested provider/ET workers; reap only this process tree.
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], env=env,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-        else:
-            import signal
-            os.killpg(proc.pid, signal.SIGKILL)
-        stdout, stderr = proc.communicate(timeout=5)
+        _terminate_tree(proc, env)
+        try:
+            stdout, stderr = proc.communicate(timeout=5)
+        except Exception:
+            stdout, stderr = b"", b""
         raise DeadlineExceeded(f"child absolute deadline expired: {Path(command[0]).name}") from exc
+    except Exception:
+        # Unexpected transport errors must not leave orphaned children either.
+        _terminate_tree(proc, env)
+        try:
+            proc.communicate(timeout=5)
+        except Exception:
+            pass
+        raise
     return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
 
 
