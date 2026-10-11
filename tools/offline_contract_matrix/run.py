@@ -139,7 +139,7 @@ class Context:
         if key not in cache:
             cache[key] = synthetic_env(self.scratch, self.cwp_root, self.et_root, with_fmp_key=key,
                                        pycache_root=getattr(self, "_pycache_root", None)
-                                       or (self.scratch.parent / "pc"))
+                                       or (self.scratch / "pc"))
         return dict(cache[key])
 
     def begin_case(self) -> None:
@@ -239,8 +239,13 @@ class Context:
         if proc.returncode != 0:
             raise RuntimeError(f"seed batch helper failed ({proc.returncode}): {proc.stderr.decode('utf-8', errors='replace')[:1000]}")
         summary = json.loads(proc.stdout)
+        rows = summary.get("requests", [])
+        if summary.get("schema_version") != "w07-seed-batch/1" or len(rows) != len(entries):
+            raise ValueError("seed helper schema/request cardinality differs from submitted batch")
         receipts = []
-        for entry, row in zip(entries, summary.get("requests", [])):
+        for entry, row in zip(entries, rows):
+            if row.get("tag") != entry["tag"] or row.get("request_argv") != entry["argv"]:
+                raise ValueError("seed helper request order or identity differs from submitted batch")
             receipts.append({
                 "tag": entry["tag"],
                 "request_argv": row["request_argv"],

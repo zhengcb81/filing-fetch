@@ -142,6 +142,35 @@ def _fresh_proofs(ctx: Context) -> dict:
     return json.loads(proc.stdout)
 
 
+def _merge_source_proofs(target: dict, part: dict, group: str) -> None:
+    """Retain every owned wiki proof; a later group cannot hide an earlier failure.
+
+    Legacy oracle consumes a flat document-ID map. Its projection is conservative
+    for collisions: every group's proof must verify and agree on the byte/version
+    facts. Full unmodified worker proof records remain available alongside it.
+    """
+    groups = target.setdefault("worker_groups", {})
+    if group in groups:
+        raise ValueError(f"duplicate worker proof group: {group}")
+    groups[group] = part
+    merged = target.setdefault("proofs", {})
+    for key, row in (part.get("proofs") or {}).items():
+        previous = merged.get(key)
+        if previous is None:
+            merged[key] = dict(row)
+        else:
+            facts = ("content_sha256", "byte_size", "source_versions",
+                     "physical_originals", "document_kind", "original_language_content_sha256")
+            agrees = all(previous.get(f) == row.get(f) for f in facts)
+            combined = dict(previous)
+            combined["verified"] = previous.get("verified") is True and row.get("verified") is True and agrees
+            combined["worker_collision"] = True
+            if not combined["verified"]:
+                combined["error"] = "worker proof collision includes a failed or incompatible verification"
+            merged[key] = combined
+    target.setdefault("catalog_snapshot", []).extend(part.get("catalog_snapshot") or [])
+
+
 def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]],
                    deadline: Deadline) -> tuple[list[tuple[int, CaseResult]], str | None]:
     """One concurrent worker group: own wiki/seeds/proxy/counters.
@@ -213,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     protected = tuple(root / child for root in (ff_root, cwp_root, et_root) for child in ("config", "companies", "src", "scripts", "transcripts"))
     attempt = OwnedAttempt.create(args.owned_root, args.out_root, protected)
     results, binding, proofs, deps, events = [], {"verified":False}, {"proofs": {}, "catalog_snapshot": []}, [], []
-    registry = _case_registry()
+    registry = []
     ctxs = []
     error = None
     stop_reason = None
@@ -223,6 +252,7 @@ def main(argv: list[str] | None = None) -> int:
                                "parent_calls": {}, "parent_launch_total": 0},
                   "child_spans": {}}
     try:
+        registry = _case_registry()
         env = None
         for index in range(workers):
             ctxs.append(Context(ff_root=ff_root, cwp_root=cwp_root, et_root=et_root,
@@ -266,38 +296,39 @@ def main(argv: list[str] | None = None) -> int:
         # after every change, once per owned wiki, merged into one proof record.
         timer.count_launch("fresh_source_proof", workers)
         with timer.span("fresh_source_proof"):
-            for ctx in ctxs:
+            for index, ctx in enumerate(ctxs):
                 part = _fresh_proofs(ctx)
-                proofs["proofs"].update(part.get("proofs") or {})
-                proofs["catalog_snapshot"].extend(part.get("catalog_snapshot") or [])
+                _merge_source_proofs(proofs, part, f"g{index + 1}")
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
     finally:
-        for ctx in ctxs:
-            phases = getattr(ctx, "phases", None)
-            if phases is not None:
-                timer.merge(phases)
-        cache_info = cache_stats(attempt.cache)
-        accounting = merge_launch_reports(
-            [launch_report(attempt.scratch / f"g{index + 1}" / "launches.jsonl")
-             for index in range(workers)])
-        parent_calls = timer.launch_counts()
-        accounting["launches"]["parent_calls"] = parent_calls
-        accounting["launches"]["parent_launch_total"] = sum(parent_calls.values())
-        for phase, entry in accounting["child_spans"].items():
-            if entry.get("status") == "measured":
-                timer.record(phase, entry["seconds"])
-            else:
-                timer.mark_unknown(phase, entry.get("reason") or "nested child span unobserved")
-        events = []
-        for index in range(workers):
-            events.extend(guard_events(attempt.scratch / f"g{index + 1}"))
-        (attempt.output / "guard-events.json").write_text(json.dumps(events, indent=2), encoding="utf-8")
-        with timer.span("cleanup"):
-            after = guard.snapshot()
-            restore = attempt.cleanup()
-            restore["production_metadata_unchanged"] = guard.unchanged(after)
-            restore["restored"] &= restore["production_metadata_unchanged"]
+        try:
+            for ctx in ctxs:
+                phases = getattr(ctx, "phases", None)
+                if phases is not None:
+                    timer.merge(phases)
+            cache_info = cache_stats(attempt.cache)
+            accounting = merge_launch_reports(
+                [launch_report(attempt.scratch / f"g{index + 1}" / "launches.jsonl")
+                 for index in range(workers)])
+            parent_calls = timer.launch_counts()
+            accounting["launches"]["parent_calls"] = parent_calls
+            accounting["launches"]["parent_launch_total"] = sum(parent_calls.values())
+            for phase, entry in accounting["child_spans"].items():
+                if entry.get("status") == "measured":
+                    timer.record(phase, entry["seconds"])
+                else:
+                    timer.mark_unknown(phase, entry.get("reason") or "nested child span unobserved")
+            events = []
+            for index in range(workers):
+                events.extend(guard_events(attempt.scratch / f"g{index + 1}"))
+            (attempt.output / "guard-events.json").write_text(json.dumps(events, indent=2), encoding="utf-8")
+        finally:
+            with timer.span("cleanup"):
+                after = guard.snapshot()
+                restore = attempt.cleanup()
+                restore["production_metadata_unchanged"] = guard.unchanged(after)
+                restore["restored"] &= restore["production_metadata_unchanged"]
     observed = {r.id for r in results}
     for cid, _ in registry:
         if cid not in observed:

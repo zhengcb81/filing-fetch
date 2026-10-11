@@ -42,6 +42,8 @@ CI_TESTS = (
     "tests/test_bundle_compat.py",
     "tests/e2e_support/test_spy_log.py",
     "tests/test_ci_tests.py",
+    "tests/test_w07_matrix_efficiency.py",
+    "tests/test_root_w07_matrix_boundaries.py",
 )
 GIT_REPOSITORY_CONTEXT = (
     "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",

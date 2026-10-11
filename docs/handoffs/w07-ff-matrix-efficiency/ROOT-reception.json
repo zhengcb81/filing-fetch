@@ -1,0 +1,168 @@
+{
+  "schema": "root-w07-ff-reception/1",
+  "author_head": "8c7adedde373862968037b0d97857291452749e5",
+  "final_attempt": "attempt-77f781b892d54252809d1cd633a23e9e",
+  "counts": {
+    "PASS": 41,
+    "FAIL": 0,
+    "PARTIAL": 0,
+    "NOT_RUN": 0
+  },
+  "scope": {
+    "batch_elapsed_seconds": 99.9624,
+    "case_limit_seconds": 30,
+    "batch_deadline_seconds": 180,
+    "final_proof_reserve_seconds": 10.0,
+    "workers": 2,
+    "worker_isolation": "independent Context/wiki/proxy/counters per group; download->reuse chains stay within one group",
+    "network_guard_boots": 278,
+    "network_attempts_denied": 0,
+    "translation_attempts": 0,
+    "provider_boundary": "fixture response only; real supplier reachability/coverage is not proven",
+    "phase_timing": {
+      "binding": {
+        "status": "measured",
+        "seconds": 2.7443,
+        "spans": 1
+      },
+      "seed": {
+        "status": "measured",
+        "seconds": 17.3333,
+        "spans": 2
+      },
+      "ff_cli": {
+        "status": "measured",
+        "seconds": 145.5619,
+        "spans": 52
+      },
+      "et_supervisor_worker": {
+        "status": "measured",
+        "seconds": 13.9095,
+        "spans": 1
+      },
+      "fixture": {
+        "status": "measured",
+        "seconds": 2.9936,
+        "spans": 1
+      },
+      "fresh_source_proof": {
+        "status": "measured",
+        "seconds": 2.4967,
+        "spans": 1
+      },
+      "cleanup": {
+        "status": "measured",
+        "seconds": 0.5388,
+        "spans": 1
+      },
+      "total": {
+        "status": "measured",
+        "seconds": 99.9624,
+        "spans": 1
+      },
+      "seed_helper": {
+        "status": "measured",
+        "seconds": 15.7805,
+        "spans": 2
+      }
+    },
+    "launch_accounting": {
+      "launches": {
+        "total_boot": 278,
+        "total_exit": 277,
+        "by_kind": {
+          "other_python": 139,
+          "seed_batch": 2,
+          "fixture_adapter": 72,
+          "ff_cli": 52,
+          "et_proxy": 11,
+          "source_proofs": 2
+        },
+        "parent_calls": {
+          "binding_probe": 1,
+          "git": 3,
+          "fresh_source_proof": 2,
+          "seed_batch": 2,
+          "cwp_cli": 3,
+          "ff_cli": 52
+        },
+        "parent_launch_total": 63
+      },
+      "child_spans": {
+        "et_supervisor_worker": {
+          "status": "measured",
+          "seconds": 13.9095,
+          "spans": 11,
+          "unknown_spans": 0,
+          "count": 11
+        },
+        "fixture": {
+          "status": "measured",
+          "seconds": 2.9936,
+          "spans": 72,
+          "unknown_spans": 0,
+          "count": 72
+        }
+      },
+      "note": null
+    },
+    "bytecode_cache": {
+      "pyc_files": 540,
+      "company_wiki_pyc": 98,
+      "et_pyc": 7,
+      "max_pyc_path_len": 214,
+      "note": "mirrored cache paths over Windows MAX_PATH (260) are silently not cached"
+    },
+    "stop_reason": null,
+    "error": null,
+    "production_baseline_scope": "stat only; no real key/config bytes read or hashed"
+  },
+  "restore": {
+    "owned_parent_shape_preserved": true,
+    "output_parent_initially_existed": true,
+    "retained_output_is_explicit_evidence": true,
+    "scratch_torn_down": true,
+    "bytecode_cache_torn_down": true,
+    "preexisting_parent_entries_preserved": true,
+    "restored": true,
+    "output": "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\w7ff-root-reports\\attempt-77f781b892d54252809d1cd633a23e9e",
+    "production_metadata_unchanged": true
+  },
+  "code_binding": {
+    "company_wiki": {
+      "file": "C:\\Users\\郑曾波\\Projects\\_HARNE~1\\w07\\ROOT-F~1\\PLANNI~1\\W07-FF~1\\input\\runtime\\cwp\\src\\company_wiki\\__init__.py",
+      "sha256": "a7159c17d9b6af0665c6f0ba9b187e63c07e1330a2afe63d6c56f397f31ddb87"
+    },
+    "transcript_tool": {
+      "file": "C:\\Users\\郑曾波\\Projects\\_HARNE~1\\w07\\ROOT-F~1\\PLANNI~1\\W07-FF~1\\input\\runtime\\et\\transcript_tool.py",
+      "sha256": "1684c922c8bff9a6ecc26fa5502a5abdc147e6c273619c5817e16325d7449003"
+    },
+    "verified": true
+  },
+  "unique_verified_proofs": 26,
+  "worker_proofs": {
+    "g1": 15,
+    "g2": 12
+  },
+  "unchanged_case_handlers": 14,
+  "readonly_author_inputs_unchanged": true,
+  "production_metadata_and_wip_preserved": true,
+  "focused_tests": 225,
+  "archive": "offline-evidence.zip",
+  "archive_bytes": 490060,
+  "archive_sha256": "94793fa15028d1e40ae727242c9a93d4a4d6a837a24c7c28d16fb49e63bcae5e",
+  "paid_calls": 0,
+  "actual_supplier_reachability_proven": false,
+  "scratch_peak_bytes": null,
+  "first_root_attempt": {
+    "counts": {
+      "PASS": 28,
+      "PARTIAL": 13,
+      "FAIL": 0,
+      "NOT_RUN": 0
+    },
+    "seconds": 130.5777,
+    "cause": "ROOT overconstrained independent logical original_locations aliases"
+  },
+  "publication_status": "pending"
+}

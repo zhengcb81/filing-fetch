@@ -497,7 +497,8 @@ def test_preexisting_cache_dir_is_not_deleted_by_cleanup(tmp_path):
     cache.mkdir()
     (cache / "other.pyc").write_bytes(b"\x00")
     attempt = OwnedAttempt.create(owned, tmp_path / "out")
-    assert attempt.cache_created is False
+    assert attempt.cache_created is True
+    assert attempt.cache != cache, "pre-existing cache must never be used for new writes"
     restore = attempt.cleanup()
     assert cache.exists() and (cache / "other.pyc").is_file(), "non-owned cache must be preserved"
     assert restore["restored"] is True

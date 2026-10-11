@@ -96,7 +96,7 @@ class OwnedAttempt:
         # under the attempt scratch those mirror paths exceed Windows MAX_PATH
         # and the producer tree silently recompiles on every child launch.
         cache = owned_parent / "pc"
-        cache_created = not cache.exists()
+        cache_created = True
         created = []
         try:
             mkdir_chain(owned_parent, created_owned_dirs)
@@ -105,9 +105,19 @@ class OwnedAttempt:
             created.append(scratch)
             output.mkdir()
             created.append(output)
-            if cache_created:
-                cache.mkdir()
+            # Cache is always newly owned. Never import/write into a previous
+            # attempt's cache; independent batches must not delete each other's.
+            for name in ["pc", *(f"p{i:02x}" for i in range(256))]:
+                candidate = owned_parent / name
+                try:
+                    candidate.mkdir()
+                except FileExistsError:
+                    continue
+                cache = candidate
                 created.append(cache)
+                break
+            else:
+                raise FileExistsError("no free compact cache child under owned root")
             return cls(scratch, output, owned_parent, out_parent, before_owned, before_out,
                        owned_existed, out_existed, created_owned_dirs, cache, cache_created)
         except Exception:
@@ -128,8 +138,8 @@ class OwnedAttempt:
         if not safe:
             raise ValueError("owned scratch identity changed; refusing cleanup")
         shutil.rmtree(self.scratch)
-        # Only a cache dir created by this attempt is removed; a pre-existing one
-        # is non-owned and stays untouched (which is a preserved state, not a leak).
+        # Only the exclusive cache created by this attempt is removed.
+        # Pre-existing caches are never used and remain untouched.
         cache_torn_down = True
         if self.cache_created and self.cache is not None and self.cache.exists() and not _reparse(self.cache):
             shutil.rmtree(self.cache)
@@ -280,6 +290,11 @@ def run_process(command: list[str], *, env: dict[str, str], cwd: Path,
             stdout, stderr = proc.communicate(timeout=5)
         except Exception:
             stdout, stderr = b"", b""
+        finally:
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                pass
         raise DeadlineExceeded(f"child absolute deadline expired: {Path(command[0]).name}") from exc
     except Exception:
         # Unexpected transport errors must not leave orphaned children either.
@@ -288,6 +303,11 @@ def run_process(command: list[str], *, env: dict[str, str], cwd: Path,
             proc.communicate(timeout=5)
         except Exception:
             pass
+        finally:
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                pass
         raise
     return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
 
