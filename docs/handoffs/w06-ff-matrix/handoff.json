@@ -1,0 +1,215 @@
+{
+  "schema_version": "w06-lane-handoff/1",
+  "lane": "W06-FF-MATRIX",
+  "status": "COMPLETE",
+  "repository": "C:\\Users\\郑曾波\\Projects\\filing-fetch",
+  "workdir": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix",
+  "branch": "codex/w06-ff-contract-matrix",
+  "base_commit": "08ec85b27133cdf8a8d3b38fdba15255fc1ebac2",
+  "head_commit": "8dd00e207e1465095f37ff720bc165b541bdd093",
+  "changed_files": [
+    {
+      "path": "tools/offline_contract_matrix/cli_main.py",
+      "sha256": "9d59382d186c45649bedda416eae9d6e95647b6012e6e3cc5af36d24682d4133",
+      "purpose": "offline contract-matrix tool"
+    },
+    {
+      "path": "tools/offline_contract_matrix/et_transcript_proxy.py",
+      "sha256": "4730f9f55b98cbc91502b919118b393ab4e52b60cbc495ff42e522a9ff9006e9",
+      "purpose": "offline contract-matrix tool"
+    },
+    {
+      "path": "tools/offline_contract_matrix/fixture_builder.py",
+      "sha256": "b12ba2f4a6574d2a5bf756438ec02c54d54b1b0b1d5cfd4773f6ff2b1d56463c",
+      "purpose": "offline contract-matrix tool"
+    },
+    {
+      "path": "tools/offline_contract_matrix/fixture_provider_adapter.py",
+      "sha256": "2aca85c6a92417f4fb4781c388ee0300f2c6e90833a5daae2951cb62743c53b3",
+      "purpose": "offline contract-matrix tool"
+    },
+    {
+      "path": "tools/offline_contract_matrix/matrix_cases.py",
+      "sha256": "c43695e4f165220483569a0589830fe05a366fb36ccc2674a9c9ee003528b116",
+      "purpose": "offline contract-matrix tool"
+    },
+    {
+      "path": "tools/offline_contract_matrix/oracle.py",
+      "sha256": "249043b9abb1312e12e7ee26a177993d7e4aa8ac46e97b95c88e68526f614262",
+      "purpose": "offline contract-matrix tool"
+    },
+    {
+      "path": "tools/offline_contract_matrix/report.py",
+      "sha256": "888000908cd515431b4b5623e45cc2832d0e41c093dfbb0b5ae9cce36e651c96",
+      "purpose": "offline contract-matrix tool"
+    },
+    {
+      "path": "tools/offline_contract_matrix/run.py",
+      "sha256": "be0d23050d51326f716ad68b8503979645226ab164b738c6c5fa14b01dcdae37",
+      "purpose": "offline contract-matrix tool"
+    },
+    {
+      "path": "tools/offline_contract_matrix/README.md",
+      "sha256": "de7f935ba04364b1aa082953fb4c9eadf77dd0b55296c751e8a86d12b5729715",
+      "purpose": "coverage matrix map + run docs"
+    },
+    {
+      "path": "tests/test_w06_contract_matrix.py",
+      "sha256": "ea64f9d40aa7eb11a925d07477508ecea1165fb45145c33a2876ea6b7cae7677",
+      "purpose": "oracle RED + fixture/report unit tests"
+    },
+    {
+      "path": ".planning/w06-ff-matrix/findings.md",
+      "sha256": "ad6ce3d6fd553fdd7e0df20926930dc90c72f0332b060dcf66f8e782351c3904",
+      "purpose": "lane planning files"
+    },
+    {
+      "path": ".planning/w06-ff-matrix/progress.md",
+      "sha256": "573067b2d225795fd291417f21c9471e5a7871e2d717fe39e299435ee9f85702",
+      "purpose": "lane planning files"
+    },
+    {
+      "path": ".planning/w06-ff-matrix/task_plan.md",
+      "sha256": "dfa2744ef834b11a93c2ab7141a5d8bdea380fb52619a2f701337b1a76395c8d",
+      "purpose": "lane planning files"
+    }
+  ],
+  "input_evidence": [
+    {
+      "path": "docs/handoffs/w06-ff-matrix/input/construction_card.md",
+      "sha256": "27e66f0b7d3b3a5e9a12b2f5ff898d97accf58176c6f8607faebbafa4a394e0d",
+      "bytes": 7102
+    },
+    {
+      "path": "docs/handoffs/w06-ff-matrix/input/handoff_contract.md",
+      "sha256": "593f1b15464db6dc5de382570c11196921c1997251c36ac4c452afd275d86173",
+      "bytes": 3345
+    },
+    {
+      "path": "docs/handoffs/w06-ff-matrix/input/inputs.json",
+      "sha256": "9ab29e07ca0ff74e45cf5a72961408371cb3c12966a474caaf1e9101feb3cc7f",
+      "bytes": 11682
+    },
+    {
+      "path": "docs/handoffs/w06-ff-matrix/input/ROOT_INTERFACE_AMENDMENT.md",
+      "sha256": "b874c266a4cd37cb823fcbfda556606754fbcef9294ada5919a023a7844bb9bb",
+      "bytes": 2220
+    },
+    {
+      "path": "docs/handoffs/w06-ff-matrix/input/manifest.json",
+      "sha256": "6a919bdba4cb9b7090f9bbe734075d83e5fbbdfc1cf48f5d4a0b56933fb33e5c",
+      "bytes": 547
+    },
+    {
+      "path": "docs/handoffs/w06-ff-matrix/input/amendment_manifest.json",
+      "sha256": "79277b90d41ae32fb0b0773655f82dad8cde81c2183c09fd1858de7281e15e16",
+      "bytes": 374
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "FF fetch_filing.py public CLI + EarningsTranscriptsTransport",
+      "before": "existing (read-only)",
+      "after": "unchanged",
+      "compatibility": "consumer-only; no FF code change"
+    },
+    {
+      "name": "ET transcript_tool.main + private retrieval launcher seam",
+      "before": "existing (read-only)",
+      "after": "unchanged",
+      "compatibility": "test-proxy reuses the existing _retrieval_launcher seam; no production flag added"
+    },
+    {
+      "name": "CWP SourceVersionReader.open_version / register / json_command_v1 adapter",
+      "before": "existing (read-only)",
+      "after": "unchanged",
+      "compatibility": "fixture provider stands in at the adapter boundary; real CWP ensure/import runs"
+    }
+  ],
+  "tests": [
+    {
+      "phase": "unit-oracle-red",
+      "command": "python -B -m pytest -q tests/test_w06_contract_matrix.py",
+      "exit_code": 0,
+      "counts": "12 passed",
+      "elapsed_seconds": 0.17,
+      "log": "docs/handoffs/w06-ff-matrix/logs/unit-tests.log",
+      "log_sha256": "b7da013ae6f980669e8e4620bb4c2c85b3006c5969238e809f2e2f11bf7a42c2",
+      "scope": "oracle detects all 6 failure vectors (RED); valid synthetic originals; report schema"
+    },
+    {
+      "phase": "manual-e2e-green",
+      "command": "python -B tools/offline_contract_matrix/run.py --cwp-project <cwp> --et-project <et> --owned-root <owned> --out-root <attempt-5>",
+      "exit_code": 0,
+      "counts": "16 PASS / 0 FAIL / 0 NOT_RUN; oracle PASS 0 findings",
+      "elapsed_seconds": 86.8,
+      "log": "docs/handoffs/w06-ff-matrix/attempts/attempt-5/report.json",
+      "log_sha256": "5729b09e1b0aea0d3d4f70cb1e42b2d6d7825c4a9086ec5d3c40f5e56d1df35c",
+      "scope": "real three-layer chain A + full coverage matrix; offline synthetic; test-proxy labeled"
+    }
+  ],
+  "findings": [
+    {
+      "id": "W06FF-01",
+      "root_cause": "CWP prepare_local_source returns a blocking local_metadata_gap when a same-entity-same-document_kind source exists for a different period, short-circuiting fetch_if_missing before the fixture adapter.",
+      "disposition": "fixture fetch case targets an (entity, kind) with no prior candidate so the fixture-provider boundary is reached; no product/contract change — ROOT owns any remediation",
+      "evidence": "attempts/attempt-5 report fin_hk_annual_fetch; adapter discovery reached (fixture_requests=1, downloaded_new)",
+      "test_ids": [
+        "fin_hk_annual_fetch"
+      ]
+    },
+    {
+      "id": "W06FF-02",
+      "root_cause": "FMP transcripts carry publication_date=null, so a reuse hit is reported as unknown_publication (as_of_cutoff_verified=False) rather than plain reused.",
+      "disposition": "accepted as correct product behavior; chain A run2 asserts 0 provider requests + the unknown_publication diagnostic; documented in README",
+      "evidence": "attempts/attempt-5 report chainA_download_reuse run2_status=unknown_publication run2_fixture_requests=0",
+      "test_ids": [
+        "chainA_download_reuse"
+      ]
+    },
+    {
+      "id": "W06FF-03",
+      "root_cause": "call_date after as_of_date is rejected by ET provenance/cutoff before import, surfacing a non-eligible diagnostic.",
+      "disposition": "call_past_cutoff asserts the actual cutoff diagnostic and that eligible=False; never reported historical-eligible",
+      "evidence": "attempts/attempt-5 report call_past_cutoff cutoff_diagnostic=True eligible=False",
+      "test_ids": [
+        "call_past_cutoff"
+      ]
+    },
+    {
+      "id": "W06FF-04",
+      "root_cause": "worker failure before/around HTTP yields unknown usage (null), which must not be rendered as 0 or swallowed.",
+      "disposition": "err_unknown_usage asserts provider_usage_complete=False and provider_requests=null (not 0), call preserved",
+      "evidence": "attempts/attempt-5 report err_unknown_usage provider_requests=null unknown_usage_reported_as_zero=False",
+      "test_ids": [
+        "err_unknown_usage"
+      ]
+    }
+  ],
+  "cleanup": {
+    "owned_root": "ephemeral temp per run (mktemp); not retained",
+    "baseline": "production config/original metadata (stat+sha) recorded before",
+    "after": "re-snapshotted after; compare equal",
+    "restored": true,
+    "raw_unchanged": true
+  },
+  "cost": {
+    "provider_calls": 0,
+    "model_calls": 0,
+    "paid_usd": 0,
+    "unknown_charge": null,
+    "fixture_requests": 9,
+    "note": "all provider requests are offline fixture requests, excluded from the real-cost ledger"
+  },
+  "space": {
+    "retained_bytes": null,
+    "scratch_peak_bytes": null,
+    "measurement": "attempts+logs < 400KiB retained; scratch (owned root) torn down each run"
+  },
+  "remaining": [
+    "Offline synthetic only: proves contract wiring, not external reachability, real supplier completeness, or economic quality.",
+    "Non-periodic kinds import correctly here; any real unsupported kind is a named gap for ROOT (none observed in this fixture set).",
+    "ROOT re-runs the real three-layer key path with final CWP/ET code before merging."
+  ],
+  "root_next_action": "ROOT: run tools/offline_contract_matrix/run.py with final CWP/ET roots to re-confirm the real three-layer key path, then merge; consider W06FF-01 (prepare_local_source cross-period blocking) and W06FF-02 (FMP unknown_publication on reuse) as candidate product follow-ups."
+}
