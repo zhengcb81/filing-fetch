@@ -483,3 +483,116 @@ def test_public_loader_rejects_malformed_persistent_tool(tmp_path, invalid):
     with pytest.raises(FilingFetchError) as error:
         load_company_wiki_root(config_path=config)
     assert error.value.code == "config_error"
+
+
+
+@pytest.mark.parametrize("schema,diagnostic,reason", [
+    ("earnings-transcript-result/2", "call_after_as_of", "call_after_as_of"),
+    ("earnings-transcript-result/1", "publication_after_as_of", "publication_after_as_of"),
+    ("earnings-transcript-result/2", None, "exact_transcript_missing"),
+    ("earnings-transcript-result/1", None, "exact_transcript_missing"),
+    ("earnings-transcript-result/2", "child_free_text_never_public", "exact_transcript_missing"),
+    ("earnings-transcript-result/2", ["call_after_as_of"], "exact_transcript_missing"),
+    ("earnings-transcript-result/2", "provider_deadline", "exact_transcript_missing"),
+])
+@pytest.mark.parametrize("usage_complete", [True, False])
+def test_not_found_result_preserves_date_cause_without_claiming_provider_outage(
+    tmp_path, monkeypatch, schema, diagnostic, reason, usage_complete,
+):
+    result = {"schema_version": schema, "request_id": "w07", "provider": "fmp",
+              "status": "not_found", "fiscal_period": "2026-Q4", "candidate_count": 0}
+    if diagnostic is not None:
+        result["error_code"] = diagnostic
+    usage = {"schema_version": "earnings-retrieval-usage/1", "request_id": "w07",
+             "usage_complete": True, "usage": {"requests_used": 1, "response_bytes_used": 512}}
+    calls = []
+    def run(command, **kwargs):
+        calls.append(command)
+        return json.dumps(result).encode(), json.dumps(usage).encode() if usage_complete else b"", 0
+    monkeypatch.setattr(transport_module, "_run_bounded_json", run)
+    # A synthetic environment seam; never resolve/read any host credential.
+    transport = _transport(tmp_path)
+    monkeypatch.setattr(transport, "_et_environment", lambda: ({}, None))
+    public = transport._et_result(request=_request(), limits=_limits())
+    assert public["status"] == "not_found"
+    assert public["reason"] == reason
+    assert public["retryable"] is False
+    assert len(calls) == 1
+    assert public["provider_calls"] == 1
+    assert public["provider_usage_complete"] is usage_complete
+    assert public["provider_requests"] == (1 if usage_complete else None)
+    assert public["provider_response_bytes"] == (512 if usage_complete else None)
+    assert public["provider_started"] is (True if usage_complete else None)
+    assert "child_free_text_never_public" not in json.dumps(public)
+    assert "source_ref" not in public
+
+
+
+@pytest.mark.parametrize("field,value,exit_code,reason", [
+    ("request_id", "unrelated-request", 0, "provider_result_invalid"),
+    ("schema_version", "earnings-transcript-result/3", 0, "provider_result_invalid"),
+    ("schema_version", ["earnings-transcript-result/2"], 0, "provider_result_invalid"),
+    ("schema_version", {"version": "earnings-transcript-result/2"}, 0, "provider_result_invalid"),
+    ("provider", "unrelated-provider", 0, "provider_result_invalid"),
+    ("fiscal_period", "2026-Q3", 0, "provider_result_invalid"),
+    ("candidate_count", 1, 0, "provider_result_invalid"),
+    ("candidate_count", True, 0, "provider_result_invalid"),
+    ("candidate_count", "0", 0, "provider_result_invalid"),
+    (None, None, 2, "provider_tool_failed"),
+])
+def test_not_found_envelope_cannot_claim_cutoff_for_unrelated_or_failed_child(
+    tmp_path, monkeypatch, field, value, exit_code, reason,
+):
+    result = {"schema_version": "earnings-transcript-result/2", "request_id": "w07",
+              "provider": "fmp", "status": "not_found", "fiscal_period": "2026-Q4",
+              "candidate_count": 0, "error_code": "call_after_as_of"}
+    if field is not None:
+        result[field] = value
+    receipt = {"schema_version": "earnings-retrieval-usage/1", "request_id": "w07",
+               "usage_complete": True, "usage": {"requests_used": 1, "response_bytes_used": 512}}
+    calls = []
+    def run(command, **kwargs):
+        calls.append(command)
+        return json.dumps(result).encode(), json.dumps(receipt).encode(), exit_code
+    monkeypatch.setattr(transport_module, "_run_bounded_json", run)
+    transport = _transport(tmp_path)
+    monkeypatch.setattr(transport, "_et_environment", lambda: ({}, None))
+    public = transport._et_result(request=_request(), limits=_limits())
+    assert public["status"] == "provider_unavailable"
+    assert public["reason"] == reason
+    assert public["retryable"] is False
+    assert public["provider_requests"] == 1
+    assert public["provider_response_bytes"] == 512
+    assert public["provider_usage_complete"] is True
+    assert public["provider_started"] is True
+    assert public["provider_calls"] == 1
+    assert "call_after_as_of" not in json.dumps(public)
+    assert "source_ref" not in public
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("stdout", [b"{broken-json", b"[]", b"null"])
+def test_malformed_stdout_preserves_independently_verified_usage(
+    tmp_path, monkeypatch, stdout,
+):
+    receipt = {"schema_version": "earnings-retrieval-usage/1", "request_id": "w07",
+               "usage_complete": True,
+               "usage": {"requests_used": 1, "response_bytes_used": 987}}
+    calls = []
+    def run(command, **kwargs):
+        calls.append(command)
+        return stdout, json.dumps(receipt).encode("utf-8"), 0
+    monkeypatch.setattr(transport_module, "_run_bounded_json", run)
+    transport = _transport(tmp_path)
+    monkeypatch.setattr(transport, "_et_environment", lambda: ({}, None))
+    public = transport._et_result(request=_request(), limits=_limits())
+    assert public["status"] == "provider_unavailable"
+    assert public["reason"] == "provider_result_invalid"
+    assert public["provider_requests"] == 1
+    assert public["provider_response_bytes"] == 987
+    assert public["provider_usage_complete"] is True
+    assert public["provider_started"] is True
+    assert public["provider_calls"] == 1
+    assert public["retryable"] is False
+    assert "source_ref" not in public
+    assert len(calls) == 1

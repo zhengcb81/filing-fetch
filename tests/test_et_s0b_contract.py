@@ -90,3 +90,39 @@ def test_fmp_extra_field_cannot_silently_change_frozen_26_key_contract() -> None
     result["published_date"] = result["call_date"]
     with pytest.raises(ETContractError):
         normalize_et_v2_result(result, fixture("fmp_v2.request.json"))
+
+
+
+def _not_found_receipt(diagnostic=None):
+    request = fixture("fmp_v2.request.json")
+    result = {"schema_version": "earnings-transcript-result/2", "request_id": request["request_id"],
+              "status": "not_found", "provider": "fmp", "fiscal_period": "2026-Q3",
+              "candidate_count": 0}
+    if diagnostic is not None:
+        result["error_code"] = diagnostic
+    return request, result
+
+
+@pytest.mark.parametrize("diagnostic,reason", [
+    (None, "exact_transcript_missing"),
+    ("call_after_as_of", "call_after_as_of"),
+    ("publication_after_as_of", "publication_after_as_of"),
+])
+def test_not_found_consumer_contract_preserves_optional_date_diagnostic(diagnostic, reason):
+    request, result = _not_found_receipt(diagnostic)
+    original = copy.deepcopy(result)
+    assert normalize_et_v2_result(result, request) == {"status": "not_found", "reason": reason}
+    assert result == original
+
+
+@pytest.mark.parametrize("field,value", [
+    ("request_id", "unrelated-request"), ("provider", "unrelated-provider"),
+    ("fiscal_period", "2026-Q4"), ("candidate_count", 1), ("candidate_count", True),
+    ("error_code", "child_free_text_never_public"), ("error_code", ["call_after_as_of"]),
+    ("reason", "call_after_as_of"),
+])
+def test_not_found_consumer_contract_rejects_invalid_binding_or_unknown_diagnostic(field, value):
+    request, result = _not_found_receipt("call_after_as_of")
+    result[field] = value
+    with pytest.raises(ETContractError):
+        normalize_et_v2_result(result, request)

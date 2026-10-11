@@ -435,3 +435,56 @@ def test_creationflags_handles_a_missing_windows_constant(monkeypatch) -> None:
     monkeypatch.setattr(transcript_tool_transport, "subprocess", SimpleNamespace())
 
     assert EarningsTranscriptsTransport._creationflags() == 0
+
+
+
+@pytest.mark.parametrize("diagnostic,reason", [
+    ("call_after_as_of", "call_after_as_of"),
+    ("publication_after_as_of", "publication_after_as_of"),
+    (None, "exact_transcript_missing"),
+])
+@pytest.mark.parametrize("usage_complete", [True, False])
+def test_not_found_transcript_stops_before_import_and_survives_public_envelope(
+    tmp_path, monkeypatch, diagnostic, reason, usage_complete,
+):
+    from ff_v2_envelope import _transcript_result
+
+    tool = tmp_path / "transcript_tool.py"
+    tool.write_text("# synthetic supplier receipt only", encoding="utf-8")
+    request_id = "urn:company-wiki:source-request:sha256:" + "c" * 64
+    commands = []
+    def run(command, *, input_bytes=None, **kwargs):
+        commands.append(command)
+        if "source_query_cli" in " ".join(command):
+            payload = {"schema_version": "2.0", "status": "not_found", "reason": "no_local_match",
+                       "request_id": request_id, "matches": [], "candidates": [],
+                       "source_read_policy_sha256": "d" * 64}
+            return json.dumps(payload).encode(), b"", 0
+        assert str(tool) in command, "not_found must never import or open a source"
+        request = json.loads(input_bytes)
+        payload = {"schema_version": "earnings-transcript-result/2", "request_id": request["request_id"],
+                   "provider": "fmp", "status": "not_found", "fiscal_period": "2026-Q3",
+                   "candidate_count": 0}
+        if diagnostic is not None:
+            payload["error_code"] = diagnostic
+        receipt = {"schema_version": "earnings-retrieval-usage/1", "request_id": request_id,
+                   "usage_complete": True, "usage": {"requests_used": 1, "response_bytes_used": 512}}
+        return json.dumps(payload).encode(), json.dumps(receipt).encode() if usage_complete else b"", 0
+    monkeypatch.setattr(transcript_tool_transport, "_run_bounded_json", run)
+    transport = EarningsTranscriptsTransport(wiki_root=tmp_path, transcript_tool=tool,
+                                            deadline=time.monotonic() + 30)
+    monkeypatch.setattr(transport, "_et_environment", lambda: ({}, None))
+    result = resolve_companion_transcript(request=_request(), filing_handle=_filing(), transport=transport)
+    public = _transcript_result(result)
+    assert public["status"] == "not_found"
+    assert public["reason"] == reason
+    assert public["retryable"] is False
+    assert public["provider_calls"] == 1
+    assert public["provider_usage_complete"] is usage_complete
+    assert public["provider_requests"] == (1 if usage_complete else None)
+    assert public["provider_response_bytes"] == (512 if usage_complete else None)
+    assert public["provider_started"] is (True if usage_complete else None)
+    assert "source_ref" not in public
+    assert len(commands) == 2
+    assert sum(str(tool) in command for command in commands) == 1
+    assert transport.company_wiki_calls == 1

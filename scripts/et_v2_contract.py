@@ -27,6 +27,12 @@ _FMP_SUCCESS_KEYS = frozenset({
     "effective_url", "http_status", "retrieved_at",
     "adapter_name", "adapter_version",
 })
+# Additive not_found diagnostics share one finite vocabulary with the transport.
+# Importing this constant does not add another production contract validator.
+ET_NOT_FOUND_DIAGNOSTICS = frozenset({"call_after_as_of", "publication_after_as_of"})
+_NOT_FOUND_KEYS = frozenset({
+    "schema_version", "request_id", "status", "provider", "fiscal_period", "candidate_count",
+})
 _FAILURE_KEYS = frozenset({
     "schema_version", "request_id", "status", "provider", "error_code",
 })
@@ -135,6 +141,26 @@ def _period(request: dict[str, Any]) -> str:
     return f"{year}-Q{quarter}"
 
 
+def _not_found_result(result: dict[str, Any], request: dict[str, Any]) -> dict[str, Any]:
+    """Read ordinary/legacy missing results and additive actual date exclusions."""
+    fields = frozenset(result)
+    if not (_NOT_FOUND_KEYS <= fields <= (_NOT_FOUND_KEYS | {"error_code"})):
+        _fail("not_found_keys")
+    if result.get("provider") != request.get("provider"):
+        _fail("provider")
+    if result.get("fiscal_period") != _period(request):
+        _fail("fiscal_period")
+    if type(result.get("candidate_count")) is not int or result["candidate_count"] != 0:
+        _fail("candidate_count")
+    reason = "exact_transcript_missing"
+    if "error_code" in result:
+        diagnostic = result["error_code"]
+        if not isinstance(diagnostic, str) or diagnostic not in ET_NOT_FOUND_DIAGNOSTICS:
+            _fail("not_found_diagnostic")
+        reason = diagnostic
+    return {"status": "not_found", "reason": reason}
+
+
 def _success_identity(result: dict[str, Any], request: dict[str, Any]) -> str:
     if frozenset(result) != _FMP_SUCCESS_KEYS:
         _fail("fmp_success_keys")
@@ -214,6 +240,8 @@ def normalize_et_v2_result(
     if not isinstance(result, dict) or not isinstance(request, dict):
         _fail("shape")
     _check_header(result, request)
+    if result.get("status") == "not_found":
+        return _not_found_result(result, request)
     if result.get("status") != "fetched":
         return _failure_result(result, request)
     fiscal_period = _success_identity(result, request)

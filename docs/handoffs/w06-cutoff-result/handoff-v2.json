@@ -1,0 +1,32 @@
+{
+  "schema_version": "root-w06-ff-malformed-usage-repair/1",
+  "verdict": "AUTHOR_COMPLETE_PENDING_INDEPENDENT_REREVIEW",
+  "root": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix-root",
+  "changed_files": [
+    "scripts/transcript_tool_transport.py",
+    "tests/test_transcript_launch_contract.py"
+  ],
+  "red": {
+    "failed": 3,
+    "seconds": 0.37
+  },
+  "concentrated": {
+    "passed": 137,
+    "skipped": 4,
+    "seconds": 2.46
+  },
+  "lint_diff": "PASS",
+  "et_products_unchanged": true,
+  "old_freeze_preserved": true,
+  "tools_unchanged": 205,
+  "protected_unchanged": 354,
+  "new_freeze": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.planning\\w06-cross-period-acquisition\\cutoff-implementation\\product-freeze-v2.json",
+  "new_freeze_sha256": "87495b11e3c41986c3a10374bae0c603af6db4d61d7b8ed8c6a01771b7ed3381",
+  "resources": {
+    "real_network_keys_config_raw_llm": 0,
+    "scratch_restored": 3,
+    "git_publish": false
+  },
+  "next_step": "Independent reviewer receives v2 freeze and concentrates on original cutoff probes, including the three malformed usage failures; ROOT owns matrix timing and normal publication",
+  "stop": true
+}

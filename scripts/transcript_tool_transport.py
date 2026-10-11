@@ -15,6 +15,8 @@ import sys
 import time
 from typing import Any
 
+from et_v2_contract import ET_NOT_FOUND_DIAGNOSTICS
+
 
 _LOOKUP_SCHEMA = "company-wiki-transcript-import-lookup-request/1"
 _IMPORT_SCHEMA = "company-wiki-transcript-import-request/2"
@@ -577,31 +579,64 @@ class EarningsTranscriptsTransport:
                 "provider_calls": 1,
                 **_provider_usage(b"", request["request_id"]),
             }
-        self._last_provider_usage = _provider_usage(usage_stderr, request["request_id"], credential)
+        # Transport usage is independent of whether stdout is a valid document.
+        # Parse the bounded, request-bound receipt once and preserve that snapshot
+        # in all later failure projections, including malformed JSON/type errors.
+        provider_usage = _provider_usage(usage_stderr, request["request_id"], credential)
+        self._last_provider_usage = provider_usage
+
+        def unavailable(
+            reason: str, *, calls: int = 1, retryable: bool = False,
+        ) -> dict[str, Any]:
+            return {
+                "status": "provider_unavailable",
+                "reason": reason,
+                "retryable": retryable,
+                "provider_calls": calls,
+                "provider_started": self._provider_started(provider_usage),
+                **provider_usage,
+            }
+
         if _credential_exposed(stdout, usage_stderr, credential):
-            return {"status": "provider_unavailable", "reason": "provider_credentials_leaked",
-                    "retryable": False, "provider_calls": 1,
-                    "provider_started": self._provider_started(self._last_provider_usage),
-                    **self._last_provider_usage}
+            return unavailable("provider_credentials_leaked")
         try:
             result = json.loads(stdout.decode("utf-8", errors="strict"))
         except (UnicodeError, json.JSONDecodeError):
-            return {
-                "status": "provider_unavailable",
-                "reason": "provider_result_invalid",
-                "retryable": False,
-                "provider_calls": 1,
-                **_provider_usage(b"", request["request_id"]),
-            }
+            return unavailable("provider_result_invalid")
         if not isinstance(result, dict):
+            return unavailable("provider_result_invalid")
+        if result.get("status") == "not_found":
+            # Bind this one process receipt to the current request. This is not
+            # another company-identity lookup or a source-byte validation.
+            invalid = (
+                result.get("schema_version") not in (
+                    "earnings-transcript-result/1", "earnings-transcript-result/2",
+                )
+                or result.get("request_id") != et_request["request_id"]
+                or result.get("provider") != et_request["provider"]
+                or result.get("fiscal_period")
+                != f"{et_request['fiscal_year']}-Q{et_request['fiscal_quarter']}"
+                or type(result.get("candidate_count")) is not int
+                or result["candidate_count"] != 0
+            )
+            if code != 0 or invalid:
+                return unavailable(
+                    "provider_tool_failed" if code != 0 else "provider_result_invalid",
+                )
+            # A completed lookup with no eligible transcript is not a provider
+            # outage. Only a producer-declared finite date diagnostic can name
+            # a cutoff; neither zero candidates nor child free text proves one.
+            diagnostic = result.get("error_code")
+            reason = (diagnostic if isinstance(diagnostic, str)
+                      and diagnostic in ET_NOT_FOUND_DIAGNOSTICS else "exact_transcript_missing")
             return {
-                "status": "provider_unavailable",
-                "reason": "provider_result_invalid",
+                "status": "not_found",
+                "reason": reason,
                 "retryable": False,
                 "provider_calls": 1,
-                **_provider_usage(b"", request["request_id"]),
+                "provider_started": self._provider_started(provider_usage),
+                **provider_usage,
             }
-        self._last_provider_usage = _provider_usage(usage_stderr, request["request_id"], credential)
         if result.get("status") != "fetched":
             error_code = result.get("error_code")
             safe_code = (
@@ -610,23 +645,13 @@ class EarningsTranscriptsTransport:
                 else "provider_unavailable"
             )
             calls = 0 if safe_code in {"provider_credentials_missing", "provider_disabled", "provider_cost_unknown", "provider_cost_budget_exceeded", "candidate_discovery_unavailable", "candidate_fetch_unavailable", "unsupported_market", "unsupported_exchange", "provider_credentials_file_unavailable", "provider_credentials_file_empty", "provider_credentials_file_invalid"} else 1
-            return {
-                "status": "provider_unavailable",
-                "reason": safe_code,
-                "retryable": self._last_provider_usage["provider_usage_complete"] and result.get("status")
-                in {"rate_limited", "provider_error"},
-                "provider_calls": calls,
-                "provider_started": self._provider_started(self._last_provider_usage),
-                **self._last_provider_usage,
-            }
+            return unavailable(
+                safe_code, calls=calls,
+                retryable=provider_usage["provider_usage_complete"] and result.get("status")
+                in ("rate_limited", "provider_error"),
+            )
         if code != 0:
-            return {
-                "status": "provider_unavailable",
-                "reason": "provider_tool_failed",
-                "retryable": False,
-                "provider_calls": 1,
-                **self._last_provider_usage,
-            }
+            return unavailable("provider_tool_failed")
         return result
 
     def _candidate(

@@ -1,0 +1,111 @@
+{
+  "schema_version": "ff-cutoff-author-report/2",
+  "verdict": "AUTHOR_COMPLETE_PENDING_ROOT_REAL41",
+  "worktree": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w06\\ff-contract-matrix-root",
+  "head_before": "88997b85ce5be20dc3d563b5c040706590df6dbb",
+  "head_after": "88997b85ce5be20dc3d563b5c040706590df6dbb",
+  "files": [
+    {
+      "path": "scripts/transcript_tool_transport.py",
+      "sha256": "781509900fc767a162fb9b530bc54c96f6d560a5157886df182815e6fc9c386c",
+      "bytes": 36981
+    },
+    {
+      "path": "scripts/et_v2_contract.py",
+      "sha256": "50bc9db60ac0ab16dcc0cb63f67f557857bf04c47dc19c5777e22028eb4f1d00",
+      "bytes": 10157
+    },
+    {
+      "path": "tests/test_transcript_launch_contract.py",
+      "sha256": "e2c43e092d15a94cc8813b0e3148d01f921d862e3e873573fbbd42cfcc2f08f2",
+      "bytes": 29605
+    },
+    {
+      "path": "tests/test_transcript_companion_transport.py",
+      "sha256": "643251a8d6adfb74c1fdfa6cb83e17bec8cafef9a56daf40c2e7ed35c7ba389a",
+      "bytes": 20348
+    },
+    {
+      "path": "tests/test_et_s0b_contract.py",
+      "sha256": "8280d87f5bfddaa1431e40f84a793ef63cde53dbb4f1a69deeaf122f79971f34",
+      "bytes": 4901
+    }
+  ],
+  "product_freeze_final_sha256": "a235b0c2c25f6c52a6402dd160737f2ec6ffa10309c368ee6eb06fbdc332cf4f",
+  "evidence_directory": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.planning\\w06-cross-period-acquisition\\cutoff-implementation\\ff",
+  "business_red": {
+    "failed": 23,
+    "passed": 8,
+    "pytest_seconds": 1.09
+  },
+  "binding_red": {
+    "failed": 8,
+    "pytest_seconds": 1.03
+  },
+  "schema_types_red": {
+    "failed": 2,
+    "passed": 1,
+    "pytest_seconds": 0.95
+  },
+  "final_author_focused": {
+    "passed": 41,
+    "deselected": 77,
+    "pytest_seconds": 0.55
+  },
+  "root_concentrated": {
+    "passed": 134,
+    "skipped": 4,
+    "pytest_seconds": 1.9,
+    "receipt": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.planning\\w06-cross-period-acquisition\\cutoff-implementation\\ff\\concentrated-final2.json",
+    "skips": [
+      {
+        "classname": "tests.test_transcript_launch_contract",
+        "name": "test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[HKEX-unsupported_market]",
+        "reason": "W07 real ET checkout integration requires an explicit test tool path"
+      },
+      {
+        "classname": "tests.test_transcript_launch_contract",
+        "name": "test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[NASDAQ-provider_credentials_missing]",
+        "reason": "W07 real ET checkout integration requires an explicit test tool path"
+      },
+      {
+        "classname": "tests.test_transcript_launch_contract",
+        "name": "test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[TOKYO-unsupported_exchange]",
+        "reason": "W07 real ET checkout integration requires an explicit test tool path"
+      },
+      {
+        "classname": "tests.test_transcript_companion_transport",
+        "name": "test_real_cwp_cli_import_and_unknown_publication_replay",
+        "reason": "company-wiki source checkout is not available for cross-project E2E"
+      }
+    ]
+  },
+  "protected_count": 354,
+  "protected_changed": [],
+  "tool_freeze_count": 205,
+  "tool_changed": [],
+  "scratch_restored": true,
+  "real_key_reads": 0,
+  "real_provider_calls": 0,
+  "llm_calls": 0,
+  "still_required": [
+    "ROOT unchanged original41 real offline matrix",
+    "ROOT publication"
+  ],
+  "historical_receipts_retained": [
+    "product-freeze.json",
+    "business-red",
+    "focused-green",
+    "binding-red",
+    "binding-green",
+    "schema-type-red",
+    "schema-types-red",
+    "concentrated",
+    "concentrated-final"
+  ],
+  "notes": [
+    "One existing process receipt boundary; no second production identity/raw validator.",
+    "SKIP is not PASS; ROOT real matrix owns actual three-layer integration.",
+    "No tools/oracle/golden/config/ET/CWP product/Git changes."
+  ]
+}
