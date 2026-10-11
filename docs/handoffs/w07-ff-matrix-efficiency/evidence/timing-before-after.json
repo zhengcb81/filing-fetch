@@ -1,0 +1,63 @@
+{
+  "schema": "w07-ff-timing-before-after/1",
+  "note": "measured on the same workstation; load makes single-process cost swing 2-3x (ff_hit 1.55s..5.43s observed)",
+  "before": {
+    "full_batch_attempts": [
+      {
+        "what": "pre-fix attempt (card record)",
+        "result": "2 PASS / 31 PARTIAL / 8 NOT_RUN",
+        "seconds": 182.8623
+      },
+      {
+        "what": "pre-fix attempt (card record)",
+        "result": "1 PASS / 27 PARTIAL / 13 NOT_RUN",
+        "seconds": 184.54
+      },
+      {
+        "what": "first run of this lane (post seed/cache pre-warm-fix, workers=1)",
+        "result": "33 PASS / 1 PARTIAL / 7 NOT_RUN",
+        "seconds": 174.4,
+        "evidence": "evidence/first-run-failure-report.json"
+      }
+    ],
+    "unit_probes": {
+      "warm_cwp_cli_import_cold_cache_seconds": 2.47,
+      "warm_cwp_cli_import_warm_cache_seconds": 0.84,
+      "warm_ensure_via_helper_seconds": 1.8,
+      "ff_local_hit_seconds": 2.75,
+      "ff_et_companion_seconds": 3.23,
+      "company_wiki_pyc_cached_before": 0,
+      "root_cause": "PYTHONPYCACHEPREFIX mirror paths over Windows MAX_PATH silently uncached (security_identity cache path 274 chars)"
+    }
+  },
+  "after": {
+    "final_full_batch": {
+      "result": "41 PASS / 0 FAIL / 0 PARTIAL / 0 NOT_RUN",
+      "seconds": 90.294,
+      "oracle_findings": 0,
+      "budget_seconds": 180,
+      "case_limit_seconds": 30,
+      "evidence": "evidence/final-41-report.json"
+    },
+    "phase_timing_seconds": {
+      "binding": 2.9965,
+      "seed": 19.4385,
+      "ff_cli_work": 132.6748,
+      "et_supervisor_worker_work": 10.6909,
+      "fixture_work": 3.1491,
+      "fresh_source_proof": 1.4717,
+      "cleanup": 0.337,
+      "total_wall": 90.294
+    },
+    "launches": {
+      "parent_launch_total": 63,
+      "guard_boots_total_incl_nested": 278,
+      "ff_cli_runs": 52
+    },
+    "unit_probes_after": {
+      "ff_local_hit_seconds": 1.55,
+      "company_wiki_pyc_cached_after": 98,
+      "max_pyc_path_len": 252
+    }
+  }
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "path": "tools/offline_contract_matrix/runtime.py",
+    "purpose": "measured launch log; MAX_PATH-safe short-path bytecode cache; child reaping on any error",
+    "sha256": "9c820df3b64206a0ea9fbc9a2e53ef1111ed689f3026ff95dfe219feb23bf169",
+    "bytes": 12982
+  },
+  {
+    "path": "tools/offline_contract_matrix/run.py",
+    "purpose": "proof reserve inside unchanged 30/180 budget; single-helper seed batch; ff_cli timing; per-group artifact prefix; env reuse",
+    "sha256": "67bec7822172d9396329ee7d814cdae87a177888634e9f2f2768a200c8a8cafa",
+    "bytes": 19637
+  },
+  {
+    "path": "tools/offline_contract_matrix/cli_main.py",
+    "purpose": "phase timing + launch accounting; truthful dependency provenance; cache-warming binding probe; 2 isolated worker groups; final-proof scheduling",
+    "sha256": "81377e5c1dd2d6b47681ba4ff93f3e34144f4a38b3cd2683d40437abe2c2553a",
+    "bytes": 19397
+  },
+  {
+    "path": "tools/offline_contract_matrix/measurement.py",
+    "purpose": "new PhaseTimer/launch_report/merge/cache_stats helpers",
+    "sha256": "8eb423f28ade49ab4950bccdaf005949890d0576b54945f88f82039344496eea",
+    "bytes": 9489
+  },
+  {
+    "path": "tools/offline_contract_matrix/seed_batch.py",
+    "purpose": "new bounded single-process sequential real CWP ensure writer",
+    "sha256": "64d71517a1dc7189f644e9fa4a3a4d881e779f6851e02d35ef587f40eef766dc",
+    "bytes": 4904
+  },
+  {
+    "path": "tools/offline_contract_matrix/matrix_cases.py",
+    "purpose": "seed_all only; all other handler ASTs byte-equal to case-handler-baseline.json",
+    "sha256": "a49d0e5a4ef6eee47c126c36c3e7342f366669819f65eaf149df90904138dfb6",
+    "bytes": 24322
+  },
+  {
+    "path": "tests/test_w07_matrix_efficiency.py",
+    "purpose": "new W07 focused suite: 18 tests (scheduling REDs, measurement contract, isolation)",
+    "sha256": "389d6e57e84be40d3831bb1113433fc1afdfc5f908f3d29fba49d391a99b1ff3",
+    "bytes": 24397
+  }
+]
