@@ -54,19 +54,12 @@ budget.
    update catalog metadata; it never downloads. Unknown date, withdrawn source,
    damaged bytes or ambiguous identity remain named gaps. Consumers still verify
    the exact source bytes through the public reader.
- 5. **Pause around downloads (retired)** — filing-fetch no longer probes
-    worker-status or writes pause files: the old pause-around orchestration
-    was removed in this lane. company-wiki retired the worker routes
-    (`73de6be refactor: retire legacy source catalog worker routes`):
-    `ensure --allow-download` never consults worker state. `--no-pause-worker`
-    and the `--worker-*` timing flags still parse for existing callers and are
-    accepted as inert no-ops.
-6. **Ensure (download)** — only for `fetch_if_missing`. company-wiki routes by
-   market and writes new bytes under
-   `companies/{entity}/raw/financial_reports/{annual|semi_annual|quarterly}/`
-   with a `<file>.source.json` provenance sidecar. The request's byte, time
-   and fee ceilings travel on this call (see *Acquisition limits*).
-7. **Return the result** — either a capture-ready `source_candidate` or an
+5. **Ensure (download)** — only for `fetch_if_missing`. company-wiki chooses
+   the configured market provider and registers immutable original bytes and
+   provenance through its storage layer. Consume the resulting logical source
+   reference; do not derive or scan provider output directories. The request's
+   byte, time and fee ceilings travel on this call (see *Acquisition limits*).
+6. **Return the result** — either a capture-ready `source_candidate` or an
    honest `gap`. A gap the producer still reports is never rewritten into a
    capture that did not happen.
 

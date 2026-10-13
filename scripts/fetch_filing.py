@@ -5,14 +5,14 @@ company, then resolves (reuses) an existing filing in company-wiki, or delegates
 a missing-source download according to the task's acquisition intent and limits.
 Existing company/session authorization carries forward without another
 per-document permission receipt. company-wiki routes by market:
-A-share (CN) -> StockInfoDLSimple/cninfo, HK/US ->
-dayu-agent. Newly downloaded bytes are written into company-wiki under
-``companies/{entity}/raw/{kind}/`` with immutable provenance; the calculation
-engines of consuming skills never import a downloader.
+configured market providers (CN uses StockInfoDLSimple/cninfo; HK/US use the
+configured Dayu integration). CWP stores originals and immutable provenance
+through its storage layer; consuming calculation engines never locate a
+provider output directory or import a downloader.
 
 Run directly:
 
-    echo '{"company_query":"AMD","document_kind":"annual_report","fiscal_year":2025,"as_of_date":"2026-07-18"}' \\
+    echo '{"schema_version":"2.0","company_query":"AMD","document_kind":"annual_report","fiscal_year":2025,"as_of_date":"2026-07-18","filing_intent":"reuse_only"}' \\
       | python scripts/fetch_filing.py [--allow-download] [--config PATH] [--request-file PATH]
 """
 
@@ -32,7 +32,6 @@ from typing import Any
 from filing_contracts import (  # noqa: E402  re-export
     FILING_RESPONSE_SCHEMA_VERSION,
     FILING_V2_REQUEST_SCHEMA_VERSION,
-    CONFIG_TOKEN_RE,
     COMPANY_WIKI_CONFIG_SCHEMA_VERSION,
     COMPANY_WIKI_IDENTITY_SCHEMA_VERSION,
     SUPPORTED_COMPANY_WIKI_CONTRACTS,
@@ -60,6 +59,14 @@ from ff_process_transport import (  # noqa: E402
 # by classification and the optional upstream_cause envelope field.
 import ff_provider_cause
 
+from ff_configuration import load_connection_root, validate_company_wiki_root
+from ff_source_candidate import (
+    COMPANY_IDENTITY_FIELDS as _COMPANY_IDENTITY_FIELDS,
+    SOURCE_CANDIDATE_FIELDS as _SOURCE_CANDIDATE_FIELDS,
+    contains_physical_field as _contains_physical_field,
+    validate_source_candidate,
+)
+
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
 
@@ -77,53 +84,6 @@ _CATALOG_RETRY_CODES = frozenset({"catalog_locked", "catalog_busy", "db_timeout"
 
 # The opt-in v2 result contains only source/business facts. A path in the
 # upstream legacy match is a transient storage detail, never a consumer handle.
-_SOURCE_CANDIDATE_FIELDS = frozenset(
-    {
-        "request_id",
-        "document_id",
-        "source_id",
-        "title",
-        "document_kind",
-        "fiscal_year",
-        "fiscal_period",
-        "period_end",
-        "form_type",
-        "market",
-        "security_id",
-        "language",
-        "published_date",
-        "https_url",
-        "snapshot_sha256",
-        "content_sha256",
-        "retrieved_at",
-        "provider",
-        "provider_document_id",
-        "collector_name",
-        "collector_version",
-        "byte_size",
-        "mime_type",
-        "capture_ready",
-    }
-)
-_COMPANY_IDENTITY_FIELDS = frozenset(
-    {
-        "canonical_name",
-        "market",
-        "exchange",
-        "ticker",
-        "security_id",
-        "match_basis",
-        "matched_value",
-        "source_name",
-        "source_url",
-        "source_record_id",
-        "verified",
-        "active",
-    }
-)
-_SOURCE_REF_FIELDS = frozenset(
-    {"schema_version", "document_id", "source_id", "content_sha256", "byte_size", "mime_type"}
-)
 _QUERY_REQUEST_FIELDS = frozenset(
     {
         "entity",
@@ -143,105 +103,15 @@ _QUERY_REQUEST_FIELDS = frozenset(
 
 
 def _validate_company_wiki_root(root: Path) -> Path:
-    if not isinstance(root, Path):
-        raise TypeError("company_wiki_root must be pathlib.Path")
-    try:
-        resolved = root.expanduser().resolve(strict=True)
-    except OSError as exc:
-        raise FilingFetchError(
-            f"configured company_wiki_root does not exist: {root}",
-            code="config_error",
-        ) from exc
-    if not resolved.is_dir():
-        raise FilingFetchError(
-            "configured company_wiki_root must be a directory", code="config_error"
-        )
-    catalog_config = resolved / "config" / "source_catalog.yaml"
-    if not catalog_config.is_file():
-        raise FilingFetchError(
-            "configured company_wiki_root lacks config/source_catalog.yaml",
-            code="config_error",
-        )
-    return resolved
+    """Compatibility alias; physical-root validation has one implementation."""
+    return validate_company_wiki_root(root)
 
 
 def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
-    """Load and validate the persistent company-wiki root configuration."""
-
+    """Load the persistent connection using the shared bounded config parser."""
     if config_path is not None and not isinstance(config_path, Path):
         raise TypeError("config_path must be pathlib.Path or None")
-    selected = config_path or DEFAULT_COMPANY_WIKI_CONFIG
-    try:
-        selected = selected.expanduser().resolve(strict=True)
-    except OSError as exc:
-        raise FilingFetchError(
-            f"company-wiki config does not exist: {selected}", code="config_error"
-        ) from exc
-    if not selected.is_file():
-        raise FilingFetchError("company-wiki config must be a file", code="config_error")
-    try:
-        payload = json.loads(selected.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise FilingFetchError(f"invalid company-wiki config: {exc}", code="config_error") from exc
-    if not isinstance(payload, dict):
-        raise FilingFetchError("company-wiki config must be an object", code="config_error")
-    required = {"schema_version", "company_wiki_root"}
-    if not set(payload) <= required | {"fmp_api_key_file", "earnings_transcripts_tool"} or not required <= set(payload):
-        raise FilingFetchError(
-            "company-wiki config must contain schema_version/company_wiki_root "
-            "and only optional fmp_api_key_file/earnings_transcripts_tool "
-            "(FC-501: no independent allowed_handle_roots allowlist)",
-            code="config_error",
-        )
-    if payload["schema_version"] != COMPANY_WIKI_CONFIG_SCHEMA_VERSION:
-        raise FilingFetchError(
-            f"company-wiki config schema_version must be {COMPANY_WIKI_CONFIG_SCHEMA_VERSION}",
-            code="config_error",
-        )
-    for path_field in ("fmp_api_key_file", "earnings_transcripts_tool"):
-        configured_path = payload.get(path_field)
-        if path_field in payload and (
-            not isinstance(configured_path, str) or not configured_path.strip()
-            or configured_path != configured_path.strip()
-        ):
-            raise FilingFetchError(
-                f"company-wiki config {path_field} must be non-empty trimmed text",
-                code="config_error",
-            )
-    configured = payload["company_wiki_root"]
-    if (
-        not isinstance(configured, str)
-        or not configured.strip()
-        or configured != configured.strip()
-    ):
-        raise FilingFetchError(
-            "company-wiki config company_wiki_root must be non-empty trimmed text",
-            code="config_error",
-        )
-    tokens = {
-        "SKILL_ROOT": str(SKILL_ROOT),
-        "USER_PROFILE": os.environ.get("USERPROFILE") or str(Path.home()),
-    }
-
-    def replace_token(match: re.Match[str]) -> str:
-        name = match.group(1)
-        if name not in tokens:
-            raise FilingFetchError(
-                f"unsupported token in company_wiki_root: {name}", code="config_error"
-            )
-        return tokens[name]
-
-    expanded = CONFIG_TOKEN_RE.sub(replace_token, configured)
-    root = Path(expanded).expanduser()
-    if not root.is_absolute():
-        # FC-1202: a relative root would be resolved implicitly against the
-        # config file's parent directory — only explicit absolute (token-
-        # expanded) roots are valid.
-        raise FilingFetchError(
-            "company-wiki config company_wiki_root must be absolute after token expansion",
-            code="config_error",
-        )
-    return _validate_company_wiki_root(root)
+    return load_connection_root(config_path or DEFAULT_COMPANY_WIKI_CONFIG, skill_root=SKILL_ROOT)
 
 
 def _limit_arguments(request: dict[str, Any]) -> list[str]:
@@ -805,70 +675,12 @@ def _source_query_candidate(
             "company-wiki source query did not return one candidate",
             code="upstream_error",
         )
-    source_ref = matches[0]
-    candidate = candidates[0]
-    if (
-        set(source_ref) != _SOURCE_REF_FIELDS
-        or source_ref.get("schema_version") != "2.0"
-        or candidate.get("source_ref") != source_ref
-    ):
-        raise FilingFetchError(
-            "company-wiki source query SourceRef mismatch",
-            code="upstream_error",
-        )
-    if any(
-        forbidden in key.lower()
-        for key in candidate
-        for forbidden in ("path", "location", "root", "bundle")
-    ):
-        raise FilingFetchError(
-            "company-wiki source query leaked a physical location",
-            code="upstream_error",
-        )
-    from ff_v2_envelope import _reference
-
-    _reference(source_ref)
-    handle = dict(candidate)
-    handle["request_id"] = payload.get("request_id")
-    review_status = handle.get("prompt_injection_status")
-    # Review state is diagnostic. The SourceRef is still an unverified candidate;
-    # the consumer must use CWP verified-open before treating the bytes as evidence.
-    validate_handle_metadata(handle, request)
-    if (
-        handle.get("document_id") != source_ref["document_id"]
-        or handle.get("source_id") != source_ref["source_id"]
-        or handle.get("snapshot_sha256") != source_ref["content_sha256"]
-        or handle.get("byte_size") != source_ref["byte_size"]
-        or handle.get("mime_type") != source_ref["mime_type"]
-    ):
-        raise FilingFetchError(
-            "company-wiki source query candidate identity mismatch",
-            code="upstream_error",
-        )
-    if handle.get("document_kind") != request.get("document_kind"):
-        raise FilingFetchError(
-            "company-wiki source query document_kind mismatch",
-            code="upstream_error",
-        )
-    if (
-        request.get("fiscal_year") is not None
-        and handle.get("fiscal_year") != request["fiscal_year"]
-    ):
-        raise FilingFetchError(
-            "company-wiki source query fiscal_year mismatch",
-            code="upstream_error",
-        )
-    for key in ("market", "security_id"):
-        if key in handle and handle[key] != company_identity[key]:
-            raise FilingFetchError(
-                f"company-wiki source query {key} mismatch",
-                code="upstream_error",
-            )
-    handle["company_identity"] = _candidate_company_identity(company_identity)
+    handle = validate_source_candidate(
+        candidates[0], matches[0], request_id=payload.get("request_id"),
+        request=request, company_identity=company_identity, context="source query",
+    )
     handle["resolution_outcome"] = "reused_existing"
     handle["download_events"] = 0
-    handle["byte_verified"] = False
-    handle["prompt_injection_status"] = review_status
     return handle
 
 
@@ -900,16 +712,7 @@ _SOURCE_OPERATION_STATUSES = frozenset(
 )
 
 
-def _contains_physical_field(value: object) -> bool:
-    if isinstance(value, dict):
-        return any(
-            any(token in str(key).lower() for token in ("path", "location", "root", "bundle"))
-            or _contains_physical_field(child)
-            for key, child in value.items()
-        )
-    if isinstance(value, (list, tuple)):
-        return any(_contains_physical_field(child) for child in value)
-    return False
+
 
 
 def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, Any]:
@@ -1063,53 +866,12 @@ def _pathless_operation_handle(
             "company-wiki operation download receipt is inconsistent", code="upstream_error"
         )
 
-    source_ref = result.get("source_ref")
-    candidate = result.get("candidate")
-    if (
-        not isinstance(source_ref, dict)
-        or set(source_ref) != _SOURCE_REF_FIELDS
-        or source_ref.get("schema_version") != "2.0"
-        or not isinstance(candidate, dict)
-        or candidate.get("source_ref") != source_ref
-    ):
-        raise FilingFetchError("company-wiki operation SourceRef mismatch", code="upstream_error")
-    handle = {key: value for key, value in candidate.items() if key in _SOURCE_CANDIDATE_FIELDS}
-    handle["source_ref"] = dict(source_ref)
-    handle["request_id"] = result["request_id"]
-    if (
-        handle.get("document_id") != source_ref.get("document_id")
-        or handle.get("source_id") != source_ref.get("source_id")
-        or handle.get("snapshot_sha256") != source_ref.get("content_sha256")
-        or handle.get("byte_size") != source_ref.get("byte_size")
-        or handle.get("mime_type") != source_ref.get("mime_type")
-        or handle.get("content_sha256", source_ref.get("content_sha256"))
-        != source_ref.get("content_sha256")
-    ):
-        raise FilingFetchError(
-            "company-wiki operation candidate identity mismatch", code="upstream_error"
-        )
-    review_status = candidate.get("prompt_injection_status")
-    # The operation supplies logical metadata; byte verification remains CWP's
-    # verified-open responsibility at the consumer boundary.
-    validate_handle_metadata(handle, request)
-    if handle.get("document_kind") != request.get("document_kind"):
-        raise FilingFetchError(
-            "company-wiki operation document_kind mismatch", code="upstream_error"
-        )
-    if (
-        request.get("fiscal_year") is not None
-        and handle.get("fiscal_year") != request["fiscal_year"]
-    ):
-        raise FilingFetchError("company-wiki operation fiscal_year mismatch", code="upstream_error")
-    for key in ("market", "security_id"):
-        if key in handle and handle[key] != company_identity[key]:
-            raise FilingFetchError(f"company-wiki operation {key} mismatch", code="upstream_error")
-
-    handle["company_identity"] = _candidate_company_identity(company_identity)
+    handle = validate_source_candidate(
+        result.get("candidate"), result.get("source_ref"), request_id=result["request_id"],
+        request=request, company_identity=company_identity, context="operation",
+    )
     handle["resolution_outcome"] = outcome
     handle["download_events"] = events
-    handle["prompt_injection_status"] = review_status
-    handle["byte_verified"] = False
     handle["operation_receipt"] = {
         "operation_schema_version": _SOURCE_OPERATION_VERSION,
         "operation": operation,
@@ -1308,8 +1070,8 @@ def resolve_filing(
     The default path calls the read-only ``resolve`` command and reuses an
     existing company-wiki filing. An explicit download intent calls
     ``ensure --allow-download``; company-wiki then routes the download by market
-    (CN -> StockInfo, HK/US -> dayu) and writes any new bytes into
-    ``companies/{entity}/raw/{kind}/``. A ``company_query`` is resolved to one
+    through its configured adapters/storage layer (CN uses StockInfoDLSimple;
+    HK/US use the configured Dayu integration). A ``company_query`` is resolved to one
     verified active security before either source command is constructed.
 
     The download intent is derived once, in :func:`_download_intent`: a v2

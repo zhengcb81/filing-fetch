@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple, Protocol, cast
 
-from ff_v2_envelope import _reference
+from ff_source_ref import validate_source_ref
 from filing_contracts import FilingFetchError, _validate_acquisition_limits
 
 
@@ -94,7 +94,7 @@ def _lookup_resolved(
 ) -> dict[str, Any]:
     status = existing["status"]
     try:
-        ref = _reference(existing.get("source_ref"))
+        ref = validate_source_ref(existing.get("source_ref"))
     except FilingFetchError:
         return _result("upstream_error", reason="transcript_lookup_contract")
     fields = _optional_fields(existing, (
@@ -120,7 +120,7 @@ def _lookup_unavailable(existing: dict[str, Any]) -> dict[str, Any]:
 
 def _lookup_legacy(existing: object, year: int, quarter: int) -> dict[str, Any]:
     try:
-        ref = _reference(existing)
+        ref = validate_source_ref(existing)
     except FilingFetchError:
         return _result("upstream_error", reason="transcript_lookup_contract")
     return _result(
@@ -163,7 +163,7 @@ def _acquire(
     status = fetched.get("status")
     if status == "downloaded":
         try:
-            ref = _reference(fetched.get("source_ref"))
+            ref = validate_source_ref(fetched.get("source_ref"))
         except FilingFetchError:
             return _result("upstream_error", reason="transcript_import_source_ref")
         return _result(

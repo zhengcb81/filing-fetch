@@ -1,0 +1,9 @@
+# findings
+
+- 三份配置实现产生实际异构规则：未知/未闭合token字面目录使原root loader绿，doctor和ET规则不同；非法UTF8抛裸decoder exception；root/doctor不限流读取。ff_configuration唯一实现，64KiB配置字节上限在read时生效，只保留原有USER_PROFILE/SKILL_ROOT。
+- query未知nested metadata外泄，ensure有递归拒绝却用任何含path子串误拒业务growth_path。ff_source_candidate明确物理契约字段、统一binding与白名单projection；未验证来源candidate仍byte_verified=false。不是新身份或人工许可。
+- SourceRef validator原来在serializer且ET重复。ff_source_ref.validate_source_ref是纯公开contract；envelope._reference留兼容别名，ET/companion/local intake/candidate共享。没有新的跨仓DTO。
+- as-of/publication仅regex接受不存在日期。共享calendar validator在请求边界和metadata/legacy publication使用，合法日期和既有cutoff不变。
+- tracked hook固定Miniconda而且sh入口使用bash数组。POSIX hook按PATH当前python执行同一pre_commit；独立fake executable记录真实argv并返回7，验证退出码不被吞。
+- provider路由属CWP、原语言电话会属ET。有限process tree、预算、receipt来源、v1兼容仍有实际用途，不能删除；协议版本、FMP枚举、public body上限不是部署硬编码。无需新增provider或任务库。
+- 当前fetch controller仍较大：本轮集中移走两份重复职责，而不为降行数强拆不同错误/receipt语义。共有process transport已存在；若将来继续合并runner必须保留非零退出/unknown usage差异并先给真实反例。

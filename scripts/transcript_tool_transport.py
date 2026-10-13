@@ -8,7 +8,6 @@ import hashlib
 import json
 import math
 import os
-import re
 from pathlib import Path
 import subprocess
 import sys
@@ -16,6 +15,9 @@ import time
 from typing import Any
 
 from et_v2_contract import ET_NOT_FOUND_DIAGNOSTICS
+from ff_configuration import expand_config_path, read_json_object
+from filing_contracts import FilingFetchError
+from ff_source_ref import validate_source_ref
 
 
 _LOOKUP_SCHEMA = "company-wiki-transcript-import-lookup-request/1"
@@ -38,18 +40,6 @@ _ET_MAX_TIMEOUT_SECONDS = 60
 # Public ET earnings-transcript-request/1 canonical UTF-8 body ceiling.
 # The operation raw-response budget is separate and may legitimately be wider.
 _ET_MAX_BODY_BYTES = 10 * 1024 * 1024
-_MAX_REF_FIELDS = frozenset(
-    {
-        "schema_version",
-        "document_id",
-        "source_id",
-        "content_sha256",
-        "byte_size",
-        "mime_type",
-    }
-)
-
-
 _KNOWN_ET_ERRORS = frozenset({
     "provider_credentials_missing", "provider_credentials_rejected",
     "provider_credentials_file_unavailable", "provider_credentials_file_empty",
@@ -238,36 +228,18 @@ class EarningsTranscriptsTransport:
             selected = self.config_path.expanduser().resolve(strict=True)
             if self._launch_config_cache and self._launch_config_cache[0] == selected:
                 return self._launch_config_cache[1]
-            with selected.open("rb") as stream:
-                raw = stream.read(65537)
-            if len(raw) > 65536:
-                raise ValueError
-            config = json.loads(raw)
-            if not isinstance(config, dict):
-                raise ValueError
-        except (OSError, ValueError):
+            config = read_json_object(selected, label="ET launch config")
+        except (OSError, ValueError, FilingFetchError):
             raise ValueError("provider_credentials_config_invalid") from None
         self._launch_config_cache = selected, config
         return config
 
     def _launch_path(self, value: object) -> Path:
-        if not isinstance(value, str) or not value.strip() or value != value.strip():
-            raise ValueError("provider_credentials_config_invalid")
-        tokens = {"USER_PROFILE": os.environ.get("USERPROFILE") or str(Path.home()),
-                  "SKILL_ROOT": str(Path(__file__).resolve().parents[1])}
-        def replace(match: re.Match[str]) -> str:
-            if match.group(1) not in tokens:
-                raise ValueError("provider_credentials_config_invalid")
-            return tokens[match.group(1)]
-        expanded = re.sub(r"\$\{([^}]+)\}", replace, value)
-        if "${" in expanded:
-            raise ValueError("provider_credentials_config_invalid")
-        path = Path(expanded).expanduser()
-        if path.is_absolute():
-            return path
-        if self.config_path is None:
-            raise ValueError("provider_credentials_config_invalid")
-        return self.config_path.expanduser().resolve(strict=True).parent / path
+        try:
+            return expand_config_path(value, field="ET launch path",
+                skill_root=Path(__file__).resolve().parents[1], config_path=self.config_path)
+        except (FilingFetchError, OSError, ValueError):
+            raise ValueError("provider_credentials_config_invalid") from None
 
     def _credential_file(self) -> Path | None:
         """Explicit source wins; otherwise reuse the selected config's known file."""
@@ -387,27 +359,11 @@ class EarningsTranscriptsTransport:
 
     @staticmethod
     def _valid_ref(value: object) -> dict[str, Any]:
-        import re
-
-        if not isinstance(value, dict) or set(value) != _MAX_REF_FIELDS:
-            raise ValueError("company-wiki SourceRef shape is invalid")
-        if value.get("schema_version") != "2.0":
-            raise ValueError("company-wiki SourceRef version is unsupported")
-        sha = value.get("content_sha256")
-        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha):
-            raise ValueError("company-wiki SourceRef SHA is invalid")
-        if type(value.get("byte_size")) is not int or value["byte_size"] < 0:
-            raise ValueError("company-wiki SourceRef byte size is invalid")
-        for key, kind in (("document_id", "document"), ("source_id", "source")):
-            prefix = f"urn:company-wiki:{kind}:sha256:"
-            item = value.get(key)
-            if not isinstance(item, str) or not item:
-                raise ValueError("company-wiki SourceRef id is invalid")
-            if item.startswith("urn:company-wiki:") and item != prefix + sha:
-                raise ValueError("company-wiki SourceRef id does not match SHA")
-        if not isinstance(value.get("mime_type"), str) or not value["mime_type"]:
-            raise ValueError("company-wiki SourceRef MIME type is invalid")
-        return dict(value)
+        """Use the same logical reference contract as filing result serialization."""
+        try:
+            return validate_source_ref(value)
+        except FilingFetchError as exc:
+            raise ValueError(str(exc)) from None
 
     def _verified_open(self, ref: dict[str, Any]) -> None:
         command = [

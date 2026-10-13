@@ -11,6 +11,7 @@ import tempfile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CI_TESTS = (
+    "tests/test_architecture_quality.py",
     "tests/test_m3_acquisition_usage_ff.py",
     "tests/test_m3_acquisition_usage_acceptance.py",
     "tests/test_failure_usage_continuity.py",

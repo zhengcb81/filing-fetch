@@ -11,7 +11,7 @@ from typing import Any
 
 import ff_process_transport
 from ff_provider_cause import condition_cause, source_condition
-from ff_v2_envelope import _reference
+from ff_source_ref import validate_source_ref
 from filing_contracts import FilingFetchError
 
 _RESULT_FIELDS = frozenset({
@@ -33,7 +33,7 @@ def _validated(payload: Any, physical_fields: Callable[[object], bool]) -> bool:
                                stage="local_prepare", upstream_cause=source_condition("local_prepare", "invalid_producer_schema"))
     status = payload["status"]
     if status == "ready":
-        _reference(payload["source_ref"])
+        validate_source_ref(payload["source_ref"])
         if payload["blocks_download"]:
             raise FilingFetchError("contradictory local preparation result",
                                    code="upstream_error", stage="local_prepare")

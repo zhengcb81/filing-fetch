@@ -1,0 +1,103 @@
+{
+  "schema_version": "ff-architecture-quality-checks/1",
+  "baseline_sha": "64b4d294a1e61e595e330b4a7d4075c289f9fdc3",
+  "tests": [
+    {
+      "stage": "RED",
+      "command": "python -B -m pytest tests/test_architecture_quality.py -q --tb=no -p no:cacheprovider",
+      "result": "EXPECTED_FAIL",
+      "counts": {
+        "failed": 31,
+        "passed": 3
+      },
+      "duration_seconds": 0.48,
+      "scope": "34 initial pre-implementation regressions; portable-hook invocation added later"
+    },
+    {
+      "stage": "GREEN-related",
+      "command": "python -B -m pytest tests/test_architecture_quality.py tests/test_fetch_filing.py tests/test_config_doctor.py tests/test_transcript_launch_contract.py tests/test_source_ref_v2_db_query.py tests/test_source_ref_v2.py tests/test_ff_v2_contract.py tests/test_transcript_companion_transport.py tests/test_local_source_prepare.py -q --tb=short -p no:cacheprovider",
+      "result": "PASS",
+      "counts": {
+        "passed": 298,
+        "skipped": 5,
+        "subtests_passed": 39
+      },
+      "duration_seconds": 21.75
+    },
+    {
+      "stage": "GREEN-broad",
+      "command": "python -X utf8 -B tools/ci_tests.py",
+      "result": "PASS",
+      "counts": {
+        "passed": 742,
+        "skipped": 7,
+        "subtests_passed": 78
+      },
+      "duration_seconds": 66.21,
+      "scope": "Existing focused offline CI plus initial34 regressions; before final pure SourceRef module move and additional portable-hook case"
+    },
+    {
+      "stage": "GREEN-final-hook",
+      "command": "python -B -m pytest tests/test_architecture_quality.py -q --tb=short -p no:cacheprovider",
+      "result": "PASS",
+      "counts": {
+        "passed": 35,
+        "skipped": 0
+      },
+      "duration_seconds": 0.64
+    },
+    {
+      "stage": "GREEN-final-contracts",
+      "command": "python -B -m pytest tests/test_architecture_quality.py tests/test_cwp_s0b_source_ref_contract.py tests/test_ff_v2_contract.py tests/test_transcript_companion.py tests/test_local_source_prepare.py tests/test_et_s0b_contract.py tests/test_transcript_launch_contract.py -q --tb=short -p no:cacheprovider",
+      "result": "PASS",
+      "counts": {
+        "passed": 174,
+        "skipped": 3
+      },
+      "duration_seconds": 2.39,
+      "scope": "After final shared pure SourceRef module move"
+    },
+    {
+      "stage": "GREEN-static",
+      "command": "python -m ruff check scripts tests tools e2e; python -m mypy scripts/filing_contracts.py scripts/fetch_filing.py; python tools/host_assumption_guard.py --roots tests tools scripts e2e; git diff --check",
+      "result": "PASS",
+      "counts": {
+        "mypy_source_files": 2,
+        "host_new_violations": 0
+      },
+      "duration_seconds": null
+    },
+    {
+      "stage": "RED-platform-error",
+      "command": "python -B -m pytest tests/test_architecture_quality.py -k root_resolution_failure -q --tb=short -p no:cacheprovider",
+      "result": "EXPECTED_FAIL",
+      "counts": {
+        "failed": 1,
+        "passed": 1,
+        "deselected": 36
+      },
+      "duration_seconds": 0.43
+    },
+    {
+      "stage": "GREEN-final-platform-contracts",
+      "command": "python -B -m pytest tests/test_architecture_quality.py tests/test_cwp_s0b_source_ref_contract.py tests/test_ff_v2_contract.py tests/test_transcript_companion.py tests/test_local_source_prepare.py tests/test_et_s0b_contract.py tests/test_transcript_launch_contract.py -q --tb=short -p no:cacheprovider",
+      "result": "PASS",
+      "counts": {
+        "passed": 177,
+        "skipped": 3,
+        "new_architecture_regressions_included": 38
+      },
+      "duration_seconds": 2.54
+    }
+  ],
+  "model_calls": 0,
+  "paid_cost_usd": 0,
+  "skip_reasons": [
+    "CWP_V2_CODE_ROOT optional isolated checkout not provided",
+    "W07_ET_TOOL explicit real ET integration not provided (3 cases)",
+    "production security-master snapshots absent (2 cases)",
+    "platform cannot create symlink (1 case)"
+  ],
+  "root_acceptance": "ROOT runs final focused CI / cross-repository offline contract at stage C.",
+  "live_provider_downloads": 0
+}

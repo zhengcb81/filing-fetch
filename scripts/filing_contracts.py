@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 import hashlib
 import json
 import math
@@ -195,6 +196,16 @@ def _required_text(value: Any, field_name: str) -> str:
     return value
 
 
+def _validate_date(value: object, field: str, *, code: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise FilingFetchError(f"{field} must use YYYY-MM-DD format", code=code)
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise FilingFetchError(f"{field} must be a valid YYYY-MM-DD date", code=code) from exc
+    return value
+
+
 def validate_request(request: dict[str, Any]) -> None:
     """Validate a filing-fetch request against the 1.2 schema.
 
@@ -220,8 +231,7 @@ def validate_request(request: dict[str, Any]) -> None:
         )
     _required_text(request.get("document_kind"), "document_kind")
     _required_text(request.get("as_of_date"), "as_of_date")
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", request["as_of_date"]):
-        raise FilingFetchError("as_of_date must use YYYY-MM-DD format", code="request_error")
+    _validate_date(request["as_of_date"], "as_of_date", code="request_error")
     mode = request.get("mode")
     if mode is not None and mode not in REQUEST_MODES:
         raise FilingFetchError(
@@ -583,8 +593,7 @@ def validate_handle_metadata(
     if isinstance(size, bool) or not isinstance(size, int) or size < 0:
         raise FilingFetchError("handle byte_size is invalid", code="upstream_error")
     published = handle.get("published_date")
-    if not isinstance(published, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", published):
-        raise FilingFetchError("handle published_date must use YYYY-MM-DD", code="upstream_error")
+    published = _validate_date(published, "handle published_date", code="upstream_error")
     as_of = request.get("as_of_date")
     if isinstance(as_of, str) and as_of and published > as_of:
         raise FilingFetchError("handle published_date is after as_of_date", code="upstream_error")
@@ -715,10 +724,7 @@ def validate_handle(
             "handle snapshot_sha256 does not match the canonical file bytes", code="upstream_error"
         )
     published = handle.get("published_date", "")
-    if not isinstance(published, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", published):
-        raise FilingFetchError(
-            "handle published_date must use YYYY-MM-DD format", code="upstream_error"
-        )
+    published = _validate_date(published, "handle published_date", code="upstream_error")
     as_of = request.get("as_of_date", "")
     if isinstance(as_of, str) and as_of and published > as_of:
         raise FilingFetchError(

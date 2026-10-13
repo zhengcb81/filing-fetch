@@ -35,100 +35,30 @@ Exit code 0 = healthy, 1 = problems found.
 from __future__ import annotations
 
 import argparse
-import json
-import os
-import re
 import sys
 from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FILING_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
 
-_TOKEN_RE = re.compile(r"\$\{(SKILL_ROOT|USER_PROFILE)\}")
+SCRIPTS = str(SKILL_ROOT / "scripts")
+if SCRIPTS not in sys.path:
+    sys.path.insert(0, SCRIPTS)
+from ff_configuration import expand_config_path, read_json_object  # noqa: E402
+from fetch_filing import load_company_wiki_root  # noqa: E402
+from filing_contracts import FilingFetchError  # noqa: E402
 
 
-def _tokens() -> dict[str, str]:
-    return {
-        "SKILL_ROOT": str(SKILL_ROOT),
-        "USER_PROFILE": os.environ.get("USERPROFILE") or str(Path.home()),
-    }
-
-
-def _expand(text: str) -> str:
-    return _TOKEN_RE.sub(lambda match: _tokens()[match.group(1)], text)
-
-
-def _check_filing_config(
-    path: Path, problems: list[str], notes: list[str]
-) -> Path | None:
-    """Validate the filing-fetch config; return the resolved wiki root."""
+def _check_filing_config(path: Path, problems: list[str], notes: list[str]) -> Path | None:
+    """Diagnostics use the exact runtime parser rather than a second schema."""
     if not path.is_file():
         problems.append(f"filing-fetch config missing: {path}")
         return None
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        problems.append(f"filing-fetch config unreadable: {path}: {exc}")
+        return load_company_wiki_root(config_path=path)
+    except FilingFetchError as exc:
+        problems.append(f"filing-fetch config: {exc}")
         return None
-    if not isinstance(payload, dict):
-        problems.append("filing-fetch config must be an object")
-        return None
-    if "allowed_handle_roots" in payload:
-        problems.append(
-            "filing-fetch config must NOT carry allowed_handle_roots "
-            "(FC-501: the policy snapshot is the single source)"
-        )
-    required = {"schema_version", "company_wiki_root"}
-    if not required <= set(payload) or not set(payload) <= required | {"fmp_api_key_file", "earnings_transcripts_tool"}:
-        problems.append(
-            "filing-fetch config must contain schema_version/company_wiki_root "
-            "and only optional fmp_api_key_file/earnings_transcripts_tool"
-        )
-        return None
-    if payload["schema_version"] != "1.0":
-        problems.append(
-            f"filing-fetch config schema_version must be 1.0, got "
-            f"{payload['schema_version']!r}"
-        )
-        return None
-    for path_field in ("fmp_api_key_file", "earnings_transcripts_tool"):
-        configured_path = payload.get(path_field)
-        if path_field in payload and (
-            not isinstance(configured_path, str) or not configured_path.strip()
-            or configured_path != configured_path.strip()
-        ):
-            problems.append(f"filing-fetch config {path_field} must be non-empty trimmed text")
-            return None
-    configured = payload["company_wiki_root"]
-    if not isinstance(configured, str) or not configured.strip():
-        problems.append(
-            "filing-fetch config company_wiki_root must be non-empty text"
-        )
-        return None
-    expanded = _expand(configured)
-    if "${" in expanded:
-        problems.append(
-            f"filing-fetch config company_wiki_root has an unsupported "
-            f"token: {configured}"
-        )
-        return None
-    root = Path(expanded).expanduser()
-    if not root.is_absolute():
-        problems.append(
-            "filing-fetch config company_wiki_root must be absolute after "
-            "token expansion"
-        )
-        return None
-    if not root.is_dir():
-        problems.append(f"configured company_wiki_root is not a directory: {root}")
-        return None
-    catalog = root / "config" / "source_catalog.yaml"
-    if not catalog.is_file():
-        problems.append(
-            f"configured company_wiki_root lacks config/source_catalog.yaml: "
-            f"{root}"
-        )
-    return root
 
 
 def _check_wiki_policy(root: Path, problems: list[str]) -> None:
@@ -192,12 +122,9 @@ def _check_revenue_config(
             notes.append(f"NOTE: {message}")
         return
     try:
-        payload = json.loads(config.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = read_json_object(config, label="revenue config")
+    except FilingFetchError as exc:
         problems.append(f"revenue config unreadable: {config}: {exc}")
-        return
-    if not isinstance(payload, dict):
-        problems.append("revenue config must be an object")
         return
     if set(payload) != {"schema_version", "filing_fetch_root"}:
         problems.append(
@@ -217,19 +144,11 @@ def _check_revenue_config(
             "revenue config filing_fetch_root must be non-empty text"
         )
         return
-    expanded = _expand(configured)
-    if "${" in expanded:
-        problems.append(
-            f"revenue config filing_fetch_root has an unsupported token: "
-            f"{configured}"
-        )
-        return
-    root = Path(expanded).expanduser()
-    if not root.is_absolute():
-        problems.append(
-            "revenue config filing_fetch_root must be absolute after token "
-            "expansion"
-        )
+    try:
+        root = expand_config_path(configured, field="revenue config filing_fetch_root",
+                                  skill_root=SKILL_ROOT, absolute=True)
+    except FilingFetchError as exc:
+        problems.append(str(exc))
         return
     if not (root / "scripts" / "fetch_filing.py").is_file():
         problems.append(
