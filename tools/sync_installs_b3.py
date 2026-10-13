@@ -7,6 +7,13 @@ configuration, output, credentials and unknown files are user state: they
 are never removed. The public config template only initializes a missing
 configuration. An interrupted install reports its actual partial writes;
 running it again writes only the remaining differences.
+
+Plan/result rows additionally diagnose the full package-owned runtime (excluding
+preserved user configuration). These reads never widen the requested write scope
+or scan installed unknown files. ``completed`` and ``--check`` remain scope-only
+copy results; ``runtime_byte_complete`` says only whether owned bytes match the
+current canonical package. Fresh-process execution is always NOT_EVALUATED here.
+Outside-scope read errors stay diagnostic and never become a new copy gate.
 """
 
 from __future__ import annotations
@@ -109,12 +116,48 @@ def _target_sha(path: Path) -> str | None:
     return _sha(path) if path.exists() else None
 
 
-def manifest(canonical: Path) -> dict[str, str]:
+def manifest(
+    canonical: Path, *, include_config: bool = True, errors: list[dict] | None = None
+) -> dict[str, str]:
+    """One ownership/hash implementation; diagnostics may retain read failures."""
+    result = {}
+    for path in installable(canonical):
+        relative = path.relative_to(canonical).as_posix()
+        if not include_config and relative in CONFIG_FILES:
+            continue
+        try:
+            result[relative] = _sha(_safe_path(canonical, relative))
+        except (OSError, ValueError) as error:
+            if errors is None:
+                raise
+            errors.append({"path": relative, "reason": str(error), "stage": "source"})
+    return result
+
+
+def _runtime_snapshot() -> tuple[dict[str, str], list[dict]]:
+    errors: list[dict] = []
+    return manifest(CANONICAL, include_config=False, errors=errors), errors
+
+
+def _runtime_diagnostics(
+    root: Path, scope: list[str], expected: dict[str, str], source_errors: list[dict]
+) -> dict:
+    """Read only known owned files, without following links or claiming execution."""
+    errors = list(source_errors)
+    drift = {error["path"] for error in source_errors}
+    for relative, digest in expected.items():
+        try:
+            if _target_sha(_safe_path(root, relative)) != digest:
+                drift.add(relative)
+        except (OSError, ValueError) as error:
+            drift.add(relative)
+            errors.append({"path": relative, "reason": str(error), "stage": "target"})
     return {
-        path.relative_to(canonical).as_posix(): _sha(
-            _safe_path(canonical, path.relative_to(canonical).as_posix())
-        )
-        for path in installable(canonical)
+        "full_runtime_drift": sorted(drift),
+        "outside_scope_runtime_drift": sorted(drift - set(scope)),
+        "runtime_diagnostic_errors": errors,
+        "runtime_byte_complete": not drift and not errors,
+        "runtime_execution_validation": "NOT_EVALUATED",
     }
 
 
@@ -141,6 +184,7 @@ def _scope(files: list[str] | None) -> list[str]:
 def plan_installations(destinations: tuple[Path, ...], files: list[str] | None = None) -> dict:
     scope = _scope(files)
     expected = {name: _sha(_safe_path(CANONICAL, name)) for name in scope}
+    runtime, runtime_errors = _runtime_snapshot()
     targets: dict[str, dict] = {}
     for destination in destinations:
         root = (destination / SKILL).resolve()
@@ -171,6 +215,7 @@ def plan_installations(destinations: tuple[Path, ...], files: list[str] | None =
             except (OSError, ValueError) as error:
                 row["needs_update"].append(relative)
                 row["errors"].append({"path": relative, "reason": str(error)})
+        row.update(_runtime_diagnostics(root, scope, runtime, runtime_errors))
         targets[key] = row
     return {
         "schema_version": "ff-install-plan/1",
@@ -248,6 +293,15 @@ def _apply(plan: dict) -> dict:
                         )
             if row["errors"]:
                 break
+    # Re-read after actual writes, including outside-scope changes since plan.
+    # Diagnostics never feed copy failure/exit status or mutate the write list.
+    runtime, runtime_errors = _runtime_snapshot()
+    for row in rows:
+        row.update(
+            _runtime_diagnostics(
+                Path(row["physical_target"]), plan["scope"], runtime, runtime_errors
+            )
+        )
     failed = any(row["errors"] for row in rows)
     written = any(row["written"] for row in rows)
     status = "partial" if failed and written else "failed" if failed else "completed"
@@ -266,7 +320,11 @@ def sync(destination: Path, files: list[str] | None = None) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check, plan or install the filing-fetch skill")
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--check", action="store_true", help="read-only drift check; exit 1 on drift")
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="read-only selected-scope check; exit 1 on scoped drift, full runtime separately diagnosed",
+    )
     mode.add_argument(
         "--plan", action="store_true", help="zero-write plan with current byte differences"
     )
@@ -307,6 +365,12 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 for relative in row["needs_update"][:20]:
                     print(f"  {relative}")
+            state = "MATCH" if row["runtime_byte_complete"] else "INCOMPLETE"
+            print(
+                f"  full owned runtime bytes: {state}; "
+                f"{len(row['outside_scope_runtime_drift'])} outside-scope drift; "
+                "execution NOT_EVALUATED"
+            )
     for row in value["targets"]:
         for error in row["errors"]:
             print(f"{error['path']}: {error['reason']}", file=sys.stderr)

@@ -88,6 +88,36 @@
         "new_architecture_regressions_included": 38
       },
       "duration_seconds": 2.54
+    },
+    {
+      "stage": "RED-runtime-install-diagnostics",
+      "command": "python -B -m pytest tests/test_install_runtime_diagnostics.py -q --tb=short -p no:cacheprovider --basetemp <owned TemporaryDirectory>",
+      "result": "EXPECTED_FAIL",
+      "counts": {
+        "failed": 6
+      },
+      "duration_seconds": 1.2,
+      "scratch_restored": true
+    },
+    {
+      "stage": "GREEN-runtime-install-diagnostics",
+      "command": "python -B -m pytest tests/test_install_runtime_diagnostics.py tests/test_selective_installation.py tests/test_s3_install_surface.py -q --tb=short -p no:cacheprovider --basetemp <owned TemporaryDirectory>",
+      "result": "PASS",
+      "counts": {
+        "passed": 33,
+        "skipped": 0
+      },
+      "duration_seconds": 8.59,
+      "scratch_restored": true
+    },
+    {
+      "stage": "GREEN-runtime-install-static",
+      "command": "python -m ruff check tools/sync_installs_b3.py tools/ci_tests.py tests/test_install_runtime_diagnostics.py; python tools/host_assumption_guard.py --roots tests tools scripts e2e; git diff --check",
+      "result": "PASS",
+      "counts": {
+        "host_new_violations": 0
+      },
+      "duration_seconds": null
     }
   ],
   "model_calls": 0,

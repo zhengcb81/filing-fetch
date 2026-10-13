@@ -7,3 +7,5 @@
 - tracked hook固定Miniconda而且sh入口使用bash数组。POSIX hook按PATH当前python执行同一pre_commit；独立fake executable记录真实argv并返回7，验证退出码不被吞。
 - provider路由属CWP、原语言电话会属ET。有限process tree、预算、receipt来源、v1兼容仍有实际用途，不能删除；协议版本、FMP枚举、public body上限不是部署硬编码。无需新增provider或任务库。
 - 当前fetch controller仍较大：本轮集中移走两份重复职责，而不为降行数强拆不同错误/receipt语义。共有process transport已存在；若将来继续合并runner必须保留非零退出/unknown usage差异并先给真实反例。
+
+- FF-AQ-06：ROOT真实部署证明diff文件一致不等于整包可运行。旧.codex ff_provider_cause缺symbol，本次selected10文件全部match仍ImportError。低层copy工具按scope工作，发布编排缺全owned byte诊断。共享manifest增加exclude-config/best-effort诊断模式，不增加第二份所有权表；每target plan和post-apply结果列完整/外scope drift、read errors、byte_complete和execution NOT_EVALUATED。副本tree不rglob、不读existing配置/keys/unknown；write list不受诊断扩大，outside error不参与copy status/exitcode。byte_complete只是与当前canonical已拥有的runtime文件比对，既不是fresh import结果，也不是hash许可。source文件集合变化、配置合理性、lazy import和运行行为仍需要所属发布/测试层负责。

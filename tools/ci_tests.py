@@ -19,6 +19,7 @@ CI_TESTS = (
     "tests/test_single_intent_acquisition.py",
     "tests/test_s3_install_surface.py",
     "tests/test_selective_installation.py",
+    "tests/test_install_runtime_diagnostics.py",
     "e2e/test_source_ref_v2_cli.py",
     "tests/test_ff_v2_contract.py",
     "tests/test_provider_cause_contract.py",
