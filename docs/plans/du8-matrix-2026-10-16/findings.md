@@ -59,12 +59,14 @@
 
 ## A.5 C 节点实测（两次真实 41 链，公开入口，未改 argv/限额）
 
-| 运行 | 结果 | 秒 | binding | seed | 调度 |
-|---|---|---|---|---|---|
-| run1 `.tmp/du8-c` | 21 PASS/1 FAIL/2 PARTIAL/17 NOT_RUN | 174.31 | 14.07 | 49.16 | 52/52，imbalance 0.0 |
-| run2 `.tmp/du8-c2` | 26 PASS/1 FAIL/2 PARTIAL/12 NOT_RUN | 174.56 | 7.63 | 37.16 | 52/52，imbalance 0.0 |
+| 运行 | 结果 | 秒 | binding | seed |
+|---|---|---|---|---|
+| run1 `.tmp/du8-c` | 21 PASS/1 FAIL/2 PARTIAL/17 NOT_RUN | 174.31 | 14.07 | 49.16 |
+| run2 `.tmp/du8-c2` | 26 PASS/1 FAIL/2 PARTIAL/12 NOT_RUN | 174.56 | 7.63 | 37.16 |
 
-调度层**已完全均衡**（两组预测负载 52.0/52.0，imbalance 0.0），两次 `stop_reason` 都具名。
+调度层两次都按**冻结模型预测**给出两组各 52.0s（imbalance 0.0）——注意这是**静态模型的预测值**，
+**不是实测**；实测成本下的真实表现见下「负载归一化的对照」小节（新分区 74.008s vs 旧 75.531s）。
+两次 `stop_reason` 都具名。
 未达 41PASS 的原因**不在调度层**，是工作站被其他 lane 打满：
 
 - 实测 CPU load **82% → 63%**（12 逻辑核），25 个非本卡 `python` 进程属 `invest-quick-scan`、
