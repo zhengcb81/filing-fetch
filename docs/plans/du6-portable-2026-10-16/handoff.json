@@ -1,0 +1,248 @@
+{
+  "schema_version": "du6-handoff/1",
+  "card_id": "DU6-FF-PORTABLE-EVIDENCE",
+  "date": "2026-10-16",
+  "base_commit": "e2efa81d7995836d457479eb528fa6f8cd5dc3f3",
+  "branch": "codex/du6-ff-portable-20261016",
+  "implementation_commits": [
+    "250981038dc8879003b2d670329278d236706dc4",
+    "ee11e070339f27e787ebf57028a712279957367d"
+  ],
+  "changed_paths": [
+    {
+      "path": "tools/offline_contract_matrix/oracle.py",
+      "sha256": "cc6fafce30cab03fc869fa9333f2239c9bef785650aff97eb859d9744138be81",
+      "bytes": 18031,
+      "necessity": "whitelist item 1: the only oracle change is the optional evidence_root parameter threaded into the existing _bound_evidence; CaseSpec/SHA/business checks and the default behaviour are untouched"
+    },
+    {
+      "path": "tools/offline_contract_matrix/cli_main.py",
+      "sha256": "81ca218b4490cad1cad36e573afb8bc8a9d1d4499ec797578c52f3ac5d7a3c0e",
+      "bytes": 27549,
+      "necessity": "whitelist item 2: main(argv) dispatches an explicit replay branch and otherwise runs the unchanged matrix; replay only reads retained evidence and calls the native audit; the record is written via staging+rename so no partial record can appear at the output path"
+    },
+    {
+      "path": "tools/offline_contract_matrix/README.md",
+      "sha256": "4165e9faa5674994a90508c4056442acb3d36970786a0ffa367ee292d5188669",
+      "bytes": 11840,
+      "necessity": "whitelist item 3: documentation only (replay contract, exit codes, retained-replay scope limits); no new source implementation"
+    },
+    {
+      "path": "tests/test_du6_portable_matrix_evidence.py",
+      "sha256": "4bb33c1868033a61b549d4f416ddd4717424382a9d25f1cfd9d257db62134b08",
+      "bytes": 39780,
+      "necessity": "whitelist item 4: the single new test file freezing old default behaviour, interface RED, relocation/replay contracts and the duplicate/unknown/removed case-row gate (35 tests)"
+    }
+  ],
+  "entrypoints": [
+    "python -B tools/offline_contract_matrix/run.py replay --report ABS_REPORT --evidence-root ABS_ARTIFACTS --output ABS_NEW_REPLAY_JSON (public frozen CLI; run.py unchanged)",
+    "oracle.audit(report: dict[str, Any], *, evidence_root: str | Path | None = None) -> list[Finding]",
+    "python -B tools/offline_contract_matrix/run.py --cwp-project ... --et-project ... --owned-root ... --out-root ... (old matrix argv, unchanged)"
+  ],
+  "interfaces_reused": [
+    "oracle._bound_evidence: the single existing relative-ref/SHA/CaseSpec/ET-receipt/proof checker; only its root input became overridable",
+    "case_specs.get_spec / audit_coverage / CaseSpec.metadata_errors / assertion_errors / request_errors / fixture_errors: unchanged authority",
+    "matrix_outcome.source_ref / count: unchanged acceptance predicates",
+    "report.SCHEMA / sha256_file / sha256_bytes: unchanged report schema ff-et-cwp-offline-matrix/1",
+    "cli_main.main(argv) matrix dispatch, WORKERS=2, CASE_TIMEOUT 30s, BATCH_DEADLINE 180s, PROOF_RESERVE_SECONDS 10s: unchanged",
+    "runtime.OwnedAttempt / Deadline / run_process / synthetic_env: reused as-is; no second process manager added",
+    "optional-root compatibility: audit(report) and audit(report, evidence_root=None) are one code path and byte-identical to the pre-change findings (frozen fingerprint 417a7891420e02e1bb9fb1641cb95ab5037c5fd754581488cf6dd4f919a64e30 over 65 findings)"
+  ],
+  "replay_output_contract": {
+    "schema_version": "ff-matrix-evidence-replay/1",
+    "record_fields": [
+      "report.sha256 (original report byte SHA)",
+      "report.schema_version (original schema)",
+      "report.sha256_after_replay",
+      "evidence_root.{requested,resolved,source,report_recorded}",
+      "original_case_results (PASS/FAIL/PARTIAL/NOT_RUN/total)",
+      "original_case_rows (verbatim id->result projection; no PASS relabelling)",
+      "original_recorded_oracle (verbatim copy)",
+      "native_replay.{pass,findings}",
+      "scope.{kind,statement,proves,does_not_prove,fresh_41_chain_scope}",
+      "certified",
+      "exit_status"
+    ],
+    "exit_codes": {
+      "0": "complete matrix all-PASS AND recorded oracle pass with zero historical findings AND current native audit clean",
+      "1": "replay read correctly but is not certified (historical FAIL/PARTIAL/NOT_RUN, recorded findings, native findings, incomplete matrix)",
+      "2": "explicit input/output diagnostic (missing report, invalid JSON, unknown schema, missing/wrong evidence root, output equal to report or already existing or inside the evidence root); never a traceback"
+    },
+    "never": [
+      "overwrites the original report, the artifacts or an existing replay output",
+      "rewrites report/case/expected/hash fields",
+      "upgrades historical FAIL/PARTIAL/NOT_RUN, recorded findings, unknown/null usage or missing fresh proofs",
+      "searches the disk or falls back to the report's recorded absolute root",
+      "starts Context/seed/provider/CWP/ET/fresh-reader/network work"
+    ]
+  },
+  "red_receipts": [
+    {
+      "receipt": "receipts/01-red-first.txt",
+      "kind": "first behaviour RED plus separately listed interface RED",
+      "command": "python -B -m pytest -q -p no:cacheprovider --tb=line tests/test_du6_portable_matrix_evidence.py --basetemp <OWNED_TEMP>/pytest",
+      "result": "3 passed, 29 failed before any source change",
+      "interface_red": [
+        "audit() has no evidence_root keyword -> TypeError (missing API, not a production defect)",
+        "cli_main has no replay branch -> argparse SystemExit(2) (missing API, not a production defect)"
+      ],
+      "first_behaviour_red": "test_override_relocates_reads_and_keeps_original_bytes -> TypeError: audit() got an unexpected keyword argument 'evidence_root'",
+      "already_green": "old default findings fingerprint (65 findings), old audit() non-mutation, old matrix argv dispatch"
+    }
+  ],
+  "tests": [
+    {
+      "command": "python -B -m pytest -q -p no:cacheprovider tests/test_du6_portable_matrix_evidence.py tests/test_w06_contract_matrix.py tests/test_w06_matrix_runtime.py tests/test_w06_case_authority.py tests/test_w07_matrix_efficiency.py --basetemp <OWNED_TEMP>/pytest",
+      "exit_code": 0,
+      "passed": 248,
+      "failed": 0,
+      "skipped": 0,
+      "time_seconds": 24.79,
+      "receipt": "receipts/02-centralized-regression.txt",
+      "note": "213 pre-existing tests unchanged plus 35 new DU6 tests (32 with the implementation commit, 3 from the independent-review follow-up); the same command gave 245 passed before that follow-up. No old assertion deleted, no per-company special case, no budget/deadline change. The receipt also carries the scoped Ruff run."
+    },
+    {
+      "command": "python -B -m ruff check tools/offline_contract_matrix/oracle.py tools/offline_contract_matrix/cli_main.py tests/test_du6_portable_matrix_evidence.py",
+      "exit_code": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "receipt": "receipts/02-centralized-regression.txt",
+      "note": "Ruff scoped to actually changed sources and the new test; no unrelated reformat of old sources/tests"
+    },
+    {
+      "command": "python -B tools/offline_contract_matrix/run.py --cwp-project ABS_PINNED_CWP --et-project ABS_PINNED_ET --owned-root ABS_OWNED --out-root ABS_OUT",
+      "exit_code": 1,
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0,
+      "time_seconds": 174.57,
+      "receipt": "receipts/04-c-relocation-replay.txt",
+      "note": "the single real 41-case chain run of this node: 38 PASS / 0 FAIL / 1 PARTIAL / 2 NOT_RUN (the three non-PASS are recorded case results, not pytest skips), 5 recorded oracle findings, exit 1 preserved as-is"
+    }
+  ],
+  "real_41_chain": {
+    "run_count": 1,
+    "argv": "python -B tools/offline_contract_matrix/run.py --cwp-project C:/Users/郑曾波/Projects/company-wiki-du6-ff-readonly --et-project C:/Users/郑曾波/Projects/earnings-transcripts-du6-ff-readonly --owned-root <OWNED_TEMP>/chain-owned --out-root <OWNED_TEMP>/chain-out",
+    "report_path_at_runtime": "<OWNED_TEMP>/chain-out/attempt-ed7a5d06098d44d5945a54ded6548c67/report.json",
+    "report_sha256": "6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc",
+    "report_bytes": 869196,
+    "artifacts": {"files": 271, "bytes": 553795, "sha_manifest": "evidence/step1-artifact-shas.json"},
+    "result": {"PASS": 38, "FAIL": 0, "PARTIAL": 1, "NOT_RUN": 2, "oracle_findings": 5, "batch_elapsed_seconds": 174.565},
+    "isolations": {"real_provider_calls": 0, "paid_usd": 0, "unknown_charge": null, "fixture_requests": 39, "translation_attempts": 0, "network_attempts_denied": 0},
+    "fixed_dependencies": {
+      "cwp": {
+        "root": "C:/Users/郑曾波/Projects/company-wiki-du6-ff-readonly",
+        "commit": "f08aa101ab49ca983d3a40356abfb05347f586b3",
+        "git_toplevel_match": true,
+        "modules": {
+          "src/company_wiki/source_catalog/source_reader.py": "bd3ba506d9dc9a4053aba3222d2ef970de121ab0c56555d8f6d8324d5997b5ae",
+          "src/company_wiki/source_catalog/service.py": "3d88bd7d7b81d55b1ae566d860adb0b5527cb47842bcd3c9a3c48fcc47b26fb6",
+          "src/company_wiki/source_catalog/config.py": "47a029ded115f6fc7364a98db2f83a772e7f6f293ca53dd4030f456d6c470d04"
+        }
+      },
+      "et": {
+        "root": "C:/Users/郑曾波/Projects/earnings-transcripts-du6-ff-readonly",
+        "commit": "d0ac42c60dcca992db78860b8469cfed3dd527e5",
+        "git_toplevel_match": true,
+        "tests_seam_present": ["tests/__init__.py", "tests/test_retrieval_runtime.py", "tests/test_transcript_api.py"],
+        "modules": {
+          "transcript_tool.py": "1684c922c8bff9a6ecc26fa5502a5abdc147e6c273619c5817e16325d7449003",
+          "transcript_api.py": "2a7ba8a7010ec6913e950ac06bd60d3f9e8b90d224b33df4e63fce323d502810",
+          "retrieval_runtime.py": "2655bbadeccc98e74c51df1f3e49171f0a827f7699abee0afc4e7d665ffb1957",
+          "tests/test_retrieval_runtime.py": "7089a48c77630a4b2cf6f1b93e49e942b4412d77a56de5d1d88379244b987a6b",
+          "tests/test_transcript_api.py": "1e5062d136a8584f515bff4debf50526c82ba87bb925983406b3eeea457f1cc2"
+        }
+      },
+      "ff": {
+        "branch": "codex/du6-ff-portable-20261016",
+        "head_at_run": "c35ea52156a73ba366eba8196fff1cf36c792c8e",
+        "code_binding_verified": true,
+        "code_binding_note": "report.code_binding records the real import locations and their SHAs (module paths display in 8.3 short form); verified=true means imports landed in the supplied code roots"
+      }
+    },
+    "scope": "fresh real 41-case FF->ET->CWP chain over an offline fixture provider boundary: real public CLI, real ET supervisor/worker, real CWP ensure/import/open_version, 0 real supplier/LLM/translation calls. It does not prove external supplier reachability or company figures."
+  },
+  "fixtures": [
+    {
+      "name": "existing portable failure corpus (read-only input)",
+      "path": "tests/fixtures/w06_contract_matrix/authority/original-41-report.json",
+      "sha256": "aa2ab10add76f89e6e259fa0a05c8ad961f562f46b3fd21a1e94c1b2a3acc72f",
+      "artifacts": {"files": 181, "bytes": 245252},
+      "use": "historical replay target; original findings/rows preserved verbatim"
+    },
+    {
+      "name": "controlled synthetic 41-case corpus",
+      "path": "generated per test under tmp_path by tests/test_du6_portable_matrix_evidence.py::build_controlled_matrix (never persisted, never committed)",
+      "use": "tool-behaviour proof only: every request/response/fixture/ET receipt is written and SHA-bound exactly like run.py writes them. It proves no real chain, no re-download and no supplier/company figure."
+    },
+    {
+      "name": "real chain report and bound artifacts",
+      "path": "evidence/chain-report.json + evidence/artifacts/ (271 files, 553795 bytes) + evidence/step1-artifact-shas.json",
+      "use": "the node-C fresh run kept as relative artifact evidence so ROOT can re-run every replay command"
+    }
+  ],
+  "replay_results": [
+    {"step": "2 relocated (deep dir with spaces + Chinese)", "command": "run.py replay --report <relocated report> --evidence-root <relocated artifacts> --output evidence/step2-relocated-replay.json", "exit": 1, "certified": false, "report_sha_unchanged": true, "case_rows_unchanged": true, "native_findings": 5, "recorded_findings": 5, "note": "readable and relocatable is not a business pass; the 1 PARTIAL / 2 NOT_RUN stay as recorded"},
+    {"step": "2b in-place (original root)", "command": "run.py replay --report <original report> --evidence-root <original artifacts> --output evidence/step2b-inplace-replay.json", "exit": 1, "note": "findings and case states identical to step 2 (same native audit over the same bytes)"},
+    {"step": "3 original artifacts root moved away", "command": "run.py replay --report <unmodified report> --evidence-root <relocated artifacts> --output evidence/step3-old-root-gone-replay.json", "exit": 1, "note": "findings identical to step 2 -> the override is what is read; nothing falls back to the recorded absolute root. The report's own bytes stayed 6e2705f3..."},
+    {"step": "3b override root moved away while the old root is still available", "command": "run.py replay --report <unmodified report> --evidence-root <missing root>", "exit": 2, "stderr": "replay error: evidence root is not a directory: ...", "note": "explicit input diagnostic, no record written, no half success report, never a silent success through the still-available old root"},
+    {"step": "4 independent copy with ONE response byte tampered", "command": "run.py replay --report <copy report> --evidence-root <tampered copy> --output evidence/step4-tampered-replay.json", "exit": 1, "added_findings": [["invalid_bound_evidence", "err_request_error", "ValueError: receipt bytes changed"]], "lost_findings": [], "note": "failure evidence kept in evidence/tampered-sample/; the success sample under evidence/artifacts/ is untouched"},
+    {"step": "5 existing portable failure fixture", "command": "run.py replay --report tests/fixtures/w06_contract_matrix/authority/original-41-report.json --evidence-root tests/fixtures/w06_contract_matrix/authority/artifacts --output evidence/step5-historical-failure-replay.json", "exit": 1, "original_case_results": {"PASS": 19, "FAIL": 21, "PARTIAL": 1, "NOT_RUN": 0, "total": 41}, "native_findings": 65, "note": "recorded findings preserved verbatim; historical FAIL/PARTIAL never upgraded"}
+  ],
+  "scopes": {
+    "retained_evidence_replay": "re-judges preserved request/response/fixture/ET-receipt bytes with the current native oracle. It does not re-read production originals, re-download anything, re-run the 41-case chain, or certify supplier/company figures.",
+    "fresh_real_41_chain": "only the single node-C run above is fresh chain evidence; the replay records never stand in for it."
+  },
+  "independent_review": [
+    {
+      "receipt": "receipts/07-independent-quality-check.txt",
+      "method": "hand re-computation from raw bytes that deliberately does not import oracle/cli_main/report",
+      "result": "21/21 PASS (report byte SHA, case counts, verbatim rows/oracle, every bound ref hash-checked on disk, one-byte tamper arithmetic, historical counts/findings preserved, scope wording). Counting-rule reconciliation appended: 165 oracle-verified bindings vs 167 distinct bound files, 0 hash mismatches under either rule."
+    },
+    {
+      "receipt": "handoff-review.md",
+      "method": "independent agent review of the whole card after implementation: derives the acceptance list itself, recomputes every SHA/count from raw bytes, re-runs the suite and Ruff",
+      "result": "PASS - ready for ROOT reception. 9 findings, all low-severity hygiene/evidence items and every one fixed (commit ee11e07 plus this follow-up): receipt 08 committed and referenced, Ruff evidenced in receipt 02, count reconciliation in receipt 07, tests[].skipped semantics corrected, duplicate/unknown/removed case-row gate tests added, staged replay write, runtime environment recorded in receipt 06."
+    },
+    {
+      "receipt": "receipts/08-evidence-byte-fidelity.txt",
+      "method": "post-commit byte-fidelity verification of the retained evidence against the report's SHA claims",
+      "result": "271/271 bound artifacts, chain-report.json and the tampered sample are byte-exact in git; scoped .gitattributes (evidence/** -text -eol -diff) keeps EOL normalisation from breaking the bindings"
+    }
+  ],
+  "old_failures_preserved": true,
+  "old_failures_detail": "no old test assertion was deleted or weakened; the frozen 65-finding default fingerprint is asserted; historical FAIL/PARTIAL/NOT_RUN rows and recorded findings survive relocation and replay unchanged; unknown/null usage and missing fresh proofs never upgrade",
+  "known_limits": [
+    "the real chain's 1 PARTIAL (request_after_failure_retry, child absolute deadline expired) and 2 NOT_RUN (final-proof reserve preserved) are batch-deadline evidence on a loaded host (174.565s of the 180s budget), not a pinned-version mismatch; per the card expected values and timeouts were not changed and the chain was not re-run for green",
+    "replay certifies retained bytes against the current oracle only; a clean replay is not fresh source verification",
+    "the controlled synthetic corpus in tests proves tool behaviour only and is never real chain evidence",
+    "report.code_binding shows 8.3 short module paths on Windows; verified=true and the receipt 03 long-form SHAs are the provenance record",
+    "no pack format, manifest mechanism, second oracle, transport library, persistent evidence store, authorization/consent file or manual sign-off document was introduced"
+  ],
+  "not_run": [
+    "original_wrong_mime and incomplete_sidecar_metadata_gap did not run in the single real chain (batch deadline/proof reserve) and are recorded NOT_RUN in evidence/chain-report.json",
+    "no fresh SourceVersionReader/original re-read during replay (by design)",
+    "no real supplier reachability, LLM or translation call (0 supplier_calls; network guard denies)",
+    "no RF formal forecast call or registry use (REVENUE_PUBLICATION_REGISTRY pointed at this lane's TEMP; RF never imported)",
+    "no mainline merge, no install/publication, no other lane directory touched"
+  ],
+  "root_integration_steps": [
+    "review handoff.md/handoff.json and the receipts (01 RED, 02 centralized regression, 03 pinned dependencies, 04 relocation replay, 05 no-fallback/tamper/history, 06 cleanup, 07 independent check)",
+    "optionally re-run any replay command against evidence/chain-report.json + evidence/artifacts/ (the commands are listed in replay_results)",
+    "merge branch codex/du6-ff-portable-20261016 (implementation commit 250981038dc8879003b2d670329278d236706dc4) per ROOT's normal process; run exact CI there",
+    "decide the follow-up for the batch-deadline NOT_RUN/PARTIAL trio of the real chain (named evidence in evidence/chain-report.json scope.stop_reason / phase_timing / launch_accounting); this lane deliberately did not widen deadlines or re-run for green",
+    "this lane stops here: no mainline merge, no install copy, no publication"
+  ],
+  "production_writes": 0,
+  "supplier_calls": 0,
+  "cleanup_receipt": "receipts/06-cleanup-receipt.txt",
+  "cleanup_summary": {
+    "retained_evidence_bytes": 1494302,
+    "retained_classes": {"chain_report": 869196, "chain_restore": 456, "chain_stdout": 224, "chain_stderr": 0, "replay_records_6_files": 69633, "bound_artifact_evidence_271_files": 553795, "tampered_failure_sample": 998},
+    "deleted_after_accounting": ["<OWNED_TEMP>/pytest", "<OWNED_TEMP>/chain-owned", "<OWNED_TEMP>/chain-out", "<OWNED_TEMP>/replay", "<OWNED_TEMP>/registry"],
+    "sentinel_preserved": true,
+    "production_metadata_unchanged": true,
+    "credential_handling": "config/FMP_API_KEY.txt stat only (size=32, mtime_ns=1790488448930065300 unchanged); content never read, copied, printed or hashed"
+  }
+}

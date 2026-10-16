@@ -1,0 +1,15 @@
+{
+  "acquisition_limits": {
+    "max_bytes": 2000000,
+    "max_cost_usd": "0",
+    "timeout_seconds": 25
+  },
+  "as_of_date": "2026-12-31",
+  "company_query": "宁德时代",
+  "document_kind": "quarterly_report",
+  "filing_intent": "fetch_if_missing",
+  "fiscal_period": "Q1",
+  "fiscal_year": 2026,
+  "market": "CN",
+  "schema_version": "2.0"
+}

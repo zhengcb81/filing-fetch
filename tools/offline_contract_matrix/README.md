@@ -95,3 +95,30 @@ Fixture responses exercise actual FF/CWP/ET runtime when its prerequisites resol
 `oracle.audit_case(spec, case)` is a component check. `oracle.audit(report)` additionally checks the complete fixed coverage and bound request/response/fixture bytes, source proofs and measured isolation. A single case/component positive control never certifies a complete product matrix. Historical reports without newly required fixture receipts remain historical/partial; do not manufacture them. No new human permission, authorization document or identity database is involved.
 
 Focused tool checks: 195 PASS (~5 seconds) and Ruff clean. The original actual product matrix remains 19 PASS / 21 FAIL / 1 PARTIAL. See `docs/handoffs/w06-ff-matrix/case-authority/handoff.md` for independent reception. Construction helper scripts in canonical evidence are historical one-shot edit records, not replay entry points; run the three test files above, then the unchanged real matrix only after ROOT producer fixes.
+
+## 可搬迁保留证据重放（DU6-FF-PORTABLE-EVIDENCE）
+
+接收方拿到的 ZIP/report 里 `evidence_root` 是供应商机器上的绝对路径；搬迁后不必再手工改 review copy，也不必重跑供应商链。
+
+**Python**：`oracle.audit(report, *, evidence_root=None)`。`None` 与旧行为完全一致（取 `report.evidence_root`）；
+显式 root 只改现有相对 request/response/fixture/ET receipt 引用的读取根，同一个 `_bound_evidence` 做同样的
+SHA/CaseSpec/原 findings 校验。不改写传入 report 或任何输入文件；不搜索磁盘、不回落旧绝对根；override 不是新的身份/授权状态。
+
+**公开 CLI**（`run.py` 直接承载，旧矩阵 argv 不变）：
+
+```
+python -B tools/offline_contract_matrix/run.py replay \
+  --report ABS_REPORT --evidence-root ABS_ARTIFACTS --output ABS_NEW_REPLAY_JSON
+```
+
+- 不要求 `--cwp-project/--et-project/--owned-root/--out-root`；只读保留证据并调用原生 `audit`，
+  不启动 Context/seed/provider/CWP/ET/fresh reader/网络。
+- 输出是小型 **`ff-matrix-evidence-replay/1`** 记录（不是第二份矩阵报告）：原 report 字节 SHA、原 schema、
+  选择的 evidence_root、原 case 结果计数与逐 case 原结果、原 recorded oracle/findings、当前 native replay findings、
+  明确历史重放 scope、退出状态。
+- 退出码：`0` 仅当原完整矩阵各 case 都 PASS、原 recorded oracle 通过且无历史 findings、且当前 native audit 无 findings；
+  重放“只是读得对”是 `1`；输入/输出错误（缺文件、非法 JSON、未知 schema、错误 root、输出同路径/已存在/落在 artifacts 内）是 `2`。
+  任何 FAIL/PARTIAL/NOT_RUN、历史 findings、未知 usage=null 都不因路径修好被升级为成功。
+- 不覆写原 report、原 artifacts 或已有重放输出；新输出必须是明确独立路径。
+- 重放只证明“保留字节 + 当前 oracle”的结果；**不等于**重新读取生产原文、重新下载、重跑 41 链、
+  或认证真实供应商/公司数字（与 fresh 真实 41 链 scope 分列声明）。

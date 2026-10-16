@@ -361,33 +361,29 @@ def test_case_crash_still_records_cleanup_and_restores_scratch(tmp_path):
 
 
 def test_run_process_reaps_child_when_communicate_raises_other_error(tmp_path):
-    class FakeProc:
-        def __init__(self):
-            self.pid = 4321
-            self.returncode = None
-            self.killed = False
-            self.communicated = 0
+    # communicate was matrix's former private implementation. Inject at the
+    # shared transport's real lifetime boundary and verify actual cleanup.
+    import os
+    import threading
+    transport = runtime.process_transport
+    captured = []
 
-        def communicate(self, input=None, timeout=None):
-            self.communicated += 1
-            if self.communicated == 1:
-                raise RuntimeError("synthetic communicate failure")
-            return b"", b""
+    def broken_lifetime(proc, job, state, deadline):
+        captured.append(proc)
+        raise RuntimeError("synthetic communicate failure")
 
-        def kill(self):
-            self.killed = True
-
-        def wait(self, timeout=None):
-            self.returncode = -9
-
-    fake = FakeProc()
-    with patch.object(runtime.subprocess, "Popen", return_value=fake), patch.object(
-        runtime.subprocess, "run"
-    ):
+    with patch.object(transport, "_await_lifetime", broken_lifetime):
         with pytest.raises(RuntimeError, match="synthetic communicate failure"):
-            runtime.run_process(["python", "child.py"], env={}, cwd=tmp_path, deadline=runtime.Deadline(5))
-    assert fake.killed, "child process leaked after an unexpected communicate error"
-    assert fake.communicated >= 2
+            runtime.run_process(
+                [sys.executable, "-B", "-S", "-c", "import threading;threading.Event().wait()"],
+                env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), cwd=tmp_path,
+                deadline=runtime.Deadline(5),
+            )
+    assert len(captured) == 1
+    assert captured[0].poll() is not None, "child process leaked after unexpected transport error"
+    assert all(pipe.closed for pipe in (captured[0].stdin, captured[0].stdout, captured[0].stderr))
+    assert not [t for t in threading.enumerate() if t.name.startswith("ff-process")]
+
 
 
 def test_expired_deadline_still_refuses_launch_after_reserve_change(tmp_path):

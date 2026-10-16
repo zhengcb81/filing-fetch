@@ -1,0 +1,42 @@
+== node C step 3: original artifacts root made unavailable -> no fallback to the old root ==
+report recorded evidence_root = C:\Users\郑曾波\Projects\_du6tmp\ff-portable-20261016\chain-out\attempt-ed7a5d06098d44d5945a54ded6548c67\artifacts
+original artifacts root now absent: True (parked at C:\Users\郑曾波\Projects\_du6tmp\ff-portable-20261016\replay\original-artifacts-parked)
+[step3] exit=1
+findings identical to step2 (override used, no old-root fallback): True
+case rows identical: True
+report sha unchanged: True
+original artifacts root restored: True
+
+== node C step 3b: override root gone while the OLD root is still available -> must NOT fall back ==
+[step3b] exit=2 stderr=replay error: evidence root is not a directory: C:\Users\郑曾波\Projects\_du6tmp\ff-portable-20261016\replay\搬迁 copy with spaces\artifacts
+exit=2 (2 = explicit input diagnostic; never a silent success via the still-available old root)
+record written: False -> no half 'success' report left behind
+override root restored: True
+
+== node C step 4: independent copy, ONE response byte tampered -> native SHA finding ==
+tampered file: err_request_error.run1.response.json (+1 byte) new sha c72397943d202d2ebd7f4eb5f564de862e700cf46a38303b2e5b95a7afea47eb
+[step4] exit=1
+findings before tamper: 5 / after: 6
+new findings caused by the tamper: [('invalid_bound_evidence', 'err_request_error', 'ValueError: receipt bytes changed')]
+findings lost by the tamper: []
+native SHA finding established: True
+report sha unchanged: True
+success sample untouched: True
+tampered copy kept as failure evidence: bytes=688
+
+== node C step 5: existing portable FAILURE fixture -> original findings preserved ==
+[step5] exit=1
+exit=1 certified=False
+original_case_results={'PASS': 19, 'FAIL': 21, 'PARTIAL': 1, 'NOT_RUN': 0, 'total': 41}
+recorded findings preserved verbatim: True
+native findings count=65
+historical fixture report sha unchanged: True
+historical fixture artifacts unchanged: True
+
+== step outputs ==
+  step2-relocated-replay.json exists=True bytes=5824
+  step2b-inplace-replay.json exists=True bytes=5884
+  step3-old-root-gone-replay.json exists=True bytes=5844
+  step3b-override-gone-replay.json exists=False bytes=0
+  step4-tampered-replay.json exists=True bytes=5954
+  step5-historical-failure-replay.json exists=True bytes=15557

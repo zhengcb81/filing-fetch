@@ -1,0 +1,45 @@
+== pinned read-only integration dependencies ==
+ff: root=C:\Users\郑曾波\Projects\filing-fetch-du6-portable
+  HEAD=c35ea52156a73ba366eba8196fff1cf36c792c8e
+  toplevel=C:/Users/郑曾波/Projects/filing-fetch-du6-portable
+  branch=codex/du6-ff-portable-20261016
+  status='M tools/offline_contract_matrix/README.md\n M tools/offline_contract_matrix/cli_main.py\n M tools/offline_contract_matrix/oracle.py\n?? docs/plans/du6-portable-2026-10-16/receipts/\n?? tests/test_du6_portable_matrix_evidence.py'
+  sparse_checkout=true
+cwp: root=C:\Users\郑曾波\Projects\company-wiki-du6-ff-readonly
+  HEAD=f08aa101ab49ca983d3a40356abfb05347f586b3
+  toplevel=C:/Users/郑曾波/Projects/company-wiki-du6-ff-readonly
+  branch=HEAD
+  status=''
+  sparse_checkout=true
+et: root=C:\Users\郑曾波\Projects\earnings-transcripts-du6-ff-readonly
+  HEAD=d0ac42c60dcca992db78860b8469cfed3dd527e5
+  toplevel=C:/Users/郑曾波/Projects/earnings-transcripts-du6-ff-readonly
+  branch=HEAD
+  status=''
+  sparse_checkout=true
+
+== ff changed modules ==
+  tools/offline_contract_matrix/oracle.py sha256=cc6fafce30cab03fc869fa9333f2239c9bef785650aff97eb859d9744138be81
+  tools/offline_contract_matrix/cli_main.py sha256=9fe0ffdb974c3e2b49ff5717dc0404b4c3b20794589d98563dce146965988f8e
+  tools/offline_contract_matrix/run.py sha256=c75138990507fc5330bfd213f1892f3d08cd106cc663dc44051bf0a658dc3151
+  tools/offline_contract_matrix/case_specs.py sha256=763a755b4e7956acb70ead79da598fb5fab4ed8990ae3acbf12a4e27a3ade67c
+  tools/offline_contract_matrix/report.py sha256=2ac4926cb7a4021046d98e9a8fc0e7b7f1b4d2ac393024387541a8b1849ecf7c
+  tools/offline_contract_matrix/runtime.py sha256=dd18dabe84600e584854de28a19f36c938157c98dff104fe9ff5b2f2346ca4bc
+
+== dependency module SHAs recorded by the matrix contract ==
+  cwp src/company_wiki/source_catalog/source_reader.py sha256=bd3ba506d9dc9a4053aba3222d2ef970de121ab0c56555d8f6d8324d5997b5ae
+  cwp src/company_wiki/source_catalog/service.py sha256=3d88bd7d7b81d55b1ae566d860adb0b5527cb47842bcd3c9a3c48fcc47b26fb6
+  cwp src/company_wiki/source_catalog/config.py sha256=47a029ded115f6fc7364a98db2f83a772e7f6f293ca53dd4030f456d6c470d04
+  et transcript_tool.py sha256=1684c922c8bff9a6ecc26fa5502a5abdc147e6c273619c5817e16325d7449003 exists=True
+  et transcript_api.py sha256=2a7ba8a7010ec6913e950ac06bd60d3f9e8b90d224b33df4e63fce323d502810 exists=True
+  et retrieval_runtime.py sha256=2655bbadeccc98e74c51df1f3e49171f0a827f7699abee0afc4e7d665ffb1957 exists=True
+  et tests/test_retrieval_runtime.py sha256=7089a48c77630a4b2cf6f1b93e49e942b4412d77a56de5d1d88379244b987a6b exists=True
+  et tests/test_transcript_api.py sha256=1e5062d136a8584f515bff4debf50526c82ba87bb925983406b3eeea457f1cc2 exists=True
+  et tests/__init__.py sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 exists=True
+
+== ET test-proxy seam present in the pinned checkout ==
+  tests dir: ['__init__.py', 'generate_transcript_goldens.py', 'golden', 'request_budget_cli_proxy.py', 'test_batch_runtime.py', 'test_common.py', 'test_launch_capability_contract.py', 'test_lock.py', 'test_make_interleaved.py', 'test_provider_cost_capability.py', 'test_reader.py', 'test_request_response_budget.py', 'test_retrieval_cli_e2e.py', 'test_retrieval_runtime.py', 'test_scraper.py', 'test_transcript_api.py', 'test_transcript_artifact.py', 'test_transcript_audit.py', 'test_translation_controls.py']
+
+== production credential metadata (stat only; bytes never read/hashed) ==
+  C:\Users\郑曾波\Projects\filing-fetch\config\FMP_API_KEY.txt size=32 mtime_ns=1790488448930065300 (content NOT read)
+  C:\Users\郑曾波\Projects\filing-fetch-du6-portable\config\FMP_API_KEY.txt absent

@@ -1,0 +1,150 @@
+{
+  "schema_version": "ff-matrix-evidence-replay/1",
+  "generated_by": {
+    "tool": "tools/offline_contract_matrix",
+    "entry": "run.py replay",
+    "audit": "oracle.audit(report, *, evidence_root=...)"
+  },
+  "report": {
+    "path": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\replay\\tampered-copy\\report.json",
+    "sha256": "6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc",
+    "schema_version": "ff-et-cwp-offline-matrix/1",
+    "sha256_after_replay": "6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc"
+  },
+  "evidence_root": {
+    "requested": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\replay\\tampered-copy\\artifacts",
+    "resolved": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\replay\\tampered-copy\\artifacts",
+    "source": "explicit_override",
+    "report_recorded": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\chain-out\\attempt-ed7a5d06098d44d5945a54ded6548c67\\artifacts"
+  },
+  "original_case_results": {
+    "PASS": 38,
+    "FAIL": 0,
+    "PARTIAL": 1,
+    "NOT_RUN": 2,
+    "total": 41
+  },
+  "original_case_rows": {
+    "chainA_download_reuse": "PASS",
+    "fin_cn_annual_hit": "PASS",
+    "fin_cn_semi_hit": "PASS",
+    "fin_cn_quarterly_hit": "PASS",
+    "fin_hk_annual_hit": "PASS",
+    "fin_hk_semi_hit": "PASS",
+    "fin_hk_quarterly_hit": "PASS",
+    "fin_us_annual_hit": "PASS",
+    "fin_us_semi_hit": "PASS",
+    "fin_us_quarterly_hit": "PASS",
+    "fin_cn_annual_fetch": "PASS",
+    "fin_cn_semi_fetch": "PASS",
+    "fin_cn_quarterly_fetch": "PASS",
+    "fin_hk_annual_fetch": "PASS",
+    "fin_hk_semi_fetch": "PASS",
+    "fin_hk_quarterly_fetch": "PASS",
+    "fin_us_annual_fetch": "PASS",
+    "fin_us_semi_fetch": "PASS",
+    "fin_us_quarterly_fetch": "PASS",
+    "nonperiod_prospectus": "PASS",
+    "nonperiod_equity_offering": "PASS",
+    "nonperiod_convertible_bond": "PASS",
+    "nonperiod_investor_relations": "PASS",
+    "call_fy_only_no_q": "PASS",
+    "call_past_cutoff": "PASS",
+    "call_wrong_quarter": "PASS",
+    "err_request_error": "PASS",
+    "err_402_entitlement": "PASS",
+    "err_missing_creds": "PASS",
+    "err_unknown_usage": "PASS",
+    "local_txt_exact_reuse": "PASS",
+    "reuse_only_missing_period": "PASS",
+    "call_wrong_symbol": "PASS",
+    "call_wrong_mime": "PASS",
+    "call_max_bytes": "PASS",
+    "call_hard_timeout": "PASS",
+    "request_after_failure_retry": "PARTIAL",
+    "original_wrong_sha": "PASS",
+    "original_max_bytes": "PASS",
+    "original_wrong_mime": "NOT_RUN",
+    "incomplete_sidecar_metadata_gap": "NOT_RUN"
+  },
+  "original_recorded_oracle": {
+    "pass": false,
+    "findings": [
+      {
+        "vector": "case_not_passed",
+        "case_id": "request_after_failure_retry",
+        "detail": "actual result PARTIAL cannot certify required case"
+      },
+      {
+        "vector": "case_not_passed",
+        "case_id": "original_wrong_mime",
+        "detail": "actual result NOT_RUN cannot certify required case"
+      },
+      {
+        "vector": "case_not_passed",
+        "case_id": "incomplete_sidecar_metadata_gap",
+        "detail": "actual result NOT_RUN cannot certify required case"
+      },
+      {
+        "vector": "missing_bound_evidence",
+        "case_id": "original_wrong_mime",
+        "detail": "PASS lacks actual request/response files"
+      },
+      {
+        "vector": "missing_bound_evidence",
+        "case_id": "incomplete_sidecar_metadata_gap",
+        "detail": "PASS lacks actual request/response files"
+      }
+    ]
+  },
+  "native_replay": {
+    "pass": false,
+    "findings": [
+      {
+        "vector": "case_not_passed",
+        "case_id": "request_after_failure_retry",
+        "detail": "actual result PARTIAL cannot certify required case"
+      },
+      {
+        "vector": "case_not_passed",
+        "case_id": "original_wrong_mime",
+        "detail": "actual result NOT_RUN cannot certify required case"
+      },
+      {
+        "vector": "case_not_passed",
+        "case_id": "incomplete_sidecar_metadata_gap",
+        "detail": "actual result NOT_RUN cannot certify required case"
+      },
+      {
+        "vector": "invalid_bound_evidence",
+        "case_id": "err_request_error",
+        "detail": "ValueError: receipt bytes changed"
+      },
+      {
+        "vector": "missing_bound_evidence",
+        "case_id": "original_wrong_mime",
+        "detail": "PASS lacks actual request/response files"
+      },
+      {
+        "vector": "missing_bound_evidence",
+        "case_id": "incomplete_sidecar_metadata_gap",
+        "detail": "PASS lacks actual request/response files"
+      }
+    ]
+  },
+  "scope": {
+    "kind": "retained-evidence replay",
+    "statement": "RETAINED-EVIDENCE REPLAY only: the preserved request/response/fixture/ET-receipt bytes under the chosen evidence root are re-judged by the current native oracle. This is NOT a fresh real 41-case FF->ET->CWP chain run and NOT a new source acquisition.",
+    "proves": "that the retained bytes still hash-match the report's claims and still satisfy the fixed CaseSpec contract and the current oracle",
+    "does_not_prove": [
+      "no production original was re-read and nothing was re-downloaded; no supplier call was made",
+      "no fresh SourceVersionReader verification ran; source proofs are only replayed as recorded",
+      "the 41-case chain was not re-executed; no fresh real chain evidence exists here",
+      "no supplier or company figure is certified by this record",
+      "historical FAIL/PARTIAL/NOT_RUN results, recorded findings and unknown/null usage are never upgraded"
+    ],
+    "fresh_41_chain_scope": "a separate fresh run (node C evidence) is the only source of fresh chain results; this record never stands in for it"
+  },
+  "certified": false,
+  "exit_status": 1
+}

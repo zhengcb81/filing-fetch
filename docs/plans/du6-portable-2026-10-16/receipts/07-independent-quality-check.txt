@@ -1,0 +1,65 @@
+== hand re-computation of the replay record's claims ==
+[PASS] report byte sha matches the record :: 6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc
+[PASS] record reports the original schema
+[PASS] case result counts recomputed from raw report :: raw={'PASS': 38, 'PARTIAL': 1, 'NOT_RUN': 2} record={'PASS': 38, 'FAIL': 0, 'PARTIAL': 1, 'NOT_RUN': 2, 'total': 41}
+[PASS] case rows are a verbatim projection (no PASS relabelling)
+[PASS] recorded oracle block copied verbatim
+[PASS] recorded oracle has 5 findings
+[PASS] recorded findings equal native replay findings (no invention)
+[PASS] replay chose the explicit relocated root
+[PASS] non-PASS history not upgraded (certified false, exit 1)
+[PASS] unknown cost still null in the source report
+
+== independent SHA walk over every bound ref in the kept artifacts ==
+[PASS] all 165 bound refs hash-match on disk :: bad=[]
+    distinct bound refs checked: 165
+
+== tamper sample is exactly one byte apart, success sample untouched ==
+[PASS] tampered copy = kept copy + exactly one byte
+[PASS] kept sample still matches its recorded sha
+
+== historical failure fixture replay: preserved, not upgraded ==
+[PASS] recorded findings preserved verbatim
+[PASS] historical case rows preserved
+[PASS] historical counts recomputed :: raw={'FAIL': 21, 'PASS': 19, 'PARTIAL': 1}
+[PASS] historical replay not certified
+[PASS] historical native findings retained (65)
+
+== scope statement separates retained replay from a fresh 41 chain ==
+[PASS] kind is retained-evidence replay
+[PASS] statement denies re-download / fresh chain
+[PASS] fresh 41-chain scope declared separately
+
+== independent check summary: 21/21 PASS ==
+
+== reconciliation note (added after independent review) ==
+Rule used above: one count per (run, ref-kind) ENTRY where the ref is present,
+including ET receipts only for runs with et_fixture_requests > 0.  The reviewer
+counted DISTINCT FILES referenced anywhere in the report instead.  Both rules
+were recomputed here; both give zero hash mismatches.
+
+per-entry count (rule above): 165  breakdown={'request': 49, 'response': 49, 'fixture': 49, 'et_result': 9, 'et_usage': 9}
+distinct referenced files: 165  (request/response/fixture/ET receipts combined)
+hash mismatches: 0 []
+verdict: both counting rules agree that every bound ref hash-matches the retained evidence.
+
+== precise reconciliation of the 165 vs 167 counts ==
+165 = bindings the oracle verifies: request/response/fixture refs on every run
+      (49+49+49) plus ET result/usage receipts only on runs whose
+      et_fixture_requests > 0 (9+9).  All 165 hash-match (0 mismatches).
+167 = every receipt/ref file a trace record names, including the ET result and
+      usage receipts that run.py also attaches to runs with
+      et_fixture_requests == 0 (the oracle deliberately does not require those).
+
+  extra trace-claimed receipt: err_request_error ET result call_past_cutoff.result.json hash_matches=True
+  extra trace-claimed receipt: err_request_error ET usage call_past_cutoff.usage.json hash_matches=True
+  extra trace-claimed receipt: err_missing_creds ET result call_past_cutoff.result.json hash_matches=True
+  extra trace-claimed receipt: err_missing_creds ET usage call_past_cutoff.usage.json hash_matches=True
+  extra trace-claimed receipt: err_unknown_usage ET result err_unknown_usage.result.json hash_matches=True
+  extra trace-claimed receipt: err_unknown_usage ET usage err_unknown_usage.usage.json hash_matches=True
+  extras=6 all_matching=True
+verdict: 165 oracle-verified bindings + 2 additionally trace-claimed ET receipts; every claimed byte matches.
+  note: the 6 extra trace entries resolve to 2 distinct extra files
+  (call_past_cutoff.result.json / call_past_cutoff.usage.json, carried over via
+  receipt_tag) -> 167 distinct bound files in total, which is exactly the
+  reviewer's independently derived count. Every claimed byte matches.

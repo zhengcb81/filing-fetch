@@ -1,0 +1,227 @@
+# Node A RED receipt (first behaviour RED) - DU6-FF-PORTABLE-EVIDENCE
+# cmd: python -B -m pytest -q -p no:cacheprovider --tb=line tests/test_du6_portable_matrix_evidence.py --basetemp <OWNED_TEMP>/pytest
+# base: e2efa81d7995836d457479eb528fa6f8cd5dc3f3 (+ PWF seed only); no source changed yet.
+# 3 passed  = frozen OLD behaviour already green (default findings hash 417a7891...,
+#             old audit() non-mutation, old matrix argv dispatch).
+# 29 failed = 2 INTERFACE RED (missing API, NOT a production defect):
+#               * audit() has no evidence_root keyword  -> TypeError
+#               * cli_main has no `replay` branch       -> argparse SystemExit(2)
+#             and the behaviour RED that rides on them (relocation keeps bytes,
+#             no fallback to the report's recorded root, tamper/upgrade refusals).
+# First behaviour RED (representative): test_override_relocates_reads_and_keeps_original_bytes
+#             -> TypeError: audit() got an unexpected keyword argument 'evidence_root'
+FF..FFFFFFFFFFFFFFFFFFFFFFFFFF.F                                         [100%]
+================================== FAILURES ===================================
+E   KeyError: 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:446: KeyError: 'evidence_root'
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:91: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:516: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:91: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:91: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:560: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:569: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:576: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:588: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:596: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:606: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:616: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:627: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:639: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   TypeError: audit() got an unexpected keyword argument 'evidence_root'
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:713: TypeError: audit() got an unexpected keyword argument 'evidence_root'
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   argparse.ArgumentError: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+
+During handling of the above exception, another exception occurred:
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                   --et-project ET_PROJECT
+                                   --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                   [--workers {1,2}]
+w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+C:\Miniconda\Lib\argparse.py:2645: SystemExit: 2
+E   AssertionError: usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+                                         --et-project ET_PROJECT
+                                         --owned-root OWNED_ROOT --out-root OUT_ROOT
+                                         [--workers {1,2}]
+      w06-offline-contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root
+      
+    assert 2 == 0
+     +  where 2 = CompletedProcess(args=['C:\\Miniconda\\python.exe', '-B', 'C:\\Users\\郑曾波\\Projects\\filing-fetch-du6-portable\\tools\...contract-matrix: error: the following arguments are required: --cwp-project, --et-project, --owned-root, --out-root\n').returncode
+C:\Users\郑曾波\Projects\filing-fetch-du6-portable\tests\test_du6_portable_matrix_evidence.py:929: AssertionError: usage: w06-offline-contract-matrix [-h] --cwp-project CWP_PROJECT
+=========================== short test summary info ===========================
+FAILED tests/test_du6_portable_matrix_evidence.py::test_interface_red_audit_exposes_evidence_root_override
+FAILED tests/test_du6_portable_matrix_evidence.py::test_interface_red_cli_exposes_replay_branch
+FAILED tests/test_du6_portable_matrix_evidence.py::test_explicit_none_and_same_root_do_not_change_findings_or_inputs
+FAILED tests/test_du6_portable_matrix_evidence.py::test_override_relocates_reads_and_keeps_original_bytes
+FAILED tests/test_du6_portable_matrix_evidence.py::test_override_reads_only_the_override_never_the_report_root
+FAILED tests/test_du6_portable_matrix_evidence.py::test_missing_override_root_never_falls_back_to_report_root
+FAILED tests/test_du6_portable_matrix_evidence.py::test_single_byte_response_tamper_is_detected
+FAILED tests/test_du6_portable_matrix_evidence.py::test_single_byte_request_tamper_is_detected
+FAILED tests/test_du6_portable_matrix_evidence.py::test_single_byte_fixture_tamper_is_detected
+FAILED tests/test_du6_portable_matrix_evidence.py::test_et_usage_and_result_receipt_tamper_is_detected
+FAILED tests/test_du6_portable_matrix_evidence.py::test_inline_response_self_claim_mismatch_is_detected
+FAILED tests/test_du6_portable_matrix_evidence.py::test_missing_artifact_file_is_detected
+FAILED tests/test_du6_portable_matrix_evidence.py::test_ref_pointing_at_directory_is_detected
+FAILED tests/test_du6_portable_matrix_evidence.py::test_illegal_json_in_bound_evidence_is_detected
+FAILED tests/test_du6_portable_matrix_evidence.py::test_path_escaping_evidence_root_is_detected
+FAILED tests/test_du6_portable_matrix_evidence.py::test_historical_failures_and_recorded_findings_cannot_be_upgraded
+FAILED tests/test_du6_portable_matrix_evidence.py::test_unknown_usage_and_null_cost_never_upgrade
+FAILED tests/test_du6_portable_matrix_evidence.py::test_missing_fresh_proof_cannot_upgrade
+FAILED tests/test_du6_portable_matrix_evidence.py::test_component_positive_control_cannot_certify_full_matrix
+FAILED tests/test_du6_portable_matrix_evidence.py::test_full_controlled_matrix_passes_and_replay_certifies
+FAILED tests/test_du6_portable_matrix_evidence.py::test_replay_refuses_same_path_and_existing_output
+FAILED tests/test_du6_portable_matrix_evidence.py::test_replay_input_errors_are_explicit_not_tracebacks[missing_report]
+FAILED tests/test_du6_portable_matrix_evidence.py::test_replay_input_errors_are_explicit_not_tracebacks[bad_json]
+FAILED tests/test_du6_portable_matrix_evidence.py::test_replay_input_errors_are_explicit_not_tracebacks[unknown_schema]
+FAILED tests/test_du6_portable_matrix_evidence.py::test_replay_input_errors_are_explicit_not_tracebacks[missing_root]
+FAILED tests/test_du6_portable_matrix_evidence.py::test_replay_input_errors_are_explicit_not_tracebacks[missing_args]
+FAILED tests/test_du6_portable_matrix_evidence.py::test_replay_never_starts_context_seed_provider_or_network
+FAILED tests/test_du6_portable_matrix_evidence.py::test_replay_requires_no_production_code_roots
+FAILED tests/test_du6_portable_matrix_evidence.py::test_public_entrypoint_run_py_replays_without_code_roots
+29 failed, 3 passed in 28.36s

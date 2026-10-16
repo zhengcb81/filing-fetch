@@ -1,0 +1,14 @@
+{
+  "acquisition_limits": {
+    "max_bytes": 50,
+    "max_cost_usd": "0",
+    "timeout_seconds": 5
+  },
+  "as_of_date": "2026-12-31",
+  "company_query": "宁德时代",
+  "document_kind": "prospectus",
+  "filing_intent": "fetch_if_missing",
+  "fiscal_year": 2031,
+  "market": "CN",
+  "schema_version": "2.0"
+}

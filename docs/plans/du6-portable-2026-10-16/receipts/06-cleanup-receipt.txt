@@ -1,0 +1,50 @@
+== assemble handoff evidence (small report/stdout/stderr/replay JSON + relative artifact evidence) ==
+
+== retained byte accounting per class ==
+  chain report (evidence/chain-report.json): files=1 bytes=869196
+  chain restore receipt: files=1 bytes=456
+  chain stdout: files=1 bytes=224
+  chain stderr: files=1 bytes=0
+  replay records (6 files): files=6 bytes=69633
+  bound artifact evidence (evidence/artifacts): files=271 bytes=553795
+  tampered failure sample: files=2 bytes=998
+  TOTAL retained evidence bytes=1494302
+
+== pre-cleanup OWNED_TEMP (this lane's own scratch/copies only) ==
+  chain-out: files=274 bytes=1437637
+  chain-owned: files=0 bytes=0
+  pytest: files=7172 bytes=5833706
+  registry: files=0 bytes=0
+  replay: files=552 bytes=2915840
+  sentinel.txt: files=1 bytes=111
+
+== cleanup: delete only paths created by this lane, resolved under OWNED_TEMP ==
+  removed: ['pytest', 'chain-owned', 'chain-out', 'replay', 'registry']
+  sentinel preserved: du6-ff-portable-evidence sentinel created 2026-10-16; only this lane writes under _du6tmp/ff-portable-20261016
+  OWNED_TEMP now: ['sentinel.txt']
+
+== post-isolation snapshot vs pre-run ==
+  ff key module SHAs unchanged: True
+  cwp HEAD/status: f08aa101ab49ca983d3a40356abfb05347f586b3 / ''
+  et  HEAD/status: d0ac42c60dcca992db78860b8469cfed3dd527e5 / ''
+  credential stat-only FMP_API_KEY.txt: size=32 mtime_ns=1790488448930065300 (content NOT read; pre: size=32 mtime_ns=1790488448930065300)
+  ff worktree status: M tools/offline_contract_matrix/README.md
+ M tools/offline_contract_matrix/cli_main.py
+ M tools/offline_contract_matrix/oracle.py
+?? docs/plans/du6-portable-2026-10-16/evidence/
+?? docs/plans/du6-portable-2026-10-16/receipts/
+?? tests/test_du6_portable_matrix_evidence.py
+
+== production writes this lane ==
+  production_writes=0 (config/key/originals/AUTO/real registry untouched; credential bytes never read, hashed or copied)
+  supplier_calls=0 (offline fixture boundary only; network guard denies)
+
+== runtime environment of every command in this lane ==
+  PYTHONDONTWRITEBYTECODE=1  (exported for each pytest/python invocation; every
+    python launcher also used -B, so no bytecode cache was written outside the
+    matrix's own owned cache dir, which the runner tears down)
+  REVENUE_PUBLICATION_REGISTRY=C:/Users/郑曾波/Projects/_du6tmp/ff-portable-20261016/registry
+    (pointed at this lane's OWNED_TEMP before any python started; RF was never
+    imported and never called; the empty registry dir was deleted in cleanup)
+  network/translation: matrix child processes run under the existing
+    W06 offline guard (socket + translator denied, counted in report.scope)

@@ -1,0 +1,25 @@
+== node C step 1: real run artefacts, byte-identical record ==
+report=C:\Users\郑曾波\Projects\_du6tmp\ff-portable-20261016\chain-out\attempt-ed7a5d06098d44d5945a54ded6548c67\report.json
+report_sha256=6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc
+artifacts_files=271 artifacts_bytes=553795
+report_bytes=869196
+
+== node C step 1b: full byte copy to a deeper dir with spaces + Chinese ==
+relocated_artifacts=C:\Users\郑曾波\Projects\_du6tmp\ff-portable-20261016\replay\搬迁 copy with spaces\artifacts
+relocated_files=271 identical=True
+relocated_report_sha256=6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc (same as original: True)
+
+== node C step 2: CLI replay with the explicitly relocated artifacts ==
+[step2] exit=1 out=step2-relocated-replay.json
+report_sha256_after=6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc unchanged=True
+record.report.sha256=6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc sha256_after_replay=6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc
+record.evidence_root={"requested": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\replay\\搬迁 copy with spaces\\artifacts", "resolved": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\replay\\搬迁 copy with spaces\\artifacts", "source": "explicit_override", "report_recorded": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\chain-out\\attempt-ed7a5d06098d44d5945a54ded6548c67\\artifacts"}
+record.original_case_results={'PASS': 38, 'FAIL': 0, 'PARTIAL': 1, 'NOT_RUN': 2, 'total': 41}
+record.certified=False exit_status=1
+native_findings=[('case_not_passed', 'request_after_failure_retry'), ('case_not_passed', 'original_wrong_mime'), ('case_not_passed', 'incomplete_sidecar_metadata_gap'), ('missing_bound_evidence', 'original_wrong_mime'), ('missing_bound_evidence', 'incomplete_sidecar_metadata_gap')]
+original_recorded_findings=[('case_not_passed', 'request_after_failure_retry'), ('case_not_passed', 'original_wrong_mime'), ('case_not_passed', 'incomplete_sidecar_metadata_gap'), ('missing_bound_evidence', 'original_wrong_mime'), ('missing_bound_evidence', 'incomplete_sidecar_metadata_gap')]
+original_case_rows={"chainA_download_reuse": "PASS", "fin_cn_annual_hit": "PASS", "fin_cn_semi_hit": "PASS", "fin_cn_quarterly_hit": "PASS", "fin_hk_annual_hit": "PASS", "fin_hk_semi_hit": "PASS", "fin_hk_quarterly_hit": "PASS", "fin_us_annual_hit": "PASS", "fin_us_semi_hit": "PASS", "fin_us_quarterly_hit": "PASS", "fin_cn_annual_fetch": "PASS", "fin_cn_semi_fetch": "PASS", "fin_cn_quarterly_fetch": "PASS", "fin_hk_annual_fetch": "PASS", "fin_hk_semi_fetch": "PASS", "fin_hk_quarterly_fetch": "PASS", "fin_us_annual_fetch": "PASS", "fin_us_semi_fetch": "PASS", "fin_us_quarterly_fetch": "PASS", "nonperiod_prospectus": "PASS", "nonperiod_equity_offering": "PASS", "nonperiod_convertible_bond": "PASS", "nonperiod_investor_relations": "PASS", "call_fy_only_no_q": "PASS", "call_past_cutoff": "PASS", "call_wrong_quarter": "PASS", "err_request_error": "PASS", "err_402_entitlement": "PASS", "err_missing_creds": "PASS", "err_unknown_usage": "PASS", "local_txt_exact_reuse": "PASS", "reuse_only_missing_period": "PASS", "call_wrong_symbol": "PASS", "call_wrong_mime": "PASS", "call_max_bytes": "PASS", "call_hard_timeout": "PASS", "request_after_failure_retry": "PARTIAL", "original_wrong_sha": "PASS", "original_max_bytes": "PASS", "original_wrong_mime": "NOT_RUN", "incomplete_sidecar_metadata_gap": "NOT_RUN"}
+
+== node C step 2b: same replay at the ORIGINAL root must agree exactly ==
+[step2b] exit=1 out=step2b-inplace-replay.json
+inplace exit=1 findings_and_case_states_identical=True

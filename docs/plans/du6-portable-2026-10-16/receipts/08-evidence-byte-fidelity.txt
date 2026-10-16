@@ -1,0 +1,13 @@
+# Evidence byte-fidelity check (post-commit)
+# Why: git's default EOL policy (*.json text eol=lf in root .gitattributes) would
+# normalize the CRLF bytes the report's SHA claims were computed over, silently
+# breaking every binding in the retained evidence. Fixed with a scoped
+# docs/plans/du6-portable-2026-10-16/.gitattributes ('evidence/** -text -eol -diff',
+# the same convention as /.planning/w04-wp04/**), the handoff commit was amended,
+# and the index was re-staged so git stores the exact bytes.
+
+bound artifact files committed byte-exactly: 271/271  mismatches=[]
+chain-report.json committed sha == recorded: True
+tampered sample still exactly +1 byte in git: True
+read-only historical fixture untouched in git: True
+head commit: b225bbc045b05aed46233f4dd7c0113d882d0321

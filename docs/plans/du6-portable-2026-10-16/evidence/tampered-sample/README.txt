@@ -1,0 +1,1 @@
+Failure evidence kept for node C step 4: this response file is the pristine err_request_error.run1.response.json plus exactly one trailing byte. The replay over it produced invalid_bound_evidence 'receipt bytes changed'; see ../step4-tampered-replay.json. The success sample under ../artifacts/ is untouched.

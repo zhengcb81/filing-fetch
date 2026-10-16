@@ -1,0 +1,16 @@
+# Final centralized regression (node B/C gate) - DU6-FF-PORTABLE-EVIDENCE
+# cmd: python -B -m pytest -q -p no:cacheprovider tests/test_du6_portable_matrix_evidence.py tests/test_w06_contract_matrix.py tests/test_w06_matrix_runtime.py tests/test_w06_case_authority.py tests/test_w07_matrix_efficiency.py --basetemp <OWNED_TEMP>/pytest
+# env: PYTHONDONTWRITEBYTECODE=1
+# The same command gave 245 passed before the independent-review follow-up
+# (3 tests added afterwards: duplicate/unknown/removed case-row gate).
+
+........................................................................ [ 29%]
+........................................................................ [ 58%]
+........................................................................ [ 87%]
+................................                                         [100%]
+248 passed in 24.79s
+
+== ruff (scoped to changed sources + new test) ==
+$ python -B -m ruff check tools/offline_contract_matrix/oracle.py tools/offline_contract_matrix/cli_main.py tests/test_du6_portable_matrix_evidence.py
+All checks passed!
+exit=0

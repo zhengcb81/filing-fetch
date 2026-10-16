@@ -53,7 +53,15 @@ def _real_layer_ok(case: dict[str, Any]) -> bool:
     )
 
 
-def audit(report: dict[str, Any]) -> list[Finding]:
+def audit(report: dict[str, Any], *, evidence_root: str | Path | None = None) -> list[Finding]:
+    """Audit one matrix report.
+
+    ``evidence_root`` optionally re-roots only the existing relative artifact
+    refs (retained-evidence replay after a relocation). ``None`` keeps the old
+    default exactly: the report's own ``evidence_root``. The override never
+    rewrites CaseSpec judgements, SHA checks, the report or any input, and it
+    is not a new identity/authorization state.
+    """
     findings: list[Finding] = []
     cases = report.get("cases") or []
     if not cases:
@@ -92,7 +100,7 @@ def audit(report: dict[str, Any]) -> list[Finding]:
             )
         )
 
-    findings.extend(_bound_evidence(report))
+    findings.extend(_bound_evidence(report, evidence_root))
     return findings
 
 
@@ -194,7 +202,7 @@ def passes(findings: list[Finding]) -> bool:
     return not findings
 
 
-def _bound_evidence(report: dict) -> list[Finding]:
+def _bound_evidence(report: dict, evidence_root: str | Path | None = None) -> list[Finding]:
     findings = []
     scope = report.get("scope") or {}
     if (
@@ -209,7 +217,9 @@ def _bound_evidence(report: dict) -> list[Finding]:
                 "startup network/translation instrumentation missing or an attempt occurred",
             )
         )
-    root_value = report.get("evidence_root")
+    # An explicit override only relocates the existing relative refs; nothing
+    # searches the disk and nothing falls back to the report's recorded root.
+    root_value = evidence_root if evidence_root is not None else report.get("evidence_root")
     root = Path(root_value).resolve() if root_value else None
     proofs = (report.get("source_proofs") or {}).get("proofs") or {}
     for case in report.get("cases", []):

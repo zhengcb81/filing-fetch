@@ -1,0 +1,30 @@
+{
+  "schema_version": "2.0",
+  "status": "not_found",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": 2030,
+    "fiscal_period": "FY",
+    "as_of_date": "2026-12-31"
+  },
+  "filing": {
+    "status": "not_found",
+    "reason": "local source preparation not_found: unknown",
+    "retryable": false,
+    "upstream_cause": {
+      "schema_version": "filing-upstream-cause/1",
+      "operation": "local_prepare",
+      "code": "unknown",
+      "provider_started": false,
+      "usage_complete": true,
+      "retry_scope": "none"
+    },
+    "stage": "local_prepare"
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 3,
+  "downloads": 0
+}
