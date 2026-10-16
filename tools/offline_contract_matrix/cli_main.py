@@ -1,6 +1,7 @@
 """Offline manual FF -> ET -> CWP matrix. Exit 0 requires complete measured proof."""
 from __future__ import annotations
 import argparse
+import copy
 import json
 import sys
 import time
@@ -18,7 +19,7 @@ from matrix_cases import seed_all  # noqa: E402
 from measurement import (  # noqa: E402
     PhaseTimer, merge_launch_reports, launch_report, cache_stats,
 )
-from report import CaseResult, Dependency, build_report, emit, sha256_file  # noqa: E402
+from report import CaseResult, Dependency, build_report, emit, sha256_bytes, sha256_file, SCHEMA  # noqa: E402
 from matrix_outcome import source_ref  # noqa: E402
 import oracle as oracle_mod  # noqa: E402
 
@@ -227,13 +228,143 @@ def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]]
     return done, stop_reason
 
 
+REPLAY_SCHEMA = "ff-matrix-evidence-replay/1"
+
+
+def _replay_fail(message: str) -> int:
+    print(f"replay error: {message}", file=sys.stderr)
+    return 2
+
+
+def _replay_main(argv: list[str]) -> int:
+    """Public retained-evidence replay entry (see README "replay").
+
+    Only the preserved bytes are read and judged by the unchanged native oracle;
+    no Context/seed/provider/CWP/ET/fresh-reader work is started. Exit 0 only
+    when the retained matrix itself was a complete PASS with a clean recorded
+    oracle AND the current native audit is clean over the chosen root; a replay
+    that merely reads correctly exits 1, and input/output mistakes exit 2.
+    """
+    parser = argparse.ArgumentParser(prog="w06-offline-contract-matrix replay")
+    parser.add_argument("--report", type=Path, required=True,
+                        help="original ff-et-cwp-offline-matrix/1 report; never modified")
+    parser.add_argument("--evidence-root", type=Path, required=True,
+                        help="root holding the retained relative request/response/fixture/receipt refs")
+    parser.add_argument("--output", type=Path, required=True,
+                        help="explicit new path for the small replay record; must not pre-exist")
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:  # argparse prints its own usage; never a traceback
+        return 0 if not exc.code else 2
+    try:
+        return _replay(args.report, args.evidence_root, args.output)
+    except Exception as exc:
+        # A transport/IO fault is an explicit input/output diagnostic, never
+        # disguised as a business verdict.
+        return _replay_fail(f"{type(exc).__name__}: {exc}")
+
+
+def _replay(report_arg: Path, root_arg: Path, output_arg: Path) -> int:
+    report_path, root = report_arg.expanduser().resolve(), root_arg.expanduser().resolve()
+    output = output_arg.expanduser().resolve()
+    if not report_path.is_file():
+        return _replay_fail(f"report file not found: {report_path}")
+    if output == report_path:
+        return _replay_fail("output must differ from the input report; the original is never rewritten")
+    if output.exists():
+        return _replay_fail(f"output already exists; refusing to overwrite: {output}")
+    if output == root or output.is_relative_to(root):
+        return _replay_fail("output must be an explicit path outside the evidence root")
+    if not root.is_dir():
+        return _replay_fail(f"evidence root is not a directory: {root}")
+    try:
+        raw = report_path.read_bytes()
+        report = json.loads(raw.decode("utf-8"))
+    except Exception as exc:
+        return _replay_fail(f"report is not valid UTF-8 JSON: {type(exc).__name__}: {exc}")
+    if not isinstance(report, dict) or report.get("schema_version") != SCHEMA:
+        found = report.get("schema_version") if isinstance(report, dict) else type(report).__name__
+        return _replay_fail(f"unknown report schema: {found}")
+    from case_specs import case_specs
+    findings = oracle_mod.audit(report, evidence_root=root)
+    cases = report.get("cases") or []
+    recorded = report.get("oracle")
+    complete_matrix = sorted(c.get("id") for c in cases) == sorted(s.id for s in case_specs())
+    counts = {kind: sum(1 for c in cases if c.get("result") == kind)
+              for kind in ("PASS", "FAIL", "PARTIAL", "NOT_RUN")}
+    counts["total"] = len(cases)
+    recorded_clean = (isinstance(recorded, dict) and recorded.get("pass") is True
+                      and not recorded.get("findings"))
+    # Historical verdicts are never upgraded: readable/relocatable evidence is
+    # not a business pass, and a clean native audit cannot rewrite old results.
+    certified = bool(cases) and complete_matrix and all(c.get("result") == "PASS" for c in cases) \
+        and recorded_clean and not findings
+    exit_status = 0 if certified else 1
+    record = {
+        "schema_version": REPLAY_SCHEMA,
+        "generated_by": {
+            "tool": "tools/offline_contract_matrix",
+            "entry": "run.py replay",
+            "audit": "oracle.audit(report, *, evidence_root=...)",
+        },
+        "report": {
+            "path": str(report_path),
+            "sha256": sha256_bytes(raw),
+            "schema_version": report.get("schema_version"),
+            "sha256_after_replay": sha256_file(report_path),
+        },
+        "evidence_root": {
+            "requested": str(root_arg),
+            "resolved": str(root),
+            "source": "explicit_override",
+            "report_recorded": report.get("evidence_root"),
+        },
+        "original_case_results": counts,
+        "original_case_rows": {c.get("id"): c.get("result") for c in cases},
+        "original_recorded_oracle": copy.deepcopy(recorded),
+        "native_replay": {"pass": not findings, "findings": [f.to_dict() for f in findings]},
+        "scope": {
+            "kind": "retained-evidence replay",
+            "statement": (
+                "RETAINED-EVIDENCE REPLAY only: the preserved request/response/fixture/"
+                "ET-receipt bytes under the chosen evidence root are re-judged by the "
+                "current native oracle. This is NOT a fresh real 41-case FF->ET->CWP "
+                "chain run and NOT a new source acquisition."
+            ),
+            "proves": (
+                "that the retained bytes still hash-match the report's claims and still "
+                "satisfy the fixed CaseSpec contract and the current oracle"
+            ),
+            "does_not_prove": [
+                "no production original was re-read and nothing was re-downloaded; no supplier call was made",
+                "no fresh SourceVersionReader verification ran; source proofs are only replayed as recorded",
+                "the 41-case chain was not re-executed; no fresh real chain evidence exists here",
+                "no supplier or company figure is certified by this record",
+                "historical FAIL/PARTIAL/NOT_RUN results, recorded findings and unknown/null usage are never upgraded",
+            ],
+            "fresh_41_chain_scope": (
+                "a separate fresh run (node C evidence) is the only source of fresh "
+                "chain results; this record never stands in for it"
+            ),
+        },
+        "certified": certified,
+        "exit_status": exit_status,
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    return exit_status
+
+
 def main(argv: list[str] | None = None) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw[:1] == ["replay"]:
+        return _replay_main(raw[1:])
     parser = argparse.ArgumentParser(prog="w06-offline-contract-matrix")
     for name in ("cwp-project", "et-project", "owned-root", "out-root"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--workers", type=int, choices=range(1, WORKERS + 1), default=WORKERS,
                         help="concurrent worker groups (each owns an independent wiki/proxy)")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw)
     workers = args.workers
     start = time.monotonic()
     deadline = Deadline(BATCH_DEADLINE)
