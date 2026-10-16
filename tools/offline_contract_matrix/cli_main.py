@@ -18,6 +18,7 @@ from run import (  # noqa: E402
 )
 from runtime import Deadline, DeadlineExceeded, OwnedAttempt, run_process, guard_events  # noqa: E402
 from matrix_cases import seed_all  # noqa: E402
+import case_scheduling  # noqa: E402
 from measurement import (  # noqa: E402
     PhaseTimer, merge_launch_reports, launch_report, cache_stats,
 )
@@ -125,6 +126,20 @@ def _case_registry() -> list[tuple[str, Callable[[Context], CaseResult]]]:
     return [(spec.id, spec.execute) for spec in case_specs()]
 
 
+def _measured_case_costs(registry: list[tuple[str, Callable[[Context], CaseResult]]] | None = None) -> dict[str, float]:
+    """Per-case cost estimate consumed by the scheduling owner.
+
+    The strongest *pre-run* predictor available from the frozen case authority
+    is the number of FF chains a case owns (a 2-run ``CaseSpec`` starts two full
+    download->reuse chains inside one group). No historical timing file is read:
+    the matrix must stay reproducible from the fixed inputs alone, and a stale
+    machine-specific timing table would be a hidden input.
+    """
+    entries = registry if registry is not None else _case_registry()
+    return case_scheduling.static_cost(
+        [(index, (cid, runner)) for index, (cid, runner) in enumerate(entries)])
+
+
 def _fresh_proofs(ctx: Context) -> dict:
     refs = []
     for traces in ctx.traces.values():
@@ -226,6 +241,13 @@ def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]]
             result.diagnostics.append("absolute case deadline exceeded; no PASS")
         done.append((pos, result))
         if time.monotonic() >= deadline.end:
+            # The batch's absolute end (not the reserve) was reached. Record the
+            # cause instead of silently truncating: an unnamed stop is exactly
+            # the tail-starvation blind spot this card closes. The remaining
+            # cases stay NOT_RUN in the report with this reason.
+            stop_reason = stop_reason or (
+                "absolute batch deadline reached (single 180s window, never renewed); "
+                "remaining cases kept NOT_RUN with their real denominator")
             break
     return done, stop_reason
 
@@ -392,6 +414,7 @@ def main(argv: list[str] | None = None) -> int:
     ctxs = []
     error = None
     stop_reason = None
+    scheduling = None
     timer = PhaseTimer()
     cache_info = {"pyc_files": 0, "company_wiki_pyc": 0, "max_pyc_path_len": None}
     accounting = {"launches": {"total_boot": 0, "total_exit": 0, "by_kind": {},
@@ -423,9 +446,14 @@ def main(argv: list[str] | None = None) -> int:
                                     deadline=deadline, cwd=ctxs[0].scratch,
                                     source_commit=source_commits.get(repo)))
         # Independent worker groups: each seeds its own wiki and runs a disjoint
-        # slice of the fixed case registry under the one shared deadline.
+        # slice of the fixed case registry under the one shared deadline. The
+        # slice is chosen by measured-cost balance, not by position: position
+        # round-robin put the three heaviest cases in one group (measured
+        # 75.53s vs 59.80s) and made that group the critical path.
         entries = list(enumerate(registry))
-        groups = [entries[index::workers] for index in range(workers)]
+        cost_model = _measured_case_costs(registry)
+        groups = case_scheduling.assign_groups(entries, workers=workers, cost=cost_model)
+        scheduling = case_scheduling.balance_report(groups, cost_model)
         done_by_pos: dict[int, CaseResult] = {}
         stops = []
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -496,6 +524,7 @@ def main(argv: list[str] | None = None) -> int:
              "provider_boundary":"fixture response only; real supplier reachability/coverage is not proven",
              "phase_timing":timer.snapshot(), "launch_accounting":accounting,
              "bytecode_cache":cache_info,
+             "case_scheduling":scheduling,
              "stop_reason":stop_reason,
              "error":error, "production_baseline_scope":"stat only; no real key/config bytes read or hashed"}
     report = build_report(dependencies=deps, cases=results, cost=cost, scope=scope, restore=restore)

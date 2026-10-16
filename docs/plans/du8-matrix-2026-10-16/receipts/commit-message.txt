@@ -1,0 +1,35 @@
+perf(matrix): cost-balanced case scheduling + named batch stop reason
+
+Node A proved two real defects against the fixed 41-case batch:
+
+1. cli_main partitioned the registry with `entries[index::workers]` - a
+   position round-robin that carries no cost information. On the retained W07
+   full-batch cost table this yields group loads of 75.5306s / 59.8019s: a
+   15.73s (26%) imbalance that becomes the single critical path and starves
+   the tail of the 180s budget.
+2. run_case_group broke on the absolute batch deadline while leaving
+   stop_reason = None, silently truncating the batch with no recorded cause.
+
+Node B adds a pure scheduling owner (case_scheduling.py, no clock/process/env/
+IO/random) that partitions by longest-processing-time-first over a total order
+of (cost descending, id ascending). The cost model is frozen and pre-run: it
+uses only CaseSpec run counts, so the matrix stays reproducible from its fixed
+inputs instead of depending on a stale machine-specific timing table.
+
+Concurrency, 30s/case, 180s/batch, the 10s proof reserve, the absolute
+deadline and the per-group isolation are all unchanged; balancing is never
+achieved by widening concurrency. A whole download->reuse chain still stays
+inside one group. The report gains scope.case_scheduling and a non-null
+stop_reason whenever the batch is truncated.
+
+Load-normalised evidence (same measured seconds, new partition produced only
+by the frozen model): critical path 167.33s -> 151.22s on run 1 and
+181.14s -> 159.98s on run 2. The legacy partition leaves exactly
+request_after_failure_retry / original_wrong_mime /
+incomplete_sidecar_metadata_gap beyond the case window on run 2 - the same
+failure set this card was raised against.
+
+The real 41-chain C node did NOT reach 41 PASS: the workstation was shared with
+other lanes at 63-100% CPU load, so fixed preparation alone consumed 25-35% of
+the budget. Named and preserved as OPEN-1/OPEN-2 in handoff.md; no limits were
+raised, no cases weakened, no denominator trimmed, and no 41 PASS is claimed.

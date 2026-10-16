@@ -1,0 +1,138 @@
+{
+  "schema": "du8-scheduling-comparison/1",
+  "measured_report": ".tmp\\du8-c2\\out\\attempt-55741366946a40408d461eadab5b74a0\\report.json",
+  "measured_cases": 29,
+  "measured_case_seconds": 283.9576,
+  "note": "Both partitions are scored on the SAME measured per-case seconds taken from one real batch on this workstation. The new partition is produced by the shipped frozen run-count cost model only; no measured timing is fed back into the scheduler, so the comparison cannot be self-fulfilling.",
+  "frozen_cost_model": {
+    "group_loads_seconds": [
+      52.0,
+      52.0
+    ],
+    "group_case_counts": [
+      20,
+      21
+    ],
+    "predicted_makespan_seconds": 52.0,
+    "perfect_balance_lower_bound_seconds": 52.0,
+    "imbalance_seconds": 0.0,
+    "cost_model": "measured per-case seconds where available, else CaseSpec run-count weight"
+  },
+  "legacy_partition": {
+    "rule": "entries[index::workers] (position round-robin)",
+    "on_frozen_model": {
+      "group_loads_seconds": [
+        56.0,
+        48.0
+      ],
+      "predicted_makespan_seconds": 56.0,
+      "predicted_imbalance_seconds": 4.0,
+      "case_window_seconds": 170.0,
+      "cases_beyond_window": {
+        "g1": [],
+        "g2": []
+      },
+      "cases_beyond_window_total": 0
+    },
+    "on_measured_seconds": {
+      "group_loads_seconds": [
+        181.1392,
+        126.8184
+      ],
+      "predicted_makespan_seconds": 181.1392,
+      "predicted_imbalance_seconds": 27.1604,
+      "case_window_seconds": 170.0,
+      "cases_beyond_window": {
+        "g1": [
+          "request_after_failure_retry",
+          "original_wrong_mime",
+          "incomplete_sidecar_metadata_gap"
+        ],
+        "g2": []
+      },
+      "cases_beyond_window_total": 3
+    }
+  },
+  "balanced_partition": {
+    "rule": "case_scheduling.assign_groups (LPT on run-count cost)",
+    "on_frozen_model": {
+      "group_loads_seconds": [
+        52.0,
+        52.0
+      ],
+      "predicted_makespan_seconds": 52.0,
+      "predicted_imbalance_seconds": 0.0,
+      "case_window_seconds": 170.0,
+      "cases_beyond_window": {
+        "g1": [],
+        "g2": []
+      },
+      "cases_beyond_window_total": 0
+    },
+    "on_measured_seconds": {
+      "group_loads_seconds": [
+        159.9759,
+        147.9817
+      ],
+      "predicted_makespan_seconds": 159.9759,
+      "predicted_imbalance_seconds": 5.9971,
+      "case_window_seconds": 170.0,
+      "cases_beyond_window": {
+        "g1": [],
+        "g2": []
+      },
+      "cases_beyond_window_total": 0
+    },
+    "groups": {
+      "g1": [
+        "chainA_download_reuse",
+        "fin_cn_quarterly_fetch",
+        "fin_hk_annual_fetch",
+        "fin_hk_semi_fetch",
+        "fin_us_quarterly_fetch",
+        "request_after_failure_retry",
+        "call_max_bytes",
+        "call_wrong_mime",
+        "call_wrong_symbol",
+        "err_missing_creds",
+        "err_unknown_usage",
+        "fin_cn_quarterly_hit",
+        "fin_hk_annual_hit",
+        "fin_hk_semi_hit",
+        "fin_us_quarterly_hit",
+        "incomplete_sidecar_metadata_gap",
+        "nonperiod_convertible_bond",
+        "nonperiod_investor_relations",
+        "original_max_bytes",
+        "original_wrong_sha"
+      ],
+      "g2": [
+        "fin_cn_annual_fetch",
+        "fin_cn_semi_fetch",
+        "fin_hk_quarterly_fetch",
+        "fin_us_annual_fetch",
+        "fin_us_semi_fetch",
+        "call_fy_only_no_q",
+        "call_hard_timeout",
+        "call_past_cutoff",
+        "call_wrong_quarter",
+        "err_402_entitlement",
+        "err_request_error",
+        "fin_cn_annual_hit",
+        "fin_cn_semi_hit",
+        "fin_hk_quarterly_hit",
+        "fin_us_annual_hit",
+        "fin_us_semi_hit",
+        "local_txt_exact_reuse",
+        "nonperiod_equity_offering",
+        "nonperiod_prospectus",
+        "original_wrong_mime",
+        "reuse_only_missing_period"
+      ]
+    }
+  },
+  "measured_makespan_improvement_seconds": 21.1633,
+  "measured_makespan_improvement_ratio": 1.1323,
+  "legacy_cases_beyond_window": 3,
+  "balanced_cases_beyond_window": 0
+}

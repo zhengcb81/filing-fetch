@@ -20,6 +20,26 @@ python -B tools/offline_contract_matrix/run.py \
 
 每 case 超时 ≤30s；批次绝对截止 ≤180s；失败保留 partial。二次执行用新 attempt，不覆第一次。
 单元测试（快速、离线、不跑跨仓）：`python -B -m pytest -q tests/test_w06_contract_matrix.py tests/test_w06_matrix_runtime.py tests/test_w06_case_authority.py`。
+本卡新增调度/恢复快测：`python -B -m pytest -q tests/test_du8_matrix_scheduling.py tests/test_du8_matrix_deadline_recovery.py`。
+
+## 调度（DU8-FF-MATRIX-COMPLETION）
+
+41 个固定 case 由 `case_scheduling.assign_groups` 分配到 ≤ `WORKERS`(=2) 个并发组。
+分配按**成本均衡**（最重优先贪心，全序 = cost 降序 + id 升序），不再是按位置轮转
+（`entries[index::workers]`）。位置轮转不含成本信息，实测把最重的三个 case 放进同一组，
+产生 75.53s / 59.80s 的两组负载；该组成为关键路径，并在 180s 批预算下把尾部 case 挤进
+保留的 final-proof 窗口。均衡后预测负载 67.67s / 67.66s。
+
+成本模型只用**运行前可得**的固定信息：`CaseSpec.runs` 的链数（2-run case 在一个组内串起
+两条完整 download→reuse 链）。不读历史计时文件——矩阵必须能从固定输入复现，机器相关的
+陈旧计时表是隐藏输入。
+
+约束保持不变：并发 ≤2（均衡不通过放大并发实现）、30s/case、180s/batch、10s proof reserve、
+`remaining` 不续期。同一 case 的 download→reuse 链绝不被拆到两个组。
+
+报告 `scope.case_scheduling` 记 `group_loads_seconds`、`group_case_counts`、
+`predicted_makespan_seconds`、`perfect_balance_lower_bound_seconds`、`imbalance_seconds`。
+批次因绝对截止被截断时，`scope.stop_reason` 必须具名（不再静默截断）。
 
 ## 架构
 

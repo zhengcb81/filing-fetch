@@ -1,0 +1,164 @@
+{
+  "schema": "du8-interruption-recovery/1",
+  "inputs": {
+    "cwp": {
+      "path": "C:\\Users\\郑曾波\\Projects\\company-wiki-du6-ff-readonly",
+      "exists": true
+    },
+    "et": {
+      "path": "C:\\Users\\郑曾波\\Projects\\earnings-transcripts-du6-ff-readonly",
+      "exists": true
+    }
+  },
+  "attempts": [
+    {
+      "kind": "interrupted",
+      "interrupted_after_seconds": 2.045,
+      "owned_seen": true,
+      "reports_present": [],
+      "artifacts_present": [
+        "attempt-462c7cc616e1441fb6f0f877d33e8594",
+        "attempt-d641dea22882444ebef6649aade5d2d3"
+      ],
+      "live_owned_python": [],
+      "owned_children_after": [
+        ".w06_matrix_sentinel",
+        "attempt-462c7cc616e1441fb6f0f877d33e8594",
+        "attempt-d641dea22882444ebef6649aade5d2d3",
+        "p00",
+        "pc"
+      ],
+      "out_children_after": [
+        ".w06_matrix_sentinel",
+        "attempt-462c7cc616e1441fb6f0f877d33e8594",
+        "attempt-d641dea22882444ebef6649aade5d2d3"
+      ],
+      "sentinel_owned_intact": true,
+      "sentinel_out_intact": true,
+      "preexisting_owned_preserved": true,
+      "preexisting_out_preserved": true,
+      "exit_code": 1
+    },
+    {
+      "kind": "clean",
+      "exit_code": 1,
+      "owned_root": "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-matrix\\.tmp\\du8-c-recovery\\owned2-603c5d31",
+      "out_root": "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-matrix\\.tmp\\du8-c-recovery\\out2-4f2ac81d",
+      "attempt_dirs": [
+        "attempt-148b3b4a40fc4d54960db69aa5b9493f"
+      ],
+      "reports": [
+        "attempt-148b3b4a40fc4d54960db69aa5b9493f\\report.json"
+      ],
+      "case_counts": {
+        "PASS": 14,
+        "FAIL": 0,
+        "PARTIAL": 12,
+        "NOT_RUN": 15,
+        "total": 41
+      },
+      "oracle": false,
+      "batch_elapsed_seconds": 182.4873,
+      "case_scheduling": {
+        "group_loads_seconds": [
+          52.0,
+          52.0
+        ],
+        "group_case_counts": [
+          20,
+          21
+        ],
+        "predicted_makespan_seconds": 52.0,
+        "perfect_balance_lower_bound_seconds": 52.0,
+        "imbalance_seconds": 0.0,
+        "cost_model": "measured per-case seconds where available, else CaseSpec run-count weight"
+      },
+      "stop_reason": "final-proof reserve preserved (10.0s of the single batch deadline); remaining cases kept NOT_RUN instead of starving the proof",
+      "worker_isolation": "independent Context/wiki/proxy/counters per group; download->reuse chains stay within one group",
+      "distinct_from_interrupted": true,
+      "restore": {
+        "owned_parent_shape_preserved": true,
+        "output_parent_initially_existed": true,
+        "retained_output_is_explicit_evidence": true,
+        "scratch_torn_down": true,
+        "bytecode_cache_torn_down": true,
+        "preexisting_parent_entries_preserved": true,
+        "restored": true,
+        "output": "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-matrix\\.tmp\\du8-c-recovery\\out2-4f2ac81d\\attempt-148b3b4a40fc4d54960db69aa5b9493f",
+        "production_metadata_unchanged": true
+      }
+    }
+  ],
+  "checks": [
+    {
+      "name": "interruption produced real chain work",
+      "ok": true
+    },
+    {
+      "name": "no success report from the interrupted attempt",
+      "ok": true
+    },
+    {
+      "name": "no owned python child survived the kill",
+      "ok": true
+    },
+    {
+      "name": "owned sentinel intact",
+      "ok": true
+    },
+    {
+      "name": "output sentinel intact",
+      "ok": true
+    },
+    {
+      "name": "pre-existing owned entries preserved",
+      "ok": true
+    },
+    {
+      "name": "pre-existing output entries preserved",
+      "ok": true
+    },
+    {
+      "name": "second attempt used fresh owned directories",
+      "ok": true
+    },
+    {
+      "name": "second attempt completed and wrote a report",
+      "ok": true
+    },
+    {
+      "name": "second attempt ran the full fixed denominator",
+      "ok": true
+    },
+    {
+      "name": "second attempt recorded a real outcome for every case",
+      "ok": true
+    },
+    {
+      "name": "recovery restored owned scratch",
+      "ok": true
+    },
+    {
+      "name": "recovery left no production metadata change",
+      "ok": true
+    },
+    {
+      "name": "a truncated batch names its stop reason or completed fully",
+      "ok": true
+    }
+  ],
+  "passed": true,
+  "batch_outcome_is_data_not_a_gate": {
+    "exit_code": 1,
+    "case_counts": {
+      "PASS": 14,
+      "FAIL": 0,
+      "PARTIAL": 12,
+      "NOT_RUN": 15,
+      "total": 41
+    },
+    "oracle_clean": false,
+    "batch_elapsed_seconds": 182.4873,
+    "note": "A non-zero exit with PARTIAL/NOT_RUN cases means the fixed 180s batch could not fit on this loaded machine; it is reported here and judged by the C-node evidence, not by recovery correctness."
+  }
+}
