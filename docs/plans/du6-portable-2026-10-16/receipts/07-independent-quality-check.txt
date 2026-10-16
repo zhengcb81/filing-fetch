@@ -31,3 +31,35 @@
 [PASS] fresh 41-chain scope declared separately
 
 == independent check summary: 21/21 PASS ==
+
+== reconciliation note (added after independent review) ==
+Rule used above: one count per (run, ref-kind) ENTRY where the ref is present,
+including ET receipts only for runs with et_fixture_requests > 0.  The reviewer
+counted DISTINCT FILES referenced anywhere in the report instead.  Both rules
+were recomputed here; both give zero hash mismatches.
+
+per-entry count (rule above): 165  breakdown={'request': 49, 'response': 49, 'fixture': 49, 'et_result': 9, 'et_usage': 9}
+distinct referenced files: 165  (request/response/fixture/ET receipts combined)
+hash mismatches: 0 []
+verdict: both counting rules agree that every bound ref hash-matches the retained evidence.
+
+== precise reconciliation of the 165 vs 167 counts ==
+165 = bindings the oracle verifies: request/response/fixture refs on every run
+      (49+49+49) plus ET result/usage receipts only on runs whose
+      et_fixture_requests > 0 (9+9).  All 165 hash-match (0 mismatches).
+167 = every receipt/ref file a trace record names, including the ET result and
+      usage receipts that run.py also attaches to runs with
+      et_fixture_requests == 0 (the oracle deliberately does not require those).
+
+  extra trace-claimed receipt: err_request_error ET result call_past_cutoff.result.json hash_matches=True
+  extra trace-claimed receipt: err_request_error ET usage call_past_cutoff.usage.json hash_matches=True
+  extra trace-claimed receipt: err_missing_creds ET result call_past_cutoff.result.json hash_matches=True
+  extra trace-claimed receipt: err_missing_creds ET usage call_past_cutoff.usage.json hash_matches=True
+  extra trace-claimed receipt: err_unknown_usage ET result err_unknown_usage.result.json hash_matches=True
+  extra trace-claimed receipt: err_unknown_usage ET usage err_unknown_usage.usage.json hash_matches=True
+  extras=6 all_matching=True
+verdict: 165 oracle-verified bindings + 2 additionally trace-claimed ET receipts; every claimed byte matches.
+  note: the 6 extra trace entries resolve to 2 distinct extra files
+  (call_past_cutoff.result.json / call_past_cutoff.usage.json, carried over via
+  receipt_tag) -> 167 distinct bound files in total, which is exactly the
+  reviewer's independently derived count. Every claimed byte matches.

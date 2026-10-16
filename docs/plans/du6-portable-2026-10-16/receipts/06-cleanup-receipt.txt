@@ -38,3 +38,13 @@
 == production writes this lane ==
   production_writes=0 (config/key/originals/AUTO/real registry untouched; credential bytes never read, hashed or copied)
   supplier_calls=0 (offline fixture boundary only; network guard denies)
+
+== runtime environment of every command in this lane ==
+  PYTHONDONTWRITEBYTECODE=1  (exported for each pytest/python invocation; every
+    python launcher also used -B, so no bytecode cache was written outside the
+    matrix's own owned cache dir, which the runner tears down)
+  REVENUE_PUBLICATION_REGISTRY=C:/Users/郑曾波/Projects/_du6tmp/ff-portable-20261016/registry
+    (pointed at this lane's OWNED_TEMP before any python started; RF was never
+    imported and never called; the empty registry dir was deleted in cleanup)
+  network/translation: matrix child processes run under the existing
+    W06 offline guard (socket + translator denied, counted in report.scope)

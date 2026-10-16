@@ -2,7 +2,8 @@
 
 - schema `du6-handoff/1`，card `DU6-FF-PORTABLE-EVIDENCE`，2026-10-16。
 - base `e2efa81d7995836d457479eb528fa6f8cd5dc3f3`，分支 `codex/du6-ff-portable-20261016`。
-- 实现 commit `250981038dc8879003b2d670329278d236706dc4`；详细字段见 [handoff.json](handoff.json)。
+- 实现 commit `250981038dc8879003b2d670329278d236706dc4`、独立审查修复 commit `ee11e070339f27e787ebf57028a712279957367d`；
+  详细字段见 [handoff.json](handoff.json)，独立审查见 [handoff-review.md](handoff-review.md)。
 - 本线 STOP：不并主线、不推安装副本、不发布。
 
 ## 交付了什么
@@ -28,12 +29,19 @@
 | 收据 | 内容 |
 |---|---|
 | `receipts/01-red-first.txt` | 首个行为 RED + 单列接口 RED（3 passed / 29 failed，全部归因缺失 API） |
-| `receipts/02-centralized-regression.txt` | 卡内集中命令 245 passed（旧 213 + 新 32）+ Ruff 只查改动源 |
+| `receipts/02-centralized-regression.txt` | 卡内集中命令 248 passed（旧 213 未动 + 新 35）+ Ruff 只查改动源（命令与输出同收据） |
 | `receipts/03-c-pinned-dependencies.txt` | pinned CWP/ET commit、模块 SHA、ET 测试 proxy seam、密钥 stat-only |
 | `receipts/04-c-relocation-replay.txt` | 真实41链产物 SHA + 空格/中文目录搬迁重放 |
 | `receipts/05-c-no-fallback-tamper-history.txt` | 旧根不可用/override 缺失/单字节篡改/历史失败 fixture |
 | `receipts/06-cleanup-receipt.txt` | 分类字节数、OWNED_TEMP 清理、前后隔离比对 |
-| `receipts/07-independent-quality-check.txt` | 独立手算 21/21（不 import 新代码，纯字节复算） |
+| `receipts/07-independent-quality-check.txt` | 独立手算 21/21（不 import 新代码，纯字节复算）+ 计数口径对账 |
+| `receipts/08-evidence-byte-fidelity.txt` | 交接证据字节保真（271/271 绑定文件与 report SHA 在 git 中逐字节一致） |
+
+**独立审查**：独立 agent 在实现完成后自行推导验收清单并逐条核查（含重算全部 SHA/计数、独立重跑测试与
+Ruff），结论 **PASS，可交 ROOT 接收**；提出的 9 项低危卫生/证据问题已全部修复（见
+[handoff-review.md](handoff-review.md)）。审查发现并修复的关键一点：仓库根 `.gitattributes` 的
+`*.json text eol=lf` 会把 CRLF 证据规整成 LF，从而悄悄破坏 report 的 SHA 绑定——已按
+`/.planning/w04-wp04/**` 先例为 `evidence/**` 加 `-text -eol -diff` 并重提交证据。
 
 ## 真实41链（fresh scope，只跑一次）
 
@@ -75,7 +83,7 @@
 
 ## ROOT 接收步骤
 
-1. 核对手算收据 `receipts/07-independent-quality-check.txt` 与 `handoff.json` 字段。
+1. 核对独立审查 `handoff-review.md`、手算收据 `receipts/07-independent-quality-check.txt` 与 `handoff.json` 字段。
 2. 需要时用 `evidence/chain-report.json` + `evidence/artifacts/` 重跑任一 replay 命令（命令见
    `handoff.json.replay_results`），注意输出路径必须是不存在的独立路径。
 3. 合并 `codex/du6-ff-portable-20261016`（实现 commit `2509810…`），在主线跑精确 CI。
