@@ -1,0 +1,471 @@
+{
+  "schema_version": "du8-ff-root-repair/1",
+  "receiver": "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-integration",
+  "receiver_base_head": "6f381199f146109b4f517537a70da1c20c6e05bd",
+  "decision": "engineering_complete_full_matrix_C_OPEN",
+  "runtime_frozen_sha256": {
+    "tools/offline_contract_matrix/case_scheduling.py": "034ccf48887fba72ef64ae82d6edcfedfc58d9ebeec9dd976bf5e21bff578f60",
+    "tools/offline_contract_matrix/cli_main.py": "45a951b758ecffd3a509e1ce911aa5827db1532174ee75cac6da7e6fbeb6c791",
+    "tools/offline_contract_matrix/extended_cases.py": "529ba08f637bf7109f8348739e8f596bb76a9bd2133fe89343277abfbdcbc8ba",
+    "tests/test_root_du8_matrix_acceptance.py": "3d058cfc35e7aac5a52ee97ccab0c66d80eefeffcea9e25eb8f7a8dc5c679c8b",
+    "docs/plans/du8-matrix-2026-10-16/fixtures/interruption_recovery_e2e.py": "97d45cc3395c59fdf0515a75f91a1443356c2b1935238dc7c8427e812b1dd959"
+  },
+  "fixed_authority_unchanged": true,
+  "matrix_runtime_sha_unchanged_since_full41": true,
+  "normal_hooks_path": ".githooks",
+  "source_scope": [
+    "tools/offline_contract_matrix/extended_cases.py",
+    "tools/offline_contract_matrix/case_scheduling.py",
+    "tools/offline_contract_matrix/cli_main.py",
+    "docs/plans/du8-matrix-2026-10-16/fixtures/interruption_recovery_e2e.py",
+    "tests/test_root_du8_matrix_acceptance.py"
+  ],
+  "tdd": {
+    "initial_red": "8 failed / 4 passed; 2 behavioral and 6 new interface absence",
+    "first_green": "12 passed",
+    "pre_review_concentrated": "244 passed in 17.72s",
+    "observation_api_red": "3 failed: unsupported new keyword; retained, not counted as behavioral proof",
+    "observation_behavior_red": "1 failed in 0.53s: original observer accepted first-seen cumulative GET",
+    "final_concentrated": {
+      "passed": 251,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 9.19,
+      "root_cases": 19,
+      "author_cases": 37,
+      "receipt": "ff-root-focused.log",
+      "fixture_restore": {
+        "command": [
+          "C:\\Miniconda\\python.exe",
+          "-B",
+          "-m",
+          "pytest",
+          "-q",
+          "-p",
+          "no:cacheprovider",
+          "--basetemp",
+          "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\ff8-focus-r6xd24wo\\pytest",
+          "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-integration\\tests\\test_root_du8_matrix_acceptance.py",
+          "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-integration\\tests\\test_du8_matrix_scheduling.py",
+          "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-integration\\tests\\test_du8_matrix_deadline_recovery.py",
+          "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-integration\\tests\\test_w06_case_authority.py",
+          "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-integration\\tests\\test_w06_matrix_runtime.py",
+          "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-integration\\tests\\test_root_w07_matrix_boundaries.py",
+          "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-integration\\tests\\test_du67_matrix_process_owner.py"
+        ],
+        "exit_code": 0,
+        "sentinel_intact": true,
+        "temp_removed": true
+      }
+    }
+  },
+  "independent_review": {
+    "report": "ff-root-independent-final.md",
+    "json": "ff-root-independent-final.json",
+    "reviewer": "/root/du67_ff_acceptance/du8_ff_root_independent",
+    "scope": "read-only exact SHA review, no independent suite rerun",
+    "closed_issue": "stateful current GET observation",
+    "remaining_p1": 0,
+    "remaining_p2": 0
+  },
+  "complete_matrix": {
+    "attempts_this_node": 1,
+    "counts": {
+      "PASS": 20,
+      "FAIL": 0,
+      "PARTIAL": 4,
+      "NOT_RUN": 17
+    },
+    "exit_code": 1,
+    "seconds": 173.2744,
+    "outer_seconds": 174.1162,
+    "producer_heads": {
+      "C:\\Users\\郑曾波\\Projects\\company-wiki-du6-ff-readonly": "f08aa101ab49ca983d3a40356abfb05347f586b3",
+      "C:\\Users\\郑曾波\\Projects\\earnings-transcripts-du6-ff-readonly": "d0ac42c60dcca992db78860b8469cfed3dd527e5"
+    },
+    "limits": {
+      "workers": 2,
+      "case_seconds": 30,
+      "batch_seconds": 180,
+      "proof_reserve_seconds": 10
+    },
+    "retained_root": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.planning\\du8-ff41-root-20261016",
+    "retained_files": 209,
+    "retained_bytes": 1151019,
+    "manifest": "ff-root-full41.manifest.json",
+    "report": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.planning\\du8-ff41-root-20261016\\attempt-97cfcba487c84de39bcb2d6475db140a\\report.json",
+    "restore": {
+      "owned_parent_shape_preserved": true,
+      "output_parent_initially_existed": true,
+      "retained_output_is_explicit_evidence": true,
+      "scratch_torn_down": true,
+      "bytecode_cache_torn_down": true,
+      "preexisting_parent_entries_preserved": true,
+      "restored": true,
+      "output": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.planning\\du8-ff41-root-20261016\\attempt-97cfcba487c84de39bcb2d6475db140a",
+      "production_metadata_unchanged": true
+    },
+    "temporary_tree_removed": true,
+    "owned_sentinel_intact": true,
+    "retained_sentinel_intact": true,
+    "cost": {
+      "real_provider_calls": 0,
+      "paid_usd": 0,
+      "unknown_charge": null,
+      "fixture_requests": 26,
+      "fixture_counter_scope": "observed local fixture GETs only; producer unknown usage stays null"
+    },
+    "oracle": {
+      "pass": false,
+      "findings": [
+        {
+          "vector": "case_not_passed",
+          "case_id": "chainA_download_reuse",
+          "detail": "actual result PARTIAL cannot certify required case"
+        },
+        {
+          "vector": "fake_layer_claimed_real",
+          "case_id": "chainA_download_reuse",
+          "detail": "declared real-3layer but ff_public_cli/et_supervisor_worker/cwp_import evidence is not all present (got {})"
+        },
+        {
+          "vector": "missing_et_receipt",
+          "case_id": "chainA_download_reuse",
+          "detail": "provider call was made but no ET usage receipt was recorded"
+        },
+        {
+          "vector": "second_run_still_downloads",
+          "case_id": "chainA_download_reuse",
+          "detail": "second run performed None provider requests; a reuse hit must be 0"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "fin_us_annual_hit",
+          "detail": "actual result PARTIAL cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "call_wrong_symbol",
+          "detail": "actual result PARTIAL cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "call_hard_timeout",
+          "detail": "actual result PARTIAL cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "fin_cn_quarterly_hit",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "fin_hk_annual_hit",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "fin_hk_semi_hit",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "fin_us_semi_hit",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "fin_us_quarterly_hit",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "nonperiod_prospectus",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "nonperiod_equity_offering",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "nonperiod_convertible_bond",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "nonperiod_investor_relations",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "err_missing_creds",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "err_unknown_usage",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "local_txt_exact_reuse",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "reuse_only_missing_period",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "original_wrong_sha",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "original_wrong_mime",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "original_max_bytes",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "case_not_passed",
+          "case_id": "incomplete_sidecar_metadata_gap",
+          "detail": "actual result NOT_RUN cannot certify required case"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "fin_us_annual_hit",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "call_wrong_symbol",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "fin_cn_quarterly_hit",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "fin_hk_annual_hit",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "fin_hk_semi_hit",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "fin_us_semi_hit",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "fin_us_quarterly_hit",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "nonperiod_prospectus",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "nonperiod_equity_offering",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "nonperiod_convertible_bond",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "nonperiod_investor_relations",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "err_missing_creds",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "err_unknown_usage",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "local_txt_exact_reuse",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "reuse_only_missing_period",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "original_wrong_sha",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "original_wrong_mime",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "original_max_bytes",
+          "detail": "PASS lacks actual request/response files"
+        },
+        {
+          "vector": "missing_bound_evidence",
+          "case_id": "incomplete_sidecar_metadata_gap",
+          "detail": "PASS lacks actual request/response files"
+        }
+      ]
+    },
+    "phase_timing": {
+      "binding": {
+        "status": "measured",
+        "seconds": 15.5381,
+        "spans": 1
+      },
+      "seed": {
+        "status": "measured",
+        "seconds": 61.6588,
+        "spans": 2
+      },
+      "ff_cli": {
+        "status": "measured",
+        "seconds": 241.9295,
+        "spans": 35
+      },
+      "et_supervisor_worker": {
+        "status": "measured",
+        "seconds": 21.3698,
+        "spans": 1
+      },
+      "fixture": {
+        "status": "measured",
+        "seconds": 5.9401,
+        "spans": 1
+      },
+      "fresh_source_proof": {
+        "status": "measured",
+        "seconds": 2.9883,
+        "spans": 1
+      },
+      "cleanup": {
+        "status": "measured",
+        "seconds": 0.1774,
+        "spans": 1
+      },
+      "total": {
+        "status": "measured",
+        "seconds": 173.2744,
+        "spans": 1
+      },
+      "seed_helper": {
+        "status": "measured",
+        "seconds": 39.2202,
+        "spans": 2
+      }
+    },
+    "launch_accounting": {
+      "launches": {
+        "total_boot": 197,
+        "total_exit": 192,
+        "by_kind": {
+          "other_python": 92,
+          "seed_batch": 2,
+          "fixture_adapter": 58,
+          "ff_cli": 34,
+          "et_proxy": 9,
+          "source_proofs": 2
+        },
+        "parent_calls": {
+          "binding_probe": 1,
+          "git": 3,
+          "fresh_source_proof": 2,
+          "seed_batch": 2,
+          "cwp_cli": 2,
+          "ff_cli": 35
+        },
+        "parent_launch_total": 45
+      },
+      "child_spans": {
+        "et_supervisor_worker": {
+          "status": "measured",
+          "seconds": 21.3698,
+          "spans": 9,
+          "unknown_spans": 0,
+          "count": 9
+        },
+        "fixture": {
+          "status": "measured",
+          "seconds": 5.9401,
+          "spans": 58,
+          "unknown_spans": 0,
+          "count": 58
+        }
+      },
+      "note": null
+    },
+    "scope_warning": "cumulative concurrent spans are not wall-clock durations and must not be added to each other"
+  },
+  "open": [
+    {
+      "id": "C-PERF",
+      "detail": "41 mandatory cases do not fit unchanged budget: 197 guard boots/35 FF parent calls, binding15.54s, cumulative seed61.66s and FF241.93s; repeated startup/preparation responsibility, no proven CPU-load attribution",
+      "next": "measure import/process startup and repeated preparation ownership; preserve fixed budgets and full mandatory denominator"
+    },
+    {
+      "id": "C-INFLIGHT",
+      "detail": "real 1s ET vector correctly rejected before observed GET: boundary PASS, in-flight NOT_RUN, overall PARTIAL",
+      "next": "retain original authority; no zero-GET full PASS"
+    },
+    {
+      "id": "RECOVERY-REAL",
+      "detail": "rewritten interruption fixture verified by pure controls and bounded real local stalled tree; public interrupted full matrix NOT_RUN in this node",
+      "next": "run only at a dedicated recovery milestone, not silently as another full 41 retry"
+    },
+    {
+      "id": "HISTORICAL",
+      "detail": "author historical 21/26/14 PASS and deleted old C restore/guard remain historical limitations"
+    }
+  ],
+  "network_calls": 0,
+  "api_calls": 0,
+  "paid_usd": 0,
+  "production_writes": 0,
+  "author_writes": 0,
+  "git_writes": 0,
+  "git_commit_or_merge": "ROOT owns normal commit/merge/push; none performed by this agent",
+  "report": "ff-root-repair.md",
+  "receiver_diff_files": [
+    "docs/plans/du8-matrix-2026-10-16/fixtures/interruption_recovery_e2e.py",
+    "docs/plans/du8-matrix-2026-10-16/handoff.md",
+    "docs/plans/du8-matrix-2026-10-16/progress.md",
+    "docs/plans/du8-matrix-2026-10-16/task_plan.md",
+    "tools/offline_contract_matrix/case_scheduling.py",
+    "tools/offline_contract_matrix/cli_main.py",
+    "tools/offline_contract_matrix/extended_cases.py"
+  ],
+  "receiver_untracked": [
+    "docs/plans/du8-matrix-2026-10-16/root-original-corrupt-markdown.json",
+    "tests/test_root_du8_matrix_acceptance.py"
+  ],
+  "product_scripts_unchanged": true,
+  "report_sha256": "165d92e3eb9a61607ce68234c5f7b4b6efbec1c9de5aec7a96baacb8b3a9d22d"
+}

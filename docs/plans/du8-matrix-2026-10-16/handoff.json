@@ -152,5 +152,18 @@
     "if it still exceeds 180s, use report.scope.phase_timing and report.scope.case_scheduling (including cost_source) to separate slow-preparation / unbalanced-scheduling / slow-single-case causes",
     "decide OPEN-2 (the 1s provider deadline semantics at case_specs.py:490), which lies outside this card's whitelist",
     "this card certifies ENGINEERING integration coverage only - never supplier reachability or company fact quality"
-  ]
+  ],
+  "root_reception": {
+    "record": "root-reception.json",
+    "engineering": "complete",
+    "full_matrix": "C_OPEN",
+    "actual_counts": {
+      "PASS": 20,
+      "FAIL": 0,
+      "PARTIAL": 4,
+      "NOT_RUN": 17
+    },
+    "actual_seconds": 173.2744,
+    "historical_author_claims_preserved_not_current_root_verdict": true
+  }
 }

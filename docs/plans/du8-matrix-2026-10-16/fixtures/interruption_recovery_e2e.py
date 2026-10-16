@@ -1,235 +1,259 @@
-"""DU8-FF-MATRIX-COMPLETION — controlled interruption / recovery end-to-end.
+"""Owned, observed interruption proof; complete 41-case acceptance is separate.
 
-Public-entry only: this script launches the *real* ``run.py`` matrix as a child
-process over the fixed read-only CWP/ET inputs, in a fresh owned root, and then
-interrupts it hard once case work has demonstrably started. It then inspects the
-on-disk state to prove the recovery invariants the card requires:
-
-  1. a killed attempt leaves *no* success report behind — the failure is never
-     reused as a success and never upgraded to PASS;
-  2. no non-replayable side effect is claimed: the interrupted attempt produced
-     no complete ``report.json``, so nothing downstream can treat it as a chain;
-  3. exit cleanup is complete — no owned child python process survives, and the
-     owned root's pre-existing content is untouched;
-  4. a *second*, uninterrupted attempt in a new owned root is an independent
-     run: fresh UUID children, its own artifacts, and its own report.
-
-It is deliberately NOT part of any per-commit CI: it starts real three-layer
-chains and takes tens of seconds.
+The public matrix is started exactly once and interrupted only after a current
+case request, matching current fixture and zero-to-new GET progression are observed in its new UUID
+attempt. No second clean matrix is silently run here. Use the separate retained
+full report for that verdict. Failure to observe work/cleanup stays NOT_RUN or
+unknown, never a zero-process or 41-PASS claim.
 """
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
 import os
-import subprocess
-import sys
-import time
-import uuid
 from pathlib import Path
+import sys
+import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[4]
-HERE = Path(__file__).resolve().parent
-RUNNER = ROOT / "tools" / "offline_contract_matrix" / "run.py"
-
-CWP = Path(r"C:\Users\郑曾波\Projects\company-wiki-du6-ff-readonly")
-ET = Path(r"C:\Users\郑曾波\Projects\earnings-transcripts-du6-ff-readonly")
-
-SENTINEL_NAME = ".w06_matrix_sentinel"
-SENTINEL_CONTENT = b"w06-matrix-sentinel-do-not-modify\n"
+TOOLS = ROOT / "tools/offline_contract_matrix"
+sys.path[:0] = [str(TOOLS), str(ROOT / "scripts")]
+import ff_process_transport as transport  # noqa: E402
+from case_specs import case_specs  # noqa: E402
 
 
-def _children(root: Path) -> set[str]:
-    return {p.name for p in root.iterdir()} if root.exists() else set()
+def _safe_env():
+    env = {
+        key: os.environ[key]
+        for key in ("SystemRoot", "WINDIR", "COMSPEC", "PATH", "PATHEXT")
+        if key in os.environ
+    }
+    env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+    return env
 
 
-def _attempt_dirs(out_root: Path) -> list[Path]:
-    return sorted(p for p in out_root.glob("attempt-*") if p.is_dir())
+def _new_attempt(output, before):
+    fresh = [
+        p
+        for p in output.glob("attempt-*")
+        if p.is_dir() and not p.is_symlink() and p.name not in before
+    ]
+    return fresh[0] if len(fresh) == 1 else None
 
 
-def _python_children_of(root: Path) -> list[int]:
-    """Best-effort: no owned python child should reference this owned root."""
-    if os.name != "nt":
-        return []
+def _case_entry(output, scratch, *, observations=None):
+    """Observe current request GET progression, not an exact blocked instant.
+
+    First-seen positive counters, malformed logs and counter rollback never
+    establish a zero baseline. Requiring zero -> new GET plus current proxy
+    state avoids certifying a previous run or a stale timed-out request.
+    """
+    if observations is None:
+        return None
+    artifacts = output / "artifacts"
+    ids = {s.id for s in case_specs()}
+    for request in sorted(artifacts.glob("*.request.json")):
+        cid = request.name.split(".", 1)[0]
+        if cid not in ids:
+            continue
+        stem = request.name.removesuffix(".request.json")
+        response = artifacts / f"{stem}.response.json"
+        if response.exists():
+            continue
+        fixture = artifacts / f"{stem}.fixture.json"
+        try:
+            fixture_bytes = fixture.read_bytes()
+            request_bytes = request.read_bytes()
+            fixture_sha = hashlib.sha256(fixture_bytes).hexdigest()
+            request_sha = hashlib.sha256(request_bytes).hexdigest()
+            key = (request.name, request_sha, fixture_sha)
+            state = json.loads(fixture_bytes)["state"]
+            calls = Path(state["calls_file"])
+            if not calls.resolve().is_relative_to(scratch.resolve()):
+                continue
+            if calls.parent.name != "calls":
+                continue
+            active = json.loads((calls.parent.parent / "state.json").read_bytes())
+            if active != state:
+                if key in observations:
+                    observations[key]["invalid"] = True
+                continue
+            try:
+                calls_bytes = calls.read_bytes()
+            except FileNotFoundError:
+                calls_bytes = b""
+            rows = [json.loads(line) for line in calls_bytes.splitlines() if line.strip()]
+            if any(not isinstance(row, dict) for row in rows):
+                continue
+            gets = sum(row.get("op") == "get" for row in rows)
+            previous = observations.get(key)
+            if previous is None:
+                observations[key] = {
+                    "last_count": gets,
+                    "started_at_zero": gets == 0,
+                    "invalid": False,
+                }
+                continue
+            prior = previous["last_count"]
+            previous["last_count"] = gets
+            if gets < prior:
+                previous["invalid"] = True
+            if previous["invalid"] or not previous["started_at_zero"] or gets <= prior:
+                continue
+            if response.exists():
+                continue
+            return {
+                "case_id": cid,
+                "request": request.name,
+                "fixture": fixture.name,
+                "observed_gets": gets,
+                "prior_observed_gets": prior,
+                "request_sha256": request_sha,
+                "fixture_sha256": fixture_sha,
+                "calls_sha256": hashlib.sha256(calls_bytes).hexdigest(),
+                "scope": "current request observed from zero to new GET before response; not proof provider remained blocked at kill instant",
+            }
+        except (OSError, ValueError, KeyError, TypeError):
+            # Partial concurrent JSON is unobserved, never a zero measurement.
+            continue
+    return None
+
+
+def _finish_owned(proc, job, state):
     try:
-        import subprocess as sp
-        out = sp.run(
-            ["wmic", "process", "where", "name='python.exe'", "get", "ProcessId,CommandLine"],
-            capture_output=True, text=True, timeout=30,
-        ).stdout
-    except Exception:
-        return []
-    own = str(root).lower()
-    hits = []
-    for line in out.splitlines():
-        low = line.lower()
-        if own in low or "offline_contract_matrix" in low:
-            parts = line.split()
-            for token in reversed(parts):
-                if token.isdigit():
-                    hits.append(int(token))
-                    break
-    return hits
-
-
-def main() -> int:
-    owned = ROOT / ".tmp" / "du8-c-recovery" / "owned"
-    out = ROOT / ".tmp" / "du8-c-recovery" / "out"
-    for path in (owned, out):
-        path.mkdir(parents=True, exist_ok=True)
-    # Pre-place a sentinel that must survive both attempts byte-for-byte.
-    sentinel = owned / SENTINEL_NAME
-    sentinel.write_bytes(SENTINEL_CONTENT)
-    out_sentinel = out / SENTINEL_NAME
-    out_sentinel.write_bytes(SENTINEL_CONTENT)
-
-    before_owned, before_out = _children(owned), _children(out)
-
-    report: dict = {
-        "schema": "du8-interruption-recovery/1",
-        "inputs": {
-            "cwp": {"path": str(CWP), "exists": CWP.is_dir()},
-            "et": {"path": str(ET), "exists": ET.is_dir()},
-        },
-        "attempts": [],
+        # Reuse the transport's already-established OS tree owner, bounded reap
+        # and pipe/thread cleanup. No WMIC, whole-machine scan or PID guessing.
+        transport._cleanup(proc, job, state)
+    except Exception as exc:
+        return {"status": "unknown", "tree_reaped": None, "reason": f"{type(exc).__name__}: {exc}"}
+    return {
+        "status": "observed",
+        "tree_reaped": True,
+        "returncode": proc.returncode,
+        "basis": "owned OS job/process group terminated; root reaped; pipe readers joined",
     }
 
-    # ── attempt 1: interrupt hard once case work starts ────────────────────
-    cmd = [
-        sys.executable, "-B", str(RUNNER),
-        "--cwp-project", str(CWP),
-        "--et-project", str(ET),
-        "--owned-root", str(owned),
-        "--out-root", str(out),
-    ]
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
-    started = time.monotonic()
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-    interrupted_after = None
+
+def _interrupt_owned(command, *, cwd, env, observe, seconds):
+    deadline = time.monotonic() + seconds
+    proc = job = state = None
+    marker = None
+    interrupted = False
+    error = None
     try:
-        # Wait until a case artifact appears (real chain work is underway).
-        deadline = time.monotonic() + 240
-        saw_work = False
-        while time.monotonic() < deadline:
-            if proc.poll() is not None:
+        proc, job = transport._spawn(command, None, str(cwd), env)
+        state = transport._IOState()
+        state.start(proc, None, 32 * 1024 * 1024, 64 * 1024)
+        while time.monotonic() < deadline and proc.poll() is None:
+            _, io_error = state.snapshot() if hasattr(state, "snapshot") else (False, None)
+            if io_error:
+                raise io_error
+            marker = observe()
+            if marker:
+                interrupted = True
                 break
-            live = _attempt_dirs(out)
-            if live and any((d / "artifacts").is_dir() and any((d / "artifacts").iterdir())
-                            for d in live):
-                saw_work = True
-                break
-            time.sleep(0.25)
-        if saw_work and proc.poll() is None:
-            time.sleep(2.0)
-            proc.kill()
-            interrupted_after = round(time.monotonic() - started, 3)
-        proc.communicate(timeout=60)   # drain and reap the interrupted attempt
-    except Exception:  # pragma: no cover - diagnostic path
-        if proc.poll() is None:
-            proc.kill()
-
-    time.sleep(1.0)
-    dirty = _attempt_dirs(out)
-    interrupted = {
-        "interrupted_after_seconds": interrupted_after,
-        "owned_seen": bool(dirty),
-        "reports_present": sorted(str(p.relative_to(out)) for d in dirty
-                                  for p in d.glob("report.json")),
-        "artifacts_present": sorted({d.name for d in dirty if (d / "artifacts").is_dir()}),
-        "live_owned_python": _python_children_of(owned),
-        "owned_children_after": sorted(_children(owned)),
-        "out_children_after": sorted(_children(out)),
-        "sentinel_owned_intact": sentinel.read_bytes() == SENTINEL_CONTENT,
-        "sentinel_out_intact": out_sentinel.read_bytes() == SENTINEL_CONTENT,
-        "preexisting_owned_preserved": before_owned <= _children(owned),
-        "preexisting_out_preserved": before_out <= _children(out),
-        "exit_code": proc.returncode,
-    }
-    report["attempts"].append({"kind": "interrupted", **interrupted})
-
-    # ── attempt 2: independent, uninterrupted, in a NEW owned root ─────────
-    owned2 = ROOT / ".tmp" / "du8-c-recovery" / f"owned2-{uuid.uuid4().hex[:8]}"
-    out2 = ROOT / ".tmp" / "du8-c-recovery" / f"out2-{uuid.uuid4().hex[:8]}"
-    owned2.mkdir(parents=True)
-    out2.mkdir(parents=True)
-    cmd2 = [
-        sys.executable, "-B", str(RUNNER),
-        "--cwp-project", str(CWP),
-        "--et-project", str(ET),
-        "--owned-root", str(owned2),
-        "--out-root", str(out2),
-    ]
-    rc2 = subprocess.call(cmd2, env=env)
-    dirs2 = _attempt_dirs(out2)
-    reports2 = [p for d in dirs2 for p in d.glob("report.json")]
-    data2 = json.loads(reports2[-1].read_text(encoding="utf-8")) if reports2 else {}
-    cases2 = data2.get("cases") or []
-    counts = {k: sum(1 for c in cases2 if c.get("result") == k)
-              for k in ("PASS", "FAIL", "PARTIAL", "NOT_RUN")}
-    counts["total"] = len(cases2)
-    report["attempts"].append({
-        "kind": "clean",
-        "exit_code": rc2,
-        "owned_root": str(owned2),
-        "out_root": str(out2),
-        "attempt_dirs": [d.name for d in dirs2],
-        "reports": [str(p.relative_to(out2)) for p in reports2],
-        "case_counts": counts,
-        "oracle": (data2.get("oracle") or {}).get("pass"),
-        "batch_elapsed_seconds": (data2.get("scope") or {}).get("batch_elapsed_seconds"),
-        "case_scheduling": (data2.get("scope") or {}).get("case_scheduling"),
-        "stop_reason": (data2.get("scope") or {}).get("stop_reason"),
-        "worker_isolation": (data2.get("scope") or {}).get("worker_isolation"),
-        "distinct_from_interrupted": not (set(d.name for d in dirs2) & {d.name for d in dirty}),
-        "restore": data2.get("restore"),
-    })
-
-    # ── independent verdicts (no self-certification) ───────────────────────
-    # These check the RECOVERY invariants only. Whether the clean attempt
-    # reached 41 PASS is machine-load dependent and is reported as data, never
-    # asserted here: conflating "the box was busy" with "recovery is broken"
-    # would be exactly the kind of disguised gate the card forbids.
-    a1, a2 = report["attempts"][0], report["attempts"][1]
-    checks = [
-        ("interruption produced real chain work", a1["owned_seen"] and bool(a1["artifacts_present"])),
-        ("no success report from the interrupted attempt", a1["reports_present"] == []),
-        ("no owned python child survived the kill", a1["live_owned_python"] == []),
-        ("owned sentinel intact", a1["sentinel_owned_intact"]),
-        ("output sentinel intact", a1["sentinel_out_intact"]),
-        ("pre-existing owned entries preserved", a1["preexisting_owned_preserved"]),
-        ("pre-existing output entries preserved", a1["preexisting_out_preserved"]),
-        ("second attempt used fresh owned directories", a2["distinct_from_interrupted"]),
-        ("second attempt completed and wrote a report", bool(a2["reports"])),
-        ("second attempt ran the full fixed denominator", a2["case_counts"]["total"] == 41),
-        ("second attempt recorded a real outcome for every case",
-         a2["case_counts"]["total"] == a2["case_counts"]["PASS"] + a2["case_counts"]["FAIL"]
-         + a2["case_counts"]["PARTIAL"] + a2["case_counts"]["NOT_RUN"]),
-        ("recovery restored owned scratch", bool((a2["restore"] or {}).get("restored"))),
-        ("recovery left no production metadata change",
-         bool((a2["restore"] or {}).get("production_metadata_unchanged"))),
-        ("a truncated batch names its stop reason or completed fully",
-         a2["case_counts"]["total"] == a2["case_counts"]["PASS"] or bool(a2["stop_reason"])),
-    ]
-    report["checks"] = [{"name": n, "ok": bool(ok)} for n, ok in checks]
-    report["passed"] = all(ok for _, ok in checks)
-    # Machine-load-dependent facts, reported but never gated here.
-    report["batch_outcome_is_data_not_a_gate"] = {
-        "exit_code": a2["exit_code"],
-        "case_counts": a2["case_counts"],
-        "oracle_clean": a2["oracle"],
-        "batch_elapsed_seconds": a2["batch_elapsed_seconds"],
-        "note": ("A non-zero exit with PARTIAL/NOT_RUN cases means the fixed 180s batch "
-                 "could not fit on this loaded machine; it is reported here and judged "
-                 "by the C-node evidence, not by recovery correctness."),
+            time.sleep(min(0.02, max(0.0, deadline - time.monotonic())))
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+    finally:
+        if proc is None:
+            cleanup = {
+                "status": "unknown",
+                "tree_reaped": None,
+                "reason": "no process owner established",
+            }
+        else:
+            cleanup = _finish_owned(proc, job, state)
+    return {
+        "interrupted": interrupted,
+        "case_entry": marker,
+        "cleanup": cleanup,
+        "error": error,
+        "deadline_seconds": seconds,
+        "stdout": b"".join(state.chunks["stdout"]).decode("utf8", errors="replace")
+        if state
+        else None,
+        "stderr": b"".join(state.chunks["stderr"]).decode("utf8", errors="replace")
+        if state
+        else None,
     }
 
 
-    dest = HERE / "interruption-recovery.json"
-    dest.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    for name, ok in checks:
-        print(f"[{'ok' if ok else 'FAIL'}] {name}")
-    print(f"recovery record: {dest}")
-    return 0 if report["passed"] else 1
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cwp-project", type=Path, required=True)
+    parser.add_argument("--et-project", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args(argv)
+    output = args.output.resolve()
+    if output.exists():
+        parser.error("output must be new; historical evidence is never overwritten")
+    with tempfile.TemporaryDirectory(prefix="du8-interrupt-") as directory:
+        temp = Path(directory)
+        owned, out = temp / "owned", temp / "out"
+        owned.mkdir()
+        out.mkdir()
+        sentinel = owned / "sentinel"
+        sentinel.write_bytes(b"preexisting fixture sentinel\n")
+        before = sentinel.read_bytes()
+        old = out / "attempt-preexisting"
+        (old / "artifacts").mkdir(parents=True)
+        (old / "artifacts" / "old.txt").write_bytes(b"old evidence")
+        baseline = {p.name for p in out.iterdir()}
+        bound = {}
+        observations = {}
+
+        def observe():
+            attempt = _new_attempt(out, baseline)
+            if attempt is None:
+                return None
+            marker = _case_entry(attempt, owned / attempt.name, observations=observations)
+            if marker:
+                bound["attempt"] = attempt.name
+            return marker
+
+        command = [
+            sys.executable,
+            "-B",
+            str(TOOLS / "run.py"),
+            "--cwp-project",
+            str(args.cwp_project.resolve()),
+            "--et-project",
+            str(args.et_project.resolve()),
+            "--owned-root",
+            str(owned),
+            "--out-root",
+            str(out),
+            "--workers",
+            "2",
+        ]
+        result = _interrupt_owned(command, cwd=temp, env=_safe_env(), observe=observe, seconds=180)
+        result.update(
+            attempt=bound.get("attempt"),
+            sentinel_intact=sentinel.read_bytes() == before,
+            preexisting_output_intact=(old / "artifacts" / "old.txt").read_bytes()
+            == b"old evidence",
+            scope="one controlled interruption; full 41-case clean run is separate",
+            schema="du8-interruption-recovery/2",
+        )
+        result["passed"] = bool(
+            result["interrupted"]
+            and result["case_entry"]
+            and result["cleanup"]["tree_reaped"] is True
+            and not result["error"]
+            and result["sentinel_intact"]
+            and result["preexisting_output_intact"]
+        )
+        temp_path = directory
+    result["temporary_tree_removed"] = not Path(temp_path).exists()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("x", encoding="utf8") as stream:
+        json.dump(result, stream, ensure_ascii=False, indent=2)
+    print(output)
+    return 0 if result["passed"] and result["temporary_tree_removed"] else 1
 
 
 if __name__ == "__main__":

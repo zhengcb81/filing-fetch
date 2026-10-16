@@ -32,11 +32,25 @@ def transcript_negative(ctx, scenario, case_id, expected_reasons, *, year=2028, 
           and t.get("reason") in expected_reasons and source_ref(t.get("source_ref")) is None
           and ctx.fixture_requests(calls) == 1 and bool(receipt))
     cleanup = not any(ctx.env.et_temp_root().iterdir())
+    verdict = "PASS" if ok and cleanup else "FAIL"
+    coverage = None
+    diagnostics = []
+    if case_id == "call_hard_timeout":
+        observed_gets = ctx.fixture_requests(calls)
+        boundary_ok = (t.get("status") not in {None, "downloaded", "reused", "unknown_publication"}
+                       and t.get("reason") == "provider_deadline"
+                       and source_ref(t.get("source_ref")) is None and bool(receipt) and cleanup)
+        coverage = {"absolute_boundary": "PASS" if boundary_ok else "FAIL",
+                    "inflight_stall": "PASS" if verdict == "PASS" else "NOT_RUN",
+                    "observed_gets": observed_gets}
+        if boundary_ok and observed_gets == 0:
+            verdict = "PARTIAL"
+            diagnostics.append("absolute deadline rejected before observed GET; in-flight stall coverage NOT_RUN")
     return CaseResult(id=case_id, title=f"transcript {scenario} rejects source and cleans worker", declared_layer="ff+et",
-        result="PASS" if ok and cleanup else "FAIL", scope="real FF+ET runtime; fixture session only",
+        result=verdict, scope="real FF+ET runtime; fixture session only",
         expected={"reasons":sorted(expected_reasons), "rejected_source":True},
-        actual={"status":t.get("status"), "reason":t.get("reason"), "worker_cleanup":cleanup, "et_result":receipt},
-        provider_counters={"fixture_requests":ctx.fixture_requests(calls)}, request_ref=result["request_ref"], response_ref=result["response_ref"])
+        actual={"status":t.get("status"), "reason":t.get("reason"), "worker_cleanup":cleanup, "et_result":receipt, **({"deadline_coverage":coverage} if coverage is not None else {})},
+        diagnostics=diagnostics, provider_counters={"fixture_requests":ctx.fixture_requests(calls)}, request_ref=result["request_ref"], response_ref=result["response_ref"])
 
 
 def case_failure_then_retry(ctx):

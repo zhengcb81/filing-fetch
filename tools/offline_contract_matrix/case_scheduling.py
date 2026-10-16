@@ -29,7 +29,7 @@ ratio = makespan / bound, so 1.0 is perfect):
 
 So the static model is shipped as a **safe, reproducible, modest** improvement -
 NOT as near-optimal scheduling. A higher-scoring per-layer variant was
-explicitly rejected as overfit (see RUN_WEIGHT_SECONDS). Callers holding real
+not selected because the simpler model is easier to derive (see RUN_WEIGHT_SECONDS). Callers holding real
 measurements should pass them via ``cost_of``; the runner exposes the hook but
 does not use it implicitly, so a batch never depends on a prior run's timing.
 
@@ -118,11 +118,8 @@ def assign_groups(entries: Iterable[tuple[int, tuple[str, Any]]], *,
     the same case id supplied twice would be scheduled twice, which is a caller
     error rather than a scheduler guarantee.
 
-    With very few distinct costs the greedy can leave a group empty (e.g. 41
-    equal-cost cases split 21/20 fill both groups, but 41 identical heavy
-    entries can all land in one). An empty group is legal and simply means the
-    worker starts and finds nothing to do; the runner still launches exactly
-    ``workers`` groups, so concurrency is never increased to rebalance.
+    A group can be empty when there are fewer entries than workers. Equal
+    positive costs are distributed across groups; they do not stack in one.
     """
     entries = list(entries)
     if workers < 1:

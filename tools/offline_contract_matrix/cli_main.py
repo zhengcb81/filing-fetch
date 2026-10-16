@@ -126,7 +126,7 @@ def _case_registry() -> list[tuple[str, Callable[[Context], CaseResult]]]:
     return [(spec.id, spec.execute) for spec in case_specs()]
 
 
-def _measured_case_costs(registry: list[tuple[str, Callable[[Context], CaseResult]]] | None = None) -> dict[str, float]:
+def _case_cost_estimates(registry: list[tuple[str, Callable[[Context], CaseResult]]] | None = None) -> dict[str, float]:
     """Per-case cost estimate consumed by the scheduling owner.
 
     The matrix must be reproducible from its fixed inputs, so no historical
@@ -453,11 +453,11 @@ def main(argv: list[str] | None = None) -> int:
                                     source_commit=source_commits.get(repo)))
         # Independent worker groups: each seeds its own wiki and runs a disjoint
         # slice of the fixed case registry under the one shared deadline. The
-        # slice is chosen by measured-cost balance, not by position: position
+        # slice is chosen by the static run-count estimate, not by position: position
         # round-robin put the three heaviest cases in one group (measured
         # 75.53s vs 59.80s) and made that group the critical path.
         entries = list(enumerate(registry))
-        cost_model = _measured_case_costs(registry)
+        cost_model = _case_cost_estimates(registry)
         groups = case_scheduling.assign_groups(entries, workers=workers, cost=cost_model)
         scheduling = case_scheduling.balance_report(groups, cost_model, cost_source="static")
         done_by_pos: dict[int, CaseResult] = {}
