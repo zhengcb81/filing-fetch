@@ -1,3 +1,15 @@
+## ROOT主线接收完成 — 2026-10-16
+
+本施工包及ROOT共因修复已正常并入主线 `d11d5f9e3e766521c84787b691f935466bf32f47`，作者完整历史保留。正式工程验收和原失败见root-reception.md/json及zip。
+
+本卡只改工程矩阵工具，生产技能文件未变，无需重装。
+
+ROOT随后正常推送并核对精确远端HEAD/CI；状态归总于CWP母PWF。
+
+**Next Step：** 本包STOP；后续由ROOT接生产共享引擎、正式摘要和母E2E，不重新开启作者施工。
+
+---
+
 ## ROOT接收更新 — 2026-10-16
 
 ROOT接收工程验收通过，待正常提交/并线/远端。独立核对271证据SHA，搬迁、篡改、缺件、原根缺失、历史失败真实CLI重放保持38PASS/1PARTIAL/2NOT_RUN与旧19PASS/21FAIL/1PARTIAL，不洗绿。ROOT修复固定.partial/竞争output覆盖，唯一owned暂存+原子不覆盖发布。集中251PASS/1FAIL暴露旧矩阵重复taskkill/communicate/wait生命周期，统一复用既有生产run_bounded，保留CompletedProcess非0原字节/原deadline，不改case30/batch180或<5秒断言；真child+descendant回收、无taskkill。最终305PASS/74.42s（含原生产transport责任测试），Ruff通过。最初180s harness超时原因unknown，后续实际5.247s回收失败有单独证据，不混为一个推断。0供应商，Temp恢复，作者/ET/生产原件及密钥不改。硬链接不支持的文件系统明确失败不覆盖；真实41链partial/NOT_RUN及母计划仍开放。
