@@ -5,7 +5,7 @@
   "branch": "codex/du8-ff-matrix-20261016",
   "implementation_commits": [
     "8fe218f",
-    "PENDING_FINAL_CORRECTION_COMMIT"
+    "7778aa9"
   ],
   "correction_note": "This handoff is v2. The v1 headline (scheduling gain 16.10s / 21.16s) was retracted after independent review: it was scored on cost tables covering only 24/41 and 29/41 cases, pricing the NOT_RUN starvation tail at a constant fallback. On the only full-coverage (41/41) table the real gain is 1.5226s / 2.02%. See handoff.md section 0.",
   "changed_paths": [
