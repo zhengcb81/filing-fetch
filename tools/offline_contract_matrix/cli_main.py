@@ -351,7 +351,14 @@ def _replay(report_arg: Path, root_arg: Path, output_arg: Path) -> int:
         "exit_status": exit_status,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Stage then rename: the output path never holds a partial record.
+    staging = output.with_name(output.name + ".partial")
+    try:
+        staging.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        staging.replace(output)
+    except Exception:
+        staging.unlink(missing_ok=True)
+        raise
     return exit_status
 
 

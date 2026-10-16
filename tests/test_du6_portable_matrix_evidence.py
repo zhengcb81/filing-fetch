@@ -751,6 +751,7 @@ def test_full_controlled_matrix_passes_and_replay_certifies(controlled, tmp_path
     assert record["native_replay"] == {"pass": True, "findings": []}
     assert record["certified"] is True
     assert record["exit_status"] == 0
+    assert not (out.parent / (out.name + ".partial")).exists()  # staged write left no partial record
     scope = record["scope"]
     assert scope["kind"] == "retained-evidence replay"
     assert "RETAINED-EVIDENCE REPLAY" in scope["statement"]
@@ -839,6 +840,28 @@ def test_replay_input_errors_are_explicit_not_tracebacks(controlled, tmp_path, c
     assert not out.exists()
     captured = capsys.readouterr()
     assert "Traceback" not in captured.err and "Traceback" not in captured.out
+
+
+@pytest.mark.parametrize("mutation", ["duplicate", "unknown", "removed"])
+def test_replay_gate_refuses_duplicate_unknown_or_removed_case_rows(controlled, tmp_path, mutation):
+    report, artifacts, report_path = controlled
+    tampered = copy.deepcopy(report)
+    if mutation == "duplicate":
+        tampered["cases"].append(copy.deepcopy(tampered["cases"][0]))
+    elif mutation == "unknown":
+        tampered["cases"][-1]["id"] = "extra-case-never-defined"
+    elif mutation == "removed":
+        tampered["cases"] = tampered["cases"][1:]
+    _write_json(report_path, tampered)
+    out = tmp_path / f"replay-{mutation}.json"
+    code = cli_main.main(
+        ["replay", "--report", str(report_path), "--evidence-root", str(artifacts), "--output", str(out)]
+    )
+    record = json.loads(out.read_text(encoding="utf-8"))
+    assert code == 1
+    assert record["certified"] is False
+    assert record["exit_status"] == 1
+    assert any(f["vector"] == "coverage_gap" for f in record["native_replay"]["findings"])
 
 
 def test_replay_never_starts_context_seed_provider_or_network(controlled, tmp_path):
