@@ -75,19 +75,39 @@
 - 后果：固定准备（binding+seed）即吃掉 25–35% 的 180s；2 worker 下 case 工作量 ~160s，
   数学上无法在 180s 内跑完 41 case。这不是分层可修的调度问题。
 
-### 负载归一化的公平对照（同一批实测秒数，非自我实现）
+### 负载归一化的对照 —— v1 版本已被独立审查推翻并更正
 
-`receipts/scheduling-comparison-run{1,2}.json`：新分区只由**冻结的 run 计数成本模型**产出，
-未回灌实测计时。
+**v1 的错误（已复现、已撤回）**：v1 报告「关键路径 167.33→151.22s / 181.14→159.98s」。
+那些数字是在**只覆盖 24/41（run1）与 29/41（run2）个 case 的成本表**上算出的；
+缺失的正是 NOT_RUN 饥饿尾部，被按常数 `DEFAULT_COST_SECONDS=2.0` 计价。
+算术铁证：组负载之和比 `measured_case_seconds` **恰好多 34.0（=17×2.0）与 24.0（=12×2.0）**，
+缺失集合 = 恰好是 NOT_RUN 集合。11.6%/7.8% 的评分负载是猜的，且猜在**最重的那端**。
 
-| 分区 | run1 关键路径 | run2 关键路径 | run2 超出 170s 窗口的 case |
-|---|---|---|---|
-| 旧 `entries[index::workers]` | 167.33s（imbalance 21.00） | 181.14s（imbalance 27.16） | **3 个**：`request_after_failure_retry`、`original_wrong_mime`、`incomplete_sidecar_metadata_gap` |
-| 新 `case_scheduling` | 151.22s（imbalance 4.90） | 159.98s（imbalance 6.00） | **0 个** |
+**更正后的真实规模**（唯一合法的全覆盖 41/41 表）：
+`receipts/scheduling-comparison.json`
 
-改善 16.10s（1.107×）/ 21.16s（1.132×）。**旧分区超窗的 3 个 case 恰好就是施工卡记录的上次真实
-失败集**（`request_after_failure_retry` PARTIAL + `original_wrong_mime`/`incomplete_sidecar_metadata_gap` NOT_RUN）
-——调度修复正对着这个失败集。
+| 分区 | 关键路径 | 相对下界 |
+|---|---|---|
+| 旧 `entries[index::workers]` | 75.5306s | 1.1162 |
+| 新 `case_scheduling`（shipped run-count 静态模型） | **74.0080s** | 1.0937 |
+| 完美均衡下界（135.3325/2） | 67.6663s | 1.0000 |
+
+→ 真实改善 **1.5226s / 2.02%**；**79.8% 的随机 20/21 分区也超过旧轮转**；
+经 `cost_of` 传入实测成本才达到 67.6690s（ratio 1.0000）。
+对照脚本已改为**拒绝任何不足 41/41 的表**并在部分表上明确 `comparison_refused: true`。
+
+### 成本模型选择：一次被判定为过拟合并弃用的尝试
+
+按 `declared_layer` 加权的模型在 W07 表上 ratio **1.0008**（看似近乎最优），但：
+- 41 个 case 只有 **4 个不同取值**（排名粒度极粗）；
+- 最优权重区间窄（`real-3layer` 权重 ±1 即劣化到 70.06s）；
+- **Spearman(model, real) = 0.7855**，反而**低于**纯 run-count 的 0.8247；
+- **bootstrap 5000 次重采样**：mean ratio 退化 **1.0598**，胜过旧轮转仅 **64.2%**，
+  且 **35.8% 的重采样中不如旧轮转**。
+
+对比 shipped run-count 模型：bootstrap mean **1.0498**，胜过旧轮转 **70.2%**。
+→ **弃用 layer 模型，ship run-count**。理由与数字写入 `case_scheduling.py` 注释，
+并由 `test_static_model_is_honestly_labelled_and_not_near_optimal` 钉住（断言真实 makespan > 下界+5s）。
 
 ### 具名 OPEN（白名单外，需 ROOT 决定）
 
@@ -97,6 +117,21 @@
 `ctx.fixture_requests(calls) == 1`（`extended_cases.py:33`）：该 case 的 ET 供应商 deadline 只有
 **1 秒**（`case_specs.py:490`，`stall` 场景），在 2–4× 慢机上 ET 在 fixture adapter 记录 GET
 **之前**就已超时 → `fixture_requests=0`、`provider_requests=null`。
-即该 case 的 1s 供应商 deadline 短于负载下的进程启动时间，是**负载敏感的既有 case 语义**，
-位于 `case_specs.py`/`extended_cases.py`——**本卡只读**，不得改。如实具名保留。
+
+**v1 的原因表述有误并已更正**：v1 说 `ctx.fixture_requests`/`run_ff` 不在白名单——不准确，
+它们在 `run.py`（属白名单）。真正的阻塞点是上述两处**只读**文件
+（冻结的 `seconds=1` 请求向量 + 只读断言）。结论不变。
+
+### RED 质量：v1 的 8 个 RED 中 7 个是同义反复
+
+在纯净基线 `e8a8558` 上按失败原因分类（`receipts/A-red-baseline-classified.txt`）：
+**6× `ModuleNotFoundError: case_scheduling` + 1× `FileNotFoundError` + 仅 1× 真实行为断言**
+（`stop_reason`）。即 v1 的 RED 主要证明「新模块还不存在」，**没有为位置轮转缺陷提供行为 RED**；
+其“负对照”测试只重实现了一遍轮转，在基线上也通过。
+
+**已修复**：新增 3 个驱动**真实 `cli_main.main`** 的行为 RED——
+`test_runner_delegates_grouping_to_the_cost_balanced_scheduler`（基线上失败于
+「cli_main 从未咨询调度 owner」）、`test_runner_reports_the_scheduling_decision_it_made`、
+`test_group_stops_launching_cases_the_moment_the_batch_expires`。
+现在基线 RED = **3 个真实行为失败 + 8 个模块缺失失败**。
 

@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -124,9 +123,8 @@ def main() -> int:
             time.sleep(2.0)
             proc.kill()
             interrupted_after = round(time.monotonic() - started, 3)
-        stdout, stderr = proc.communicate(timeout=60)
-    except Exception as exc:  # pragma: no cover - diagnostic path
-        stdout, stderr = b"", str(exc).encode()
+        proc.communicate(timeout=60)   # drain and reap the interrupted attempt
+    except Exception:  # pragma: no cover - diagnostic path
         if proc.poll() is None:
             proc.kill()
 

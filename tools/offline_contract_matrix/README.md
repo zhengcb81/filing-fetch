@@ -27,18 +27,34 @@ python -B tools/offline_contract_matrix/run.py \
 41 个固定 case 由 `case_scheduling.assign_groups` 分配到 ≤ `WORKERS`(=2) 个并发组。
 分配按**成本均衡**（最重优先贪心，全序 = cost 降序 + id 升序），不再是按位置轮转
 （`entries[index::workers]`）。位置轮转不含成本信息，实测把最重的三个 case 放进同一组，
-产生 75.53s / 59.80s 的两组负载；该组成为关键路径，并在 180s 批预算下把尾部 case 挤进
-保留的 final-proof 窗口。均衡后预测负载 67.67s / 67.66s。
+产生 **75.5306s / 59.8019s** 的两组负载（不平衡 15.73s = 26%），使该组成为关键路径。
 
-成本模型只用**运行前可得**的固定信息：`CaseSpec.runs` 的链数（2-run case 在一个组内串起
-两条完整 download→reuse 链）。不读历史计时文件——矩阵必须能从固定输入复现，机器相关的
-陈旧计时表是隐藏输入。
+**诚实的收益规模**（在保留的 W07 **41/41 全覆盖**实测表上评分，完美均衡下界 67.6663s）：
+
+| 分区 | 关键路径 | 相对下界 |
+|---|---|---|
+| 旧位置轮转 | 75.5306s | 1.1162 |
+| 新 `case_scheduling`（shipped 静态模型） | **74.0080s** | 1.0937 |
+| 完美均衡下界 | 67.6663s | 1.0000 |
+
+即真实改善约 **1.52s / 2.02%**，且 **79.8% 的随机 20/21 分区也能超过旧轮转**。
+所以这是**可复现的小幅改善，不是接近最优的调度**。不要把它宣传成大幅提速。
+
+成本模型只用**运行前可得**的固定信息：`CaseSpec.runs` 的链数。不读历史计时文件——
+矩阵必须能从固定输入复现，机器相关的陈旧计时表是隐藏输入。
+曾试验过一个按 `declared_layer` 加权的模型：它在 W07 表上看似近乎最优（67.723s），
+但仅有 4 个取值、最优权重区间极窄，bootstrap 重采样后 mean ratio 退化为 1.0598 且只有
+64.2% 概率胜过旧轮转——**比本 run-count 模型的 1.0498 / 70.2% 更差**，故**判定为过拟合并弃用**。
+
+`case_scheduling.static_cost` 提供 `cost_of` 钩子，持有实测秒数的调用方可据此调度并达到下界；
+runner 不隐式使用它，否则批次会依赖上一次运行的计时。
 
 约束保持不变：并发 ≤2（均衡不通过放大并发实现）、30s/case、180s/batch、10s proof reserve、
 `remaining` 不续期。同一 case 的 download→reuse 链绝不被拆到两个组。
 
 报告 `scope.case_scheduling` 记 `group_loads_seconds`、`group_case_counts`、
-`predicted_makespan_seconds`、`perfect_balance_lower_bound_seconds`、`imbalance_seconds`。
+`predicted_makespan_seconds`、`perfect_balance_lower_bound_seconds`、`imbalance_seconds`、
+**`cost_source`**（static/measured，防止把预测当实测）。
 批次因绝对截止被截断时，`scope.stop_reason` 必须具名（不再静默截断）。
 
 ## 架构

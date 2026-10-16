@@ -129,11 +129,17 @@ def _case_registry() -> list[tuple[str, Callable[[Context], CaseResult]]]:
 def _measured_case_costs(registry: list[tuple[str, Callable[[Context], CaseResult]]] | None = None) -> dict[str, float]:
     """Per-case cost estimate consumed by the scheduling owner.
 
-    The strongest *pre-run* predictor available from the frozen case authority
-    is the number of FF chains a case owns (a 2-run ``CaseSpec`` starts two full
-    download->reuse chains inside one group). No historical timing file is read:
-    the matrix must stay reproducible from the fixed inputs alone, and a stale
-    machine-specific timing table would be a hidden input.
+    The matrix must be reproducible from its fixed inputs, so no historical
+    timing file is read here: a stale machine-specific timing table would be a
+    hidden input. The shipped estimate is therefore the frozen static one
+    (CaseSpec run count), which the retained 41/41 table shows is a real but
+    modest improvement over position round-robin (74.008s vs 75.531s against a
+    67.666s perfect-balance bound) - a coarse proxy, not near-optimal scheduling.
+
+    ``case_scheduling.static_cost`` accepts a ``cost_of`` hook so a caller that
+    already holds measured per-case seconds can schedule on them and reach the
+    bound. The runner does not do that implicitly, because doing so would make
+    a batch depend on a prior run's timing.
     """
     entries = registry if registry is not None else _case_registry()
     return case_scheduling.static_cost(
@@ -453,7 +459,7 @@ def main(argv: list[str] | None = None) -> int:
         entries = list(enumerate(registry))
         cost_model = _measured_case_costs(registry)
         groups = case_scheduling.assign_groups(entries, workers=workers, cost=cost_model)
-        scheduling = case_scheduling.balance_report(groups, cost_model)
+        scheduling = case_scheduling.balance_report(groups, cost_model, cost_source="static")
         done_by_pos: dict[int, CaseResult] = {}
         stops = []
         with ThreadPoolExecutor(max_workers=workers) as pool:

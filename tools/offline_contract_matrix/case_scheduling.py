@@ -2,47 +2,74 @@
 
 Why this module exists (DU8-FF-MATRIX-COMPLETION, node A): the runner used
 ``entries[index::workers]`` — a *position* round-robin. Position carries no
-cost information, and the fixed 41-case registry is heavily heterogeneous
-(1-run local hits ~1.5s vs the real-3layer ``chainA_download_reuse`` ~10.6s
-and the 2-run ``request_after_failure_retry`` ~8.3s). Measured on the retained
-W07 full batch this produced group loads of 75.53s and 59.80s: a 15.7s (26%)
-imbalance that became the critical path and, at the 180s batch budget, pushed
-the tail cases into the reserved proof window.
+cost information, and the fixed 41-case registry is heterogeneous (cheap
+single-run local hits vs the real-3layer ``chainA_download_reuse`` and the
+multi-run fetch/retry chains). On the retained W07 full 41/41 cost table that
+produced group loads of 75.5306s and 59.8019s: a 15.73s (26%) imbalance that
+became the single critical path and starved the tail of the 180s budget.
 
 This owner is deliberately **pure**: no clock, no process, no environment, no
 I/O, no randomness. Callers supply the case entries and a cost estimate; the
 function returns the group assignment. That keeps the planner trivially
 testable under a fake clock and incapable of widening concurrency by itself.
 
-Determinism: the longest-processing-time-first greedy is applied over a total
-order that is (cost descending, case id ascending), and ties between group
-loads are broken by the lower group index. The same set of cases therefore
-always yields the same partition, independent of input order.
+HONESTY ABOUT THE COST MODEL (measured, not asserted)
+-----------------------------------------------------
+Two cost sources are supported, and their real-world strength differs a lot.
+Both were scored on the retained W07 41/41 measured table (perfect-balance bound
+= total/2 = 67.6663s; legacy position round-robin = 75.5306s; critical-path
+ratio = makespan / bound, so 1.0 is perfect):
+
+* ``measured`` — the caller supplies per-case seconds (e.g. a prior run's
+  ``actual.elapsed_seconds``) through ``cost_of``. Ratio 1.0000: LPT on real
+  costs reaches the bound.
+* ``static`` (default) — derived only from the frozen case authority (run
+  count). Ratio 1.0937 on the real table: a 1.52s / 2.02% critical-path gain
+  over legacy, and 69% of random 20/21 partitions beat it.
+
+So the static model is shipped as a **safe, reproducible, modest** improvement -
+NOT as near-optimal scheduling. A higher-scoring per-layer variant was
+explicitly rejected as overfit (see RUN_WEIGHT_SECONDS). Callers holding real
+measurements should pass them via ``cost_of``; the runner exposes the hook but
+does not use it implicitly, so a batch never depends on a prior run's timing.
+
+Determinism: the longest-processing-time-first greedy runs over a total order
+of (cost descending, case id ascending), and ties between equal group loads
+break toward the lower group index. The same case set therefore always yields
+the same partition, independent of input order.
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable, Iterable, Sequence
 
-# Default cost estimate for a case the cost model does not know. Chosen as the
-# cheap single-run local-hit order of magnitude so an unknown case can never
-# dominate the schedule; the real per-case timings replace it as soon as the
-# measurement exists.
+# Static fallback for a case the caller supplied no measurement for. Chosen at
+# the cheap single-run local-hit order of magnitude so an unknown case can never
+# dominate the schedule.
 DEFAULT_COST_SECONDS = 2.0
 
-# Relative weight of one FF child launch inside a case. A `CaseSpec` with N
-# runs starts N full download->reuse chains inside ONE group, so the run count
-# is the strongest static predictor of case cost available before measurement.
+# Static model: a fixed base plus a weight per FF chain, because a ``CaseSpec``
+# with N runs starts N full download->reuse chains inside ONE group.
+#
+# A richer model (per-declared-layer base) was tried and REJECTED. On the
+# retained W07 41/41 table it looks near-perfect (67.723s against a 67.666s
+# bound), but that is an artifact of the table: the model carries only 4 distinct
+# values across 41 cases and its optimal weight region is a narrow plateau. Under
+# bootstrap resampling of the observed per-case costs it degrades to a mean
+# critical-path/bound ratio of 1.0598 and beats position round-robin in only
+# 64.2% of resamples - WORSE than this plain run-count model's 1.0498 / 70.2%.
+# The simpler model generalizes better, so it is the one shipped. See the
+# DU8 findings "cost-model selection" entry for the recorded numbers.
 RUN_WEIGHT_SECONDS = 2.0
 
 
 def static_cost(entries: Sequence[tuple[int, tuple[str, Any]]],
                 cost_of: Callable[[str], float] | None = None) -> dict[str, float]:
-    """Cost estimate per case id from the fixed CaseSpec shape.
+    """Cost estimate per case id, using a caller measurement when available.
 
-    ``cost_of`` lets the caller supply measured per-case seconds (the report's
-    own ``actual.elapsed_seconds``). Without it the estimate is the run count,
-    which is a property of the frozen case authority rather than of a run.
+    ``cost_of`` is the supported hook for real measurements (the report's own
+    ``actual.elapsed_seconds`` from an earlier run). Return ``None`` from it for
+    cases without a measurement and the frozen static estimate is used instead.
     """
     from case_specs import get_spec
 
@@ -60,25 +87,32 @@ def static_cost(entries: Sequence[tuple[int, tuple[str, Any]]],
 
 
 def assign_groups(entries: Iterable[tuple[int, tuple[str, Any]]], *,
-                  workers: int, cost: dict[str, float] | None = None) -> list[list[tuple[int, tuple[str, Any]]]]:
+                  workers: int, cost: dict[str, float] | None = None,
+                  cost_of: Callable[[str], float] | None = None
+                  ) -> list[list[tuple[int, tuple[str, Any]]]]:
     """Partition the fixed case entries into ``workers`` cost-balanced groups.
 
     Guarantees relied on by the runner and its tests:
 
-    * every entry lands in exactly one group;
-    * a whole case chain stays inside one group (grouping is by case id, and a
-      case id owns exactly one entry);
-    * at most ``workers`` groups are produced — the planner never raises
+    * every *entry* lands in exactly one group;
+    * at most ``workers`` groups are produced - the planner never raises
       concurrency to balance load;
     * the result depends only on the *set* of entries, not their order;
-    * group 0 receives the heaviest case, and the greedy then always charges
-      the currently lightest group, so the heaviest case is never stacked on
-      top of an already heavier group.
+    * the greedy always charges the currently lightest group, so the heaviest
+      case is never stacked on top of an already heavier group.
+
+    Grouping is per entry, so a whole download->reuse case chain stays in one
+    group as long as the caller passes each case exactly once. The runner does
+    that by construction (``enumerate(registry)``), and the suite asserts the
+    exactly-once property on the real registry.
+
+    A case id appearing on two entries belongs to two groups by definition;
+    that is a caller error, not a scheduler guarantee.
     """
     entries = list(entries)
     if workers < 1:
         raise ValueError("workers must be at least one")
-    model = dict(cost) if cost is not None else static_cost(entries)
+    model = dict(cost) if cost is not None else static_cost(entries, cost_of)
 
     # Total order: cost descending, then id ascending for determinism.
     ordered = sorted(
@@ -105,8 +139,12 @@ def group_loads(groups: Sequence[Sequence[tuple[int, tuple[str, Any]]]],
 
 
 def balance_report(groups: Sequence[Sequence[tuple[int, tuple[str, Any]]]],
-                   cost: dict[str, float]) -> dict[str, Any]:
-    """Measured-shape summary of a partition for the report and the handoff."""
+                   cost: dict[str, float], *, cost_source: str = "static") -> dict[str, Any]:
+    """Summary of a partition for the report and the handoff.
+
+    ``cost_source`` records which model produced the numbers so a reader can
+    never mistake a static prediction for a measurement.
+    """
     loads = group_loads(groups, cost)
     makespan = max(loads) if loads else 0.0
     total = sum(loads)
@@ -117,5 +155,11 @@ def balance_report(groups: Sequence[Sequence[tuple[int, tuple[str, Any]]]],
         "predicted_makespan_seconds": round(makespan, 4),
         "perfect_balance_lower_bound_seconds": round(lower_bound, 4),
         "imbalance_seconds": round(makespan - lower_bound, 4),
-        "cost_model": "measured per-case seconds where available, else CaseSpec run-count weight",
+        "cost_source": cost_source,
+        "cost_model": (
+            "measured per-case seconds supplied via cost_of" if cost_source == "measured"
+            else "frozen static estimate from CaseSpec run count; a coarse proxy, "
+                 "measured at 74.008s vs legacy 75.531s and vs the 67.666s "
+                 "perfect-balance bound on the retained W07 41/41 table"
+        ),
     }

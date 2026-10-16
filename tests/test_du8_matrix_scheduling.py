@@ -111,55 +111,124 @@ def _cost_model(ids):
 
 
 def _assign(entries, *, workers=2, cost=None):
-    """Call the scheduling owner the runner uses, with an explicit cost model."""
+    """Call the scheduling owner the runner uses.
+
+    ``cost=None`` exercises the SHIPPED path (the frozen static model), which is
+    what the runner actually does. Pass ``cost`` explicitly to score a partition
+    on the retained measured table.
+    """
     import case_scheduling
 
-    ids = [cid for _, (cid, _) in entries]
-    model = cost if cost is not None else _cost_model(ids)
-    return case_scheduling.assign_groups(entries, workers=workers, cost=cost or model)
+    return case_scheduling.assign_groups(entries, workers=workers, cost=cost)
 
 
 def _group_loads(groups, cost):
     return [round(sum(cost[cid] for _, (cid, _) in group), 4) for group in groups]
 
 
-# ── 1. cost balance ────────────────────────────────────────────────────────
+# ── 1. cost balance (scored on the FULL 41/41 retained table) ──────────────
+#
+# Honesty note: every assertion below is evaluated on the retained W07 table,
+# which covers all 41 cases. An earlier version of this suite scored partitions
+# on tables covering only the cases that actually RAN, pricing the NOT_RUN
+# starvation tail at a constant fallback - which inflated the apparent gain from
+# ~2% to ~20%. These tests deliberately use the full-coverage table so that
+# cannot recur.
 
 
-def test_real_41_registry_is_cost_balanced_across_two_groups():
+def test_measured_table_covers_the_full_41_case_registry():
+    """Guard against a partial table silently pricing the tail at a constant."""
     entries = list(enumerate(_real_registry()))
     cost = _cost_model([cid for _, (cid, _) in entries])
-    groups = _assign(entries, workers=2, cost=cost)
-    assert len(groups) == 2, "the fixed batch still uses exactly two worker groups"
-    loads = _group_loads(groups, cost)
-    total = sum(loads)
-    makespan = max(loads)
-    # Lower bound is total/workers; the optimal partition on this cost table is
-    # 67.67s per group. Require the scheduler to stay within 6% of the optimum,
-    # which the old position round-robin (75.53/59.80) fails by a wide margin.
-    assert makespan <= total / 2 * 1.06, (
-        f"group loads {loads} are imbalanced: critical path {makespan:.2f}s vs "
-        f"optimal {total / 2:.2f}s (old round-robin measured 75.53/59.80)"
+    assert len(cost) == 41, "the scoring table must cover the full fixed denominator"
+    assert len(REAL_COSTS) == 41
+    assert set(cost) == {cid for _, (cid, _) in entries}
+
+
+def test_balanced_partition_beats_position_round_robin_on_real_full_coverage():
+    """The shipped static model must be a real, measurable improvement.
+
+    Measured on the retained 41/41 table: legacy 75.5306s vs shipped 74.0080s,
+    i.e. a 1.52s / 2.02% critical-path reduction against a 67.6663s optimum.
+    The bar is deliberately modest because that is the honest size of the gain.
+    """
+    entries = list(enumerate(_real_registry()))
+    cost = _cost_model([cid for _, (cid, _) in entries])
+    legacy = [entries[i::2] for i in range(2)]
+    balanced = _assign(entries, workers=2)          # shipped static model
+    legacy_makespan = max(_group_loads(legacy, cost))
+    new_makespan = max(_group_loads(balanced, cost))
+    assert new_makespan < legacy_makespan, (
+        f"the shipped partition {new_makespan:.4f}s must beat position "
+        f"round-robin {legacy_makespan:.4f}s on the real full-coverage table"
     )
-    assert abs(loads[0] - loads[1]) <= total * 0.06, (
-        f"unbalanced critical path: {loads}"
+    assert legacy_makespan - new_makespan >= 1.0, (
+        "the improvement must be at least a second to be worth shipping; got "
+        f"{legacy_makespan - new_makespan:.4f}s"
     )
 
 
-def test_position_round_robin_would_fail_the_same_balance_bar():
-    """Negative control: the old assignment is provably not cost balanced."""
+def test_position_round_robin_is_provably_imbalanced_on_real_costs():
+    """Negative control, scored on the full table (not a local reimplementation).
+
+    This is the defect A-node names: the old assignment's two groups differ by
+    15.73s (26%) on measured data.
+    """
     entries = list(enumerate(_real_registry()))
     cost = _cost_model([cid for _, (cid, _) in entries])
     legacy = [entries[i::2] for i in range(2)]
     loads = _group_loads(legacy, cost)
     total = sum(loads)
-    assert max(loads) > total / 2 * 1.06, (
-        "the retained cost table must show the old round-robin as imbalanced; "
-        f"got {loads}"
-    )
-    # And it reproduces the measured real split (75.53 / 59.80).
     assert loads[0] == pytest.approx(75.5306, abs=0.01)
     assert loads[1] == pytest.approx(59.8019, abs=0.01)
+    assert max(loads) - min(loads) > total * 0.10, (
+        f"position round-robin must show a >10% spread on real costs; got {loads}"
+    )
+
+
+def test_static_model_is_honestly_labelled_and_not_near_optimal():
+    """The static model is a coarse proxy; the report must say so.
+
+    Pinned as a fact so nobody later mistakes the 74.008s result for near
+    optimality: the perfect-balance bound is 67.6663s and the shipped static
+    model is several seconds above it.
+    """
+    from case_scheduling import balance_report, static_cost
+
+    entries = list(enumerate(_real_registry()))
+    frozen = static_cost(entries)
+    groups = _assign(entries, workers=2)
+    report = balance_report(groups, frozen, cost_source="static")
+    assert report["cost_source"] == "static"
+    assert "proxy" in report["cost_model"]
+    cost = _cost_model([cid for _, (cid, _) in entries])
+    real_makespan = max(_group_loads(groups, cost))
+    bound = sum(cost.values()) / 2
+    assert real_makespan > bound + 5.0, (
+        "the static model must not be advertised as near-optimal: "
+        f"makespan {real_makespan:.3f}s vs bound {bound:.3f}s"
+    )
+    assert real_makespan == pytest.approx(74.008, abs=0.01), (
+        "the documented static-model result on the retained table must stay honest"
+    )
+
+
+def test_measured_costs_via_cost_of_hook_reach_near_optimal():
+    """The supported hook for real measurements must actually work end-to-end."""
+    from case_scheduling import static_cost
+
+    entries = list(enumerate(_real_registry()))
+    cost = _cost_model([cid for _, (cid, _) in entries])
+    measured = static_cost(entries, cost_of=cost.get)
+    assert measured == cost, "cost_of must take precedence over the static estimate"
+    groups = _assign(entries, workers=2, cost=measured)
+    makespan = max(_group_loads(groups, cost))
+    bound = sum(cost.values()) / 2
+    assert makespan <= bound * 1.01, (
+        f"measured-cost scheduling must be near optimal; got {makespan:.4f}s "
+        f"vs bound {bound:.4f}s"
+    )
+
 
 
 # ── 2. order independence ──────────────────────────────────────────────────
@@ -255,6 +324,104 @@ def test_workers_beyond_ceiling_are_refused_by_the_cli():
             "--cwp-project", "x", "--et-project", "y",
             "--owned-root", "z", "--out-root", "w", "--workers", "3",
         ])
+
+
+# ── 4b. the runner really uses the balanced assignment ─────────────────────
+#
+# This is the behavioural RED that the first version of this suite lacked: it
+# drives the real cli_main.main and proves the grouping the RUNNER actually
+# executes is cost-balanced, instead of re-testing a local reimplementation.
+# On the pre-change runner cli_main made NO call to the scheduling owner at all,
+# so this fails with "cli_main never consulted the scheduler".
+
+
+def _spy_on_assignment(monkeypatch, recorder):
+    """Record the runner's grouping decision WITHOUT importing the new module.
+
+    Patching ``cli_main``'s own namespace keeps this a genuine behavioural RED:
+    on the pre-change runner there is no such attribute, so the test fails on
+    the missing DELEGATION (a real defect) rather than on a missing import.
+    """
+    import cli_main
+
+    real = getattr(cli_main, "case_scheduling", None)
+
+    class _Spy:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def assign_groups(self, entries, **kwargs):
+            if self._inner is None:
+                recorder.append({"groups": None, "kwargs": kwargs})
+                raise AssertionError(
+                    "cli_main never consulted a scheduling owner: the runner "
+                    "partitions cases by position, not by cost")
+            groups = self._inner.assign_groups(entries, **kwargs)
+            recorder.append({"groups": groups, "kwargs": kwargs})
+            return groups
+
+        def balance_report(self, *a, **kw):
+            return self._inner.balance_report(*a, **kw) if self._inner else {}
+
+        def __getattr__(self, name):
+            if self._inner is None:
+                raise AttributeError(name)
+            return getattr(self._inner, name)
+
+    monkeypatch.setattr(cli_main, "case_scheduling", _Spy(real), raising=False)
+    return real
+
+
+def test_runner_delegates_grouping_to_the_cost_balanced_scheduler(tmp_path, monkeypatch):
+    recorded = []
+    _spy_on_assignment(monkeypatch, recorded)
+    registry = _real_registry()
+    _rc, _report, _ = _run_main(tmp_path, registry, [], clock=_Clock(), workers=2)
+
+    assert recorded, (
+        "cli_main never consulted the scheduling owner: the runner still "
+        "partitions by position instead of by cost"
+    )
+    assert len(recorded) == 1, "exactly one scheduling decision per batch"
+    call = recorded[0]
+    assert call["kwargs"].get("workers") == 2
+    groups = call["groups"]
+    assert len(groups) == 2, "the runner must still use exactly two groups"
+
+    # The grouping the runner actually executed must be the balanced one.
+    cost = _cost_model([cid for cid, _ in registry])
+    loads = _group_loads(groups, cost)
+    legacy = [list(enumerate(registry))[i::2] for i in range(2)]
+    legacy_makespan = max(_group_loads(legacy, cost))
+    assert max(loads) < legacy_makespan, (
+        f"the runner's real grouping {loads} did not beat position round-robin "
+        f"({legacy_makespan:.4f}s)"
+    )
+
+
+def test_runner_reports_the_scheduling_decision_it_made(tmp_path, monkeypatch):
+    recorded = []
+    _spy_on_assignment(monkeypatch, recorded)
+    registry = _real_registry()
+    _rc, report, _ = _run_main(tmp_path, registry, [], clock=_Clock(), workers=2)
+    scheduling = (report.get("scope") or {}).get("case_scheduling")
+    assert scheduling, "the report must record the scheduling decision"
+    for key in ("group_loads_seconds", "group_case_counts", "cost_source",
+                "predicted_makespan_seconds", "perfect_balance_lower_bound_seconds"):
+        assert key in scheduling, f"report scheduling record lacks {key}"
+    assert scheduling["cost_source"] in {"static", "measured"}
+    assert sorted(scheduling["group_case_counts"]) == sorted(len(g) for g in recorded[0]["groups"])
+
+
+def test_runner_partition_covers_the_fixed_registry_exactly_once(tmp_path, monkeypatch):
+    recorded = []
+    _spy_on_assignment(monkeypatch, recorded)
+    registry = _real_registry()
+    _rc, _report, _ = _run_main(tmp_path, registry, [], clock=_Clock(), workers=2)
+    flat = [cid for group in recorded[0]["groups"] for _pos, (cid, _r) in group]
+    assert sorted(flat) == sorted(cid for cid, _ in registry)
+    assert len(flat) == len(set(flat)), "a case was scheduled into two groups"
+
 
 
 # ── 5. deadline recovery: zero new launches past the reserve ───────────────
