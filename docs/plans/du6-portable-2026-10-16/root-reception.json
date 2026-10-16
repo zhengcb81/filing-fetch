@@ -1,0 +1,20 @@
+{
+  "lane": "ff",
+  "status": "ENGINEERING_ACCEPTED_AWAITING_PUBLICATION",
+  "source_sha256": {
+    "tools/offline_contract_matrix/cli_main.py": "a1000e95c37d67d2ecb4ca0b050cf71005702dae1336e1437988f3a98b6c3cb0",
+    "tools/offline_contract_matrix/runtime.py": "8275faad55ed0816b425503a7be6cd25e7376f419dc79838c3013ad9d37450b2",
+    "tests/test_du67_replay_output_ownership.py": "49b6782c5bd4467db0438d58272bb126ca6d387716fb5b20bd1d45a04ecfb16c",
+    "tests/test_du67_matrix_process_owner.py": "3e2714da5bdeb8295442f38fdd02956fa64033d7de82564b685b93fa1f8f582c",
+    "tests/test_w07_matrix_efficiency.py": "94f783f634ca16e945fb54d44f8298d068a016b99567e072c3d66ea1acc0b1e2",
+    "tests/test_root_w07_matrix_boundaries.py": "87eb5b2427255b052a164c5039af611bfaaf0dafc8a242500f4080e55094173e"
+  },
+  "retained_archive": {
+    "path": "root-reception-receipts.zip",
+    "bytes": 15478,
+    "sha256": "a9e99daf1ba99da12fa0f986eb1ef204e40cbb7bad5f3bc264f23a1287f02aee"
+  },
+  "supplier_calls": 0,
+  "production_writes": 0,
+  "note": "ROOT接收工程验收通过，待正常提交/并线/远端。独立核对271证据SHA，搬迁、篡改、缺件、原根缺失、历史失败真实CLI重放保持38PASS/1PARTIAL/2NOT_RUN与旧19PASS/21FAIL/1PARTIAL，不洗绿。ROOT修复固定.partial/竞争output覆盖，唯一owned暂存+原子不覆盖发布。集中251PASS/1FAIL暴露旧矩阵重复taskkill/communicate/wait生命周期，统一复用既有生产run_bounded，保留CompletedProcess非0原字节/原deadline，不改case30/batch180或<5秒断言；真child+descendant回收、无taskkill。最终305PASS/74.42s（含原生产transport责任测试），Ruff通过。最初180s harness超时原因unknown，后续实际5.247s回收失败有单独证据，不混为一个推断。0供应商，Temp恢复，作者/ET/生产原件及密钥不改。硬链接不支持的文件系统明确失败不覆盖；真实41链partial/NOT_RUN及母计划仍开放。"
+}

@@ -69,23 +69,30 @@ def test_measurement_failure_still_restores_attempt(tmp_path,monkeypatch):
     assert not (tmp_path/"owned").exists()
 
 def test_dead_child_is_reaped_after_second_communicate_error(tmp_path,monkeypatch):
-    class Child:
-        pid=123
-        returncode=None
-        waited=False
-        def communicate(self,*a,**kw):
-            raise RuntimeError("pipe broken")
-        def kill(self):
-            self.returncode=-9
-        def wait(self,timeout=None):
-            self.waited=True
-            return self.returncode
-    child=Child()
-    monkeypatch.setattr(runtime.subprocess,"Popen",lambda *a,**kw:child)
-    monkeypatch.setattr(runtime,"_terminate_tree",lambda proc,env:proc.kill())
-    with pytest.raises(RuntimeError):
-        runtime.run_process(["python"],env={},cwd=tmp_path,deadline=runtime.Deadline(1))
-    assert child.waited
+    # Cleanup must also work if I/O setup fails after real reader threads start.
+    import os
+    import threading
+    transport = runtime.process_transport
+    original_start = transport._IOState.start
+    captured = []
+
+    def broken_start(state, proc, *args):
+        captured.append(proc)
+        original_start(state, proc, *args)
+        raise RuntimeError("pipe broken")
+
+    monkeypatch.setattr(transport._IOState, "start", broken_start)
+    with pytest.raises(RuntimeError, match="pipe broken"):
+        runtime.run_process(
+            [sys.executable, "-B", "-S", "-c", "import threading;threading.Event().wait()"],
+            env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"), cwd=tmp_path,
+            deadline=runtime.Deadline(5),
+        )
+    assert len(captured) == 1
+    assert captured[0].poll() is not None
+    assert all(pipe.closed for pipe in (captured[0].stdin, captured[0].stdout, captured[0].stderr))
+    assert not [t for t in threading.enumerate() if t.name.startswith("ff-process")]
+
 
 @pytest.mark.parametrize("kind",["missing","extra","reordered"])
 def test_seed_response_cardinality_and_order_are_validated(tmp_path,monkeypatch,kind):

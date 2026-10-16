@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -351,14 +353,20 @@ def _replay(report_arg: Path, root_arg: Path, output_arg: Path) -> int:
         "exit_status": exit_status,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
-    # Stage then rename: the output path never holds a partial record.
-    staging = output.with_name(output.name + ".partial")
+    # Only the exclusive temporary file is ours. Publishing a complete inode
+    # with link is atomic and refuses an output created by another writer after
+    # the early input checks; replace/rename would overwrite it on POSIX.
+    staging = None
     try:
-        staging.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-        staging.replace(output)
-    except Exception:
-        staging.unlink(missing_ok=True)
-        raise
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
+                                         dir=output.parent, prefix=".ff-replay-",
+                                         suffix=".partial", delete=False) as stream:
+            staging = Path(stream.name)
+            json.dump(record, stream, ensure_ascii=False, indent=2)
+        os.link(staging, output)
+    finally:
+        if staging is not None:
+            staging.unlink(missing_ok=True)
     return exit_status
 
 

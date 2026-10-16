@@ -5,10 +5,17 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+
+SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+import ff_process_transport as process_transport  # noqa: E402
 
 
 class DeadlineExceeded(TimeoutError):
@@ -258,58 +265,25 @@ def synthetic_env(scratch: Path, cwp_root: Path, et_root: Path, *, with_fmp_key:
     return env
 
 
-def _terminate_tree(proc: subprocess.Popen, env: dict[str, str]) -> None:
-    # FF owns nested provider/ET workers; reap only this process tree. The
-    # reaping must survive failures in the killer itself so no child leaks.
-    try:
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], env=env,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-        else:
-            import signal
-            os.killpg(proc.pid, signal.SIGKILL)
-    except Exception:
-        pass
-    try:
-        proc.kill()
-    except Exception:
-        pass
-
-
 def run_process(command: list[str], *, env: dict[str, str], cwd: Path,
                 deadline: Deadline, input: bytes | None = None) -> subprocess.CompletedProcess:
-    remaining = deadline.remaining()  # check before launching, not after completion
-    kw = {} if os.name == "nt" else {"start_new_session":True}
-    proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, env=env, cwd=cwd, **kw)
+    """Adapt the public bounded transport without renewing the matrix deadline."""
+    remaining = deadline.remaining()  # Expired requests must not enter the transport.
     try:
-        stdout, stderr = proc.communicate(input, timeout=min(remaining, deadline.remaining()))
-    except (subprocess.TimeoutExpired, DeadlineExceeded) as exc:
-        _terminate_tree(proc, env)
-        try:
-            stdout, stderr = proc.communicate(timeout=5)
-        except Exception:
-            stdout, stderr = b"", b""
-        finally:
-            try:
-                proc.wait(timeout=5)
-            except Exception:
-                pass
-        raise DeadlineExceeded(f"child absolute deadline expired: {Path(command[0]).name}") from exc
-    except Exception:
-        # Unexpected transport errors must not leave orphaned children either.
-        _terminate_tree(proc, env)
-        try:
-            proc.communicate(timeout=5)
-        except Exception:
-            pass
-        finally:
-            try:
-                proc.wait(timeout=5)
-            except Exception:
-                pass
-        raise
-    return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
+        result = process_transport.run_bounded(
+            command, timeout_seconds=remaining, input_bytes=input, cwd=str(cwd), env=env,
+        )
+    except process_transport.ChildTimeout as exc:
+        raise DeadlineExceeded(
+            f"child absolute deadline expired: {Path(command[0]).name}"
+        ) from exc
+    except process_transport.ChildFailed as exc:
+        # The matrix classifies nonzero exits itself; preserve its existing
+        # CompletedProcess contract, including un-decoded stdout/stderr bytes.
+        return subprocess.CompletedProcess(command, exc.returncode, exc.stdout, exc.stderr)
+    return subprocess.CompletedProcess(
+        command, result["returncode"], result["stdout"], result["stderr"],
+    )
 
 
 def guard_events(scratch: Path) -> list[dict]:
