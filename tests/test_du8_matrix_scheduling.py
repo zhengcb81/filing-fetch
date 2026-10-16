@@ -611,6 +611,28 @@ def test_cost_model_claims_are_backed_by_committed_receipts():
         "a single-scheme claim would be adequate and this guard is unnecessary")
 
 
+def test_no_receipt_asserts_a_global_cost_model_conclusion():
+    """Generated receipt strings must not resurrect the withdrawn claim.
+
+    The bootstrap receipt is machine-generated, so its `conclusion` string is
+    easy to overlook. It must scope itself to its own scheme and point at the
+    sensitivity companion rather than asserting a general result.
+    """
+    receipts = (TOOLS.parents[1] / "docs" / "plans" / "du8-matrix-2026-10-16" / "receipts")
+    bootstrap = json.loads((receipts / "cost-model-bootstrap.json").read_text(encoding="utf-8"))
+    conclusion = bootstrap["conclusion"]
+    assert "THIS resampling scheme" in conclusion, (
+        "the generated conclusion must scope itself to one scheme")
+    assert "sensitivity" in conclusion, (
+        "the generated conclusion must point at the scheme-sensitivity receipt")
+    assert "NOT for a claimed robustness advantage" in conclusion
+    # And the withdrawn phrasing must be gone from every committed receipt.
+    for path in receipts.glob("*.json"):
+        text = path.read_text(encoding="utf-8")
+        assert "generalizes at least as well" not in text, (
+            f"{path.name} still carries the withdrawn robustness claim")
+
+
 def test_ship_reason_is_simplicity_not_a_robustness_claim():
     """The shipped model's justification must not overclaim robustness."""
     module = (TOOLS / "case_scheduling.py").read_text(encoding="utf-8")

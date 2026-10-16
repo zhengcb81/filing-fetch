@@ -1,39 +1,19 @@
-docs(du8): make every cost-model claim reproducible; correct the ship reason
+docs(du8): scope the generated bootstrap conclusion; refresh receipts
 
-A second independent review found two justification defects. Both are real and
-both are fixed here rather than argued away.
+Final polish from the third review pass. The reviewer noted that the
+machine-generated `conclusion` string in receipts/cost-model-bootstrap.json
+still read "run-count generalizes at least as well as layer" - the withdrawn
+robustness claim surviving in generated output that is easy to overlook.
 
-N1 - the decisive bootstrap numbers were prose-only. The previous revision
-asserted that run-count "generalizes better" than the per-layer model because
-bootstrap resampling degraded layer to 1.0598 / 64.2% against run-count's
-1.0498 / 70.2%. No committed script reproduced those figures, and the reviewer's
-resampling inverted them. I have now committed both scripts and both receipts:
+The script now emits a conclusion that names its own resampling scheme, states
+the head-to-head result for that scheme only, points at the sensitivity
+companion that shows the ordering flips, and says plainly that the shipped
+model is chosen for simplicity and provenance rather than robustness. A test
+asserts that phrasing and also greps every committed receipt for the withdrawn
+sentence, so it cannot reappear in generated output.
 
-  fixtures/cost_model_bootstrap.py -> receipts/cost-model-bootstrap.json
-  fixtures/cost_model_bootstrap_sensitivity.py
-      -> receipts/cost-model-bootstrap-sensitivity.json
-
-My figure does reproduce under stratified resampling, but the reviewer is right
-that the conclusion is scheme-dependent. Across four schemes the run-count model
-beats the layer model in 0.0%, 0.04%, 10.8% and 57.0% of draws respectively -
-the two swap places. So the claim "run-count generalizes better" is withdrawn
-everywhere (module docstring, README, findings, handoff.md, handoff.json,
-task_plan.md). run-count is shipped because it is SIMPLER, has transparent
-provenance and is derivable entirely from the frozen case authority, and because
-it is a demonstrated if modest improvement on real full-coverage data - not
-because it is more robust. A test now pins that disclaimer in place.
-
-N2 - the committed comparison receipt was the refusal artifact pointing at a
-deleted temp path, not the full-coverage comparison it was described as. The
-refusal sample now lives under scheduling-comparison-refusal-sample.json and
-receipts/scheduling-comparison.json is regenerated from the full-coverage W07
-report (75.5306s legacy, 74.008s shipped, 67.6663s bound, 2.02%). Tests pin both
-the real receipt's numbers and the refusal sample's shape.
-
-Also: the RED classifier is committed as fixtures/classify_red.py and derives
-every count from pytest's own summary lines, fixing a receipt that said "total
-12" while its raw tail showed 13. The assign_groups docstring no longer implies
-dedupe or non-empty groups.
-
-Suite: 36 passed (was 32); 12-file regression 343 passed. No limits changed, no
-case weakened, no 41 PASS claimed.
+Receipts refreshed: 37 passed (B-du8-suite.txt), 344 passed (B-regression.txt),
+and A-red-baseline-classified.txt regenerated with head counts derived from
+pytest's own summary lines (18 = 5 behavioural + 11 module-absent + 2
+unclassified, matching the raw tail). The classifier now exits 0 after
+self-checking that consistency.

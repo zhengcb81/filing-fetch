@@ -71,7 +71,7 @@
     {
       "command": "python -B -m pytest -q tests/test_du8_matrix_scheduling.py tests/test_du8_matrix_deadline_recovery.py",
       "exit_code": 0,
-      "passed": 32,
+      "passed": 37,
       "failed": 0,
       "skipped": 0,
       "receipt": "docs/plans/du8-matrix-2026-10-16/receipts/B-du8-suite.txt"
@@ -79,7 +79,7 @@
     {
       "command": "python -B -m pytest -q tests/test_du8_matrix_scheduling.py tests/test_du8_matrix_deadline_recovery.py tests/test_w07_matrix_efficiency.py tests/test_w06_contract_matrix.py tests/test_w06_matrix_runtime.py tests/test_w06_case_authority.py tests/test_du6_portable_matrix_evidence.py tests/test_du67_matrix_process_owner.py tests/test_du67_replay_output_ownership.py tests/test_root_w07_matrix_boundaries.py tests/test_p5_process_transport.py tests/test_p5_process_lifecycle.py",
       "exit_code": 0,
-      "passed": 339,
+      "passed": 344,
       "failed": 0,
       "skipped": 0,
       "receipt": "docs/plans/du8-matrix-2026-10-16/receipts/B-regression.txt"

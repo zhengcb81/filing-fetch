@@ -118,18 +118,22 @@ def main() -> int:
             "layer_worse_than_legacy": round(1 - wins("layer", "legacy"), 4),
         },
     }
-    # State the conclusion the data actually supports.
+    # State only what THIS scheme supports, and say that it is one scheme.
+    # An earlier version emitted "run-count generalizes at least as well as
+    # layer", which read as a general claim; the sensitivity companion script
+    # shows the ordering flips under proportional noise, so this string must not
+    # assert a global conclusion.
     hl = result["head_to_head"]
-    if hl["runcount_beats_legacy"] >= hl["layer_beats_legacy"]:
-        result["conclusion"] = (
-            "run-count generalizes at least as well as layer; ship run-count "
-            "(also simpler and fully derivable from frozen inputs)"
-        )
-    else:
-        result["conclusion"] = (
-            "layer generalizes better under this resampling; the shipped "
-            "run-count model is then a simplicity choice, NOT a robustness win"
-        )
+    winner = "run-count" if hl["runcount_beats_layer"] >= 0.5 else "layer"
+    result["conclusion"] = (
+        f"under THIS resampling scheme ({result['resampling']}), {winner} wins the "
+        f"head-to-head ({hl['runcount_beats_layer']:.3f} of draws for run-count). "
+        "This is ONE scheme, not a general result: see "
+        "cost_model_bootstrap_sensitivity.py, which shows the ordering flips under "
+        "proportional noise. The shipped run-count model is chosen for simplicity, "
+        "transparent provenance and derivability from the frozen case authority, "
+        "NOT for a claimed robustness advantage."
+    )
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(result, indent=2, ensure_ascii=False))

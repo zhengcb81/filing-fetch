@@ -55,5 +55,5 @@
     "runcount_worse_than_legacy": 0.298,
     "layer_worse_than_legacy": 0.3584
   },
-  "conclusion": "run-count generalizes at least as well as layer; ship run-count (also simpler and fully derivable from frozen inputs)"
+  "conclusion": "under THIS resampling scheme (per-case cost drawn from its own CaseSpec run-count stratum, times U(0.9,1.1)), run-count wins the head-to-head (0.570 of draws for run-count). This is ONE scheme, not a general result: see cost_model_bootstrap_sensitivity.py, which shows the ordering flips under proportional noise. The shipped run-count model is chosen for simplicity, transparent provenance and derivability from the frozen case authority, NOT for a claimed robustness advantage."
 }

@@ -115,8 +115,10 @@ def main() -> int:
         assert n_failed == len(behavioural) + len(module_absent) + len(other), (
             f"count mismatch: pytest {n_failed} vs classified "
             f"{len(behavioural) + len(module_absent) + len(other)}")
-        assert len(behavioural) >= 3, "expected the three real behavioural RED failures"
+        assert len(behavioural) >= 3, "expected the real behavioural RED failures to persist"
         print(f"\nwrote {dest}")
+        print(f"consistency: pytest {n_failed} == classified "
+              f"{len(behavioural) + len(module_absent) + len(other)}")
         return 0
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
