@@ -1,0 +1,5 @@
+# Exact DU6 retained-evidence carriers. These bytes are SHA-bound by the
+# ff-et-cwp-offline-matrix/1 report and by evidence/step1-artifact-shas.json,
+# so EOL translation would silently break every binding. Same convention as
+# /.planning/w04-wp04/** -text -eol -diff.
+evidence/** -text -eol -diff

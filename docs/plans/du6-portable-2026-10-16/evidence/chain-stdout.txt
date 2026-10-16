@@ -1,0 +1,2 @@
+cases: {'PASS': 38, 'FAIL': 0, 'PARTIAL': 1, 'NOT_RUN': 2}; seconds=174.57; oracle findings=5
+report: C:\Users\郑曾波\Projects\_du6tmp\ff-portable-20261016\chain-out\attempt-ed7a5d06098d44d5945a54ded6548c67\report.json

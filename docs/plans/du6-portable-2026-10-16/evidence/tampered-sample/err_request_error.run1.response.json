@@ -1,0 +1,26 @@
+{
+  "schema_version": "2.0",
+  "status": "request_error",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": null,
+    "fiscal_period": null,
+    "as_of_date": "2026-01-01"
+  },
+  "filing": {
+    "status": "request_error",
+    "reason": "schema 1.2 requests require mode or fiscal_year: pass mode=exact with fiscal_year, or mode=latest_as_of",
+    "retryable": false,
+    "request_diagnostic": {
+      "schema_version": "filing-request-diagnostic/1",
+      "reason": "exact_requires_fiscal_year",
+      "field_path": "fiscal_year"
+    }
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 0,
+  "downloads": 0
+} 

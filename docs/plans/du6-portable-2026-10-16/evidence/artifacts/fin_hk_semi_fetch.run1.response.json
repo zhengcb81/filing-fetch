@@ -1,0 +1,47 @@
+{
+  "schema_version": "2.0",
+  "status": "source_candidate",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": 2026,
+    "fiscal_period": "S1",
+    "as_of_date": "2026-12-31"
+  },
+  "filing": {
+    "status": "source_candidate",
+    "source_ref": {
+      "byte_size": 625,
+      "content_sha256": "8c69002d13ee464da485a19fca5f0f5cec88cc0ca8dbecab2cdafad453b2afbd",
+      "document_id": "urn:company-wiki:document:sha256:8c69002d13ee464da485a19fca5f0f5cec88cc0ca8dbecab2cdafad453b2afbd",
+      "mime_type": "application/pdf",
+      "schema_version": "2.0",
+      "source_id": "urn:company-wiki:source:sha256:8c69002d13ee464da485a19fca5f0f5cec88cc0ca8dbecab2cdafad453b2afbd"
+    },
+    "byte_verification": "pending_verified_open",
+    "document_kind": "semi_annual_report",
+    "fiscal_year": 2026,
+    "fiscal_period": "S1",
+    "resolution_outcome": "downloaded_new",
+    "download_events": 1
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 2,
+  "downloads": 1,
+  "acquisition_observation": {
+    "schema_version": "acquisition-observation/1",
+    "usage_scope": "operation",
+    "outcome": "downloaded_new",
+    "provider_started": true,
+    "usage_complete": true,
+    "wire_usage_complete": false,
+    "http_exchanges_complete": null,
+    "wire_body_bytes": 0,
+    "entity_body_bytes": 625,
+    "http_exchanges": 0,
+    "cost_usd": null,
+    "http_observation": null
+  }
+}

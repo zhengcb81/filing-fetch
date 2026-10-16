@@ -1,0 +1,33 @@
+== hand re-computation of the replay record's claims ==
+[PASS] report byte sha matches the record :: 6e2705f3f8eda048f884e7916bb98484380557c252a20c612caaf26fd07b11bc
+[PASS] record reports the original schema
+[PASS] case result counts recomputed from raw report :: raw={'PASS': 38, 'PARTIAL': 1, 'NOT_RUN': 2} record={'PASS': 38, 'FAIL': 0, 'PARTIAL': 1, 'NOT_RUN': 2, 'total': 41}
+[PASS] case rows are a verbatim projection (no PASS relabelling)
+[PASS] recorded oracle block copied verbatim
+[PASS] recorded oracle has 5 findings
+[PASS] recorded findings equal native replay findings (no invention)
+[PASS] replay chose the explicit relocated root
+[PASS] non-PASS history not upgraded (certified false, exit 1)
+[PASS] unknown cost still null in the source report
+
+== independent SHA walk over every bound ref in the kept artifacts ==
+[PASS] all 165 bound refs hash-match on disk :: bad=[]
+    distinct bound refs checked: 165
+
+== tamper sample is exactly one byte apart, success sample untouched ==
+[PASS] tampered copy = kept copy + exactly one byte
+[PASS] kept sample still matches its recorded sha
+
+== historical failure fixture replay: preserved, not upgraded ==
+[PASS] recorded findings preserved verbatim
+[PASS] historical case rows preserved
+[PASS] historical counts recomputed :: raw={'FAIL': 21, 'PASS': 19, 'PARTIAL': 1}
+[PASS] historical replay not certified
+[PASS] historical native findings retained (65)
+
+== scope statement separates retained replay from a fresh 41 chain ==
+[PASS] kind is retained-evidence replay
+[PASS] statement denies re-download / fresh chain
+[PASS] fresh 41-chain scope declared separately
+
+== independent check summary: 21/21 PASS ==

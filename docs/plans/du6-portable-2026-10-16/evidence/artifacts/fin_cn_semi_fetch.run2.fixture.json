@@ -1,0 +1,14 @@
+{
+  "state": {
+    "scenario": "success",
+    "provider_scenario": "serve",
+    "content_utf8": "",
+    "call_date": "2025-12-01",
+    "response_bytes": 512,
+    "calls_file": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\chain-owned\\attempt-ed7a5d06098d44d5945a54ded6548c67\\g2\\proxy\\calls\\fin_cn_semi_fetch.jsonl",
+    "et_temp_root": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\chain-owned\\attempt-ed7a5d06098d44d5945a54ded6548c67\\g2\\proxy\\tmp",
+    "receipts_dir": "C:\\Users\\郑曾波\\Projects\\_du6tmp\\ff-portable-20261016\\chain-out\\attempt-ed7a5d06098d44d5945a54ded6548c67\\artifacts",
+    "receipt_tag": "fin_cn_semi_fetch"
+  },
+  "with_fmp_key": true
+}
