@@ -90,7 +90,12 @@ def test_dead_child_is_reaped_after_second_communicate_error(tmp_path,monkeypatc
         )
     assert len(captured) == 1
     assert captured[0].poll() is not None
-    assert all(pipe.closed for pipe in (captured[0].stdin, captured[0].stdout, captured[0].stderr))
+    assert captured[0].stdout is not None and captured[0].stderr is not None
+    assert all(
+        pipe.closed
+        for pipe in (captured[0].stdin, captured[0].stdout, captured[0].stderr)
+        if pipe is not None
+    )
     assert not [t for t in threading.enumerate() if t.name.startswith("ff-process")]
 
 
@@ -116,3 +121,48 @@ def test_independent_catalog_alias_counts_are_not_byte_identity():
     assert target["proofs"]["doc"]["verified"] is True
     assert target["worker_groups"]["g1"]["proofs"]["doc"]["original_locations"] == 1
     assert target["worker_groups"]["g2"]["proofs"]["doc"]["original_locations"] == 2
+
+
+@pytest.mark.parametrize("boundary", ["lifetime", "partial_io_start"])
+def test_unexpected_cleanup_accepts_absent_stdin_on_any_platform(tmp_path, monkeypatch, boundary):
+    """Exercise both actual error tests with POSIX's optional-stdin shape.
+
+    Real public transport still starts and reaps its child. Only after its
+    cleanup completes do we hide an already-closed Windows bootstrap stdin,
+    matching POSIX input=None without changing global os.name or production.
+    """
+    transport = runtime.process_transport
+    original_spawn = transport._spawn
+    original_bounded = transport.run_bounded
+    children = []
+
+    def record_spawn(*args, **kwargs):
+        proc, job = original_spawn(*args, **kwargs)
+        children.append(proc)
+        return proc, job
+
+    def public_transport_with_optional_stdin(*args, **kwargs):
+        assert kwargs.get("input_bytes") is None
+        try:
+            return original_bounded(*args, **kwargs)
+        finally:
+            assert len(children) == 1
+            proc = children[0]
+            assert proc.poll() is not None
+            assert proc.stdout is not None and proc.stderr is not None
+            assert proc.stdout.closed and proc.stderr.closed
+            if proc.stdin is not None:
+                assert proc.stdin.closed
+                proc.stdin = None
+
+    monkeypatch.setattr(transport, "_spawn", record_spawn)
+    monkeypatch.setattr(transport, "run_bounded", public_transport_with_optional_stdin)
+    if boundary == "lifetime":
+        from test_w07_matrix_efficiency import (
+            test_run_process_reaps_child_when_communicate_raises_other_error as exercise_error,
+        )
+
+        exercise_error(tmp_path)
+    else:
+        test_dead_child_is_reaped_after_second_communicate_error(tmp_path, monkeypatch)
+    assert children[0].stdin is None

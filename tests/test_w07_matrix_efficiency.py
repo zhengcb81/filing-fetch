@@ -381,7 +381,12 @@ def test_run_process_reaps_child_when_communicate_raises_other_error(tmp_path):
             )
     assert len(captured) == 1
     assert captured[0].poll() is not None, "child process leaked after unexpected transport error"
-    assert all(pipe.closed for pipe in (captured[0].stdin, captured[0].stdout, captured[0].stderr))
+    assert captured[0].stdout is not None and captured[0].stderr is not None
+    assert all(
+        pipe.closed
+        for pipe in (captured[0].stdin, captured[0].stdout, captured[0].stderr)
+        if pipe is not None
+    )
     assert not [t for t in threading.enumerate() if t.name.startswith("ff-process")]
 
 
