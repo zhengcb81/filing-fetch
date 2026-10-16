@@ -98,18 +98,25 @@
 经 `cost_of` 传入实测成本才达到 67.6690s（ratio 1.0000）。
 对照脚本已改为**拒绝任何不足 41/41 的表**并在部分表上明确 `comparison_refused: true`。
 
-### 成本模型选择：一次被判定为过拟合并弃用的尝试
+### 成本模型选择：结论**取决于重采样方案**（作者 v1 的"过拟合"论断已被独立审查推翻）
 
-按 `declared_layer` 加权的模型在 W07 表上 ratio **1.0008**（看似近乎最优），但：
-- 41 个 case 只有 **4 个不同取值**（排名粒度极粗）；
-- 最优权重区间窄（`real-3layer` 权重 ±1 即劣化到 70.06s）；
-- **Spearman(model, real) = 0.7855**，反而**低于**纯 run-count 的 0.8247；
-- **bootstrap 5000 次重采样**：mean ratio 退化 **1.0598**，胜过旧轮转仅 **64.2%**，
-  且 **35.8% 的重采样中不如旧轮转**。
+`receipts/cost-model-bootstrap.json`（分层重采样，可复现）与
+`receipts/cost-model-bootstrap-sensitivity.json`（四种方案并列）：
 
-对比 shipped run-count 模型：bootstrap mean **1.0498**，胜过旧轮转 **70.2%**。
-→ **弃用 layer 模型，ship run-count**。理由与数字写入 `case_scheduling.py` 注释，
-并由 `test_static_model_is_honestly_labelled_and_not_near_optimal` 钉住（断言真实 makespan > 下界+5s）。
+| 方案 | run-count mean ratio | layer mean ratio | run-count 胜旧轮转 | layer 胜旧轮转 | run-count 胜 layer |
+|---|---|---|---|---|---|
+| 分层重采样 ×U(0.9,1.1) | 1.0498 | 1.0598 | 70.2% | 64.2% | **57.0%** |
+| 比例噪声 ±10% | 1.0937 | 1.0082 | 98.5% | 100% | **0.0%** |
+| 比例噪声 ±20% | 1.0936 | 1.0164 | 86.0% | 100% | **0.04%** |
+| 比例噪声 ±40% | 1.0937 | 1.0328 | 70.5% | 95.5% | **10.8%** |
+
+在 W07 实测表上 layer 反而更好（ratio 1.0008 vs run-count 1.0937）。
+
+**诚实结论**：作者 v1 写的"layer 过拟合、run-count 泛化更好"**不成立**——那只是**分层重采样这一种方案**
+的结果；换成比例噪声，**layer 大胜**。独立审查正确地推翻了它。
+**ship run-count 的真实理由是：更简单、provenance 透明、完全可由冻结输入推导，
+且在真实全覆盖数据上有已验证的小幅改善**；**不是**"更稳健"。README/handoff/代码注释均已按此改写。
+layer 权重保留在 bootstrap fixture 中，供想要更拟合模型者使用。
 
 ### 具名 OPEN（白名单外，需 ROOT 决定）
 

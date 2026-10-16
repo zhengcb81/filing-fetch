@@ -74,7 +74,12 @@ class _FakeSpec:
 
 
 def test_group_stops_launching_cases_the_moment_the_batch_expires(tmp_path):
-    """A case that already died of the deadline must not drag in the next one."""
+    """A case that already died of the deadline must not drag in the next one.
+
+    Behavioural RED: on the pre-change runner the absolute-deadline branch broke
+    the loop while leaving ``stop_reason = None``, so a truncated batch recorded
+    no cause at all. This fails there on the assertion below, not on an import.
+    """
     clock = _Clock()
     starts = []
 

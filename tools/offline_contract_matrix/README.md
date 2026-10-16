@@ -42,9 +42,15 @@ python -B tools/offline_contract_matrix/run.py \
 
 成本模型只用**运行前可得**的固定信息：`CaseSpec.runs` 的链数。不读历史计时文件——
 矩阵必须能从固定输入复现，机器相关的陈旧计时表是隐藏输入。
-曾试验过一个按 `declared_layer` 加权的模型：它在 W07 表上看似近乎最优（67.723s），
-但仅有 4 个取值、最优权重区间极窄，bootstrap 重采样后 mean ratio 退化为 1.0598 且只有
-64.2% 概率胜过旧轮转——**比本 run-count 模型的 1.0498 / 70.2% 更差**，故**判定为过拟合并弃用**。
+
+曾试验按 `declared_layer` 加权的模型：它在 W07 表上 ratio **1.0008**（看似近乎最优），
+但只有 **4 个取值**、最优权重区间窄。作者最初的"run-count 泛化更好"结论**不成立**：
+稳健性比较**取决于重采样方案**（见 `receipts/cost-model-bootstrap*.json`）——
+- 分层重采样：run-count 胜（mean 1.0498，胜过旧轮转 70.2%；layer 1.0598 / 64.2%）；
+- 比例噪声：**layer 大胜**（±20% 时胜过旧轮转 100%、胜过 run-count 99.96%）。
+
+因此 **ship run-count 的理由是「更简单、provenance 透明、完全可由冻结输入推导」，
+不是「更稳健」**。想要拟合更好的静态模型，可用 bootstrap fixture 里记录的 layer 权重。
 
 `case_scheduling.static_cost` 提供 `cost_of` 钩子，持有实测秒数的调用方可据此调度并达到下界；
 runner 不隐式使用它，否则批次会依赖上一次运行的计时。

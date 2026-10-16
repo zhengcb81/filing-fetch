@@ -580,3 +580,66 @@ def test_scheduling_owner_is_pure_and_reads_no_clock_or_process():
     source = (TOOLS / "case_scheduling.py").read_text(encoding="utf-8")
     for forbidden in ("subprocess", "time.monotonic", "os.environ", "socket", "threading"):
         assert forbidden not in source, f"the scheduler must stay a pure planner: {forbidden}"
+
+
+def test_cost_model_claims_are_backed_by_committed_receipts():
+    """No decisive cost-model claim may rest on prose alone.
+
+    An earlier revision asserted a bootstrap result that no committed script
+    reproduced, and that independent review inverted. Every claim about which
+    cost model generalizes better must therefore point at a committed,
+    re-runnable receipt.
+    """
+    plan = TOOLS.parents[1] / "docs" / "plans" / "du8-matrix-2026-10-16"
+    fixtures = plan / "fixtures"
+    receipts = plan / "receipts"
+    assert (fixtures / "cost_model_bootstrap.py").is_file(), (
+        "the bootstrap claim needs a committed, re-runnable script")
+    assert (fixtures / "cost_model_bootstrap_sensitivity.py").is_file(), (
+        "the scheme-dependence claim needs a committed, re-runnable script")
+    for name in ("cost-model-bootstrap.json", "cost-model-bootstrap-sensitivity.json"):
+        path = receipts / name
+        assert path.is_file(), f"missing reproducible receipt: {name}"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data.get("trials"), f"{name} must record its trial count"
+    sensitivity = json.loads((receipts / "cost-model-bootstrap-sensitivity.json").read_text(encoding="utf-8"))
+    assert len(sensitivity["schemes"]) >= 3, "the sensitivity receipt must show several schemes"
+    # The two schemes must actually disagree, which is the whole point.
+    per_scheme = [s["runcount_beats_layer"] for s in sensitivity["schemes"].values()]
+    assert max(per_scheme) > 0.5 and min(per_scheme) < 0.5, (
+        "the receipt must show the conclusion flipping between schemes; otherwise "
+        "a single-scheme claim would be adequate and this guard is unnecessary")
+
+
+def test_ship_reason_is_simplicity_not_a_robustness_claim():
+    """The shipped model's justification must not overclaim robustness."""
+    module = (TOOLS / "case_scheduling.py").read_text(encoding="utf-8")
+    assert "does NOT claim run-count" in module, (
+        "the module must explicitly disclaim the refuted robustness claim")
+    assert "SIMPLER" in module
+    readme = (TOOLS / "README.md").read_text(encoding="utf-8")
+    assert "不是「更稳健」" in readme or "不是\"更稳健\"" in readme, (
+        "the README must state the ship reason is not superior robustness")
+
+
+def test_full_coverage_comparison_receipt_is_the_real_one():
+    """The committed comparison receipt must be full-coverage, not a refusal."""
+    receipt = (TOOLS.parents[1] / "docs" / "plans" / "du8-matrix-2026-10-16"
+               / "receipts" / "scheduling-comparison.json")
+    data = json.loads(receipt.read_text(encoding="utf-8"))
+    assert data["comparison_refused"] is False
+    assert data["coverage"] == {"measured": 41, "required": 41, "missing": []}
+    assert data["legacy_partition"]["makespan_seconds"] == pytest.approx(75.5306, abs=0.01)
+    assert data["shipped_partition"]["makespan_seconds"] == pytest.approx(74.008, abs=0.01)
+    assert data["perfect_balance_bound_seconds"] == pytest.approx(67.6663, abs=0.01)
+    assert data["improvement_percent"] == pytest.approx(2.02, abs=0.01)
+
+
+def test_refusal_sample_is_kept_separately_and_marks_itself_refused():
+    """The refusal artifact must not be mistaken for the real comparison."""
+    receipts = (TOOLS.parents[1] / "docs" / "plans" / "du8-matrix-2026-10-16" / "receipts")
+    sample = receipts / "scheduling-comparison-refusal-sample.json"
+    assert sample.is_file(), "keep a refusal sample under a distinct filename"
+    data = json.loads(sample.read_text(encoding="utf-8"))
+    assert data["comparison_refused"] is True
+    assert "legacy_partition" not in data and "improvement_percent" not in data

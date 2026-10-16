@@ -1,49 +1,39 @@
-fix(matrix): retract the overstated scheduling gain; add a real RED
+docs(du8): make every cost-model claim reproducible; correct the ship reason
 
-Independent review reproduced two HIGH defects in the previous commit. Both
-are confirmed here by re-derivation, and both are corrections of my own work.
+A second independent review found two justification defects. Both are real and
+both are fixed here rather than argued away.
 
-1. The headline scheduling gain was an artifact of a hidden denominator.
-   The comparison receipts scored partitions on tables covering only 24/41
-   (run 1) and 29/41 (run 2) cases, pricing every un-run case at the constant
-   DEFAULT_COST_SECONDS. Proof: the group loads sum to exactly 34.0s and 24.0s
-   more than the measured totals - 17*2.0 and 12*2.0 - and the missing set is
-   exactly the NOT_RUN starvation tail, i.e. the heavy end. On the only
-   full-coverage (41/41) table the real critical-path gain is 1.5226s / 2.02%
-   (75.5306s -> 74.0080s against a 67.6663s bound), and 79.8% of random 20/21
-   partitions beat the old rule. The 16-21s figures are withdrawn.
+N1 - the decisive bootstrap numbers were prose-only. The previous revision
+asserted that run-count "generalizes better" than the per-layer model because
+bootstrap resampling degraded layer to 1.0598 / 64.2% against run-count's
+1.0498 / 70.2%. No committed script reproduced those figures, and the reviewer's
+resampling inverted them. I have now committed both scripts and both receipts:
 
-   The comparison script now REFUSES any table below 41/41 coverage and says
-   why, the two partial-coverage receipts are deleted, and the README, handoff
-   and findings state the true size and explicitly deny near-optimality.
+  fixtures/cost_model_bootstrap.py -> receipts/cost-model-bootstrap.json
+  fixtures/cost_model_bootstrap_sensitivity.py
+      -> receipts/cost-model-bootstrap-sensitivity.json
 
-2. The static cost model is now the plain run-count model, not the per-layer
-   one. The per-layer variant looked near-perfect on the W07 table (ratio
-   1.0008) but is overfit: it has only 4 distinct values across 41 cases, its
-   optimal weight region is a narrow plateau, its Spearman correlation with
-   real cost (0.7855) is below run-count's (0.8247), and under 5000 bootstrap
-   resamples it degrades to a mean ratio of 1.0598 and beats the old rule in
-   only 64.2% of draws - worse than run-count's 1.0498 / 70.2%. The rejection
-   and its numbers are recorded in the module and pinned by a test.
+My figure does reproduce under stratified resampling, but the reviewer is right
+that the conclusion is scheme-dependent. Across four schemes the run-count model
+beats the layer model in 0.0%, 0.04%, 10.8% and 57.0% of draws respectively -
+the two swap places. So the claim "run-count generalizes better" is withdrawn
+everywhere (module docstring, README, findings, handoff.md, handoff.json,
+task_plan.md). run-count is shipped because it is SIMPLER, has transparent
+provenance and is derivable entirely from the frozen case authority, and because
+it is a demonstrated if modest improvement on real full-coverage data - not
+because it is more robust. A test now pins that disclaimer in place.
 
-   static_cost now also honours its cost_of hook, so a caller holding measured
-   per-case seconds reaches the bound (ratio 1.0000). The runner does not use
-   it implicitly, so a batch never depends on a prior run's timing.
+N2 - the committed comparison receipt was the refusal artifact pointing at a
+deleted temp path, not the full-coverage comparison it was described as. The
+refusal sample now lives under scheduling-comparison-refusal-sample.json and
+receipts/scheduling-comparison.json is regenerated from the full-coverage W07
+report (75.5306s legacy, 74.008s shipped, 67.6663s bound, 2.02%). Tests pin both
+the real receipt's numbers and the refusal sample's shape.
 
-3. The A-node RED was largely tautological: on pristine base e8a8558, 6 of the
-   8 failures were ModuleNotFoundError and 1 was FileNotFoundError, leaving a
-   single behavioural assertion. The position-round-robin defect had no
-   behavioural RED; its "negative control" only re-implemented the old rule and
-   passed on base. Three tests now drive the real cli_main.main and fail on the
-   genuine defect - cli_main never consulted a scheduling owner - plus the
-   missing report record and the unnamed batch stop.
+Also: the RED classifier is committed as fixtures/classify_red.py and derives
+every count from pytest's own summary lines, fixing a receipt that said "total
+12" while its raw tail showed 13. The assign_groups docstring no longer implies
+dedupe or non-empty groups.
 
-Also corrected: implementation_commits is no longer empty, changed_paths is
-complete, the 32-pass and 339-pass results have separate receipts, the recovery
-script's own exit 0 is no longer written as if a real batch had exited 0, all
-three real batches are listed including the weakest, and the supplier_calls /
-production_writes claims now carry an explicit limitation because the C-run
-restore artifacts were deleted with .tmp/.
-
-No limits were changed, no case weakened, no denominator trimmed, and no
-41 PASS is claimed.
+Suite: 36 passed (was 32); 12-file regression 343 passed. No limits changed, no
+case weakened, no 41 PASS claimed.

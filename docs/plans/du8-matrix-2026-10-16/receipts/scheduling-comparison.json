@@ -1,35 +1,50 @@
 {
   "schema": "du8-scheduling-comparison/1",
-  "measured_report": "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\du8-partial-wp37fpjs\\partial-report.json",
+  "measured_report": "docs\\handoffs\\w07-ff-matrix-efficiency\\evidence\\final-41-report.json",
   "frozen_model": "case_scheduling.static_cost (CaseSpec run count)",
   "case_window_seconds": 170.0,
   "coverage": {
-    "measured": 24,
+    "measured": 41,
     "required": 41,
-    "missing": [
-      "call_hard_timeout",
-      "call_max_bytes",
-      "call_past_cutoff",
-      "call_wrong_mime",
-      "call_wrong_quarter",
-      "call_wrong_symbol",
-      "err_402_entitlement",
-      "err_missing_creds",
-      "err_request_error",
-      "err_unknown_usage",
-      "incomplete_sidecar_metadata_gap",
-      "local_txt_exact_reuse",
-      "original_max_bytes",
-      "original_wrong_mime",
-      "original_wrong_sha",
-      "request_after_failure_retry",
-      "reuse_only_missing_period"
-    ]
+    "missing": []
   },
-  "comparison_refused": true,
-  "refusal_reason": "the table is partial: pricing the un-run cases at a constant fallback would put a fabricated cost on exactly the starvation tail and inflate the apparent scheduling gain. No headline comparison is reported from this report; use a full 41/41 report instead.",
-  "honest_partial_facts": {
-    "measured_case_seconds": 99.6,
-    "note": "raw measurement only; NOT a partition comparison"
-  }
+  "comparison_refused": false,
+  "perfect_balance_bound_seconds": 67.6663,
+  "legacy_partition": {
+    "rule": "entries[index::workers] (position round-robin)",
+    "makespan_seconds": 75.5306,
+    "group_loads_seconds": [
+      75.5306,
+      59.8019
+    ],
+    "cases_beyond_window": {
+      "g1": [],
+      "g2": []
+    }
+  },
+  "shipped_partition": {
+    "rule": "case_scheduling.assign_groups on the frozen run-count model",
+    "model_loads_seconds": [
+      52.0,
+      52.0
+    ],
+    "makespan_seconds": 74.008,
+    "group_loads_seconds": [
+      74.008,
+      61.3245
+    ],
+    "cases_beyond_window": {
+      "g1": [],
+      "g2": []
+    }
+  },
+  "improvement_seconds": 1.5226,
+  "improvement_ratio": 1.0206,
+  "improvement_percent": 2.02,
+  "random_baseline": {
+    "trials": 20000,
+    "fraction_beating_legacy": 0.798,
+    "median_random_makespan_seconds": 71.9486
+  },
+  "honesty_note": "Reported gain is modest by design. On this table 79.8% of random partitions beat position round-robin, so the shipped static model is a reproducible improvement, not near-optimal scheduling."
 }

@@ -51,15 +51,25 @@ DEFAULT_COST_SECONDS = 2.0
 # Static model: a fixed base plus a weight per FF chain, because a ``CaseSpec``
 # with N runs starts N full download->reuse chains inside ONE group.
 #
-# A richer model (per-declared-layer base) was tried and REJECTED. On the
-# retained W07 41/41 table it looks near-perfect (67.723s against a 67.666s
-# bound), but that is an artifact of the table: the model carries only 4 distinct
-# values across 41 cases and its optimal weight region is a narrow plateau. Under
-# bootstrap resampling of the observed per-case costs it degrades to a mean
-# critical-path/bound ratio of 1.0598 and beats position round-robin in only
-# 64.2% of resamples - WORSE than this plain run-count model's 1.0498 / 70.2%.
-# The simpler model generalizes better, so it is the one shipped. See the
-# DU8 findings "cost-model selection" entry for the recorded numbers.
+# A richer model (per-declared-layer base) was tried and rejected. It scores
+# better on the retained W07 41/41 table (67.723s, ratio 1.0008, against a
+# 67.666s bound) but that number is not trustworthy: it carries only 4 distinct
+# values across 41 cases and its optimal weight region is a narrow plateau.
+#
+# The robustness comparison is genuinely SCHEME-DEPENDENT and is recorded in
+# fixtures/cost_model_bootstrap.py, cost_model_bootstrap_sensitivity.py and
+# receipts/cost-model-bootstrap*.json. Under stratified resampling of the W07
+# costs the plain run-count model wins (mean ratio 1.0498, beats legacy in 70.2%
+# of draws vs the layer model's 1.0598 / 64.2%). Under proportional noise the
+# LAYER model wins decisively (at +-20% it beats legacy in 100% of draws and
+# beats run-count in 99.96%). So this module does NOT claim run-count
+# generalizes better.
+#
+# Run-count is shipped because it is SIMPLER, has transparent provenance, is
+# fully derivable from the frozen case authority, and is a demonstrated (if
+# modest) improvement on real full-coverage data - not because it is more
+# robust. A reader who wants the better-fitting static model should use the
+# layer weights recorded in the bootstrap fixtures.
 RUN_WEIGHT_SECONDS = 2.0
 
 
@@ -104,10 +114,15 @@ def assign_groups(entries: Iterable[tuple[int, tuple[str, Any]]], *,
     Grouping is per entry, so a whole download->reuse case chain stays in one
     group as long as the caller passes each case exactly once. The runner does
     that by construction (``enumerate(registry)``), and the suite asserts the
-    exactly-once property on the real registry.
+    exactly-once property on the real registry. The planner does NOT dedupe:
+    the same case id supplied twice would be scheduled twice, which is a caller
+    error rather than a scheduler guarantee.
 
-    A case id appearing on two entries belongs to two groups by definition;
-    that is a caller error, not a scheduler guarantee.
+    With very few distinct costs the greedy can leave a group empty (e.g. 41
+    equal-cost cases split 21/20 fill both groups, but 41 identical heavy
+    entries can all land in one). An empty group is legal and simply means the
+    worker starts and finds nothing to do; the runner still launches exactly
+    ``workers`` groups, so concurrency is never increased to rebalance.
     """
     entries = list(entries)
     if workers < 1:

@@ -20,6 +20,9 @@
     "docs/plans/du8-matrix-2026-10-16/handoff.md",
     "docs/plans/du8-matrix-2026-10-16/handoff.json",
     "docs/plans/du8-matrix-2026-10-16/fixtures/scheduling_comparison.py",
+    "docs/plans/du8-matrix-2026-10-16/fixtures/cost_model_bootstrap.py",
+    "docs/plans/du8-matrix-2026-10-16/fixtures/cost_model_bootstrap_sensitivity.py",
+    "docs/plans/du8-matrix-2026-10-16/fixtures/classify_red.py",
     "docs/plans/du8-matrix-2026-10-16/fixtures/interruption_recovery_e2e.py",
     "docs/plans/du8-matrix-2026-10-16/fixtures/interruption-recovery.json",
     "docs/plans/du8-matrix-2026-10-16/receipts/A-red-baseline.txt",
@@ -27,6 +30,9 @@
     "docs/plans/du8-matrix-2026-10-16/receipts/B-du8-suite.txt",
     "docs/plans/du8-matrix-2026-10-16/receipts/B-regression.txt",
     "docs/plans/du8-matrix-2026-10-16/receipts/scheduling-comparison.json",
+    "docs/plans/du8-matrix-2026-10-16/receipts/scheduling-comparison-refusal-sample.json",
+    "docs/plans/du8-matrix-2026-10-16/receipts/cost-model-bootstrap.json",
+    "docs/plans/du8-matrix-2026-10-16/receipts/cost-model-bootstrap-sensitivity.json",
     "docs/plans/du8-matrix-2026-10-16/receipts/commit-message.txt"
   ],
   "interfaces": {
@@ -123,7 +129,8 @@
   "old_failures_preserved": true,
   "known_limits": [
     "the shipped static scheduling model improves the critical path by only 1.5226s (2.02%) on the full 41/41 table, and 79.8% of random partitions beat the OLD rule - so this is a small reproducible gain, NOT near-optimal scheduling",
-    "a per-declared-layer cost model scored near-optimally on the W07 table (ratio 1.0008) but was REJECTED as overfit: under 5000 bootstrap resamples it degraded to mean ratio 1.0598 and beat the old rule in only 64.2% of resamples, worse than the shipped run-count model's 1.0498 / 70.2%",
+    "the reason run-count rather than the better-fitting per-layer model is shipped is SIMPLICITY, transparent provenance and derivability from the frozen case authority - NOT superior robustness. A v2 claim that run-count generalizes better was refuted by independent review: the comparison is scheme-dependent. Under stratified resampling run-count wins (1.0498, beats legacy 70.2%, vs layer 1.0598 / 64.2%); under proportional noise the LAYER model wins decisively (at +-20% it beats legacy 100% and run-count 99.96%). Both outcomes are reproducible from receipts/cost-model-bootstrap.json and receipts/cost-model-bootstrap-sensitivity.json",
+    "the per-layer model does score better on the W07 table itself (ratio 1.0008 vs run-count 1.0937), but it carries only 4 distinct values across 41 cases and its optimal weight region is narrow, so that number is not treated as evidence of a general advantage",
     "C node did not reach 41 PASS in any real batch: run1 21 PASS/1 FAIL/2 PARTIAL/17 NOT_RUN @174.31s, run2 26 PASS/1 FAIL/2 PARTIAL/12 NOT_RUN @174.56s, recovery clean attempt 14 PASS/0 FAIL/12 PARTIAL/15 NOT_RUN @182.49s",
     "15 pre-existing repo-wide test failures are host-path/config-assumption issues unrelated to this card; all reproduce identically on pristine base e8a8558 in a detached worktree, so this card adds ZERO new failures",
     "OPEN-1: the fixed 180s batch cannot fit 41 cases on this host at 2-4x normal per-case cost; WORKERS<=2 is a hard ceiling. The cost_of hook added by this card is the legitimate in-layer optimisation available, and it is not sufficient on a 3.7x-slower machine",

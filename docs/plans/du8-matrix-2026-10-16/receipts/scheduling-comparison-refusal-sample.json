@@ -1,0 +1,35 @@
+{
+  "schema": "du8-scheduling-comparison/1",
+  "measured_report": "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\du8-partial-wp37fpjs\\partial-report.json",
+  "frozen_model": "case_scheduling.static_cost (CaseSpec run count)",
+  "case_window_seconds": 170.0,
+  "coverage": {
+    "measured": 24,
+    "required": 41,
+    "missing": [
+      "call_hard_timeout",
+      "call_max_bytes",
+      "call_past_cutoff",
+      "call_wrong_mime",
+      "call_wrong_quarter",
+      "call_wrong_symbol",
+      "err_402_entitlement",
+      "err_missing_creds",
+      "err_request_error",
+      "err_unknown_usage",
+      "incomplete_sidecar_metadata_gap",
+      "local_txt_exact_reuse",
+      "original_max_bytes",
+      "original_wrong_mime",
+      "original_wrong_sha",
+      "request_after_failure_retry",
+      "reuse_only_missing_period"
+    ]
+  },
+  "comparison_refused": true,
+  "refusal_reason": "the table is partial: pricing the un-run cases at a constant fallback would put a fabricated cost on exactly the starvation tail and inflate the apparent scheduling gain. No headline comparison is reported from this report; use a full 41/41 report instead.",
+  "honest_partial_facts": {
+    "measured_case_seconds": 99.6,
+    "note": "raw measurement only; NOT a partition comparison"
+  }
+}
