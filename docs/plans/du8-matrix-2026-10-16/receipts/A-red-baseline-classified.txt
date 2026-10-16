@@ -1,0 +1,56 @@
+A-node RED on pristine base e8a8558, classified by root cause
+========================================================================
+pytest reported: 18 failed, 19 passed
+classified: behavioural=5 module_absent=11 other=2  (sum=18)
+
+BEHAVIOURAL failures (these prove real defects in the pre-change runner):
+    test_cost_model_claims_are_backed_by_committed_receipts
+    test_group_stops_launching_cases_the_moment_the_batch_expires
+    test_refusal_sample_is_kept_separately_and_marks_itself_refused
+    test_runner_delegates_grouping_to_the_cost_balanced_scheduler
+    test_runner_reports_the_scheduling_decision_it_made
+
+module-absence failures (necessarily fail before the new module exists):
+    test_assignment_is_independent_of_input_order
+    test_chainA_stays_whole_and_is_placed_by_cost_not_by_position
+    test_every_case_is_assigned_exactly_once
+    test_full_coverage_comparison_receipt_is_the_real_one
+    test_measured_costs_via_cost_of_hook_reach_near_optimal
+    test_no_receipt_asserts_a_global_cost_model_conclusion
+    test_scheduler_never_invents_more_groups_than_workers
+    test_scheduling_owner_is_pure_and_reads_no_clock_or_process
+    test_ship_reason_is_simplicity_not_a_robustness_claim
+    test_static_model_is_honestly_labelled_and_not_near_optimal
+    test_two_run_chains_are_never_split_across_groups
+
+unclassified:
+    test_balanced_partition_beats_position_round_robin_on_real_full_coverage
+    test_runner_partition_covers_the_fixed_registry_exactly_once
+
+Interpretation: on the base commit cli_main partitioned the registry by
+position and never consulted a scheduling owner, so the behavioural
+failures named above reproduce the real defects. Some behavioural entries
+assert on artifacts that only exist after this card (committed receipts and
+the scheduling module's own disclaimer); those are change-detectors rather
+than defect proofs. The module-absence failures only record that
+case_scheduling.py did not exist yet and are NOT evidence of a defect - an
+earlier version of this receipt over-weighted them.
+
+------------------------------------------------------------------------
+raw pytest tail:
+cheduling.py::test_assignment_is_independent_of_input_order
+FAILED tests/test_du8_matrix_scheduling.py::test_every_case_is_assigned_exactly_once
+FAILED tests/test_du8_matrix_scheduling.py::test_two_run_chains_are_never_split_across_groups
+FAILED tests/test_du8_matrix_scheduling.py::test_chainA_stays_whole_and_is_placed_by_cost_not_by_position
+FAILED tests/test_du8_matrix_scheduling.py::test_scheduler_never_invents_more_groups_than_workers
+FAILED tests/test_du8_matrix_scheduling.py::test_runner_delegates_grouping_to_the_cost_balanced_scheduler
+FAILED tests/test_du8_matrix_scheduling.py::test_runner_reports_the_scheduling_decision_it_made
+FAILED tests/test_du8_matrix_scheduling.py::test_runner_partition_covers_the_fixed_registry_exactly_once
+FAILED tests/test_du8_matrix_scheduling.py::test_scheduling_owner_is_pure_and_reads_no_clock_or_process
+FAILED tests/test_du8_matrix_scheduling.py::test_cost_model_claims_are_backed_by_committed_receipts
+FAILED tests/test_du8_matrix_scheduling.py::test_no_receipt_asserts_a_global_cost_model_conclusion
+FAILED tests/test_du8_matrix_scheduling.py::test_ship_reason_is_simplicity_not_a_robustness_claim
+FAILED tests/test_du8_matrix_scheduling.py::test_full_coverage_comparison_receipt_is_the_real_one
+FAILED tests/test_du8_matrix_scheduling.py::test_refusal_sample_is_kept_separately_and_marks_itself_refused
+FAILED tests/test_du8_matrix_deadline_recovery.py::test_group_stops_launching_cases_the_moment_the_batch_expires
+18 failed, 19 passed in 5.91s

@@ -20,6 +20,48 @@ python -B tools/offline_contract_matrix/run.py \
 
 每 case 超时 ≤30s；批次绝对截止 ≤180s；失败保留 partial。二次执行用新 attempt，不覆第一次。
 单元测试（快速、离线、不跑跨仓）：`python -B -m pytest -q tests/test_w06_contract_matrix.py tests/test_w06_matrix_runtime.py tests/test_w06_case_authority.py`。
+本卡新增调度/恢复快测：`python -B -m pytest -q tests/test_du8_matrix_scheduling.py tests/test_du8_matrix_deadline_recovery.py`。
+
+## 调度（DU8-FF-MATRIX-COMPLETION）
+
+41 个固定 case 由 `case_scheduling.assign_groups` 分配到 ≤ `WORKERS`(=2) 个并发组。
+分配按**成本均衡**（最重优先贪心，全序 = cost 降序 + id 升序），不再是按位置轮转
+（`entries[index::workers]`）。位置轮转不含成本信息，实测把最重的三个 case 放进同一组，
+产生 **75.5306s / 59.8019s** 的两组负载（不平衡 15.73s = 26%），使该组成为关键路径。
+
+**诚实的收益规模**（在保留的 W07 **41/41 全覆盖**实测表上评分，完美均衡下界 67.6663s）：
+
+| 分区 | 关键路径 | 相对下界 |
+|---|---|---|
+| 旧位置轮转 | 75.5306s | 1.1162 |
+| 新 `case_scheduling`（shipped 静态模型） | **74.0080s** | 1.0937 |
+| 完美均衡下界 | 67.6663s | 1.0000 |
+
+即真实改善约 **1.52s / 2.02%**，且 **79.8% 的随机 20/21 分区也能超过旧轮转**。
+所以这是**可复现的小幅改善，不是接近最优的调度**。不要把它宣传成大幅提速。
+
+成本模型只用**运行前可得**的固定信息：`CaseSpec.runs` 的链数。不读历史计时文件——
+矩阵必须能从固定输入复现，机器相关的陈旧计时表是隐藏输入。
+
+曾试验按 `declared_layer` 加权的模型：它在 W07 表上 ratio **1.0008**（看似近乎最优），
+但只有 **4 个取值**、最优权重区间窄。作者最初的"run-count 泛化更好"结论**不成立**：
+稳健性比较**取决于重采样方案**（见 `receipts/cost-model-bootstrap*.json`）——
+- 分层重采样：run-count 胜（mean 1.0498，胜过旧轮转 70.2%；layer 1.0598 / 64.2%）；
+- 比例噪声：**layer 大胜**（±20% 时胜过旧轮转 100%、胜过 run-count 99.96%）。
+
+因此 **ship run-count 的理由是「更简单、provenance 透明、完全可由冻结输入推导」，
+不是「更稳健」**。想要拟合更好的静态模型，可用 bootstrap fixture 里记录的 layer 权重。
+
+`case_scheduling.static_cost` 提供 `cost_of` 钩子，持有实测秒数的调用方可据此调度并达到下界；
+runner 不隐式使用它，否则批次会依赖上一次运行的计时。
+
+约束保持不变：并发 ≤2（均衡不通过放大并发实现）、30s/case、180s/batch、10s proof reserve、
+`remaining` 不续期。同一 case 的 download→reuse 链绝不被拆到两个组。
+
+报告 `scope.case_scheduling` 记 `group_loads_seconds`、`group_case_counts`、
+`predicted_makespan_seconds`、`perfect_balance_lower_bound_seconds`、`imbalance_seconds`、
+**`cost_source`**（static/measured，防止把预测当实测）。
+批次因绝对截止被截断时，`scope.stop_reason` 必须具名（不再静默截断）。
 
 ## 架构
 

@@ -1,0 +1,52 @@
+{
+  "schema": "du8-cost-model-bootstrap-sensitivity/1",
+  "trials": 5000,
+  "schemes": {
+    "proportional_noise_pm10pct": {
+      "mean_ratio": {
+        "legacy": 1.1162,
+        "runcount": 1.0937,
+        "layer": 1.0082
+      },
+      "runcount_beats_legacy": 0.985,
+      "layer_beats_legacy": 1.0,
+      "runcount_beats_layer": 0.0
+    },
+    "proportional_noise_pm20pct": {
+      "mean_ratio": {
+        "legacy": 1.1161,
+        "runcount": 1.0936,
+        "layer": 1.0164
+      },
+      "runcount_beats_legacy": 0.8598,
+      "layer_beats_legacy": 1.0,
+      "runcount_beats_layer": 0.0004
+    },
+    "proportional_noise_pm40pct": {
+      "mean_ratio": {
+        "legacy": 1.1159,
+        "runcount": 1.0937,
+        "layer": 1.0328
+      },
+      "runcount_beats_legacy": 0.7054,
+      "layer_beats_legacy": 0.9546,
+      "runcount_beats_layer": 0.108
+    },
+    "stratified_resample_x_0.9_1.1": {
+      "mean_ratio": {
+        "legacy": 1.0851,
+        "runcount": 1.0498,
+        "layer": 1.0598
+      },
+      "runcount_beats_legacy": 0.702,
+      "layer_beats_legacy": 0.6416,
+      "runcount_beats_layer": 0.57
+    }
+  },
+  "on_actual_table": {
+    "legacy": 1.1162,
+    "runcount": 1.0937,
+    "layer": 1.0008
+  },
+  "conclusion": "the two models trade places depending on the resampling scheme: run-count wins under stratified resampling, layer wins under proportional noise. The shipped choice therefore rests on SIMPLICITY and frozen-input derivability, not on a generalization advantage."
+}

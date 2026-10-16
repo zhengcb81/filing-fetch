@@ -1,0 +1,59 @@
+{
+  "schema": "du8-cost-model-bootstrap/1",
+  "purpose": "Settle whether the layer cost model or the plain run-count model generalizes better, so the shipped-model choice rests on a reproducible measurement rather than prose.",
+  "source_table": "C:\\Users\\郑曾波\\Projects\\filing-fetch-du8-matrix\\docs\\handoffs\\w07-ff-matrix-efficiency\\evidence\\final-41-report.json",
+  "coverage": {
+    "measured": 41,
+    "required": 41
+  },
+  "trials": 5000,
+  "seed": 20261016,
+  "resampling": "per-case cost drawn from its own CaseSpec run-count stratum, times U(0.9,1.1)",
+  "on_actual_table": {
+    "legacy": 1.1162,
+    "runcount": 1.0937,
+    "layer": 1.0008
+  },
+  "bound_seconds": 67.6663,
+  "distinct_model_values": {
+    "runcount": [
+      2.0,
+      4.0
+    ],
+    "layer": [
+      0.5,
+      2.0,
+      4.0,
+      6.0
+    ]
+  },
+  "bootstrap": {
+    "legacy": {
+      "mean_ratio": 1.0851,
+      "median_ratio": 1.0809,
+      "p90_ratio": 1.1586,
+      "worst_ratio": 1.285
+    },
+    "runcount": {
+      "mean_ratio": 1.0498,
+      "median_ratio": 1.0429,
+      "p90_ratio": 1.1028,
+      "worst_ratio": 1.2193
+    },
+    "layer": {
+      "mean_ratio": 1.0598,
+      "median_ratio": 1.0522,
+      "p90_ratio": 1.1225,
+      "worst_ratio": 1.2766
+    }
+  },
+  "head_to_head": {
+    "runcount_beats_legacy": 0.702,
+    "layer_beats_legacy": 0.6416,
+    "runcount_beats_layer": 0.57,
+    "layer_beats_runcount": 0.43,
+    "runcount_worse_than_legacy": 0.298,
+    "layer_worse_than_legacy": 0.3584
+  },
+  "conclusion": "under THIS resampling scheme (per-case cost drawn from its own CaseSpec run-count stratum, times U(0.9,1.1)), run-count wins the head-to-head (0.570 of draws for run-count). This is ONE scheme, not a general result: see cost_model_bootstrap_sensitivity.py, which shows the ordering flips under proportional noise. The shipped run-count model is chosen for simplicity, transparent provenance and derivability from the frozen case authority, NOT for a claimed robustness advantage."
+}

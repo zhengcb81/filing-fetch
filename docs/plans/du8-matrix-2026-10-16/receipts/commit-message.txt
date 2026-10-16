@@ -1,0 +1,19 @@
+docs(du8): scope the generated bootstrap conclusion; refresh receipts
+
+Final polish from the third review pass. The reviewer noted that the
+machine-generated `conclusion` string in receipts/cost-model-bootstrap.json
+still read "run-count generalizes at least as well as layer" - the withdrawn
+robustness claim surviving in generated output that is easy to overlook.
+
+The script now emits a conclusion that names its own resampling scheme, states
+the head-to-head result for that scheme only, points at the sensitivity
+companion that shows the ordering flips, and says plainly that the shipped
+model is chosen for simplicity and provenance rather than robustness. A test
+asserts that phrasing and also greps every committed receipt for the withdrawn
+sentence, so it cannot reappear in generated output.
+
+Receipts refreshed: 37 passed (B-du8-suite.txt), 344 passed (B-regression.txt),
+and A-red-baseline-classified.txt regenerated with head counts derived from
+pytest's own summary lines (18 = 5 behavioural + 11 module-absent + 2
+unclassified, matching the raw tail). The classifier now exits 0 after
+self-checking that consistency.
