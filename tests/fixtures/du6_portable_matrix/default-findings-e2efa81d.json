@@ -1,0 +1,327 @@
+[
+  {
+    "vector": "case_not_passed",
+    "case_id": "chainA_download_reuse",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "fake_layer_claimed_real",
+    "case_id": "chainA_download_reuse",
+    "detail": "declared real-3layer but ff_public_cli/et_supervisor_worker/cwp_import evidence is not all present (got {'ff_public_cli': True, 'et_supervisor_worker': False, 'cwp_import': False})"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "fin_cn_annual_fetch",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "fin_cn_semi_fetch",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "fin_cn_quarterly_fetch",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "fin_hk_annual_fetch",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "fin_hk_semi_fetch",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "fin_hk_quarterly_fetch",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "fin_us_annual_fetch",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "fin_us_semi_fetch",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "fin_us_quarterly_fetch",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "call_fy_only_no_q",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "call_past_cutoff",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "wrong_cutoff",
+    "case_id": "call_past_cutoff",
+    "detail": "past-cutoff case did not report the actual cutoff diagnostic"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "call_wrong_quarter",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "err_402_entitlement",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "err_missing_creds",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "err_unknown_usage",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "fake_zero_cost",
+    "case_id": "err_unknown_usage",
+    "detail": "unknown usage/cost was reported as 0 or the provider call was swallowed"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "local_txt_exact_reuse",
+    "detail": "actual result PARTIAL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "call_wrong_symbol",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "call_wrong_mime",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "call_max_bytes",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "call_hard_timeout",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "case_not_passed",
+    "case_id": "request_after_failure_retry",
+    "detail": "actual result FAIL cannot certify required case"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "chainA_download_reuse",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "chainA_download_reuse",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_cn_annual_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_cn_annual_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_cn_semi_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_cn_semi_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_cn_quarterly_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_cn_quarterly_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_hk_annual_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_hk_annual_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_hk_semi_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_hk_semi_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_hk_quarterly_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_hk_quarterly_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_us_annual_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_us_annual_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_us_semi_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_us_semi_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_us_quarterly_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "fin_us_quarterly_fetch",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "nonperiod_prospectus",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "nonperiod_equity_offering",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "nonperiod_convertible_bond",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "nonperiod_investor_relations",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "call_past_cutoff",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "call_wrong_quarter",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "err_402_entitlement",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "err_missing_creds",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "err_unknown_usage",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "local_txt_exact_reuse",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "reuse_only_missing_period",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "call_wrong_symbol",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "call_wrong_mime",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "call_max_bytes",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "call_hard_timeout",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "request_after_failure_retry",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "request_after_failure_retry",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "original_wrong_sha",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "original_wrong_mime",
+    "detail": "KeyError: 'fixture_ref'"
+  },
+  {
+    "vector": "missing_case_fixture_evidence",
+    "case_id": "original_max_bytes",
+    "detail": "KeyError: 'fixture_ref'"
+  }
+]

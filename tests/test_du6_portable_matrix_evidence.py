@@ -41,10 +41,10 @@ from report import SCHEMA  # noqa: E402
 
 AUTHORITY = Path(__file__).parent / "fixtures" / "w06_contract_matrix" / "authority"
 REPLAY_SCHEMA = "ff-matrix-evidence-replay/1"
-# Canonical sha256 of [f.to_dict() for f in audit(frozen 41 report)] captured on
-# base commit e2efa81 BEFORE any DU6 change (sort_keys, ensure_ascii=False).
-# Freezes "no override => findings exactly preserved".
-FROZEN_DEFAULT_FINDINGS_SHA256 = "417a7891420e02e1bb9fb1641cb95ab5037c5fd754581488cf6dd4f919a64e30"
+# Exact host-independent fields generated from the committed pre-DU6 oracle
+# e2efa81d against the retained 41-case authority, not refreshed from new code.
+# Structured equality shows the changed row instead of an opaque digest mismatch.
+FROZEN_DEFAULT_FINDINGS = Path(__file__).parent / "fixtures" / "du6_portable_matrix" / "default-findings-e2efa81d.json"
 FROZEN_DEFAULT_FINDING_COUNT = 65
 
 
@@ -472,7 +472,7 @@ def test_default_audit_findings_are_exactly_preserved():
     report = _frozen_report()
     findings = oracle_mod.audit(report)
     assert len(findings) == FROZEN_DEFAULT_FINDING_COUNT
-    assert _sha256_json([f.to_dict() for f in findings]) == FROZEN_DEFAULT_FINDINGS_SHA256
+    assert [f.to_dict() for f in findings] == json.loads(FROZEN_DEFAULT_FINDINGS.read_text(encoding="utf-8"))
     assert Counter(f.vector for f in findings) == {
         "missing_case_fixture_evidence": 40,
         "case_not_passed": 22,
