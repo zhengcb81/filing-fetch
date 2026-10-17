@@ -51,30 +51,106 @@ def _filing(response: dict[str, Any]) -> dict[str, Any]:
 # ── seeding (once, before cases) ───────────────────────────────────────────
 
 
-def seed_all(ctx: Context) -> None:
-    """Seed periodic financial-report originals (local hits) and scan once.
-
-    The fetch_if_missing cases deliberately target (kind, year) keys that are
-    NOT seeded here so they exercise the fixture-provider download path.
-    """
-    # Establish legitimate warm state through the real acquisition writer first.
-    # A scanned sidecar is intentionally a separate legacy/incomplete control.
-    # W07 efficiency: the ten identical CWP ensure writes run sequentially inside
-    # ONE bounded helper process calling the same real ensure service; every
-    # request keeps its own request/response/receipt/source-ref/count record.
+def _warm_seed_list() -> list[tuple]:
+    """The fixed warm seeds, in their historical order (frozen inputs)."""
     seeds = [
         (identity, kind, 2024, period)
         for identity in (CN, HK, US)
         for kind, period in (("annual_report", "FY"), ("semi_annual_report", "S1"), ("quarterly_report", "Q1"))
     ]
     seeds.append((US, "annual_report", 2025, "FY"))
+    return seeds
+
+
+# The local TXT transcript seed, named by ``local_txt_exact_reuse``'s fixed
+# companion request (reuse_only, 2024 Q2). It is written in-process, not via
+# the acquisition writer.
+TXT_SEED_KEY = ("US", "investor_call_transcript", 2024, "Q2")
+
+
+def warm_consumption(spec) -> set:
+    """Warm keys a fixed case consumes or references, from the frozen authority.
+
+    A case's warm preparation is derived only from its fixed definition: a run
+    whose filing or companion row carries ``reuse_only`` intent names the warm
+    key it expects the group's wiki to answer (assertion target or context
+    fidelity with the historical all-seeds runs). Keys outside the fixed warm
+    list are deliberately absent gaps (``reuse_only_missing_period``,
+    ``incomplete_sidecar_metadata_gap``) and must never be seeded; the caller
+    intersects with the fixed list.
+    """
+    keys: set = set()
+    for run in getattr(spec, "runs", ()) or ():
+        request = run.request()
+        rows = [(request, True), (request.get("companion_transcript"), False)]
+        for row, is_filing in rows:
+            if not isinstance(row, dict):
+                continue
+            if (row.get("filing_intent") or row.get("intent")) != "reuse_only":
+                continue
+            if is_filing:
+                keys.add((request.get("market"), request.get("document_kind"),
+                          request.get("fiscal_year"), request.get("fiscal_period")))
+            else:
+                quarter = row.get("fiscal_quarter")
+                keys.add((request.get("market"), "investor_call_transcript",
+                          row.get("fiscal_year"), f"Q{quarter}" if quarter is not None else None))
+    return keys
+
+
+def seed_plan_for(case_ids) -> dict:
+    """Per-group warm preparation derived from the group's own fixed cases.
+
+    Returns ``{"ensure_seeds": [...], "seed_txt": bool}``. Every consumed seed
+    still runs the real acquisition writer in the group that consumes it; the
+    union of all groups' plans equals the full fixed warm list, so coverage
+    never shrinks — only the per-group duplication is removed.
+    """
+    from case_specs import get_spec
+
+    wanted: set = set()
+    for cid in case_ids:
+        spec = get_spec(cid)
+        if spec is None:
+            raise ValueError(f"seed plan for unknown case id: {cid}")
+        wanted |= warm_consumption(spec)
+    ensure_seeds = [seed for seed in _warm_seed_list()
+                    if (seed[0].market, seed[1], seed[2], seed[3]) in wanted]
+    return {"ensure_seeds": ensure_seeds, "seed_txt": TXT_SEED_KEY in wanted}
+
+
+def seed_all(ctx: Context) -> None:
+    """Seed periodic financial-report originals (local hits) and scan once.
+
+    The fetch_if_missing cases deliberately target (kind, year) keys that are
+    NOT seeded here so they exercise the fixture-provider download path.
+
+    DU10: when the runner hands the group's own case ids via ``ctx.seed_cases``,
+    only the warm keys those fixed cases consume or reference are prepared, each
+    still through the real acquisition writer in this group. Without that
+    attribute the historical full batch is prepared (single-group and legacy
+    callers keep their exact behavior).
+    """
+    # Establish legitimate warm state through the real acquisition writer first.
+    # A scanned sidecar is intentionally a separate legacy/incomplete control.
+    # W07 efficiency: the identical CWP ensure writes run sequentially inside
+    # ONE bounded helper process calling the same real ensure service; every
+    # request keeps its own request/response/receipt/source-ref/count record.
+    plan = seed_plan_for(ctx.seed_cases) if getattr(ctx, "seed_cases", None) is not None else None
+    seeds = _warm_seed_list() if plan is None else plan["ensure_seeds"]
+    seed_txt = True if plan is None else plan["seed_txt"]
     ctx.seed_receipts = ctx.warm_seed_batch(seeds)
-    (ctx.artifacts / "warm-seed-receipts.json").write_text(json.dumps(ctx.seed_receipts, ensure_ascii=False, indent=2), encoding="utf-8")
-    from dataclasses import replace
-    txt_identity = replace(US, provider="fmp", source_url="https://financialmodelingprep.com/stable/earning-call-transcript?symbol=AAPL&year=2024&quarter=2")
-    ctx.env.seed_original(txt_identity, document_kind="investor_call_transcript", fiscal_year=2024,
-                          fiscal_period="Q2", form_type=None, published_date="2024-07-01",
-                          content=b"Synthetic original-language local TXT transcript.\n", mime_type="text/plain", filename_hint="aapl_local_2024q2")
+    # Group-owned evidence files carry the group prefix: the evidence dir is
+    # flat and shared, so an unprefixed name would let one group's receipts
+    # overwrite the other's (the seed-batch stdout files are prefixed already).
+    prefix = getattr(ctx, "artifact_prefix", "")
+    (ctx.artifacts / f"{prefix}warm-seed-receipts.json").write_text(json.dumps(ctx.seed_receipts, ensure_ascii=False, indent=2), encoding="utf-8")
+    if seed_txt:
+        from dataclasses import replace
+        txt_identity = replace(US, provider="fmp", source_url="https://financialmodelingprep.com/stable/earning-call-transcript?symbol=AAPL&year=2024&quarter=2")
+        ctx.env.seed_original(txt_identity, document_kind="investor_call_transcript", fiscal_year=2024,
+                              fiscal_period="Q2", form_type=None, published_date="2024-07-01",
+                              content=b"Synthetic original-language local TXT transcript.\n", mime_type="text/plain", filename_hint="aapl_local_2024q2")
     ctx.scan()
 
 

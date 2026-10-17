@@ -1,0 +1,161 @@
+{
+  "schema_version": "du10-handoff/1",
+  "card_id": "DU10-FF41-CLOSE",
+  "status": "COMPLETE",
+  "generated_at": "2026-10-17T20:20:13+01:00",
+  "base_commit": "c7c8867da35cd19d4f419fa70947332615e8e9c0",
+  "branch": "codex/du10-ff41-close",
+  "implementation_commits": [
+    "bb60678dd6c1271836bbe062ea55dc4749592fc0",
+    "cb7e2fbf928d534a678e488abfc73ac52ae58ada",
+    "af3f7a14486d83ac6c3a3f63cbfad427e200ccd9",
+    "22ef5a14e8b72d840608282e3ed413322cbaa6b2"
+  ],
+  "implementation_commits_note": "cb7e2fb/af3f7a1 are the 5h usage-limit interruption handoff docs; bb60678 and 22ef5a1 carry code+tests+evidence. The commit adding this handoff is the final frozen HEAD (STOP).",
+  "changed_paths": [
+    "docs/plans/du10-ff41-close-2026-10-17/NEXT_HANDOFF.md",
+    "docs/plans/du10-ff41-close-2026-10-17/findings.md",
+    "docs/plans/du10-ff41-close-2026-10-17/fixtures/interruption_restart_e2e.py",
+    "docs/plans/du10-ff41-close-2026-10-17/progress.md",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/A-red-baseline.txt",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/baseline-loaded-machine.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/baseline-run.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/dependency-eol-equivalence.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/dependency-postcheck.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/dependency-record.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/final-run.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/independent-review-round1.md",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/interruption-restart-v2.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/interruption-restart-v3.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/interruption-restart.json",
+    "docs/plans/du10-ff41-close-2026-10-17/task_plan.md",
+    "tests/test_du10_ff41_rootcause.py",
+    "tools/offline_contract_matrix/cli_main.py",
+    "tools/offline_contract_matrix/matrix_cases.py",
+    "docs/plans/du10-ff41-close-2026-10-17/handoff.md",
+    "docs/plans/du10-ff41-close-2026-10-17/handoff.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/cleanup.json",
+    "docs/plans/du10-ff41-close-2026-10-17/receipts/independent-review-round2.md"
+  ],
+  "interfaces": {
+    "entrypoints": [
+      "python -B tools/offline_contract_matrix/run.py --cwp-project <p> --et-project <p> --owned-root <p> --out-root <p> [--workers 1|2]",
+      "python -B tools/offline_contract_matrix/run.py replay --report <p> --evidence-root <p> --output <p>",
+      "python -B docs/plans/du10-ff41-close-2026-10-17/fixtures/interruption_restart_e2e.py --cwp-project <p> --et-project <p> --output <p>"
+    ],
+    "inputs": [
+      "fixed 41 CaseSpec registry (case_specs.case_specs(), unchanged)",
+      "read-only CWP 900dbf6489f3b995a0bfb7fcbb8a001a68df241d snapshot at C:/Users/郑曾波/Projects/.du10-deps/cwp",
+      "read-only ET 7d06777e250ee3f7ae58f0be2cee62944bd2c104 snapshot at C:/Users/郑曾波/Projects/.du10-deps/et"
+    ],
+    "outputs": [
+      "ff-et-cwp-offline-matrix/1 report.json (schema unchanged)",
+      "g1./g2. warm-seed-receipts.json per group (new: group-prefixed, was a single shared name)",
+      "seed plan derived per group from frozen CaseSpec reuse_only references (ctx.seed_cases; full batch fallback preserved)",
+      "du10-interruption-restart/2 recovery receipt (sha_pairs real values, hard leg2 gates, full-file residue SHAs)"
+    ],
+    "unchanged": [
+      "CLI argv and --workers choices range(1,3)",
+      "WORKERS=2, CASE_TIMEOUT=30, BATCH_DEADLINE=180, PROOF_RESERVE_SECONDS=10.0",
+      "case_specs.py, oracle.py, matrix_outcome.py, report schema, seed_batch.py, source_proofs.py, run.py, runtime.py, case_scheduling.py, measurement.py, fixture_builder.py, fixture_provider_adapter.py, et_transcript_proxy.py, extended_cases.py"
+    ]
+  },
+  "results": {
+    "c1_full_matrix": {
+      "counts": {
+        "PASS": 41,
+        "FAIL": 0,
+        "PARTIAL": 0,
+        "NOT_RUN": 0
+      },
+      "batch_elapsed_seconds": 97.6772,
+      "exit_code": 0,
+      "oracle_pass": true,
+      "oracle_findings": 0,
+      "restore_restored": true,
+      "report_sha256": "a0dd3c1a7af32f66000b92e074e69520f7aaa64550b98993af0552b4d18d83da",
+      "receipt": "receipts/final-run.json",
+      "scope": "real offline FF->ET->CWP chain at the fixture provider boundary; one complete run, node C"
+    },
+    "c2_recovery": {
+      "authoritative": "receipts/interruption-restart-v3.json",
+      "passed": true,
+      "checks": "12/12",
+      "restart_leg": {
+        "exit_code": 0,
+        "seconds": 144.542,
+        "counts": {
+          "PASS": 41,
+          "total": 41
+        },
+        "oracle_findings": 0
+      },
+      "sentinel_sha_pairs": "v3 receipt sha_pairs (before/after values)",
+      "fail_closed_evidence": "receipts/interruption-restart-v2.json (degraded 40/41 restart correctly refused by the hardened gate)",
+      "historical": "receipts/interruption-restart.json (pre-hardening gate)"
+    },
+    "baseline_runs": {
+      "unmodified_main": "receipts/baseline-run.json (41/41, 110.8451s, 38% load)",
+      "loaded_machine_redo": "receipts/baseline-loaded-machine.json (1 PARTIAL/40 NOT_RUN @183.8s, 96% load; kept, not hidden)"
+    },
+    "tests": {
+      "affected_11_files": "329 passed (author 52.24s / reviewer 54.85s)",
+      "new_regression": "tests/test_du10_ff41_rootcause.py (5 tests: 2 behavioral RED + 1 API + 2 guards)",
+      "red_baseline": "receipts/A-red-baseline.txt (3 failed / 2 passed on pre-fix code)"
+    }
+  },
+  "fixed_dependencies": {
+    "cwp": {
+      "commit": "900dbf6489f3b995a0bfb7fcbb8a001a68df241d",
+      "snapshot": "C:/Users/郑曾波/Projects/.du10-deps/cwp"
+    },
+    "et": {
+      "commit": "7d06777e250ee3f7ae58f0be2cee62944bd2c104",
+      "snapshot": "C:/Users/郑曾波/Projects/.du10-deps/et"
+    },
+    "verification": [
+      "receipts/dependency-record.json",
+      "receipts/dependency-postcheck.json",
+      "receipts/dependency-eol-equivalence.json"
+    ],
+    "drift_note": "CWP repo HEAD moved to 29cedac during the card; the fixed snapshot was the only run input"
+  },
+  "independent_review": {
+    "reviewer": "general-purpose agent (author excluded)",
+    "round1": {
+      "reviewed_sha": "af3f7a14486d83ac6c3a3f63cbfad427e200ccd9",
+      "verdict": "REQUEST_CHANGES",
+      "findings": "2 P2 + 2 P3",
+      "report": "receipts/independent-review-round1.md"
+    },
+    "round2": {
+      "reviewed_sha": "22ef5a14e8b72d840608282e3ed413322cbaa6b2",
+      "verdict": "APPROVE",
+      "findings": "none (2 non-blocking notes)",
+      "report": "receipts/independent-review-round2.md"
+    }
+  },
+  "finding_fix_mapping": {
+    "du8_full_matrix_open": "per-group warm-seed subsetting from frozen CaseSpec consumption (seed 26.92->14.25s) + load-dependence proven by same-day three-state runs; C-1 41/41 at 97.68s",
+    "du8_restart_recovery_not_run": "C-2 interruption/restart/recovery E2E v3 passed (v2 kept as fail-closed evidence)",
+    "du8_call_hard_timeout_open": "PASS in C-1 and v3 restart leg; load-sensitive case noted (v2 had one unnamed PARTIAL under load; naming added from v3 onward)",
+    "review_r1_p2_sha_pairs": "fixture sha_pairs real before/after values, re-run v2+v3",
+    "review_r1_p2_degraded_restart_gate": "hard gates leg2_completed_clean + restart_all_41_pass, no exclusions; v2 refuse / v3 pass",
+    "review_r1_p3_test_counts": "findings A.9 corrected (329 total)",
+    "review_r1_p3_receipt_overwrite_residue": "group-prefixed warm-seed receipts + full-file residue SHA map"
+  },
+  "cleanup": {
+    "receipt": "receipts/cleanup.json",
+    "deleted": "C:/Users/郑曾波/Projects/.du10-tmp (entire card-owned test/report temp)",
+    "kept": "C:/Users/郑曾波/Projects/.du10-deps (rebuild recipe in NEXT_HANDOFF.md)",
+    "fmp_key_stat_unchanged": true,
+    "fmp_key_content_read": false
+  },
+  "scope_proves": "engineering contract-matrix coverage: fixed 41 cases on the real FF->ET->CWP code chain at the fixture supplier boundary, plus interruption/restart/cleanup recovery semantics",
+  "scope_does_not_prove": [
+    "no real provider/supplier reachability, coverage or filing quality is certified",
+    "no company/figure truth is certified; unknown usage/cost stays null",
+    "not a per-commit CI gate; the matrix is a manual large-node run",
+    "machine load still swings completion margin (documented same-day three-state evidence); budgets were never raised"
+  ]
+}

@@ -1,0 +1,299 @@
+{
+  "schema_version": "du10-final-run/1",
+  "generated_at": "2026-10-17T18:45:13+01:00",
+  "command": "python -B tools/offline_contract_matrix/run.py --cwp-project C:/Users/郑曾波/Projects/.du10-deps/cwp --et-project C:/Users/郑曾波/Projects/.du10-deps/et --owned-root C:/Users/郑曾波/Projects/.du10-tmp/final-owned --out-root C:/Users/郑曾波/Projects/.du10-tmp/final-out --workers 2",
+  "exit_code": 0,
+  "attempt": "attempt-1ce035cefbc2469688e684a0d64d637a",
+  "report_sha256": "a0dd3c1a7af32f66000b92e074e69520f7aaa64550b98993af0552b4d18d83da",
+  "results": {
+    "chainA_download_reuse": {
+      "result": "PASS",
+      "elapsed_seconds": 10.2208
+    },
+    "fin_cn_annual_hit": {
+      "result": "PASS",
+      "elapsed_seconds": 2.0426
+    },
+    "fin_cn_semi_hit": {
+      "result": "PASS",
+      "elapsed_seconds": 1.9647
+    },
+    "fin_cn_quarterly_hit": {
+      "result": "PASS",
+      "elapsed_seconds": 2.0791
+    },
+    "fin_hk_annual_hit": {
+      "result": "PASS",
+      "elapsed_seconds": 2.0644
+    },
+    "fin_hk_semi_hit": {
+      "result": "PASS",
+      "elapsed_seconds": 2.0331
+    },
+    "fin_hk_quarterly_hit": {
+      "result": "PASS",
+      "elapsed_seconds": 2.0018
+    },
+    "fin_us_annual_hit": {
+      "result": "PASS",
+      "elapsed_seconds": 2.0665
+    },
+    "fin_us_semi_hit": {
+      "result": "PASS",
+      "elapsed_seconds": 2.0528
+    },
+    "fin_us_quarterly_hit": {
+      "result": "PASS",
+      "elapsed_seconds": 2.2487
+    },
+    "fin_cn_annual_fetch": {
+      "result": "PASS",
+      "elapsed_seconds": 5.0331
+    },
+    "fin_cn_semi_fetch": {
+      "result": "PASS",
+      "elapsed_seconds": 5.0424
+    },
+    "fin_cn_quarterly_fetch": {
+      "result": "PASS",
+      "elapsed_seconds": 5.0687
+    },
+    "fin_hk_annual_fetch": {
+      "result": "PASS",
+      "elapsed_seconds": 4.9348
+    },
+    "fin_hk_semi_fetch": {
+      "result": "PASS",
+      "elapsed_seconds": 5.0536
+    },
+    "fin_hk_quarterly_fetch": {
+      "result": "PASS",
+      "elapsed_seconds": 4.9666
+    },
+    "fin_us_annual_fetch": {
+      "result": "PASS",
+      "elapsed_seconds": 5.1344
+    },
+    "fin_us_semi_fetch": {
+      "result": "PASS",
+      "elapsed_seconds": 4.9935
+    },
+    "fin_us_quarterly_fetch": {
+      "result": "PASS",
+      "elapsed_seconds": 5.0763
+    },
+    "nonperiod_prospectus": {
+      "result": "PASS",
+      "elapsed_seconds": 3.0414
+    },
+    "nonperiod_equity_offering": {
+      "result": "PASS",
+      "elapsed_seconds": 2.8289
+    },
+    "nonperiod_convertible_bond": {
+      "result": "PASS",
+      "elapsed_seconds": 2.6074
+    },
+    "nonperiod_investor_relations": {
+      "result": "PASS",
+      "elapsed_seconds": 2.7176
+    },
+    "call_fy_only_no_q": {
+      "result": "PASS",
+      "elapsed_seconds": 2.0077
+    },
+    "call_past_cutoff": {
+      "result": "PASS",
+      "elapsed_seconds": 4.2139
+    },
+    "call_wrong_quarter": {
+      "result": "PASS",
+      "elapsed_seconds": 4.2653
+    },
+    "err_request_error": {
+      "result": "PASS",
+      "elapsed_seconds": 0.2947
+    },
+    "err_402_entitlement": {
+      "result": "PASS",
+      "elapsed_seconds": 4.3279
+    },
+    "err_missing_creds": {
+      "result": "PASS",
+      "elapsed_seconds": 2.8828
+    },
+    "err_unknown_usage": {
+      "result": "PASS",
+      "elapsed_seconds": 4.2117
+    },
+    "local_txt_exact_reuse": {
+      "result": "PASS",
+      "elapsed_seconds": 3.6328
+    },
+    "reuse_only_missing_period": {
+      "result": "PASS",
+      "elapsed_seconds": 2.9334
+    },
+    "call_wrong_symbol": {
+      "result": "PASS",
+      "elapsed_seconds": 4.4937
+    },
+    "call_wrong_mime": {
+      "result": "PASS",
+      "elapsed_seconds": 4.3687
+    },
+    "call_max_bytes": {
+      "result": "PASS",
+      "elapsed_seconds": 4.4286
+    },
+    "call_hard_timeout": {
+      "result": "PASS",
+      "elapsed_seconds": 4.9627
+    },
+    "request_after_failure_retry": {
+      "result": "PASS",
+      "elapsed_seconds": 10.4227
+    },
+    "original_wrong_sha": {
+      "result": "PASS",
+      "elapsed_seconds": 2.4567
+    },
+    "original_wrong_mime": {
+      "result": "PASS",
+      "elapsed_seconds": 2.8971
+    },
+    "original_max_bytes": {
+      "result": "PASS",
+      "elapsed_seconds": 2.7912
+    },
+    "incomplete_sidecar_metadata_gap": {
+      "result": "PASS",
+      "elapsed_seconds": 4.6176
+    }
+  },
+  "counts": {
+    "PASS": 41,
+    "FAIL": 0,
+    "PARTIAL": 0,
+    "NOT_RUN": 0
+  },
+  "batch_elapsed_seconds": 97.6772,
+  "limits": {
+    "case_limit_seconds": 30,
+    "batch_deadline_seconds": 180,
+    "final_proof_reserve_seconds": 10.0,
+    "workers": 2
+  },
+  "phase_timing": {
+    "binding": {
+      "status": "measured",
+      "seconds": 3.5084,
+      "spans": 1
+    },
+    "seed": {
+      "status": "measured",
+      "seconds": 14.2489,
+      "spans": 2
+    },
+    "ff_cli": {
+      "status": "measured",
+      "seconds": 151.7909,
+      "spans": 52
+    },
+    "et_supervisor_worker": {
+      "status": "measured",
+      "seconds": 12.9632,
+      "spans": 1
+    },
+    "fixture": {
+      "status": "measured",
+      "seconds": 2.3139,
+      "spans": 1
+    },
+    "fresh_source_proof": {
+      "status": "measured",
+      "seconds": 1.6241,
+      "spans": 1
+    },
+    "cleanup": {
+      "status": "measured",
+      "seconds": 0.3385,
+      "spans": 1
+    },
+    "total": {
+      "status": "measured",
+      "seconds": 97.6772,
+      "spans": 1
+    }
+  },
+  "launch_accounting": {
+    "total_boot": 260,
+    "total_exit": 259,
+    "by_kind": {
+      "other_python": 139,
+      "seed_batch": 2,
+      "fixture_adapter": 54,
+      "ff_cli": 52,
+      "et_proxy": 11,
+      "source_proofs": 2
+    },
+    "parent_calls": {
+      "binding_probe": 1,
+      "git": 3,
+      "fresh_source_proof": 2,
+      "seed_batch": 2,
+      "cwp_cli": 3,
+      "ff_cli": 52
+    },
+    "parent_launch_total": 63
+  },
+  "bytecode_cache": {
+    "pyc_files": 550,
+    "company_wiki_pyc": 103,
+    "et_pyc": 7,
+    "max_pyc_path_len": 175,
+    "note": "mirrored cache paths over Windows MAX_PATH (260) are silently not cached"
+  },
+  "case_scheduling": {
+    "group_loads_seconds": [
+      52.0,
+      52.0
+    ],
+    "group_case_counts": [
+      20,
+      21
+    ],
+    "predicted_makespan_seconds": 52.0,
+    "perfect_balance_lower_bound_seconds": 52.0,
+    "imbalance_seconds": 0.0,
+    "cost_source": "static",
+    "cost_model": "frozen static estimate from CaseSpec run count; a coarse proxy, measured at 74.008s vs legacy 75.531s and vs the 67.666s perfect-balance bound on the retained W07 41/41 table"
+  },
+  "stop_reason": null,
+  "error": null,
+  "oracle_pass": true,
+  "oracle_findings": [],
+  "restored": true,
+  "cost": {
+    "real_provider_calls": 0,
+    "paid_usd": 0,
+    "unknown_charge": null,
+    "fixture_requests": 42,
+    "fixture_counter_scope": "observed local fixture GETs only; producer unknown usage stays null"
+  },
+  "fixed_dependencies": {
+    "cwp": {
+      "fixed_commit": "900dbf6489f3b995a0bfb7fcbb8a001a68df241d",
+      "snapshot": "C:/Users/郑曾波/Projects/.du10-deps/cwp",
+      "extraction": "git archive (no .git)"
+    },
+    "et": {
+      "fixed_commit": "7d06777e250ee3f7ae58f0be2cee62944bd2c104",
+      "snapshot": "C:/Users/郑曾波/Projects/.du10-deps/et",
+      "extraction": "git archive (no .git)"
+    }
+  },
+  "code_binding_verified": true,
+  "scope_note": "real offline fixture chain; no provider/network/LLM; does not certify real supplier or filing quality",
+  "snapshot_eol_note": "snapshot era: git archive under core.autocrlf=true (pure-LF files CRLF-smudged; proven content-equivalent to the fixed commits in dependency-eol-equivalence.json). The currently extracted .du10-deps snapshot is byte-exact (-c core.autocrlf=false) for reproducibility."
+}

@@ -1,0 +1,117 @@
+{
+  "schema_version": "du10-interruption-restart/2",
+  "inputs": {
+    "cwp": "C:\\Users\\郑曾波\\Projects\\.du10-deps\\cwp",
+    "et": "C:\\Users\\郑曾波\\Projects\\.du10-deps\\et"
+  },
+  "restart_attempt": "attempt-fff25692d78044e4921089dbf5eedcad",
+  "leg1": {
+    "interrupted": true,
+    "case_entry": {
+      "case_id": "chainA_download_reuse",
+      "request": "chainA_download_reuse.run1.request.json",
+      "fixture": "chainA_download_reuse.run1.fixture.json",
+      "observed_gets": 1,
+      "prior_observed_gets": 0,
+      "request_sha256": "5465e6cd6e57d9e1632fb49308fa3345e9c808c124d6e4332c473868de8406f7",
+      "fixture_sha256": "ad96a2ed5fdf5ac3445770bfd217006911eb6e148cc5fcffd553aa0b8e188518",
+      "calls_sha256": "a0a68429ff03c45a347e871986019bb3fb35e6b6d762bfaa03cfd3ebe6a1711c",
+      "scope": "current request observed from zero to new GET before response; not proof the provider remained blocked at the kill instant"
+    },
+    "cleanup": {
+      "status": "observed",
+      "tree_reaped": true,
+      "returncode": 1,
+      "basis": "owned OS job/process group terminated; root reaped; pipe readers joined"
+    },
+    "error": null,
+    "deadline_seconds": 180,
+    "attempt": "attempt-372202079ecd4d28b44e3670a09ed5cc",
+    "residue_after_kill": {
+      "file_count": 40,
+      "report_json_present": false,
+      "sha256_of_sorted_paths": "3e222167b1fb1161975256b757d29faaaca9e4d42f5d2bd0a8eca2e5064e35c8",
+      "file_shas": {
+        "artifacts\\chainA_download_reuse.run1.fixture.json": "ad96a2ed5fdf5ac3445770bfd217006911eb6e148cc5fcffd553aa0b8e188518",
+        "artifacts\\chainA_download_reuse.run1.request.json": "5465e6cd6e57d9e1632fb49308fa3345e9c808c124d6e4332c473868de8406f7",
+        "artifacts\\fin_cn_annual_fetch.run1.fixture.json": "3d86c98c68aaee7a6578310121f503c1efc82833fd9350790cd650b421bb0f02",
+        "artifacts\\fin_cn_annual_fetch.run1.request.json": "063d5a7effa0fd35e046f5bcec90c84dc4e8e3c8a5df0a370914d3c18ca32750",
+        "artifacts\\fin_cn_annual_fetch.run1.response.json": "92d02278c1f802e12a6b8c636d7b1e294d94af86906fb6ddd8af010dba58d951",
+        "artifacts\\fin_cn_annual_fetch.run1.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\fin_cn_annual_fetch.run2.fixture.json": "3d86c98c68aaee7a6578310121f503c1efc82833fd9350790cd650b421bb0f02",
+        "artifacts\\fin_cn_annual_fetch.run2.request.json": "063d5a7effa0fd35e046f5bcec90c84dc4e8e3c8a5df0a370914d3c18ca32750",
+        "artifacts\\g1.seed-batch.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g1.seed-batch.stdout.json": "2eaa7d506901f68b3dd79c26d57668ee657dcce3d642e365c0335d7bfb65d64b",
+        "artifacts\\g1.seed-scan.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g1.seed-scan.stdout.txt": "826f0bef35de445407f189d20e27c23f5bfccd3193dc8153207ac7e360434f90",
+        "artifacts\\g1.seed_cn_quarterly_report_2024_Q1.response.json": "bbe9a4bb70e552f1a1f8b9621d7f9358a28807858b174f11dd9d6fdfe76bebff",
+        "artifacts\\g1.seed_cn_quarterly_report_2024_Q1.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g1.seed_hk_annual_report_2024_FY.response.json": "4d85a5f23ee2a8a19b33a73fc95656ca377607cb45e0230d2313b3d8d1515e5b",
+        "artifacts\\g1.seed_hk_annual_report_2024_FY.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g1.seed_hk_semi_annual_report_2024_S1.response.json": "f282b65e0a83e8863e933b4ee9161714151d70aa43926eb1133e11ca4950acfe",
+        "artifacts\\g1.seed_hk_semi_annual_report_2024_S1.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g1.seed_us_annual_report_2025_FY.response.json": "33e16ed96b18cfc4736bb2405187b64494a09a6e1efe3a2644a5277e32a67801",
+        "artifacts\\g1.seed_us_annual_report_2025_FY.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g1.seed_us_quarterly_report_2024_Q1.response.json": "f226d61ae56d303e447d776b4b8c33808f885cd5beccaad45215cb88bf2c046c",
+        "artifacts\\g1.seed_us_quarterly_report_2024_Q1.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g1.warm-seed-receipts.json": "80b5d9bf89287a35c6c1c4c5537444a4ff1480cdb8c895a9be12ffeb6648943f",
+        "artifacts\\g2.seed-batch.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g2.seed-batch.stdout.json": "6d6e7ba343f1194b87fa61d21aa9b8fb74950df3a600ffdd1447339fb6633a76",
+        "artifacts\\g2.seed-scan.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g2.seed-scan.stdout.txt": "37d5e129356a330203cb399cdc6a5b3af4b90808c0f2c176c12fcf1f636bca3c",
+        "artifacts\\g2.seed_cn_annual_report_2024_FY.response.json": "8cb2c68b7904b0de2bffdf3e7e5b0d71948bc810a5756f0b2b0bc35c17568882",
+        "artifacts\\g2.seed_cn_annual_report_2024_FY.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g2.seed_cn_semi_annual_report_2024_S1.response.json": "0f5ddf7724d672ccd94b1425e3da664808ce7170ce394f5ae6825b03a0fbb93d",
+        "artifacts\\g2.seed_cn_semi_annual_report_2024_S1.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g2.seed_hk_quarterly_report_2024_Q1.response.json": "abeb00ec58ac242de4da68fff40f1ed7ad008be6387f86df12f321b97450566a",
+        "artifacts\\g2.seed_hk_quarterly_report_2024_Q1.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g2.seed_us_annual_report_2024_FY.response.json": "78b5622e9e7ccae3716766ffe30feabaa7a87b370f44a45dc8daae1e3599061c",
+        "artifacts\\g2.seed_us_annual_report_2024_FY.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g2.seed_us_annual_report_2025_FY.response.json": "acdd25b444c76084f464d2c96ae4add98299aba9e5e2d8f944d30fd03cac1008",
+        "artifacts\\g2.seed_us_annual_report_2025_FY.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g2.seed_us_semi_annual_report_2024_S1.response.json": "1c6f2915675d868bd6f613c18be4fb3d6ba4dd6b52e8b24541472137fe06e07a",
+        "artifacts\\g2.seed_us_semi_annual_report_2024_S1.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "artifacts\\g2.warm-seed-receipts.json": "cfaa33cb164c4d072a613633bbea2e1ba1c2ea6d51d48cedd44dbe8c0b933267"
+      }
+    },
+    "stdout_tail": ""
+  },
+  "leg2": {
+    "status": "completed",
+    "seconds": 144.542,
+    "exit_code": 0,
+    "stdout_tail": "cases: {'PASS': 41, 'FAIL': 0, 'PARTIAL': 0, 'NOT_RUN': 0}; seconds=143.96; oracle findings=0\r\nreport: C:\\Users\\郑曾波\\AppData\\Local\\Temp\\du10-restart-zy9aqz3e\\out\\attempt-fff25692d78044e4921089dbf5eedcad\\report.json\r\n"
+  },
+  "sha_pairs": {
+    "sentinel": {
+      "before": "fc0c0cbe8c5fa5d03d1bf1d47e8c74af1879ea32080f3d53c7bda261b065cb64",
+      "after": "fc0c0cbe8c5fa5d03d1bf1d47e8c74af1879ea32080f3d53c7bda261b065cb64"
+    },
+    "preexisting_output_entry": {
+      "before": "1dbea9178554e84308f8118f71fc3d8d770b3e06b82c3c94653b9ad915f2280e",
+      "after": "1dbea9178554e84308f8118f71fc3d8d770b3e06b82c3c94653b9ad915f2280e"
+    }
+  },
+  "checks": {
+    "leg1_interrupted_in_flight": true,
+    "leg1_tree_reaped": true,
+    "leg1_no_report_written": true,
+    "restart_is_new_unique_attempt": true,
+    "restart_report_written": true,
+    "restart_restored_true": true,
+    "residue_not_rewritten": true,
+    "leg2_completed_clean": true,
+    "restart_all_41_pass": true,
+    "sentinel_intact": true,
+    "preexisting_output_intact": true,
+    "temporary_tree_removed": true
+  },
+  "restart_case_counts": {
+    "PASS": 41,
+    "total": 41
+  },
+  "restart_non_pass_cases": [],
+  "restart_oracle_findings": 0,
+  "passed": true,
+  "scope": "one controlled interruption + one restart-to-completion + cleanup; the 41-case verdict is judged by the separate clean C-node run, but the restart leg must itself exit 0 with 41/41 PASS for recovery to pass here"
+}

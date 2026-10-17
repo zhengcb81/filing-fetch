@@ -208,6 +208,13 @@ def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]]
     done: list[tuple[int, CaseResult]] = []
     stop_reason = None
     phases = getattr(ctx, "phases", None)
+    # Warm preparation is derived from THIS group's own fixed cases only; the
+    # ids travel on the context because seed_all's one-argument call shape is
+    # pinned by existing callers (DU8/W07 suites patch it as seed_all(ctx)).
+    try:
+        ctx.seed_cases = [cid for _, (cid, _runner) in entries]
+    except AttributeError:
+        pass
     if phases is not None:
         with phases.span("seed"):
             seed_all(ctx)

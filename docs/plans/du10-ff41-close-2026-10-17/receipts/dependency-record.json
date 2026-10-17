@@ -1,0 +1,20 @@
+{
+  "schema_version": "du10-dependency-record/1",
+  "generated_at": "2026-10-17T18:45:40+01:00",
+  "cwp": {
+    "repo": "C:/Users/郑曾波/Projects/company-wiki",
+    "repo_head_now": "29cedac7f74938578e144c2e252f3f64b52a974b",
+    "fixed_commit_used": "900dbf6489f3b995a0bfb7fcbb8a001a68df241d",
+    "snapshot_root": "C:/Users/郑曾波/Projects/.du10-deps/cwp",
+    "snapshot_has_git": false
+  },
+  "et": {
+    "repo": "C:/Users/郑曾波/Projects/earnings-transcripts/earnings-transcripts",
+    "repo_head_now": "7d06777e250ee3f7ae58f0be2cee62944bd2c104",
+    "fixed_commit_used": "7d06777e250ee3f7ae58f0be2cee62944bd2c104",
+    "snapshot_root": "C:/Users/郑曾波/Projects/.du10-deps/et",
+    "snapshot_has_git": false,
+    "tests_seam_present": true
+  },
+  "drift_note": "snapshots extracted via git archive at the fixed commits; repo heads may have moved on, the fixed commits are the declared inputs; post-test re-verification of snapshot hash samples in final receipts"
+}

@@ -1,0 +1,40 @@
+C:\Miniconda\Lib\site-packages\pluggy\_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Miniconda\Lib\site-packages\pluggy\_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Miniconda\Lib\site-packages\_pytest\logging.py:865: in pytest_runtest_call
+    yield
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <CaptureManager _method='fd' _global_capturing=<MultiCapture out=<FDCapture 1 oldfd=5 _state='suspended' tmpfile=<Enco..._io.TextIOWrapper name='nul' mode='r' encoding='utf-8'>> _state='suspended' _in_suspended=False> _capture_fixture=None>
+item = <Function test_txt_transcript_seed_lands_only_in_the_group_that_consumes_it>
+
+    @hookimpl(wrapper=True)
+    def pytest_runtest_call(self, item: Item) -> Generator[None]:
+        with self.item_capture("call", item):
+>           return (yield)
+                    ^^^^^
+E           RuntimeError: generator raised StopIteration
+
+C:\Miniconda\Lib\site-packages\_pytest\capture.py:900: RuntimeError
+---------------------------- Captured stdout call -----------------------------
+cases: {'PASS': 1, 'FAIL': 36, 'PARTIAL': 4, 'NOT_RUN': 0}; seconds=1.21; oracle findings=44
+report: C:\Users\郑曾波\AppData\Local\Temp\pytest-of-郑曾波\pytest-1813\test_txt_transcript_seed_lands0\out\attempt-116c4e7730034566879fe0ad04bd4261\report.json
+_________________ test_seed_plan_for_rejects_unknown_case_ids _________________
+
+    def test_seed_plan_for_rejects_unknown_case_ids():
+        import matrix_cases
+    
+        with pytest.raises(ValueError, match="unknown case id"):
+>           matrix_cases.seed_plan_for(["not_a_fixed_case"])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: module 'matrix_cases' has no attribute 'seed_plan_for'
+
+tests\test_du10_ff41_rootcause.py:208: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_du10_ff41_rootcause.py::test_each_group_warm_seed_batch_covers_only_its_consumed_keys
+FAILED tests/test_du10_ff41_rootcause.py::test_txt_transcript_seed_lands_only_in_the_group_that_consumes_it
+FAILED tests/test_du10_ff41_rootcause.py::test_seed_plan_for_rejects_unknown_case_ids
+3 failed, 2 passed in 7.12s

@@ -1,0 +1,48 @@
+{
+  "schema_version": "du10-baseline-run/1",
+  "generated_at": "2026-10-17T19:04:09+01:00",
+  "code_state": "main c7c8867 unmodified (pre-fix)",
+  "attempt": "attempt-27b6021ec9984581807cc3b8631ed82e",
+  "report_sha256": "4ca68489d850c3b7f5961e5de8210be368e21683a312eaa5abb9030ce839c7c6",
+  "counts": {
+    "PARTIAL": 1,
+    "NOT_RUN": 40
+  },
+  "batch_elapsed_seconds": 183.8395,
+  "phase_timing": {
+    "binding": {
+      "status": "measured",
+      "seconds": 40.6815,
+      "spans": 1
+    },
+    "seed": {
+      "status": "measured",
+      "seconds": 249.779,
+      "spans": 2
+    },
+    "ff_cli": {
+      "status": "measured",
+      "seconds": 7.1152,
+      "spans": 1
+    },
+    "fresh_source_proof": {
+      "status": "measured",
+      "seconds": 6.3843,
+      "spans": 1
+    },
+    "cleanup": {
+      "status": "measured",
+      "seconds": 3.0203,
+      "spans": 1
+    },
+    "total": {
+      "status": "measured",
+      "seconds": 183.8395,
+      "spans": 1
+    }
+  },
+  "stop_reason": "final-proof reserve preserved (10.0s of the single batch deadline); remaining cases kept NOT_RUN instead of starving the proof",
+  "machine_cpu_load_pct_during_run": 96,
+  "snapshot": "byte-exact (git -c core.autocrlf=false archive)",
+  "note": "redo attempt on a machine saturated by concurrent agent lanes; binding 40.7s / seed 249.8s and the batch starved to 1 PARTIAL / 40 NOT_RUN — the same failure mode recorded by DU8. Kept as truthful loaded-machine evidence; the Node A record remains baseline#1 (38% load, 41/41 PASS)."
+}
