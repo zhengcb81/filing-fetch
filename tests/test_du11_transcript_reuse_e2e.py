@@ -137,6 +137,7 @@ def test_real_cwp_reuses_a_motley_fool_transcript_without_any_download(
         "msft_2026_q3_call.txt", KNOWN_TRANSCRIPT_BODY, MOTLEY_SIDECAR
     )
     owned_wiki.run_scan()
+    owned_wiki.checkpoint()
     before = owned_wiki.query_local({
         "entity": ENTITY, "document_kind": "investor_call_transcript",
         "as_of_date": AS_OF, "market": MARKET, "security_id": SECURITY_ID,
@@ -174,6 +175,7 @@ def test_real_cwp_unknown_publication_observation_costs_zero_provider_and_zero_r
     }
     owned_wiki.seed_transcript("msft_2026_q3_unknown.txt", UNKNOWN_TRANSCRIPT_BODY, sidecar)
     owned_wiki.run_scan()
+    owned_wiki.checkpoint()
 
     probe = owned_wiki.query_local({
         "entity": ENTITY, "document_kind": "investor_call_transcript",
@@ -216,6 +218,7 @@ def test_real_cwp_qualified_match_wins_over_an_unknown_observation(
     owned_wiki.seed_transcript("msft_2026_q3_call.txt", KNOWN_TRANSCRIPT_BODY,
                                MOTLEY_SIDECAR)
     owned_wiki.run_scan()
+    owned_wiki.checkpoint()
 
     held = transport(owned_wiki, KNOWN_FIXTURE)
     resolved = resolve_companion_transcript(
@@ -247,6 +250,7 @@ def test_real_cwp_two_real_providers_for_one_period_are_ambiguous_and_never_down
         ),
     )
     owned_wiki.run_scan()
+    owned_wiki.checkpoint()
 
     held = transport(owned_wiki, KNOWN_FIXTURE)
     resolved = resolve_companion_transcript(
@@ -272,6 +276,7 @@ def test_real_cwp_mixed_unknown_and_after_as_of_observations_are_a_named_gap(
                                unknown_sidecar)
     owned_wiki.seed_transcript("msft_2026_q3_late.txt", AFTER_AS_OF_BODY, after_sidecar)
     owned_wiki.run_scan()
+    owned_wiki.checkpoint()
 
     probe = owned_wiki.query_local({
         "entity": ENTITY, "document_kind": "investor_call_transcript",
@@ -309,6 +314,7 @@ def test_real_cwp_after_as_of_only_observation_is_its_own_named_gap(
     owned_wiki.seed_transcript("msft_2026_q3_late.txt", AFTER_AS_OF_BODY,
                                dict(MOTLEY_SIDECAR, published_date="2026-10-10"))
     owned_wiki.run_scan()
+    owned_wiki.checkpoint()
 
     held = transport(owned_wiki, KNOWN_FIXTURE)
     resolved = resolve_companion_transcript(
@@ -326,6 +332,8 @@ def test_real_cwp_missing_then_one_download_then_replay_is_pure_reuse(
     owned_wiki: OwnedWiki,
 ) -> None:
     owned_wiki.run_scan()
+    owned_wiki.checkpoint()
+    owned_wiki.expect_canonical_imports()
     first_transport = transport(owned_wiki, KNOWN_FIXTURE)
 
     first = resolve_companion_transcript(
@@ -373,6 +381,8 @@ def test_real_cwp_explicit_fmp_does_not_reuse_another_providers_source(
     owned_wiki.seed_transcript("msft_2026_q3_call.txt", KNOWN_TRANSCRIPT_BODY,
                                MOTLEY_SIDECAR)
     owned_wiki.run_scan()
+    owned_wiki.checkpoint()
+    owned_wiki.expect_canonical_imports()
     monkeypatch.setenv("ET_FIXTURE_PATH", str(UNKNOWN_FIXTURE))
 
     held = transport(owned_wiki, UNKNOWN_FIXTURE)
@@ -402,6 +412,64 @@ def test_real_cwp_explicit_fmp_does_not_reuse_another_providers_source(
     assert len(et_calls(owned_wiki)) == 1
 
 
+def test_real_cwp_explicit_fmp_lookup_finds_and_reuses_its_own_source(
+    owned_wiki: OwnedWiki,
+) -> None:
+    """A-node positive control: the provider-scoped envelope does return `found`."""
+    owned_wiki.run_scan()
+    owned_wiki.checkpoint()
+    owned_wiki.expect_canonical_imports()
+    first_transport = transport(owned_wiki, KNOWN_FIXTURE)
+
+    first = resolve_companion_transcript(
+        request=companion_request(provider="fmp"), filing_handle=filing_handle(),
+        transport=first_transport,
+    )
+    assert first["status"] == "downloaded", first
+    assert first["provider"] == "fmp"
+    assert first["provider_calls"] == 1
+    assert len(et_calls(owned_wiki)) == 1
+
+    probe = owned_wiki.query_local({
+        "entity": ENTITY, "document_kind": "investor_call_transcript",
+        "as_of_date": AS_OF, "market": MARKET, "security_id": SECURITY_ID,
+        "form_type": None, "fiscal_year": 2026, "fiscal_period": "Q3",
+        "language": None, "provider": "fmp", "provider_document_id": None,
+        "mode": "exact", "allow_download": False, "schema_version": "1.0",
+    })
+    assert probe["status"] == "found", probe
+    assert probe["candidates"][0]["provider"] == "fmp"
+    envelope = owned_wiki.run_module(
+        "company_wiki.source_catalog.source_query_cli",
+        [],
+        json.dumps({
+            "schema_version": "company-wiki-transcript-import-lookup-request/1",
+            "source_request": {
+                "entity": ENTITY, "document_kind": "investor_call_transcript",
+                "as_of_date": AS_OF, "market": MARKET, "security_id": SECURITY_ID,
+                "form_type": None, "fiscal_year": 2026, "fiscal_period": "Q3",
+                "language": None, "provider": "fmp", "provider_document_id": None,
+                "mode": "exact", "allow_download": False, "schema_version": "1.0",
+            },
+        }).encode("utf-8"),
+    )
+    assert envelope[0] == 0, envelope
+    assert json.loads(envelope[1].decode("utf-8"))["status"] == "found"
+
+    replay_transport = transport(owned_wiki, KNOWN_FIXTURE)
+    replay = resolve_companion_transcript(
+        request=companion_request(provider="fmp"), filing_handle=filing_handle(),
+        transport=replay_transport,
+    )
+    assert replay["status"] == "reused", replay
+    assert replay["provider"] == "fmp"
+    assert replay["source_ref"] == first["source_ref"]
+    assert replay["as_of_cutoff_verified"] is True
+    assert replay["provider_calls"] == 0
+    assert len(et_calls(owned_wiki)) == 1
+    assert replay_transport.company_wiki_calls == 2
+
+
 def test_real_ff_cli_reuses_the_registered_transcript_end_to_end(
     owned_wiki: OwnedWiki, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -409,6 +477,7 @@ def test_real_ff_cli_reuses_the_registered_transcript_end_to_end(
     owned_wiki.seed_transcript("msft_2026_q3_call.txt", KNOWN_TRANSCRIPT_BODY,
                                MOTLEY_SIDECAR)
     owned_wiki.run_scan()
+    owned_wiki.checkpoint()
     config = owned_wiki.launcher_config(
         earnings_transcripts_tool=str(owned_wiki.et_tool()),
         fmp_api_key_file=str(owned_wiki.key_file()),

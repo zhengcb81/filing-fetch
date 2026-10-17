@@ -116,7 +116,9 @@ def _lookup_unavailable(existing: dict[str, Any]) -> dict[str, Any]:
     status = "ambiguous" if existing["status"] == "ambiguous" else "upstream_error"
     return _result(
         status, reason=existing.get("reason") or "transcript_lookup_unavailable",
-        **_optional_fields(existing, ("provider_calls", "excluded_candidates")),
+        **_optional_fields(existing, (
+            "provider_calls", "excluded_candidates", "excluded_publication_statuses",
+        )),
     )
 
 

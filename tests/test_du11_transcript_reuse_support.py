@@ -189,8 +189,14 @@ class OwnedWiki:
     def __init__(self, source_tar: Path, *, label: str = "du11") -> None:
         self.root = Path(tempfile.mkdtemp(prefix=f"{label}-owned-"))
         self.source_tar = source_tar
-        self._baseline: dict[str, tuple[int, str, int]] | None = None
-        self._mutable_prefixes = ("companies/", ".source_catalog/", "runtime/")
+        self._initial: dict[str, tuple[int, str, int]] | None = None
+        self._checkpoint: dict[str, tuple[int, str, int]] | None = None
+        self._company_additions_expected = False
+        # Only catalogue state and the harness's own runtime files may grow.
+        self._growable_prefixes = (".source_catalog/", "runtime/")
+        # Paths that legitimately change during a run (the catalogue database and
+        # the fixture processes' own files); everything else must stay identical.
+        self._activity_prefixes = (".source_catalog/", "runtime/", "companies/")
 
     # -- construction -----------------------------------------------------
     def build(self, *, with_security_master: bool = True) -> "OwnedWiki":
@@ -214,7 +220,22 @@ class OwnedWiki:
         runtime.mkdir()
         self.et_tool().write_text(ET_TOOL_SCRIPT, encoding="utf-8")
         self.key_file().write_text("SYNTHETIC-TEST-KEY-0123456789", encoding="utf-8")
-        self._baseline = self.manifest()
+        self._initial = self.manifest()
+        return self
+
+    def checkpoint(self) -> "OwnedWiki":
+        """Snapshot the tree *after* the test's own seeding and catalog scan.
+
+        The restore comparison then treats only genuinely new catalogue/import
+        artifacts as additions, so an overwritten seed or a stray company file
+        cannot hide behind a "companies/" prefix.
+        """
+        self._checkpoint = self.manifest()
+        return self
+
+    def expect_canonical_imports(self) -> "OwnedWiki":
+        """Allow exactly one canonical import pair (original + sidecar) later."""
+        self._company_additions_expected = True
         return self
 
     def launcher_config(self, **optional: str) -> Path:
@@ -335,39 +356,55 @@ class OwnedWiki:
         return listing
 
     def restore_receipt(self) -> dict[str, object]:
-        assert self._baseline is not None, "build() must run before the receipt"
-        baseline = self._baseline
+        assert self._initial is not None, "build() must run before the receipt"
+        assert self._checkpoint is not None, "checkpoint() must run before the receipt"
+        checkpoint = self._checkpoint
         current = self.manifest()
-        changed: list[str] = []
-        removed: list[str] = []
-        added: list[str] = []
-        for name, entry in baseline.items():
-            if name not in current:
-                removed.append(name)
-            elif current[name] != entry:
-                changed.append(name)
-        for name in current:
-            if name not in baseline:
-                added.append(name)
-        allowed_added = [
-            name for name in added if name.startswith(self._mutable_prefixes)
+
+        # 1. The pre-test inventory: anything outside the catalogue/runtime
+        #    activity area (frozen source, config, sentinel, existing output)
+        #    must be byte- and mtime-identical.
+        frozen_changed = [
+            name
+            for name, entry in self._initial.items()
+            if not name.startswith(self._activity_prefixes)
+            and current.get(name) != entry
         ]
-        unexpected_added = [name for name in added if name not in allowed_added]
+        # 2. Everything seeded and scanned before the action must be untouched.
+        changed = [
+            name
+            for name, entry in checkpoint.items()
+            if name in current and current[name] != entry
+        ]
+        removed = [name for name in checkpoint if name not in current]
+        added = [name for name in current if name not in checkpoint]
+        growable = [name for name in added if name.startswith(self._growable_prefixes)]
+        company_added = [name for name in added if name not in growable]
+        transcript_prefix = "/".join(TRANSCRIPT_DIR) + "/"
+        if self._company_additions_expected:
+            # One canonical import writes exactly the original and its sidecar.
+            unexpected_company = [
+                name
+                for name in company_added
+                if not name.startswith(transcript_prefix)
+            ]
+            assert len(company_added) == 2, company_added
+            assert len(unexpected_company) == 0, unexpected_company
+            assert sum(name.endswith(".source.json") for name in company_added) == 1
+        else:
+            unexpected_company = company_added
         restore_changed = [
             name for name in changed + removed if name.startswith("restore/")
         ]
-        frozen_changed = [
-            name
-            for name in changed + removed
-            if name.startswith("src/") or name == "pyproject.toml"
-        ]
         return {
-            "baseline_entries": len(baseline),
+            "initial_entries": len(self._initial),
+            "checkpoint_entries": len(checkpoint),
             "current_entries": len(current),
-            "changed": changed,
-            "removed": removed,
-            "added": allowed_added,
-            "unexpected_added": unexpected_added,
+            "changed_since_checkpoint": changed,
+            "removed_since_checkpoint": removed,
+            "catalogue_or_runtime_added": growable,
+            "canonical_import_added": company_added,
+            "unexpected_added": unexpected_company,
             "restore_entry_changed": restore_changed,
             "frozen_source_changed": frozen_changed,
             "root": str(self.root),
@@ -378,7 +415,7 @@ class OwnedWiki:
         assert receipt["restore_entry_changed"] == [], receipt
         assert receipt["frozen_source_changed"] == [], receipt
         assert receipt["unexpected_added"] == [], receipt
-        assert receipt["removed"] == [], receipt
+        assert receipt["removed_since_checkpoint"] == [], receipt
         return receipt
 
     def cleanup(self) -> None:

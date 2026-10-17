@@ -1006,9 +1006,12 @@ class EarningsTranscriptsTransport:
                 "provider_calls": 1,
             }
         receipt = self._verified_open(ref)
-        # The verified manifest names the committed provenance. The CWP import
-        # contract already proved the tool result's provider equals the
-        # candidate's, so that declaration is the fallback, never a request default.
+        # The verified manifest names the committed provenance. Only when it
+        # does not is the tool result's own declaration used, and that is still
+        # a CWP-validated fact rather than a request default: the import
+        # contract requires tool_result.provider == candidate.provider, and FF
+        # builds the candidate from this same fetched result. If neither
+        # exists the provider stays unknown (the key is omitted).
         provider = self._manifest_provider(receipt)
         if provider is None:
             declared = fetched.get("provider")

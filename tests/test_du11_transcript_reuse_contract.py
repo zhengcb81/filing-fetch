@@ -800,6 +800,49 @@ def test_acquire_requery_with_a_contract_violation_never_downloads(
     assert fake.kinds() == ["query"]
 
 
+def test_a_candidate_without_any_provider_is_reused_with_the_manifest_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: Path
+) -> None:
+    """Literal card case: the query candidate names no provider at all."""
+    payload = query_found(LOCAL_RAW)
+    payload["candidates"][0].pop("provider")
+    fake = FakeCWP(
+        queries=[payload],
+        reader=[reader_entry(LOCAL_RAW, provider="motley_fool")],
+    )
+    transport = build(monkeypatch, fake, tool)
+    result = resolve_companion_transcript(
+        request=companion_request(), filing_handle=filing(), transport=transport,
+    )
+    assert result["status"] == "reused", result
+    assert result["provider"] == "motley_fool"
+    assert result["source_ref"] == ref_for(LOCAL_RAW)
+    assert fake.count("et") == 0
+
+
+def test_a_download_without_manifest_or_declared_provider_keeps_provider_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: Path
+) -> None:
+    """No manifest provider and no tool declaration stays unknown, never `fmp`."""
+    fetched = fetched_result()
+    fetched.pop("provider")
+    fake = FakeCWP(
+        queries=[query_not_found()],
+        fetched=fetched,
+        imported=imported_result(),
+        reader=[reader_entry(FMP_PAYLOAD, manifest=False)],
+        tool=tool,
+    )
+    transport = build(monkeypatch, fake, tool)
+    result = resolve_companion_transcript(
+        request=companion_request(), filing_handle=filing(), transport=transport,
+    )
+    assert result["status"] == "downloaded", result
+    assert "provider" not in result
+    assert result["provider_calls"] == 1
+    assert fake.count("et") == 1
+
+
 @pytest.mark.parametrize("provider", ["motley_fool", "sec"])
 def test_an_unsupported_provider_option_is_named_and_calls_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: Path, provider: str
