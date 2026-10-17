@@ -1,0 +1,85 @@
+{
+  "cases": {
+    "envelope_provider_fmp": {
+      "candidate_provider": null,
+      "candidates": 0,
+      "excluded": [],
+      "exit": 0,
+      "reason": "no_local_match",
+      "status": "not_found"
+    },
+    "envelope_provider_null": {
+      "candidate_provider": null,
+      "candidates": 0,
+      "excluded": [],
+      "exit": 2,
+      "reason": "invalid_request",
+      "status": "blocked"
+    },
+    "ff_companion_provider_omitted": {
+      "as_of_cutoff_verified": true,
+      "company_wiki_calls": 2,
+      "et_calls": 0,
+      "fiscal_quarter": 3,
+      "fiscal_year": 2026,
+      "provider": "motley_fool",
+      "provider_calls": 0,
+      "reason": null,
+      "source_ref": {
+        "byte_size": 81,
+        "content_sha256": "7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851",
+        "document_id": "urn:company-wiki:document:sha256:7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851",
+        "mime_type": "text/plain",
+        "schema_version": "2.0",
+        "source_id": "urn:company-wiki:source:sha256:7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851"
+      },
+      "status": "reused"
+    },
+    "neutral_plain_provider_fmp": {
+      "candidate_provider": null,
+      "candidates": 0,
+      "excluded": [],
+      "exit": 0,
+      "reason": "no_local_match",
+      "status": "not_found"
+    },
+    "neutral_plain_request": {
+      "candidate_provider": "motley_fool",
+      "candidates": 1,
+      "excluded": [],
+      "exit": 0,
+      "reason": "one_local_match",
+      "status": "found"
+    },
+    "reader_receipt": {
+      "byte_size_matches_ref": true,
+      "bytes_sha256_matches_ref": true,
+      "exit": 0,
+      "manifest_fiscal_period": "Q3",
+      "manifest_provider": "motley_fool",
+      "manifest_published_date": "2026-07-22",
+      "manifest_security_id": "MSFT"
+    }
+  },
+  "cwp_commit": "34a7dd71aaa49d18c13fcdd300ce79581114ca5b",
+  "cwp_src_tar_sha256": "555b11a87ebd67858c08ddbc08971fc97deff3b19079444dc738b6eafa558eac",
+  "ff_commit": {
+    "source_commit": "5dee9a20c1c5952688673caf784fdce4e9391a50",
+    "worktree": true
+  },
+  "ff_scripts": "C:\\Users\\\u90d1\u66fe\u6ce2\\Projects\\filing-fetch-du11-local-transcript-reuse\\scripts",
+  "ff_scripts_sha256": {
+    "transcript_companion.py": "7e3f28a5928270850af308b9d20f4187cbaa985f1e0a5b4dffb83c3a1c0084be",
+    "transcript_reuse_selection.py": "8591e9968d5d23c4e056a32062ea4b4fdbac63c3421523d921f3176d93823231",
+    "transcript_tool_transport.py": "20f8903df96af64de94d3ce6959ecdb0a36555589f6c410a8e83e9f9a6276999"
+  },
+  "label": "worktree du11 implementation",
+  "llm_calls": 0,
+  "network_calls": 0,
+  "owned_temp_removed": true,
+  "scan": {
+    "exit": 0
+  },
+  "seed_bytes": 81,
+  "seed_sha256": "7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851"
+}

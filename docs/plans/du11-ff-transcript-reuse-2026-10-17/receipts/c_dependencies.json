@@ -1,0 +1,61 @@
+{
+  "cwp_repo": "C:\\Users\\\u90d1\u66fe\u6ce2\\Projects\\company-wiki",
+  "cwp_worktree_head_at_capture": "d52a6562ffb858f6bebe78322ce14198df1d0144",
+  "frozen_cwp_commit": "34a7dd71aaa49d18c13fcdd300ce79581114ca5b",
+  "archive_spec": [
+    "src",
+    "pyproject.toml"
+  ],
+  "archive_tar_sha256": "555b11a87ebd67858c08ddbc08971fc97deff3b19079444dc738b6eafa558eac",
+  "extracted_file_count": 356,
+  "extracted_python_files": 349,
+  "direct_contract_files": {
+    "src/company_wiki/source_catalog/source_query_cli.py": {
+      "git_blob_sha1": "31ef524f5d04543d9066b2ca8dc7fef49e2c2d50"
+    },
+    "src/company_wiki/source_catalog/source_reader_cli.py": {
+      "git_blob_sha1": "467c67859a96eddb0455c08264e5b9179159e2c6"
+    },
+    "src/company_wiki/source_catalog/transcript_import_cli.py": {
+      "git_blob_sha1": "ab5fef438e7f4411873fbf4ec67f41cbb3cab3c9"
+    },
+    "src/company_wiki/source_catalog/source_reader.py": {
+      "git_blob_sha1": "b19d3a843d552c077dbee215a2d020f6c64a37a4"
+    },
+    "src/company_wiki/source_catalog/qualification.py": {
+      "git_blob_sha1": "cde7ba0f01c7957d72bca6ff1395df0668d53f2b"
+    },
+    "src/company_wiki/source_catalog/resolver.py": {
+      "git_blob_sha1": "a7e3003aaaaa0401c112f282cd5c6c9c2aa3336d"
+    },
+    "src/company_wiki/source_catalog/scanner.py": {
+      "git_blob_sha1": "b66f8c994e1cc0be6a92f3f54406e0584cba5a93"
+    },
+    "src/company_wiki/source_catalog/canonical_writer.py": {
+      "git_blob_sha1": "028492c89141cba404663e46cbe035a35c8658df"
+    },
+    "src/company_wiki/source_catalog/transcript_import.py": {
+      "git_blob_sha1": "b04796d4b329e47d4167ea21ea1444c69371aca3"
+    },
+    "src/company_wiki/source_catalog/transcript_tool_contract.py": {
+      "git_blob_sha1": "ef2acdb97ab4424e25c952accc122f617a72fbb0"
+    },
+    "src/company_wiki/source_catalog/transcript_fmp_contract.py": {
+      "git_blob_sha1": "00a09bc88cb8312fb93a353706bdbeb00f2a8aba"
+    },
+    "src/company_wiki/source_catalog/metadata_observation.py": {
+      "git_blob_sha1": "5378c09bac295aa941fd5ac05e27c632e6d49695"
+    },
+    "src/company_wiki/source_catalog/cli.py": {
+      "git_blob_sha1": "77e92b07580c58c8bbc68f7168f04873c358a87c"
+    }
+  },
+  "et_repo": {
+    "path": "C:\\Users\\\u90d1\u66fe\u6ce2\\Projects\\earnings-transcripts\\earnings-transcripts",
+    "expected_commit": "2584b7eed062a9a30254bc06b4f19ab5471b414e",
+    "commit_present": true,
+    "worktree_head": "2584b7eed062a9a30254bc06b4f19ab5471b414e",
+    "executed_by_this_card": false,
+    "boundary": "the ET supplier is an offline fixture process; no ET source is imported"
+  }
+}

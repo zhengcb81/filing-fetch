@@ -1,0 +1,58 @@
+{
+  "du11_card_tests": {
+    "collected": 109,
+    "passed": 109,
+    "failed": [],
+    "skipped": 0,
+    "skipped_names": [],
+    "seconds": 100.14,
+    "modules": [
+      "tests/test_du11_transcript_reuse_support.py",
+      "tests/test_du11_transcript_reuse_selection.py",
+      "tests/test_du11_transcript_reuse_contract.py",
+      "tests/test_du11_transcript_reuse_e2e.py"
+    ],
+    "per_module": {
+      "tests/test_du11_transcript_reuse_contract.py": 45,
+      "tests/test_du11_transcript_reuse_e2e.py": 10,
+      "tests/test_du11_transcript_reuse_selection.py": 47,
+      "tests/test_du11_transcript_reuse_support.py": 7
+    }
+  },
+  "central_regression": {
+    "collected": 260,
+    "passed": 257,
+    "failed": [],
+    "skipped": 3,
+    "skipped_names": [
+      "test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[HKEX-unsupported_market]",
+      "test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[NASDAQ-provider_credentials_missing]",
+      "test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[TOKYO-unsupported_exchange]"
+    ],
+    "seconds": 13.89,
+    "modules": [
+      "tests/test_transcript_companion.py",
+      "tests/test_transcript_companion_transport.py",
+      "tests/test_transcript_launch_contract.py",
+      "tests/test_transcript_response_budget.py",
+      "tests/test_ff_v2_contract.py",
+      "tests/test_cwp_s0b_source_ref_contract.py",
+      "tests/test_acquisition_failure_consumer.py",
+      "tests/test_failure_usage_continuity.py",
+      "tests/test_m3_acquisition_usage_ff.py",
+      "tests/test_provider_diagnostics_cli.py"
+    ],
+    "per_module": {
+      "tests/test_acquisition_failure_consumer.py": 77,
+      "tests/test_cwp_s0b_source_ref_contract.py": 4,
+      "tests/test_failure_usage_continuity.py": 19,
+      "tests/test_ff_v2_contract.py": 12,
+      "tests/test_m3_acquisition_usage_ff.py": 21,
+      "tests/test_provider_diagnostics_cli.py": 10,
+      "tests/test_transcript_companion.py": 14,
+      "tests/test_transcript_companion_transport.py": 19,
+      "tests/test_transcript_launch_contract.py": 78,
+      "tests/test_transcript_response_budget.py": 6
+    }
+  }
+}

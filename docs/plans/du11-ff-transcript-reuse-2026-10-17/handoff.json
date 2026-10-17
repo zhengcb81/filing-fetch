@@ -1,0 +1,601 @@
+{
+  "card_id": "du11-ff-transcript-reuse",
+  "card_path": "C:/Users/\u90d1\u66fe\u6ce2/Projects/company-wiki/docs/plans/document-understanding-2026-10-13/parallel/du11-2026-10-17/du11_ff_transcript_reuse.md",
+  "status": "COMPLETE",
+  "base_commit": "f1a939e522c22b23659712a8bd2b344f5eb0a364",
+  "branch": "codex/du11-ff-transcript-reuse",
+  "worktree": "C:\\Users\\\u90d1\u66fe\u6ce2\\Projects\\filing-fetch-du11-local-transcript-reuse",
+  "implementation_commits": [
+    "c787757a9f0409777fd6d469a90d2371bce706d5",
+    "d16dce21c88459c12ea88b14f36af44617bd8c1b",
+    "5dee9a20c1c5952688673caf784fdce4e9391a50"
+  ],
+  "final_delivery_commit": "docs-only handoff commit on this branch whose parent is the frozen source head 5dee9a20c1c5952688673caf784fdce4e9391a50; ROOT verifies the actual HEAD (git log -1), which touches only docs/plans/du11-ff-transcript-reuse-2026-10-17/**",
+  "author_scope": {
+    "changed_paths": [
+      "scripts/transcript_companion.py",
+      "scripts/transcript_reuse_selection.py",
+      "scripts/transcript_tool_transport.py",
+      "tests/fixtures/du11_transcript_reuse/fmp_known_publication.fetched.json",
+      "tests/test_du11_transcript_reuse_contract.py",
+      "tests/test_du11_transcript_reuse_e2e.py",
+      "tests/test_du11_transcript_reuse_selection.py",
+      "tests/test_du11_transcript_reuse_support.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/findings.md",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/handoff.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/handoff.md",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/progress.md",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/A_RED_after_fix.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/A_RED_baseline.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/ab_probe.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/c_dependencies.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/c_mutation_check.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/c_restore_receipt.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/c_test_summary.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/make_fixture.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/make_handoff.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/mutation_check.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/restore_probe.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/reviewer_report.md",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/task_plan.md"
+    ],
+    "source_files": [
+      "scripts/transcript_companion.py",
+      "scripts/transcript_reuse_selection.py",
+      "scripts/transcript_tool_transport.py"
+    ],
+    "test_files": [
+      "tests/fixtures/du11_transcript_reuse/fmp_known_publication.fetched.json",
+      "tests/test_du11_transcript_reuse_contract.py",
+      "tests/test_du11_transcript_reuse_e2e.py",
+      "tests/test_du11_transcript_reuse_selection.py",
+      "tests/test_du11_transcript_reuse_support.py"
+    ],
+    "plan_files": [
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/findings.md",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/handoff.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/handoff.md",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/progress.md",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/A_RED_after_fix.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/A_RED_baseline.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/ab_probe.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/c_dependencies.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/c_mutation_check.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/c_restore_receipt.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/c_test_summary.json",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/make_fixture.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/make_handoff.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/mutation_check.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/restore_probe.py",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/receipts/reviewer_report.md",
+      "docs/plans/du11-ff-transcript-reuse-2026-10-17/task_plan.md"
+    ],
+    "outside_whitelist": [],
+    "not_modified_on_purpose": [
+      "scripts/ff_v2_envelope.py (public envelope already carries the real provider; no weakening of source/fee/SHA checks was needed)",
+      "scripts/fetch_filing.py, scripts/filing_contracts.py, config/**, tools/offline_contract_matrix/**, company-wiki and earnings-transcripts sources, skill install directories"
+    ],
+    "source_freeze_sha256": {
+      "scripts/transcript_companion.py": "7e3f28a5928270850af308b9d20f4187cbaa985f1e0a5b4dffb83c3a1c0084be",
+      "scripts/transcript_reuse_selection.py": "8591e9968d5d23c4e056a32062ea4b4fdbac63c3421523d921f3176d93823231",
+      "scripts/transcript_tool_transport.py": "20f8903df96af64de94d3ce6959ecdb0a36555589f6c410a8e83e9f9a6276999",
+      "tests/fixtures/du11_transcript_reuse/fmp_known_publication.fetched.json": "62e87b4e358048a10e876184142a6e36fd1d087220ce1cc546b05b476492db2f",
+      "tests/test_du11_transcript_reuse_contract.py": "df85a5a871ecd88bc5a111d618110ecdb4768b8ef92859605f13fef9ae000555",
+      "tests/test_du11_transcript_reuse_e2e.py": "2b749da3602756a053a116e31cf5fb8f9ec02fdc2b30e2df17057c5fb507f06a",
+      "tests/test_du11_transcript_reuse_selection.py": "15bbc2621fd3accdb0943f3cdc3980cb7b1ec59ede3ce923d1d0a42e23d2cdd0",
+      "tests/test_du11_transcript_reuse_support.py": "1adedc50acb402a098754ab1f853e89b430299093421ca93a008e29180dbdd2a"
+    }
+  },
+  "input_output_schema": {
+    "request_schema": "unchanged: filing_contracts._validate_companion_request still allows only intent/fiscal_year/fiscal_quarter/provider/acquisition_limits and still rejects providers other than fmp",
+    "response_schema": "unchanged: ff_v2_envelope._TRANSCRIPT_KEYS untouched; new diagnostics (qualification, excluded_candidates) stay inside the child result and are dropped by the public serializer; provider is omitted when the verified manifest does not name one",
+    "new_named_reasons": [
+      "transcript_lookup_contract",
+      "transcript_lookup_source_ref",
+      "transcript_lookup_identity_mismatch",
+      "transcript_provider_mismatch",
+      "unsupported_transcript_provider",
+      "publication_date_unknown",
+      "publication_after_as_of",
+      "publication_date_invalid",
+      "transcript_lookup_changed"
+    ],
+    "compatibility_matrix": "handoff.md section 3",
+    "internal_diagnostic_keys": [
+      "qualification",
+      "excluded_candidates"
+    ]
+  },
+  "tests": {
+    "card": {
+      "collected": 109,
+      "passed": 109,
+      "failed": [],
+      "skipped": 0,
+      "skipped_names": [],
+      "seconds": 100.14,
+      "modules": [
+        "tests/test_du11_transcript_reuse_support.py",
+        "tests/test_du11_transcript_reuse_selection.py",
+        "tests/test_du11_transcript_reuse_contract.py",
+        "tests/test_du11_transcript_reuse_e2e.py"
+      ],
+      "per_module": {
+        "tests/test_du11_transcript_reuse_contract.py": 45,
+        "tests/test_du11_transcript_reuse_e2e.py": 10,
+        "tests/test_du11_transcript_reuse_selection.py": 47,
+        "tests/test_du11_transcript_reuse_support.py": 7
+      }
+    },
+    "central_regression": {
+      "collected": 260,
+      "passed": 257,
+      "failed": [],
+      "skipped": 3,
+      "skipped_names": [
+        "test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[HKEX-unsupported_market]",
+        "test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[NASDAQ-provider_credentials_missing]",
+        "test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[TOKYO-unsupported_exchange]"
+      ],
+      "seconds": 13.89,
+      "modules": [
+        "tests/test_transcript_companion.py",
+        "tests/test_transcript_companion_transport.py",
+        "tests/test_transcript_launch_contract.py",
+        "tests/test_transcript_response_budget.py",
+        "tests/test_ff_v2_contract.py",
+        "tests/test_cwp_s0b_source_ref_contract.py",
+        "tests/test_acquisition_failure_consumer.py",
+        "tests/test_failure_usage_continuity.py",
+        "tests/test_m3_acquisition_usage_ff.py",
+        "tests/test_provider_diagnostics_cli.py"
+      ],
+      "per_module": {
+        "tests/test_acquisition_failure_consumer.py": 77,
+        "tests/test_cwp_s0b_source_ref_contract.py": 4,
+        "tests/test_failure_usage_continuity.py": 19,
+        "tests/test_ff_v2_contract.py": 12,
+        "tests/test_m3_acquisition_usage_ff.py": 21,
+        "tests/test_provider_diagnostics_cli.py": 10,
+        "tests/test_transcript_companion.py": 14,
+        "tests/test_transcript_companion_transport.py": 19,
+        "tests/test_transcript_launch_contract.py": 78,
+        "tests/test_transcript_response_budget.py": 6
+      }
+    },
+    "commands": [
+      "python -m ruff check scripts tests",
+      "python -m pytest tests/test_du11_transcript_reuse_selection.py tests/test_du11_transcript_reuse_contract.py tests/test_du11_transcript_reuse_e2e.py -q",
+      "python -m pytest tests/test_transcript_companion.py tests/test_transcript_companion_transport.py tests/test_transcript_launch_contract.py tests/test_transcript_response_budget.py tests/test_ff_v2_contract.py tests/test_cwp_s0b_source_ref_contract.py tests/test_acquisition_failure_consumer.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_provider_diagnostics_cli.py -q",
+      "python -m pytest tests -q   (full repo; 9 pre-existing failures also fail at the base commit)"
+    ],
+    "mutation_check": {
+      "isolated_tree": true,
+      "tests": [
+        "tests/test_du11_transcript_reuse_selection.py",
+        "tests/test_du11_transcript_reuse_contract.py"
+      ],
+      "mutations": [
+        {
+          "mutation": "M1 source request relabels an omitted provider as fmp",
+          "file": "scripts/transcript_tool_transport.py",
+          "exit": 1,
+          "summary": "3 failed, 89 passed in 1.62s",
+          "failed_tests": [
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_queries_without_a_provider_and_reuses_the_local_source",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_reused_provider_comes_from_the_verified_reader_manifest",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_acquisition_still_uses_only_fmp"
+          ],
+          "detected": true
+        },
+        {
+          "mutation": "M2 neutral lookup goes through the provider-scoped envelope",
+          "file": "scripts/transcript_tool_transport.py",
+          "exit": 1,
+          "summary": "3 failed, 89 passed in 1.73s",
+          "failed_tests": [
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_queries_without_a_provider_and_reuses_the_local_source",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_reused_provider_comes_from_the_verified_reader_manifest",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_acquisition_still_uses_only_fmp"
+          ],
+          "detected": true
+        },
+        {
+          "mutation": "M3 reused provider falls back to fmp",
+          "file": "scripts/transcript_tool_transport.py",
+          "exit": 1,
+          "summary": "1 failed, 91 passed in 1.58s",
+          "failed_tests": [
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_missing_manifest_provider_stays_unknown_and_is_never_relabelled_fmp"
+          ],
+          "detected": true
+        },
+        {
+          "mutation": "M4 a gap becomes a silent miss (download allowed)",
+          "file": "scripts/transcript_tool_transport.py",
+          "exit": 1,
+          "summary": "6 failed, 86 passed in 1.52s",
+          "failed_tests": [
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_several_unknown_exclusions_become_the_named_gap_without_any_download",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_restricted_exclusions_are_reported_with_their_own_qualification[statuses0-publication_after_as_of]",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_restricted_exclusions_are_reported_with_their_own_qualification[statuses1-publication_date_invalid]",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_restricted_exclusions_are_reported_with_their_own_qualification[statuses2-publication_date_invalid]",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_restricted_exclusions_are_reported_with_their_own_qualification[statuses3-publication_date_unknown]",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_reuse_only_intent_never_downloads_after_a_named_gap"
+          ],
+          "detected": true
+        },
+        {
+          "mutation": "M5 companion maps an omitted provider back to fmp",
+          "file": "scripts/transcript_companion.py",
+          "exit": 1,
+          "summary": "7 failed, 85 passed in 1.75s",
+          "failed_tests": [
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_queries_without_a_provider_and_reuses_the_local_source",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_reused_provider_comes_from_the_verified_reader_manifest",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_single_unknown_publication_exclusion_keeps_the_observation_without_a_read",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_qualified_match_wins_over_an_unknown_exclusion",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_acquisition_still_uses_only_fmp",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_candidate_without_any_provider_is_reused_with_the_manifest_provider",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_the_public_v2_envelope_keeps_the_real_provider_and_measured_zero"
+          ],
+          "detected": true
+        },
+        {
+          "mutation": "M6 the unknown observation is read again (extra GET)",
+          "file": "scripts/transcript_tool_transport.py",
+          "exit": 1,
+          "summary": "1 failed, 91 passed in 1.71s",
+          "failed_tests": [
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_single_unknown_publication_exclusion_keeps_the_observation_without_a_read"
+          ],
+          "detected": true
+        },
+        {
+          "mutation": "M7 a single unknown exclusion is reported as a true miss",
+          "file": "scripts/transcript_reuse_selection.py",
+          "exit": 1,
+          "summary": "3 failed, 89 passed in 1.11s",
+          "failed_tests": [
+            "FAILED tests/test_du11_transcript_reuse_selection.py::test_one_unknown_excluded_candidate_keeps_ref_and_qualification",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_single_unknown_publication_exclusion_keeps_the_observation_without_a_read",
+            "FAILED tests/test_du11_transcript_reuse_contract.py::test_acquire_requery_with_local_evidence_never_downloads[exclusions0-qualification]"
+          ],
+          "detected": true
+        }
+      ],
+      "baseline": {
+        "exit": 0,
+        "summary": "92 passed in 0.88s",
+        "failed": []
+      },
+      "pristine_restored": true,
+      "undetected": [],
+      "shared_worktree_untouched": true,
+      "isolated_tree_removed": true
+    }
+  },
+  "a_red": {
+    "baseline": {
+      "as_of_cutoff_verified": true,
+      "company_wiki_calls": 3,
+      "et_calls": 1,
+      "fiscal_quarter": 3,
+      "fiscal_year": 2026,
+      "provider": "fmp",
+      "provider_calls": 1,
+      "reason": null,
+      "source_ref": {
+        "byte_size": 353,
+        "content_sha256": "c6a6b3e9c8c1f484d7959c45ce1f4c111f70d0c55c71e6549ecc2cf3714d3232",
+        "document_id": "urn:company-wiki:document:sha256:c6a6b3e9c8c1f484d7959c45ce1f4c111f70d0c55c71e6549ecc2cf3714d3232",
+        "mime_type": "application/json",
+        "schema_version": "2.0",
+        "source_id": "urn:company-wiki:source:sha256:c6a6b3e9c8c1f484d7959c45ce1f4c111f70d0c55c71e6549ecc2cf3714d3232"
+      },
+      "status": "downloaded"
+    },
+    "after_fix": {
+      "as_of_cutoff_verified": true,
+      "company_wiki_calls": 2,
+      "et_calls": 0,
+      "fiscal_quarter": 3,
+      "fiscal_year": 2026,
+      "provider": "motley_fool",
+      "provider_calls": 0,
+      "reason": null,
+      "source_ref": {
+        "byte_size": 81,
+        "content_sha256": "7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851",
+        "document_id": "urn:company-wiki:document:sha256:7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851",
+        "mime_type": "text/plain",
+        "schema_version": "2.0",
+        "source_id": "urn:company-wiki:source:sha256:7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851"
+      },
+      "status": "reused"
+    },
+    "wire_observations": {
+      "baseline": {
+        "envelope_provider_fmp": {
+          "candidate_provider": null,
+          "candidates": 0,
+          "excluded": [],
+          "exit": 0,
+          "reason": "no_local_match",
+          "status": "not_found"
+        },
+        "envelope_provider_null": {
+          "candidate_provider": null,
+          "candidates": 0,
+          "excluded": [],
+          "exit": 2,
+          "reason": "invalid_request",
+          "status": "blocked"
+        },
+        "ff_companion_provider_omitted": {
+          "as_of_cutoff_verified": true,
+          "company_wiki_calls": 3,
+          "et_calls": 1,
+          "fiscal_quarter": 3,
+          "fiscal_year": 2026,
+          "provider": "fmp",
+          "provider_calls": 1,
+          "reason": null,
+          "source_ref": {
+            "byte_size": 353,
+            "content_sha256": "c6a6b3e9c8c1f484d7959c45ce1f4c111f70d0c55c71e6549ecc2cf3714d3232",
+            "document_id": "urn:company-wiki:document:sha256:c6a6b3e9c8c1f484d7959c45ce1f4c111f70d0c55c71e6549ecc2cf3714d3232",
+            "mime_type": "application/json",
+            "schema_version": "2.0",
+            "source_id": "urn:company-wiki:source:sha256:c6a6b3e9c8c1f484d7959c45ce1f4c111f70d0c55c71e6549ecc2cf3714d3232"
+          },
+          "status": "downloaded"
+        },
+        "neutral_plain_provider_fmp": {
+          "candidate_provider": null,
+          "candidates": 0,
+          "excluded": [],
+          "exit": 0,
+          "reason": "no_local_match",
+          "status": "not_found"
+        },
+        "neutral_plain_request": {
+          "candidate_provider": "motley_fool",
+          "candidates": 1,
+          "excluded": [],
+          "exit": 0,
+          "reason": "one_local_match",
+          "status": "found"
+        },
+        "reader_receipt": {
+          "byte_size_matches_ref": true,
+          "bytes_sha256_matches_ref": true,
+          "exit": 0,
+          "manifest_fiscal_period": "Q3",
+          "manifest_provider": "motley_fool",
+          "manifest_published_date": "2026-07-22",
+          "manifest_security_id": "MSFT"
+        }
+      },
+      "after_fix": {
+        "envelope_provider_fmp": {
+          "candidate_provider": null,
+          "candidates": 0,
+          "excluded": [],
+          "exit": 0,
+          "reason": "no_local_match",
+          "status": "not_found"
+        },
+        "envelope_provider_null": {
+          "candidate_provider": null,
+          "candidates": 0,
+          "excluded": [],
+          "exit": 2,
+          "reason": "invalid_request",
+          "status": "blocked"
+        },
+        "ff_companion_provider_omitted": {
+          "as_of_cutoff_verified": true,
+          "company_wiki_calls": 2,
+          "et_calls": 0,
+          "fiscal_quarter": 3,
+          "fiscal_year": 2026,
+          "provider": "motley_fool",
+          "provider_calls": 0,
+          "reason": null,
+          "source_ref": {
+            "byte_size": 81,
+            "content_sha256": "7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851",
+            "document_id": "urn:company-wiki:document:sha256:7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851",
+            "mime_type": "text/plain",
+            "schema_version": "2.0",
+            "source_id": "urn:company-wiki:source:sha256:7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851"
+          },
+          "status": "reused"
+        },
+        "neutral_plain_provider_fmp": {
+          "candidate_provider": null,
+          "candidates": 0,
+          "excluded": [],
+          "exit": 0,
+          "reason": "no_local_match",
+          "status": "not_found"
+        },
+        "neutral_plain_request": {
+          "candidate_provider": "motley_fool",
+          "candidates": 1,
+          "excluded": [],
+          "exit": 0,
+          "reason": "one_local_match",
+          "status": "found"
+        },
+        "reader_receipt": {
+          "byte_size_matches_ref": true,
+          "bytes_sha256_matches_ref": true,
+          "exit": 0,
+          "manifest_fiscal_period": "Q3",
+          "manifest_provider": "motley_fool",
+          "manifest_published_date": "2026-07-22",
+          "manifest_security_id": "MSFT"
+        }
+      }
+    },
+    "fix_mapping": [
+      "provider hard-coded fmp in _source_request -> provider passed through (omitted stays null)",
+      "always the lookup-request/1 envelope -> plain SourceRequest on the omitted-provider path, envelope kept for explicit fmp",
+      "reused provider returned as fmp -> manifest.provider of the verified reader receipt",
+      "unknown/as-of exclusions invisible -> named unknown/gap outcomes with zero downloads",
+      "companion mapped omitted provider to fmp -> omitted stays omitted"
+    ]
+  },
+  "c_e2e": {
+    "layer_chain": [
+      "resolve_companion_transcript (real FF code)",
+      "EarningsTranscriptsTransport.lookup_exact (real FF code)",
+      "python -m company_wiki.source_catalog.source_query_cli (real frozen CWP, plain SourceRequest, provider=null)",
+      "python -m company_wiki.source_catalog.source_reader_cli (real frozen CWP verified open)",
+      "offline ET fixture process (registered but must never run)"
+    ],
+    "mock_boundary": "only the ET supplier process is synthetic (a local script that records every call and replays a fixed fixture result); the FF companion and transport, the three company-wiki CLIs, the catalog SQLite state, the scanner and the canonical import are real",
+    "result": {
+      "as_of_cutoff_verified": true,
+      "fiscal_quarter": 3,
+      "fiscal_year": 2026,
+      "provider": "motley_fool",
+      "provider_calls": 0,
+      "publication_date": "2026-07-22",
+      "source_sha256": "971e29f6bfc701b83f51d424dfb73e5dd4223c307e0131caa19b5ce1105a7b11",
+      "status": "reused"
+    },
+    "et_calls": 0,
+    "company_wiki_child_calls": 2,
+    "public_cli_case": "tests/test_du11_transcript_reuse_e2e.py::test_real_ff_cli_reuses_the_registered_transcript_end_to_end runs the public scripts/fetch_filing.py with a v2 request"
+  },
+  "frozen_upstream": {
+    "cwp_commit": "34a7dd71aaa49d18c13fcdd300ce79581114ca5b",
+    "cwp_archive_tar_sha256": "555b11a87ebd67858c08ddbc08971fc97deff3b19079444dc738b6eafa558eac",
+    "cwp_archive_spec": [
+      "src",
+      "pyproject.toml"
+    ],
+    "cwp_extracted_file_count": 356,
+    "cwp_direct_contract_files": {
+      "src/company_wiki/source_catalog/source_query_cli.py": {
+        "git_blob_sha1": "31ef524f5d04543d9066b2ca8dc7fef49e2c2d50"
+      },
+      "src/company_wiki/source_catalog/source_reader_cli.py": {
+        "git_blob_sha1": "467c67859a96eddb0455c08264e5b9179159e2c6"
+      },
+      "src/company_wiki/source_catalog/transcript_import_cli.py": {
+        "git_blob_sha1": "ab5fef438e7f4411873fbf4ec67f41cbb3cab3c9"
+      },
+      "src/company_wiki/source_catalog/source_reader.py": {
+        "git_blob_sha1": "b19d3a843d552c077dbee215a2d020f6c64a37a4"
+      },
+      "src/company_wiki/source_catalog/qualification.py": {
+        "git_blob_sha1": "cde7ba0f01c7957d72bca6ff1395df0668d53f2b"
+      },
+      "src/company_wiki/source_catalog/resolver.py": {
+        "git_blob_sha1": "a7e3003aaaaa0401c112f282cd5c6c9c2aa3336d"
+      },
+      "src/company_wiki/source_catalog/scanner.py": {
+        "git_blob_sha1": "b66f8c994e1cc0be6a92f3f54406e0584cba5a93"
+      },
+      "src/company_wiki/source_catalog/canonical_writer.py": {
+        "git_blob_sha1": "028492c89141cba404663e46cbe035a35c8658df"
+      },
+      "src/company_wiki/source_catalog/transcript_import.py": {
+        "git_blob_sha1": "b04796d4b329e47d4167ea21ea1444c69371aca3"
+      },
+      "src/company_wiki/source_catalog/transcript_tool_contract.py": {
+        "git_blob_sha1": "ef2acdb97ab4424e25c952accc122f617a72fbb0"
+      },
+      "src/company_wiki/source_catalog/transcript_fmp_contract.py": {
+        "git_blob_sha1": "00a09bc88cb8312fb93a353706bdbeb00f2a8aba"
+      },
+      "src/company_wiki/source_catalog/metadata_observation.py": {
+        "git_blob_sha1": "5378c09bac295aa941fd5ac05e27c632e6d49695"
+      },
+      "src/company_wiki/source_catalog/cli.py": {
+        "git_blob_sha1": "77e92b07580c58c8bbc68f7168f04873c358a87c"
+      }
+    },
+    "et": {
+      "path": "C:\\Users\\\u90d1\u66fe\u6ce2\\Projects\\earnings-transcripts\\earnings-transcripts",
+      "expected_commit": "2584b7eed062a9a30254bc06b4f19ab5471b414e",
+      "commit_present": true,
+      "worktree_head": "2584b7eed062a9a30254bc06b4f19ab5471b414e",
+      "executed_by_this_card": false,
+      "boundary": "the ET supplier is an offline fixture process; no ET source is imported"
+    }
+  },
+  "restore_receipt": {
+    "canonical_import_added": [],
+    "catalogue_or_runtime_added": [
+      ".source_catalog/catalog.sqlite3-shm",
+      ".source_catalog/catalog.sqlite3-wal"
+    ],
+    "catalogue_or_runtime_changed": [],
+    "changed_since_checkpoint": [],
+    "checkpoint_entries": 366,
+    "checkpoint_taken_after_scan": true,
+    "current_entries": 368,
+    "frozen_source_changed": [],
+    "initial_entries": 362,
+    "initial_has_sentinel": true,
+    "removed_since_checkpoint": [],
+    "restore_entry_changed": [],
+    "root": "C:\\Users\\\u90d1\u66fe\u6ce2\\AppData\\Local\\Temp\\du11-restore-receipt-owned-ffms38lv",
+    "sentinel_entry": [
+      "restore/existing.out",
+      "restore/sentinel.txt"
+    ],
+    "unexpected_added": []
+  },
+  "cleanup_receipt": {
+    "owned_root": "C:\\Users\\\u90d1\u66fe\u6ce2\\AppData\\Local\\Temp\\du11-restore-receipt-owned-ffms38lv",
+    "removed": true
+  },
+  "resource_counts": {
+    "network_calls": 0,
+    "paid_api_calls": 0,
+    "llm_calls": 0,
+    "translation_calls": 0,
+    "credential_values_read": 0,
+    "credential_note": "the main repo's untracked config/FMP_API_KEY.txt was never opened; only its path/stat is mentioned as a non-card change",
+    "provider_boundary": "0 real ET/provider calls; unknown fee/count fields stay null, never derived from a missing field"
+  },
+  "independent_review": {
+    "reviewer": "independent subagent reviewer, distinct from the author",
+    "status": "PASS",
+    "rounds": "round1 PASS on c787757 (0 blocker/0 major, 3 minor + 7 nit) -> fixed in d16dce2; round2 PASS on 5dee9a2 (0 blocker/0 major/0 source minor), residual delivery nits closed in the docs commit",
+    "report": "receipts/reviewer_report.md",
+    "reviews": [
+      {
+        "report": "receipts/reviewer_report.md",
+        "reviewed_source_sha": "c787757a9f0409777fd6d469a90d2371bce706d5",
+        "verdict": "PASS",
+        "blockers": 0,
+        "majors": 0,
+        "minors": 3,
+        "nits": 7,
+        "all_findings_fixed_in": "5dee9a20c1c5952688673caf784fdce4e9391a50"
+      }
+    ],
+    "reviewed_source_sha": "5dee9a20c1c5952688673caf784fdce4e9391a50",
+    "unresolved_findings": 0
+  },
+  "limitations": [
+    "no new provider was enabled and no real supplier data quality is claimed",
+    "motley_fool is a synthetic registration that only proves cross-provider reuse",
+    "the acquisition provider stays the existing FMP configuration",
+    "the public wire cannot express several or restricted unknown candidates, so those are narrowed to a named gap inside the existing reason field",
+    "entity/issuer matching remains company-wiki's query gate; FF adds only the manifest FY/Q/market/security consistency check because the manifest has no issuer field",
+    "the receipts directory also ships the evidence generators (ab_probe.py, restore_probe.py, mutation_check.py, make_handoff.py); they are not product code"
+  ],
+  "root_wiring_notes": [
+    "STOP after the docs commit: no merge, no push, no worktree cleanup",
+    "ROOT should re-check receipts/c_dependencies.json blob SHAs if it changes source_query_cli/source_reader/qualification",
+    "the full-repo pytest run has 9 pre-existing failures that also fail at the base commit; they are outside this card"
+  ]
+}

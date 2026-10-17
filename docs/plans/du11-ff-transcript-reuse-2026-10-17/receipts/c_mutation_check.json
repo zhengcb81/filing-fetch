@@ -1,0 +1,105 @@
+{
+  "isolated_tree": true,
+  "tests": [
+    "tests/test_du11_transcript_reuse_selection.py",
+    "tests/test_du11_transcript_reuse_contract.py"
+  ],
+  "mutations": [
+    {
+      "mutation": "M1 source request relabels an omitted provider as fmp",
+      "file": "scripts/transcript_tool_transport.py",
+      "exit": 1,
+      "summary": "3 failed, 89 passed in 1.62s",
+      "failed_tests": [
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_queries_without_a_provider_and_reuses_the_local_source",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_reused_provider_comes_from_the_verified_reader_manifest",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_acquisition_still_uses_only_fmp"
+      ],
+      "detected": true
+    },
+    {
+      "mutation": "M2 neutral lookup goes through the provider-scoped envelope",
+      "file": "scripts/transcript_tool_transport.py",
+      "exit": 1,
+      "summary": "3 failed, 89 passed in 1.73s",
+      "failed_tests": [
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_queries_without_a_provider_and_reuses_the_local_source",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_reused_provider_comes_from_the_verified_reader_manifest",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_acquisition_still_uses_only_fmp"
+      ],
+      "detected": true
+    },
+    {
+      "mutation": "M3 reused provider falls back to fmp",
+      "file": "scripts/transcript_tool_transport.py",
+      "exit": 1,
+      "summary": "1 failed, 91 passed in 1.58s",
+      "failed_tests": [
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_missing_manifest_provider_stays_unknown_and_is_never_relabelled_fmp"
+      ],
+      "detected": true
+    },
+    {
+      "mutation": "M4 a gap becomes a silent miss (download allowed)",
+      "file": "scripts/transcript_tool_transport.py",
+      "exit": 1,
+      "summary": "6 failed, 86 passed in 1.52s",
+      "failed_tests": [
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_several_unknown_exclusions_become_the_named_gap_without_any_download",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_restricted_exclusions_are_reported_with_their_own_qualification[statuses0-publication_after_as_of]",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_restricted_exclusions_are_reported_with_their_own_qualification[statuses1-publication_date_invalid]",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_restricted_exclusions_are_reported_with_their_own_qualification[statuses2-publication_date_invalid]",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_restricted_exclusions_are_reported_with_their_own_qualification[statuses3-publication_date_unknown]",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_reuse_only_intent_never_downloads_after_a_named_gap"
+      ],
+      "detected": true
+    },
+    {
+      "mutation": "M5 companion maps an omitted provider back to fmp",
+      "file": "scripts/transcript_companion.py",
+      "exit": 1,
+      "summary": "7 failed, 85 passed in 1.75s",
+      "failed_tests": [
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_queries_without_a_provider_and_reuses_the_local_source",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_reused_provider_comes_from_the_verified_reader_manifest",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_single_unknown_publication_exclusion_keeps_the_observation_without_a_read",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_qualified_match_wins_over_an_unknown_exclusion",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_acquisition_still_uses_only_fmp",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_candidate_without_any_provider_is_reused_with_the_manifest_provider",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_the_public_v2_envelope_keeps_the_real_provider_and_measured_zero"
+      ],
+      "detected": true
+    },
+    {
+      "mutation": "M6 the unknown observation is read again (extra GET)",
+      "file": "scripts/transcript_tool_transport.py",
+      "exit": 1,
+      "summary": "1 failed, 91 passed in 1.71s",
+      "failed_tests": [
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_single_unknown_publication_exclusion_keeps_the_observation_without_a_read"
+      ],
+      "detected": true
+    },
+    {
+      "mutation": "M7 a single unknown exclusion is reported as a true miss",
+      "file": "scripts/transcript_reuse_selection.py",
+      "exit": 1,
+      "summary": "3 failed, 89 passed in 1.11s",
+      "failed_tests": [
+        "FAILED tests/test_du11_transcript_reuse_selection.py::test_one_unknown_excluded_candidate_keeps_ref_and_qualification",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_a_single_unknown_publication_exclusion_keeps_the_observation_without_a_read",
+        "FAILED tests/test_du11_transcript_reuse_contract.py::test_acquire_requery_with_local_evidence_never_downloads[exclusions0-qualification]"
+      ],
+      "detected": true
+    }
+  ],
+  "baseline": {
+    "exit": 0,
+    "summary": "92 passed in 0.88s",
+    "failed": []
+  },
+  "pristine_restored": true,
+  "undetected": [],
+  "shared_worktree_untouched": true,
+  "isolated_tree_removed": true
+}

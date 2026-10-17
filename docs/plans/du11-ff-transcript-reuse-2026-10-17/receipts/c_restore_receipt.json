@@ -1,0 +1,53 @@
+{
+  "cleanup_receipt": {
+    "owned_root": "C:\\Users\\\u90d1\u66fe\u6ce2\\AppData\\Local\\Temp\\du11-restore-receipt-owned-ffms38lv",
+    "removed": true
+  },
+  "company_wiki_child_calls": 2,
+  "cwp_frozen_commit": "34a7dd71aaa49d18c13fcdd300ce79581114ca5b",
+  "et_calls": 0,
+  "layering": [
+    "resolve_companion_transcript (real FF code)",
+    "EarningsTranscriptsTransport.lookup_exact (real FF code)",
+    "python -m company_wiki.source_catalog.source_query_cli (real frozen CWP, plain SourceRequest, provider=null)",
+    "python -m company_wiki.source_catalog.source_reader_cli (real frozen CWP verified open)",
+    "offline ET fixture process (registered but must never run)"
+  ],
+  "llm_calls": 0,
+  "network_calls": 0,
+  "owned_original_sha256": "971e29f6bfc701b83f51d424dfb73e5dd4223c307e0131caa19b5ce1105a7b11",
+  "restore_receipt": {
+    "canonical_import_added": [],
+    "catalogue_or_runtime_added": [
+      ".source_catalog/catalog.sqlite3-shm",
+      ".source_catalog/catalog.sqlite3-wal"
+    ],
+    "catalogue_or_runtime_changed": [],
+    "changed_since_checkpoint": [],
+    "checkpoint_entries": 366,
+    "checkpoint_taken_after_scan": true,
+    "current_entries": 368,
+    "frozen_source_changed": [],
+    "initial_entries": 362,
+    "initial_has_sentinel": true,
+    "removed_since_checkpoint": [],
+    "restore_entry_changed": [],
+    "root": "C:\\Users\\\u90d1\u66fe\u6ce2\\AppData\\Local\\Temp\\du11-restore-receipt-owned-ffms38lv",
+    "sentinel_entry": [
+      "restore/existing.out",
+      "restore/sentinel.txt"
+    ],
+    "unexpected_added": []
+  },
+  "result": {
+    "as_of_cutoff_verified": true,
+    "fiscal_quarter": 3,
+    "fiscal_year": 2026,
+    "provider": "motley_fool",
+    "provider_calls": 0,
+    "publication_date": "2026-07-22",
+    "source_sha256": "971e29f6bfc701b83f51d424dfb73e5dd4223c307e0131caa19b5ce1105a7b11",
+    "status": "reused"
+  },
+  "scan": true
+}

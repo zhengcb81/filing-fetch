@@ -1,0 +1,84 @@
+{
+  "cases": {
+    "envelope_provider_fmp": {
+      "candidate_provider": null,
+      "candidates": 0,
+      "excluded": [],
+      "exit": 0,
+      "reason": "no_local_match",
+      "status": "not_found"
+    },
+    "envelope_provider_null": {
+      "candidate_provider": null,
+      "candidates": 0,
+      "excluded": [],
+      "exit": 2,
+      "reason": "invalid_request",
+      "status": "blocked"
+    },
+    "ff_companion_provider_omitted": {
+      "as_of_cutoff_verified": true,
+      "company_wiki_calls": 3,
+      "et_calls": 1,
+      "fiscal_quarter": 3,
+      "fiscal_year": 2026,
+      "provider": "fmp",
+      "provider_calls": 1,
+      "reason": null,
+      "source_ref": {
+        "byte_size": 353,
+        "content_sha256": "c6a6b3e9c8c1f484d7959c45ce1f4c111f70d0c55c71e6549ecc2cf3714d3232",
+        "document_id": "urn:company-wiki:document:sha256:c6a6b3e9c8c1f484d7959c45ce1f4c111f70d0c55c71e6549ecc2cf3714d3232",
+        "mime_type": "application/json",
+        "schema_version": "2.0",
+        "source_id": "urn:company-wiki:source:sha256:c6a6b3e9c8c1f484d7959c45ce1f4c111f70d0c55c71e6549ecc2cf3714d3232"
+      },
+      "status": "downloaded"
+    },
+    "neutral_plain_provider_fmp": {
+      "candidate_provider": null,
+      "candidates": 0,
+      "excluded": [],
+      "exit": 0,
+      "reason": "no_local_match",
+      "status": "not_found"
+    },
+    "neutral_plain_request": {
+      "candidate_provider": "motley_fool",
+      "candidates": 1,
+      "excluded": [],
+      "exit": 0,
+      "reason": "one_local_match",
+      "status": "found"
+    },
+    "reader_receipt": {
+      "byte_size_matches_ref": true,
+      "bytes_sha256_matches_ref": true,
+      "exit": 0,
+      "manifest_fiscal_period": "Q3",
+      "manifest_provider": "motley_fool",
+      "manifest_published_date": "2026-07-22",
+      "manifest_security_id": "MSFT"
+    }
+  },
+  "cwp_commit": "34a7dd71aaa49d18c13fcdd300ce79581114ca5b",
+  "cwp_src_tar_sha256": "555b11a87ebd67858c08ddbc08971fc97deff3b19079444dc738b6eafa558eac",
+  "ff_commit": {
+    "archive_tar_sha256": "97081d83fb2640fcadfc221f58e3ebee9ed99ab261be5ea620be783ea548bf9d",
+    "source_commit": "f1a939e522c22b23659712a8bd2b344f5eb0a364"
+  },
+  "ff_scripts": "C:\\Users\\\u90d1\u66fe\u6ce2\\AppData\\Local\\Temp\\du11-ab-holder-0e0ch7bm\\baseline\\scripts",
+  "ff_scripts_sha256": {
+    "transcript_companion.py": "5cbba8dcdb15f9d61a232d6f15fc2b40ed2320f2b26226e85a5d2dbf4db3f7f7",
+    "transcript_tool_transport.py": "6b2a74890d84050f562b7440eb8d80048ade1fc30b2426c6bac439b0418eb19a"
+  },
+  "label": "baseline f1a939e522c22b23659712a8bd2b344f5eb0a364",
+  "llm_calls": 0,
+  "network_calls": 0,
+  "owned_temp_removed": true,
+  "scan": {
+    "exit": 0
+  },
+  "seed_bytes": 81,
+  "seed_sha256": "7589339ef8ac6e95894f8fbb3e01804ffeae2ce68fe2dabaa9116b8bfc7d4851"
+}
