@@ -1,0 +1,61 @@
+{
+  "schema_version": "du10-cleanup/1",
+  "generated_at": "2026-10-17T20:18:39+01:00",
+  "deleted": {
+    "root": "C:\\Users\\郑曾波\\Projects\\.du10-tmp",
+    "file_count_before": 615,
+    "top_level": [
+      "baseline-out",
+      "baseline.stderr.txt",
+      "baseline.stdout.txt",
+      "baseline2.stderr.txt",
+      "baseline2.stdout.txt",
+      "final-out",
+      "final.stderr.txt",
+      "final.stdout.txt",
+      "interruption-restart.json"
+    ],
+    "reports_final_sha_verified": {
+      "attempt-b0e39315eed84e2d98495a900429508e": {
+        "path": "C:\\Users\\郑曾波\\Projects\\.du10-tmp\\baseline-out\\attempt-b0e39315eed84e2d98495a900429508e\\report.json",
+        "sha256": "1ca551c2ccc65c166a5d966a4ec54c0445f64b0f506f0fc2fdd74d7c52b89982",
+        "matches_recorded_receipt": true
+      },
+      "attempt-27b6021ec9984581807cc3b8631ed82e": {
+        "path": "C:\\Users\\郑曾波\\Projects\\.du10-tmp\\baseline-out\\attempt-27b6021ec9984581807cc3b8631ed82e\\report.json",
+        "sha256": "4ca68489d850c3b7f5961e5de8210be368e21683a312eaa5abb9030ce839c7c6",
+        "matches_recorded_receipt": true
+      },
+      "attempt-1ce035cefbc2469688e684a0d64d637a": {
+        "path": "C:\\Users\\郑曾波\\Projects\\.du10-tmp\\final-out\\attempt-1ce035cefbc2469688e684a0d64d637a\\report.json",
+        "sha256": "a0dd3c1a7af32f66000b92e074e69520f7aaa64550b98993af0552b4d18d83da",
+        "matches_recorded_receipt": true
+      }
+    },
+    "removed": true
+  },
+  "kept": {
+    "du10_deps_snapshot": "C:/Users/郑曾波/Projects/.du10-deps (cwp/et, byte-exact fixed-commit inputs; rebuild recipe in NEXT_HANDOFF.md)",
+    "construction_worktree": "C:/Users/郑曾波/Projects/filing-fetch-du10-41-matrix"
+  },
+  "production_guard": {
+    "fmp_key_stat_before": {
+      "exists": true,
+      "size": 32,
+      "mtime_ns": 1790488448930065300
+    },
+    "fmp_key_stat_after": {
+      "exists": true,
+      "size": 32,
+      "mtime_ns": 1790488448930065300
+    },
+    "unchanged": true,
+    "content_read": false,
+    "main_tree_status_after": [
+      "?? config/FMP_API_KEY.txt"
+    ],
+    "main_tree_clean_except_untracked_key": true
+  },
+  "sentinel_sha_pairs_reference": "docs/plans/du10-ff41-close-2026-10-17/receipts/interruption-restart-v3.json#sha_pairs (E2E sentinel + pre-existing entry, before/after values)",
+  "restore_receipts": "C-1 report restore.restored=true and restore.json in the (now deleted) attempt; compact values preserved in receipts/final-run.json"
+}

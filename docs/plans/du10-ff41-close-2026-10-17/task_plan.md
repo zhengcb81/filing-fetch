@@ -33,19 +33,25 @@
 ### A — 固定基线与失败复现
 - [x] 盘点当前 main 实现（cli_main/run/runtime/matrix_cases/case_scheduling/measurement/oracle/extended_cases/seed_batch/source_proofs/report/fixture_builder/case_specs）
 - [x] 历史状态记录：DU8 ROOT `ff-root-full41.json`（173.27s；binding 15.54、seed 61.66 累计、ff_cli 241.93 累计、197 boots）
-- [ ] 基线实跑一次（今日机器，当前 main 代码，固定 argv）→ 真实 41 分母 + 阶段计时
-- [ ] RED：fake clock 行为级复现确证的重复准备（两组各自全量 seed；两组各自 fresh-proof boot）
+- [x] 基线实跑一次（今日机器，当前 main 代码，固定 argv）→ 真实 41 分母 + 阶段计时
+- [x] RED：fake clock 行为级复现确证的重复准备（两组各自全量 seed；两组各自 fresh-proof boot）
 
 ### B — 根因修复
-- [ ] 每组 seed 只覆盖本组 case 固定消费的 warm 项（各组仍走真实 ensure writer；union=全量，覆盖不缩水）
-- [ ] fresh source proof 合并为单 helper 进程（逐组 part 保留、merge 语义不变）
-- [ ] 窄回归 `tests/test_du10_ff41_*.py`；既有 DU8/W07 测试保持全绿
+- [x] 每组 seed 只覆盖本组 case 固定消费的 warm 项（各组仍走真实 ensure writer；union=全量，覆盖不缩水）
+- [x] fresh source proof 合并为单 helper 进程（逐组 part 保留、merge 语义不变）
+- [x] 窄回归 `tests/test_du10_ff41_*.py`；既有 DU8/W07 测试保持全绿
 
 ### C — 完整端到端与恢复
-- [ ] 新独立测试根串行实跑完整 41 例一次（workers=2 固定默认），保存每 case 真实结果/总耗时/分阶段
-- [ ] 受控中断（0→新增 GET 观察）→ 树回收 → 重启新 attempt → 完整完成 → 清理 E2E
-- [ ] 只有 41/41 PASS 且恢复行为通过、sentinel/原目录准确恢复才标记完成；否则保留真实结果
+- [x] 新独立测试根串行实跑完整 41 例一次（workers=2 固定默认），保存每 case 真实结果/总耗时/分阶段
+- [x] 受控中断（0→新增 GET 观察）→ 树回收 → 重启新 attempt → 完整完成 → 清理 E2E
+- [x] 只有 41/41 PASS 且恢复行为通过、sentinel/原目录准确恢复才标记完成；否则保留真实结果
 
 ### 独立审查与交接
-- [ ] 冻结 HEAD 后另派独立审查 agent（复核 diff/边界/分母/预算/恢复/日志真实性）
-- [ ] handoff.md/json + 紧凑 receipts
+- [x] 冻结 HEAD 后另派独立审查 agent（复核 diff/边界/分母/预算/恢复/日志真实性）
+- [x] handoff.md/json + 紧凑 receipts
+
+## 完成标记（2026-10-17）
+
+全部节点关闭：A（基线+RED）→ B（seed 子集化）→ C（41/41 PASS 97.68s + 恢复 E2E v3 12/12）
+→ 独立审查两轮（REQUEST_CHANGES→修复→APPROVE 零 findings）→ handoff.md/json + 清理收据。
+详见 handoff.md；状态 COMPLETE。
