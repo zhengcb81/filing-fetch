@@ -22,7 +22,7 @@
   - C-2 恢复 E2E `passed=True`，中断腿在 chainA run1（0→1 GET）、重启腿
     `41/41 PASS, 126.767s, exit 0`、sentinel/既有条目/临时树全过；
     `receipts/interruption-restart.json`
-  - 既有 11 套件 185 passed（作者声明，未经独审独立复跑）
+  - 既有 11 套件 329 passed（独审实测；旧文误记 185，见 findings A.9）
 
 ## 待做（按序，不可并行）
 
@@ -97,3 +97,9 @@
 - 不把工程并线写成完整 41 PASS（无审查前不可；审查 APPROVE 后方可）
 - 不在 `C:/Users/郑曾波/Projects/filing-fetch` 主仓上 push（review 完成后
   单独走正常并线流程）
+
+## 执行状态更新（2026-10-17T20:01:21+01:00）
+
+- 第 1 步（独立审查）第一轮已完成：REQUEST_CHANGES，2 P2 + 2 P3（findings A.10），已全部修复
+  （fixture v2 + 收据前缀 + 计数更正），待审查员按新 SHA 复核转 APPROVE。
+- 剩余：审查员复核 → handoff.md/json → 清理 .du10-tmp（cleanup 收据含 FMP key stat 前后对照）。

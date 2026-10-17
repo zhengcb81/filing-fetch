@@ -39,7 +39,7 @@ sys.path[:0] = [str(TOOLS), str(ROOT / "scripts")]
 import ff_process_transport as transport  # noqa: E402
 from case_specs import case_specs  # noqa: E402
 
-SCHEMA = "du10-interruption-restart/1"
+SCHEMA = "du10-interruption-restart/2"
 
 
 def _sha(path: Path) -> str:
@@ -138,16 +138,19 @@ def _case_entry(output: Path, scratch: Path, *, observations: dict):
 
 
 def _attempt_residue(attempt: Path) -> dict:
-    """Fingerprint the killed attempt exactly as it died (bounded sample)."""
+    """Fingerprint the killed attempt exactly as it died — every file byte-ruled.
+
+    The full per-file SHA map (not a sample) is what makes "the killed residue
+    was never rewritten" a whole-directory proof: any byte change anywhere in
+    the residue flips the comparison.
+    """
     files = sorted(p for p in attempt.rglob("*") if p.is_file())
     return {
         "file_count": len(files),
         "report_json_present": (attempt / "report.json").is_file(),
         "sha256_of_sorted_paths": hashlib.sha256(
             "\n".join(str(p.relative_to(attempt)) for p in files).encode("utf-8")).hexdigest(),
-        "sample_shas": {str(p.relative_to(attempt)): _sha(p)
-                        for p in files if p.name in {"restore.json", "guard-events.json"}
-                        or p.name.endswith("seed-batch.stdout.json")},
+        "file_shas": {str(p.relative_to(attempt)): _sha(p) for p in files},
     }
 
 
@@ -219,9 +222,16 @@ def _leg2_restart(command, *, cwd, env, out, seconds):
         rc = result["returncode"]
         stdout = result["stdout"].decode("utf8", errors="replace")
     except transport.ChildTimeout:
-        return {"status": "timeout", "seconds": time.monotonic() - started}
+        return {"status": "timeout", "seconds": round(time.monotonic() - started, 3)}
+    except transport.ChildFailed as exc:
+        # A degraded restart is recorded with its real exit code and tails —
+        # never swallowed into "unknown" so the receipt cannot hide it.
+        return {"status": "failed", "seconds": round(time.monotonic() - started, 3),
+                "exit_code": exc.returncode,
+                "stdout_tail": (exc.stdout or b"").decode("utf8", errors="replace")[-500:],
+                "stderr_tail": (exc.stderr or b"").decode("utf8", errors="replace")[-500:]}
     except Exception as exc:
-        return {"status": "unknown", "seconds": time.monotonic() - started,
+        return {"status": "unknown", "seconds": round(time.monotonic() - started, 3),
                 "reason": f"{type(exc).__name__}: {exc}"}
     return {"status": "completed", "seconds": round(time.monotonic() - started, 3),
             "exit_code": rc, "stdout_tail": stdout[-500:]}
@@ -259,56 +269,80 @@ def main(argv=None):
         leg2 = (_leg2_restart(command, cwd=temp, env=env, out=out, seconds=400)
                 if leg1["interrupted"] and leg1["attempt"] else {"status": "skipped"})
 
-        checks: dict[str, object] = {}
+        # Sentinel / pre-existing entry before-and-after SHA pairs are part of
+        # the receipt itself (the card requires the values, not only booleans).
+        sha_pairs = {
+            "sentinel": {"before": sentinel_before, "after": _sha(sentinel)},
+            "preexisting_output_entry": {
+                "before": preexisting_sha, "after": _sha(old / "artifacts" / "old.txt")},
+        }
+        checks: dict[str, bool] = {}
         checks["leg1_interrupted_in_flight"] = bool(leg1["interrupted"] and leg1["case_entry"])
         checks["leg1_tree_reaped"] = leg1["cleanup"].get("tree_reaped") is True
         checks["leg1_no_report_written"] = bool(leg1["residue_after_kill"]
                                                 and not leg1["residue_after_kill"]["report_json_present"])
         restart_name = None
-        if leg2.get("status") == "completed":
-            fresh = [p for p in out.glob("attempt-*")
-                     if p.is_dir() and p.name not in baseline
-                     and p.name != leg1["attempt"]]
-            checks["restart_is_new_unique_attempt"] = len(fresh) == 1
-            restart_name = fresh[0].name if len(fresh) == 1 else None
-            report_path = out / restart_name / "report.json" if restart_name else None
-            report = None
-            if report_path and report_path.is_file():
+        fresh = ([p for p in out.glob("attempt-*")
+                  if p.is_dir() and p.name not in baseline and p.name != leg1["attempt"]]
+                 if leg1["attempt"] else [])
+        checks["restart_is_new_unique_attempt"] = len(fresh) == 1
+        report = None
+        if len(fresh) == 1:
+            restart_name = fresh[0].name
+            report_path = out / restart_name / "report.json"
+            if report_path.is_file():
                 try:
                     report = json.loads(report_path.read_text(encoding="utf-8"))
                 except ValueError:
                     report = None
-            checks["restart_report_written"] = report is not None
-            counts = {}
-            if report:
-                for case in report.get("cases") or []:
-                    counts[case["result"]] = counts.get(case["result"], 0) + 1
-                counts["total"] = len(report.get("cases") or [])
-            checks["restart_case_counts"] = counts
-            checks["restart_restored_true"] = bool(report and (report.get("restore") or {}).get("restored") is True)
-            checks["residue_not_rewritten"] = (residue_frozen == _attempt_residue(out / leg1["attempt"])
-                                               if leg1["attempt"] else False)
-        else:
-            checks["restart_is_new_unique_attempt"] = False
-            checks["restart_report_written"] = False
-            checks["restart_case_counts"] = {}
-            checks["restart_restored_true"] = False
-            checks["residue_not_rewritten"] = False
-        checks["sentinel_intact"] = _sha(sentinel) == sentinel_before
-        checks["preexisting_output_intact"] = _sha(old / "artifacts" / "old.txt") == preexisting_sha
+        checks["restart_report_written"] = report is not None
+        counts: dict[str, int] = {}
+        non_pass: list[dict] = []
+        oracle_findings = None
+        if report:
+            for case in report.get("cases") or []:
+                counts[case["result"]] = counts.get(case["result"], 0) + 1
+                if case["result"] != "PASS":
+                    non_pass.append({"id": case.get("id"), "result": case.get("result"),
+                                     "diagnostics": (case.get("diagnostics") or [])[:3]})
+            counts["total"] = len(report.get("cases") or [])
+            oracle_findings = len((report.get("oracle") or {}).get("findings") or [])
+        checks["restart_restored_true"] = bool(
+            report and (report.get("restore") or {}).get("restored") is True)
+        checks["residue_not_rewritten"] = (
+            residue_frozen == _attempt_residue(out / leg1["attempt"])
+            if leg1["attempt"] else False)
+        # Hard gates (independent-review finding: a degraded restart must never
+        # pass this fixture). The matrix exits 0 only on complete clean PASS, so
+        # both the process exit and the report's own counts are required.
+        checks["leg2_completed_clean"] = (
+            leg2.get("status") == "completed" and leg2.get("exit_code") == 0)
+        checks["restart_all_41_pass"] = (
+            counts.get("PASS") == 41 and counts.get("total") == 41
+            and not any(counts.get(kind, 0) for kind in ("FAIL", "PARTIAL", "NOT_RUN")))
+        checks["sentinel_intact"] = (
+            sha_pairs["sentinel"]["before"] == sha_pairs["sentinel"]["after"])
+        checks["preexisting_output_intact"] = (
+            sha_pairs["preexisting_output_entry"]["before"]
+            == sha_pairs["preexisting_output_entry"]["after"])
         temp_path = directory
     checks["temporary_tree_removed"] = not Path(temp_path).exists()
-    passed = all(bool(v) for k, v in checks.items()
-                 if k not in {"restart_case_counts"})
+    passed = all(checks.values())
     result = {
         "schema_version": SCHEMA,
         "inputs": {"cwp": str(args.cwp_project), "et": str(args.et_project)},
+        "restart_attempt": restart_name,
         "leg1": leg1,
         "leg2": leg2,
+        "sha_pairs": sha_pairs,
         "checks": checks,
+        "restart_case_counts": counts,
+        "restart_non_pass_cases": non_pass,
+        "restart_oracle_findings": oracle_findings,
         "passed": passed,
         "scope": "one controlled interruption + one restart-to-completion + cleanup; "
-                 "the 41-case verdict is judged by the separate clean C-node run",
+                 "the 41-case verdict is judged by the separate clean C-node run, but the "
+                 "restart leg must itself exit 0 with 41/41 PASS for recovery to pass here",
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("x", encoding="utf8") as stream:

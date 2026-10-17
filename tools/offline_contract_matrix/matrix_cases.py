@@ -140,7 +140,11 @@ def seed_all(ctx: Context) -> None:
     seeds = _warm_seed_list() if plan is None else plan["ensure_seeds"]
     seed_txt = True if plan is None else plan["seed_txt"]
     ctx.seed_receipts = ctx.warm_seed_batch(seeds)
-    (ctx.artifacts / "warm-seed-receipts.json").write_text(json.dumps(ctx.seed_receipts, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Group-owned evidence files carry the group prefix: the evidence dir is
+    # flat and shared, so an unprefixed name would let one group's receipts
+    # overwrite the other's (the seed-batch stdout files are prefixed already).
+    prefix = getattr(ctx, "artifact_prefix", "")
+    (ctx.artifacts / f"{prefix}warm-seed-receipts.json").write_text(json.dumps(ctx.seed_receipts, ensure_ascii=False, indent=2), encoding="utf-8")
     if seed_txt:
         from dataclasses import replace
         txt_identity = replace(US, provider="fmp", source_url="https://financialmodelingprep.com/stable/earning-call-transcript?symbol=AAPL&year=2024&quarter=2")

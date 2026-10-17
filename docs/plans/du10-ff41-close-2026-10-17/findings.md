@@ -81,3 +81,56 @@
   重启独立完成 41/41、sentinel/既有目录不变、临时树移除（`receipts/interruption-restart.json`）。
 - 检查未发现需要代码修复的恢复缺陷（DU8 单元级恢复测试覆盖到期 0 新增启动/attempt 唯一性/cache 不共享等）；
   本卡 OPEN 是端到端证据缺口，由 C-2 补齐。
+
+## A.9 计数更正（2026-10-17，独审 P3 finding）
+
+作者先前两处测试计数不实，现更正（方向安全：全绿结论不变，数字以实测为准）：
+
+- 正确事实：11 个文件一次串跑 **329 passed**（独审实测 54.85s、作者修复后复测 52.24s）；
+  分文件 = du10 5 + w07_efficiency 18 + w06_contract 20 + w06_runtime 14 + du8_scheduling 25 +
+  du8_deadline 12 + du6_portable 35 + du67_process 6 + root_w07 14 + w06_case_authority 161 +
+  root_du8_acceptance 19 = 329。
+- progress.md 旧句「case_authority+root_du8_acceptance 36 绿」为笔误（实为 161+19=180）；
+  NEXT_HANDOFF 旧句「11 套件 185 passed」混淆了「三文件批次 185（161+19+5）」与全套总数。均已更正。
+
+## A.10 独立最终审查：第一轮 REQUEST_CHANGES 与修复映射（2026-10-17T20:01:21+01:00）
+
+独审 agent 对 HEAD `af3f7a1` 的结论：**REQUEST_CHANGES**（第 1–5 项 PASS，第 6 项 FAIL）。
+核心核验全部通过：diff 保护边界（14 个保护文件零改动、预算未上调、41 分母不变）、
+seed 子集修复正当性（union==全量、缺口键永不 seed、真实 ensure writer 未绕过）、
+RED 3 failed/2 passed 复现吻合、C-1/C-2/依赖证据真实（SHA/绑定/等价抽验 8/8）、
+11 文件 329 passed。findings 与修复：
+
+| # | 级别 | Finding | 修复 |
+|---|---|---|---|
+| 1 | P2 | 收据缺 sentinel/既有条目前后 SHA 实值（仅布尔） | fixture v2 增 `sha_pairs`（before/after 实值入收据），重跑生成 `interruption-restart-v2.json` |
+| 2 | P2 | C-2 pass 门槛不含重启腿 exit_code/计数（"降级重启可过"隐患） | fixture v2 显式 `leg2_completed_clean`（status+exit 0）与 `restart_all_41_pass`（41/41 零非 PASS）入 `checks` 门槛，`all(checks.values())` 无排除项；ChildFailed 显式记录 exit_code/尾部 |
+| 3 | P3 | 测试计数声明不实（185 vs 329） | A.9 更正 |
+| 4a | P3 | warm-seed-receipts.json 两组同名互写覆盖 | seed_all 改按 `artifact_prefix` 命名（g1./g2. 前缀，符合 evidence dir 平铺前缀约定）；W07 探针无前缀属性 → 默认 '' 行为不变 |
+| 4b | P3 | 残留指纹仅抽样 3 文件 | `_attempt_residue` 改全量 per-file SHA map（"残留未改写"成为全目录字节证明） |
+
+第 1/2/4b 项由 fixture v2 重跑收据覆盖；4a 由 11 文件套件复测（329 passed）覆盖。
+v1 收据保留不删（历史证据不覆盖）；handoff 以 v2 为准并注明 v1 缺口。
+
+## A.11 fixture v2 重跑：硬化门槛拦截负载退化的重启（保留失败，不改门槛）
+
+v2（`receipts/interruption-restart-v2.json`，`du10-interruption-restart/2`）实跑结果 passed=False：
+
+- 恢复语义全部通过：中断腿 chainA run1 在途（0→1 GET）、树回收、无 report 伪装、
+  重启为新唯一 attempt、残留全量 SHA 未改写、sentinel/既有条目 SHA 前后相等
+  （`sha_pairs` 实值入收据，finding 1 生效）、临时树移除。
+- **新硬门槛生效并拒绝**：重启腿 40 PASS / 1 PARTIAL（171.23s，oracle findings=2），
+  `leg2_completed_clean`（exit 1）与 `restart_all_41_pass`（40/41）判 false → 整体不通过。
+  这正是 finding 2 要求的 fail-closed 行为：降级重启不再能伪装通过。
+- 失败原因属环境负载（重启腿 171.9s vs v1 的 126.8s，同日不同负载窗口），非 harness 缺陷；
+  按卡片"保留真实结果、重跑受影响节点、不删失败"，v2 原样保留，安静窗口（CPU 12%）重跑
+  生成 v3；fixture 同时新增 `restart_non_pass_cases`（非 PASS case 实名）避免再出现
+  "只知道 40/41 不知道谁" 的证据盲区。
+
+## A.12 fixture v3（安静窗口，CPU 12%）：全部 12 项检查通过
+
+`receipts/interruption-restart-v3.json`（`du10-interruption-restart/2`）passed=True：
+中断腿 chainA run1 在途（0→1 GET）→ 树回收 → 无 report 伪装；重启腿 144.542s exit 0，
+**41/41 PASS、oracle 0 findings、非 PASS 列表为空**；新唯一 attempt、残留全量 SHA 前后一致、
+sentinel/既有条目 SHA 前后相等、临时树移除。至此 finding 1/2/4b 的修复有正向通过证据，
+v2 的 fail-closed 拦截与 v3 的完整通过共同证明门槛真实。

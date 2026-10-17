@@ -60,3 +60,12 @@
   + 临时目录清理 + 快照重建备忘）。
 - 恢复后请严格按 NEXT_HANDOFF.md 顺序执行；不要回退到 A/B/C 节点，不要重跑完整
   41 例矩阵（机器负载敏感）。最终并线需等独审 APPROVE。
+
+## 独审与修复（2026-10-17T20:01:21+01:00）
+
+- 独审第一轮对 af3f7a1：REQUEST_CHANGES（1–5 PASS / 6 FAIL）——2 P2 + 2 P3，映射见 findings A.10。
+- 修复：fixture v2（sha_pairs 实值、leg2_completed_clean/restart_all_41_pass 硬门槛、
+  残留全量哈希、ChildFailed 显式记录）；matrix_cases.py warm-seed-receipts 按组前缀。
+- 受影响测试复测：11 文件 329 passed（52.24s）。fixture v2 重跑见 receipts/interruption-restart-v2.json。
+- fixture v3（安静窗口）12/12 全过：重启腿 144.5s exit 0、41/41、sha_pairs 实值；v2 保留为 fail-closed 实证。
+- 待：审查员按新 SHA 复核 → APPROVE 后写 handoff + 清理 .du10-tmp。
