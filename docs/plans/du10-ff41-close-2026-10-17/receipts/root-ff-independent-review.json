@@ -1,0 +1,71 @@
+{
+  "schema_version": "root-independent-reception/1",
+  "card_id": "DU10-FF41-CLOSE",
+  "reviewer_agent": "/root/du10_ff_reception_review",
+  "verdict": "PASS",
+  "reviewed_head": "ff2ba400ad37e1188b88ed61ff7a1814a647b94b",
+  "base_commit": "c7c8867da35cd19d4f419fa70947332615e8e9c0",
+  "source_sha256": {
+    "tools/offline_contract_matrix/cli_main.py": {
+      "worktree_sha256": "bb43a04ad9e37e51420c5449fc31c54622ce7d4a056b534601f51d5abe74d026",
+      "git_blob_bytes_sha256": "bb43a04ad9e37e51420c5449fc31c54622ce7d4a056b534601f51d5abe74d026",
+      "unchanged_since_independent_round2": true
+    },
+    "tools/offline_contract_matrix/matrix_cases.py": {
+      "worktree_sha256": "c472c3dd44f266d5386ab6edd1446ca0d3659e558ca7318009fc4de30f5fbdf0",
+      "git_blob_bytes_sha256": "c472c3dd44f266d5386ab6edd1446ca0d3659e558ca7318009fc4de30f5fbdf0",
+      "unchanged_since_independent_round2": true
+    },
+    "tests/test_du10_ff41_rootcause.py": {
+      "worktree_sha256": "09cd3d413774aa181adcf52673474ac8e5a482b5755e9f86a7031479dcfb32b3",
+      "git_blob_bytes_sha256": "09cd3d413774aa181adcf52673474ac8e5a482b5755e9f86a7031479dcfb32b3",
+      "unchanged_since_independent_round2": true
+    },
+    "docs/plans/du10-ff41-close-2026-10-17/fixtures/interruption_restart_e2e.py": {
+      "worktree_sha256": "37364ae366cf3c9ef0c785a30fd4277ccb1a808b1fb11793da7bba0eb092629d",
+      "git_blob_bytes_sha256": "37364ae366cf3c9ef0c785a30fd4277ccb1a808b1fb11793da7bba0eb092629d",
+      "unchanged_since_independent_round2": true
+    }
+  },
+  "findings": [],
+  "tests": {
+    "passed": 42,
+    "failed": 0,
+    "pytest_seconds": 10.56,
+    "wall_seconds": 19.501,
+    "command": [
+      "python",
+      "-B",
+      "-m",
+      "pytest",
+      "tests/test_du10_ff41_rootcause.py",
+      "tests/test_w07_matrix_efficiency.py",
+      "tests/test_root_du8_matrix_acceptance.py",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "--basetemp",
+      "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\root-du10-ff-review-sxptt4lm\\pytest"
+    ],
+    "exit_code": 0,
+    "temporary_tree_removed": true
+  },
+  "reused_review": {
+    "round1": "receipts/independent-review-round1.md",
+    "round2": "receipts/independent-review-round2.md",
+    "round2_source_commit": "22ef5a14e8b72d840608282e3ed413322cbaa6b2",
+    "all_4_source_and_test_files_unchanged_at_final": true,
+    "scope": "Existing independent reviewer had original final full report/artifacts before author cleanup, checked exact report SHA and 3 bound request/response pairs. ROOT reuses valid work and does not rerun the 41-case matrix."
+  },
+  "evidence": "ff-independent-review-evidence.json",
+  "limitations": [
+    "No full matrix rerun by ROOT reviewer. Source and all fixed oracles unchanged; existing two-round independent review reused.",
+    "Original large artifacts intentionally cleaned by author after prior independent review; ROOT cannot replay them from compact summaries alone.",
+    "Restart is a fresh attempt with preserved killed-attempt residue; it proves isolated restart-to-completion, not same-attempt continuation.",
+    "Fixture provider boundary only; no live provider, company filing facts or LLM quality proven.",
+    "High machine load can still exhaust fixed deadline; preserved baseline-loaded-machine and v2 failed receipts disclose this. No budget was raised."
+  ],
+  "changes_to_author_tree": false,
+  "network_calls": 0,
+  "llm_calls": 0
+}

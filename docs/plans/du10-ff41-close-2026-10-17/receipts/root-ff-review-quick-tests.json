@@ -1,0 +1,23 @@
+{
+  "command": [
+    "python",
+    "-B",
+    "-m",
+    "pytest",
+    "tests/test_du10_ff41_rootcause.py",
+    "tests/test_w07_matrix_efficiency.py",
+    "tests/test_root_du8_matrix_acceptance.py",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\root-du10-ff-review-sxptt4lm\\pytest"
+  ],
+  "cwd": "C:\\Users\\郑曾波\\Projects\\filing-fetch-du10-41-matrix",
+  "exit_code": 0,
+  "seconds": 19.501,
+  "stdout": "..........................................                               [100%]\n42 passed in 10.56s\n",
+  "stderr": "",
+  "temp_root": "C:\\Users\\郑曾波\\AppData\\Local\\Temp\\root-du10-ff-review-sxptt4lm",
+  "temporary_tree_removed": true
+}

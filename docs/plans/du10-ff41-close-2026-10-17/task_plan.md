@@ -1,3 +1,7 @@
+## ROOT 接收更新 — 2026-10-17
+
+最终实现/复审已通过，详情 [ROOT_RECEPTION](ROOT_RECEPTION.md)。正常主线发布后以母 PWF 的远端 SHA 为准；下方旧状态是作者历史。
+
 # Task Plan — DU10-FF41-CLOSE
 
 - 卡：完成 filing-fetch 固定 41 例端到端矩阵（关闭 DU8 遗留 C）
