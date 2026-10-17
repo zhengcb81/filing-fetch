@@ -10,6 +10,7 @@ removed, and the company-wiki repository is only ever read.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 from collections.abc import Iterator
@@ -371,11 +372,17 @@ class OwnedWiki:
             and current.get(name) != entry
         ]
         # 2. Everything seeded and scanned before the action must be untouched.
-        changed = [
+        #    Only catalogue state and the harness's own runtime files may change
+        #    (the catalogue database legitimately grows during an import).
+        changed_all = [
             name
             for name, entry in checkpoint.items()
             if name in current and current[name] != entry
         ]
+        changed_activity = [
+            name for name in changed_all if name.startswith(self._growable_prefixes)
+        ]
+        changed = [name for name in changed_all if name not in changed_activity]
         removed = [name for name in checkpoint if name not in current]
         added = [name for name in current if name not in checkpoint]
         growable = [name for name in added if name.startswith(self._growable_prefixes)]
@@ -401,6 +408,7 @@ class OwnedWiki:
             "checkpoint_entries": len(checkpoint),
             "current_entries": len(current),
             "changed_since_checkpoint": changed,
+            "catalogue_or_runtime_changed": changed_activity,
             "removed_since_checkpoint": removed,
             "catalogue_or_runtime_added": growable,
             "canonical_import_added": company_added,
@@ -414,6 +422,7 @@ class OwnedWiki:
         receipt = self.restore_receipt()
         assert receipt["restore_entry_changed"] == [], receipt
         assert receipt["frozen_source_changed"] == [], receipt
+        assert receipt["changed_since_checkpoint"] == [], receipt
         assert receipt["unexpected_added"] == [], receipt
         assert receipt["removed_since_checkpoint"] == [], receipt
         return receipt
@@ -423,4 +432,116 @@ class OwnedWiki:
         if self.root.exists():
             shutil.rmtree(self.root, ignore_errors=True)
         assert not self.root.exists(), f"owned temporary root survived cleanup: {self.root}"
+
+
+# ---------------------------------------------------------------------------
+# Harness self-tests: the restore receipt must actually fail on residue.
+# A miniature frozen-source tar is enough; no company-wiki code runs here.
+# ---------------------------------------------------------------------------
+
+
+def minimal_source_tar(directory: Path) -> Path:
+    tar = directory / "minimal-frozen-src.tar"
+    payload = {
+        "src/company_wiki/__init__.py": b"# frozen stand-in\n",
+        "src/company_wiki/source_catalog/__init__.py": b"# frozen stand-in\n",
+        "pyproject.toml": b"[tool.ruff]\nline-length = 100\n",
+    }
+    with tarfile.open(tar, "w") as archive:
+        for name, data in payload.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    return tar
+
+
+@pytest.fixture
+def harness_wiki(tmp_path: Path) -> Iterator[OwnedWiki]:
+    wiki = OwnedWiki(minimal_source_tar(tmp_path), label="du11-harness").build()
+    try:
+        yield wiki
+    finally:
+        wiki.cleanup()
+
+
+def test_restore_harness_accepts_a_clean_run(harness_wiki: OwnedWiki) -> None:
+    harness_wiki.seed_transcript("msft_2026_q3_call.txt", KNOWN_TRANSCRIPT_BODY,
+                                 MOTLEY_SIDECAR)
+    harness_wiki.checkpoint()
+    receipt = harness_wiki.assert_restored()
+    assert receipt["changed_since_checkpoint"] == []
+    assert receipt["unexpected_added"] == []
+    assert receipt["canonical_import_added"] == []
+
+
+def test_restore_harness_detects_a_modified_seed(harness_wiki: OwnedWiki) -> None:
+    seeded = harness_wiki.seed_transcript(
+        "msft_2026_q3_call.txt", KNOWN_TRANSCRIPT_BODY, MOTLEY_SIDECAR
+    )
+    harness_wiki.checkpoint()
+    seeded.write_bytes(KNOWN_TRANSCRIPT_BODY + b"tampered")
+    with pytest.raises(AssertionError):
+        harness_wiki.assert_restored()
+    relative = seeded.relative_to(harness_wiki.root).as_posix()
+    assert harness_wiki.restore_receipt()["changed_since_checkpoint"] == [relative]
+
+
+def test_restore_harness_detects_a_modified_sidecar(harness_wiki: OwnedWiki) -> None:
+    seeded = harness_wiki.seed_transcript(
+        "msft_2026_q3_call.txt", KNOWN_TRANSCRIPT_BODY, MOTLEY_SIDECAR
+    )
+    harness_wiki.checkpoint()
+    sidecar = seeded.with_name(seeded.name + ".source.json")
+    sidecar.write_text('{"provider": "fmp"}', encoding="utf-8")
+    with pytest.raises(AssertionError):
+        harness_wiki.assert_restored()
+    relative = sidecar.relative_to(harness_wiki.root).as_posix()
+    assert harness_wiki.restore_receipt()["changed_since_checkpoint"] == [relative]
+
+
+def test_restore_harness_detects_a_stray_company_file(harness_wiki: OwnedWiki) -> None:
+    harness_wiki.checkpoint()
+    stray = harness_wiki.root / "companies" / "Other Corp" / "raw" / "x.txt"
+    stray.parent.mkdir(parents=True)
+    stray.write_bytes(b"stray")
+    with pytest.raises(AssertionError):
+        harness_wiki.assert_restored()
+    relative = stray.relative_to(harness_wiki.root).as_posix()
+    assert harness_wiki.restore_receipt()["unexpected_added"] == [relative]
+
+
+def test_restore_harness_accepts_exactly_one_canonical_import_pair(
+    harness_wiki: OwnedWiki,
+) -> None:
+    harness_wiki.checkpoint()
+    harness_wiki.expect_canonical_imports()
+    target = harness_wiki.root.joinpath(*TRANSCRIPT_DIR)
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "imported.json").write_bytes(b"{}")
+    (target / "imported.json.source.json").write_bytes(b"{}")
+    receipt = harness_wiki.assert_restored()
+    assert len(receipt["canonical_import_added"]) == 2
+
+
+def test_restore_harness_rejects_a_second_import_pair(harness_wiki: OwnedWiki) -> None:
+    harness_wiki.checkpoint()
+    harness_wiki.expect_canonical_imports()
+    target = harness_wiki.root.joinpath(*TRANSCRIPT_DIR)
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("one.json", "one.json.source.json", "two.json"):
+        (target / name).write_bytes(b"{}")
+    with pytest.raises(AssertionError):
+        harness_wiki.assert_restored()
+
+
+def test_restore_harness_detects_a_frozen_source_change(harness_wiki: OwnedWiki) -> None:
+    harness_wiki.checkpoint()
+    frozen = harness_wiki.root / "src" / "company_wiki" / "__init__.py"
+    frozen.write_bytes(b"# mutated\n")
+    with pytest.raises(AssertionError):
+        harness_wiki.assert_restored()
+    relative = frozen.relative_to(harness_wiki.root).as_posix()
+    receipt = harness_wiki.restore_receipt()
+    assert receipt["frozen_source_changed"] == [relative]
+    assert receipt["changed_since_checkpoint"] == [relative]
 
