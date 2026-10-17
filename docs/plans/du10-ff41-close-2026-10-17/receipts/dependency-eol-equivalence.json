@@ -1,0 +1,193 @@
+{
+  "samples": {
+    "cwp/src/company_wiki/__init__.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/src/company_wiki/source_catalog/cli.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/src/company_wiki/source_catalog/service.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/src/company_wiki/source_catalog/source_reader.py": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/src/company_wiki/source_catalog/config.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/phase6/post_w03_original_research_2026-10-11/evidence/p7-audit-technical-review/local-evidence-retry/P05/scope.json": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/docs/plans/narrative-evidence-pilot-2026-09-26/harness_lanes/g3_rf_assurance_and_packaging.md": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/phase6/fresh_root_implementation_2026-10-09/typed_cause_usage_diagnosis/w08_safe_boundary/reproduce.py": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/tests/document_normalization/run_real_originals.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/tests/unit/document_understanding_root/test_deep_pdf_capture_production.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/.planning/w06-cross-period-acquisition/cutoff-implementation/ff/malformed-usage-repair/diff-check.log": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/src/company_wiki/source_catalog/archive_retired_evidence.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/phase6/main_auto_official_json/evidence/w03-public-main-reception/red-public3-20261011T001138Z-f56d3951.json": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/tests/unit/test_automation_store_atomic.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/.planning/m3-acceptance-json-fixes/green.log": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/reviews/US-MSFT/commands/1791445299833284000-independent-runtime-arithmetic-correct-schema.stderr.txt": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/tests/contract/test_legacy_caller_reachability.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/tests/fixtures/document_understanding_layout_hints/inputs/cross_column_header.json": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/executions/HK-00700/processes/process-13516.jsonl": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/executions/US-MSFT/commands/1791442737872418900-reuse-fy2025-after-main-fix.stdout.txt": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/tests/unit/test_w04_narrative_semantics.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/phase6/m3_acceptance_2026-10-10/ff-normal-main-merge.json": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/src/company_wiki/automation/registry.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/executions/US-MSFT/processes/process-46728.jsonl": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/tests/unit/test_commit_policy.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/fresh-native-documents-2026-10-09/INTERFACES.md": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/reviews/HK-00700/commands/1791445301795878000-independent-pypdf-and-poppler-context-table-review.stdout.txt": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/tests/unit/test_narrative_batch.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "cwp/docs/plans/cross-market-rf-e2e-2026-10-08/phase6/fresh_executor_launch/launched/CN-688012.init.json": {
+      "equivalence": "byte_equal"
+    },
+    "cwp/tests/fixtures/sample_news.md": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcript_tool.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcript_api.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/retrieval_runtime.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/tests/__init__.py": {
+      "equivalence": "byte_equal"
+    },
+    "et/tests/test_retrieval_runtime.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/tests/test_transcript_api.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/MSFT/MSFT_Q4_2024_earnings_call.txt": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcript_audit.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/.planning/w06-cutoff-result/findings.md": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/FIG/FIG_Q4_2025_earnings_call.txt": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/SNOW/SNOW_Q1_2027_bilingual.json": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/docs/implementation/s3-et-runtime-handoff.md": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/MDB/MDB_Q1_2026_bilingual.json": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/.planning/n5-et-local-text/findings.md": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/FIG/FIG_Q2_2025_interleaved.txt": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/SNOW/SNOW_Q3_2025_bilingual.json": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/.planning/w06-cutoff-result/progress.md": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/MDB/MDB_Q4_2026_earnings_call.txt": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/MSFT/MSFT_Q1_2025_interleaved.txt": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/tests/golden/fmp_v2.wrong_quarter.json": {
+      "equivalence": "byte_equal"
+    },
+    "et/tests/test_transcript_artifact.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/.planning/s3-et-bounded-runtime-20261003/progress.md": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/tests/test_common.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/tests/request_budget_cli_proxy.py": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/MSFT/MSFT_Q2_2026_interleaved.txt": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/docs/plans/du9-legacy-comparison-2026-10-16/receipts/root-reception/root-acceptance.json": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/docs/implementation/handoffs/N5-ET-TXT/handoff.json": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/docs/plans/du7-extraction-2026-10-16/handoff.md": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/transcripts/SNOW/SNOW_Q4_2024_bilingual.json": {
+      "equivalence": "lf_to_crlf_smudge"
+    },
+    "et/docs/plans/du9-legacy-comparison-2026-10-16/receipts/b_concentrated_regression.txt": {
+      "equivalence": "lf_to_crlf_smudge"
+    }
+  },
+  "mismatch": [],
+  "cwp_files": 8931,
+  "et_files": 288,
+  "all_equivalent": true,
+  "byte_equal_n": 14,
+  "smudged_n": 46,
+  "generated_at": "2026-10-17T19:03:45+01:00",
+  "rule": "archived == blob, or blob is pure-LF and archived == blob with LF->CRLF smudge (git archive under core.autocrlf=true)",
+  "note": "proves baseline#1/C-1/C-2 consumed the fixed commits' content: the archive-extract snapshot used by those runs is the commit's blobs modulo pure-LF eol smudge"
+}

@@ -1,0 +1,70 @@
+{
+  "schema_version": "du10-baseline-run/1",
+  "generated_at": "2026-10-17T18:45:40+01:00",
+  "code_state": "main c7c8867 unmodified (pre-fix)",
+  "attempt": "attempt-b0e39315eed84e2d98495a900429508e",
+  "report_sha256": "1ca551c2ccc65c166a5d966a4ec54c0445f64b0f506f0fc2fdd74d7c52b89982",
+  "counts": {
+    "PASS": 41,
+    "FAIL": 0,
+    "PARTIAL": 0,
+    "NOT_RUN": 0
+  },
+  "batch_elapsed_seconds": 110.8451,
+  "phase_timing": {
+    "binding": {
+      "status": "measured",
+      "seconds": 2.7938,
+      "spans": 1
+    },
+    "seed": {
+      "status": "measured",
+      "seconds": 26.9168,
+      "spans": 2
+    },
+    "ff_cli": {
+      "status": "measured",
+      "seconds": 163.4358,
+      "spans": 52
+    },
+    "fresh_source_proof": {
+      "status": "measured",
+      "seconds": 1.6425,
+      "spans": 1
+    },
+    "cleanup": {
+      "status": "measured",
+      "seconds": 0.3583,
+      "spans": 1
+    },
+    "total": {
+      "status": "measured",
+      "seconds": 110.8451,
+      "spans": 1
+    }
+  },
+  "launches": {
+    "total_boot": 278,
+    "total_exit": 277,
+    "by_kind": {
+      "other_python": 139,
+      "seed_batch": 2,
+      "fixture_adapter": 72,
+      "ff_cli": 52,
+      "et_proxy": 11,
+      "source_proofs": 2
+    },
+    "parent_calls": {
+      "binding_probe": 1,
+      "git": 3,
+      "fresh_source_proof": 2,
+      "seed_batch": 2,
+      "cwp_cli": 3,
+      "ff_cli": 52
+    },
+    "parent_launch_total": 63
+  },
+  "machine_load_pct_at_start": 38,
+  "note": "baseline proves main already completes 41/41 under moderate load; B fixes are still required by the card (confirmed duplicate seed preparation)",
+  "snapshot_eol_note": "snapshot era: git archive under core.autocrlf=true (pure-LF files CRLF-smudged; proven content-equivalent to the fixed commits in dependency-eol-equivalence.json)"
+}

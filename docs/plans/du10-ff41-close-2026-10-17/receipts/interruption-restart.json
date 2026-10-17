@@ -1,0 +1,64 @@
+{
+  "schema_version": "du10-interruption-restart/1",
+  "inputs": {
+    "cwp": "C:\\Users\\郑曾波\\Projects\\.du10-deps\\cwp",
+    "et": "C:\\Users\\郑曾波\\Projects\\.du10-deps\\et"
+  },
+  "leg1": {
+    "interrupted": true,
+    "case_entry": {
+      "case_id": "chainA_download_reuse",
+      "request": "chainA_download_reuse.run1.request.json",
+      "fixture": "chainA_download_reuse.run1.fixture.json",
+      "observed_gets": 1,
+      "prior_observed_gets": 0,
+      "request_sha256": "5465e6cd6e57d9e1632fb49308fa3345e9c808c124d6e4332c473868de8406f7",
+      "fixture_sha256": "283e403c6e179fcdc9486f6cbfbfc7cf9d622165e03d3e988b6b6d4f747f2137",
+      "calls_sha256": "909d9f9161628cfcc037e9482e821c055b0180bbd6c70061488b2a08ef533f17",
+      "scope": "current request observed from zero to new GET before response; not proof the provider remained blocked at the kill instant"
+    },
+    "cleanup": {
+      "status": "observed",
+      "tree_reaped": true,
+      "returncode": 1,
+      "basis": "owned OS job/process group terminated; root reaped; pipe readers joined"
+    },
+    "error": null,
+    "deadline_seconds": 180,
+    "attempt": "attempt-13187211180c4a7d8ae6ff957713e3b5",
+    "residue_after_kill": {
+      "file_count": 39,
+      "report_json_present": false,
+      "sha256_of_sorted_paths": "f6e81f308a5af9a025e33cc0892aa7f0d86a84fad70b090403242c61288cd6bd",
+      "sample_shas": {
+        "artifacts\\g1.seed-batch.stdout.json": "7070bca348210ca69c62081c193134b39c6de9005eaa7f1cf7086dc1dbd70c69",
+        "artifacts\\g2.seed-batch.stdout.json": "9e3652ee15db783a6f006d0957eac35058a619a94d3a86959b99e5b1f773a00a"
+      }
+    },
+    "stdout_tail": ""
+  },
+  "leg2": {
+    "status": "completed",
+    "seconds": 126.767,
+    "exit_code": 0,
+    "stdout_tail": "cases: {'PASS': 41, 'FAIL': 0, 'PARTIAL': 0, 'NOT_RUN': 0}; seconds=125.81; oracle findings=0\r\nreport: C:\\Users\\郑曾波\\AppData\\Local\\Temp\\du10-restart-v2l7ojlr\\out\\attempt-7cd3aae9b9be458ea43159583282a4d1\\report.json\r\n"
+  },
+  "checks": {
+    "leg1_interrupted_in_flight": true,
+    "leg1_tree_reaped": true,
+    "leg1_no_report_written": true,
+    "restart_is_new_unique_attempt": true,
+    "restart_report_written": true,
+    "restart_case_counts": {
+      "PASS": 41,
+      "total": 41
+    },
+    "restart_restored_true": true,
+    "residue_not_rewritten": true,
+    "sentinel_intact": true,
+    "preexisting_output_intact": true,
+    "temporary_tree_removed": true
+  },
+  "passed": true,
+  "scope": "one controlled interruption + one restart-to-completion + cleanup; the 41-case verdict is judged by the separate clean C-node run"
+}
