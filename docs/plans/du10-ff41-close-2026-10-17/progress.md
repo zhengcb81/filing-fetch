@@ -51,3 +51,12 @@
   - sentinel/既有 out 条目字节不变；临时树移除。receipt `receipts/interruption-restart.json`。
 - 依赖快照与 EOL 等价性、负载实录见 findings A.6/A.7。
 - 待办：提交 → 冻结 HEAD → 独立审查 agent → 修复 findings（如有）→ handoff + 清理。
+
+## 2026-10-17 会话熔断收尾
+
+- 节点 A/B/C 全部 commit 在 `bb60678`；本卡作者侧的工作已完成。
+- 5h 用量上限在派发独立最终审查 subagent 时触发熔断，作者侧无法继续；
+  剩余事项已 commit `cb7e2fb` 的 `NEXT_HANDOFF.md` 固化（独立审查 + handoff
+  + 临时目录清理 + 快照重建备忘）。
+- 恢复后请严格按 NEXT_HANDOFF.md 顺序执行；不要回退到 A/B/C 节点，不要重跑完整
+  41 例矩阵（机器负载敏感）。最终并线需等独审 APPROVE。
