@@ -18,6 +18,11 @@ from et_v2_contract import ET_NOT_FOUND_DIAGNOSTICS
 from ff_configuration import expand_config_path, read_json_object
 from filing_contracts import FilingFetchError
 from ff_source_ref import validate_source_ref
+from transcript_reuse_selection import (
+    LocalQueryContractError,
+    Selection,
+    select_local_outcome,
+)
 
 
 _LOOKUP_SCHEMA = "company-wiki-transcript-import-lookup-request/1"
@@ -192,7 +197,11 @@ class EarningsTranscriptsTransport:
         fiscal_quarter: int,
         as_of_date: str,
         allow_download: bool,
+        provider: str | None,
     ) -> dict[str, Any]:
+        # The reuse scope is source-neutral: ``provider`` stays None unless the
+        # caller explicitly constrained it. The acquisition provider is decided
+        # separately (FMP only) and is never written back into this request.
         return {
             "entity": identity["canonical_name"],
             "document_kind": "investor_call_transcript",
@@ -203,7 +212,7 @@ class EarningsTranscriptsTransport:
             "fiscal_year": fiscal_year,
             "fiscal_period": f"Q{fiscal_quarter}",
             "language": None,
-            "provider": "fmp",
+            "provider": provider,
             "provider_document_id": None,
             "mode": "exact",
             "allow_download": allow_download,
@@ -333,11 +342,8 @@ class EarningsTranscriptsTransport:
             _ = stderr  # bounded; classification stays the caller's job
         return result, code
 
-    def _query(self, source_request: dict[str, Any]) -> dict[str, Any]:
-        request = {
-            "schema_version": _LOOKUP_SCHEMA,
-            "source_request": source_request,
-        }
+    def _run_source_query(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """One bounded call to the public local source-query CLI."""
         command = [
             sys.executable,
             "-m",
@@ -345,17 +351,35 @@ class EarningsTranscriptsTransport:
             "--config",
             str(self.wiki_root / "config" / "source_catalog.yaml"),
         ]
-        payload, code = self._run_json(
+        result, code = self._run_json(
             command,
-            request,
+            payload,
             cwd=self.wiki_root,
             env=self._wiki_env(),
         )
-        if payload.get("schema_version") != "2.0":
+        if result.get("schema_version") != "2.0":
             raise ValueError("company-wiki source query schema is unsupported")
         if code not in (0, 2):
             raise ValueError("company-wiki source query failed")
-        return payload
+        return result
+
+    def _query(self, source_request: dict[str, Any]) -> dict[str, Any]:
+        """Provider-scoped duplicate-suppression lookup through its own envelope.
+
+        This entry exists for the explicit-provider import-dedup path and keeps
+        requiring a concrete provider; it is not a cross-source query.
+        """
+        return self._run_source_query(
+            {"schema_version": _LOOKUP_SCHEMA, "source_request": source_request}
+        )
+
+    def _query_local(self, source_request: dict[str, Any]) -> dict[str, Any]:
+        """Source-neutral exact local query: a plain ``SourceRequest`` object.
+
+        The CLI constructs ``SourceRequest`` directly and calls
+        ``SourceVersionReader.query_local``; no lookup envelope is wrapped.
+        """
+        return self._run_source_query(dict(source_request))
 
     @staticmethod
     def _valid_ref(value: object) -> dict[str, Any]:
@@ -365,7 +389,8 @@ class EarningsTranscriptsTransport:
         except FilingFetchError as exc:
             raise ValueError(str(exc)) from None
 
-    def _verified_open(self, ref: dict[str, Any]) -> None:
+    def _verified_open(self, ref: dict[str, Any]) -> dict[str, Any]:
+        """Read verified bytes; return the public receipt that names their source."""
         command = [
             sys.executable,
             "-m",
@@ -408,50 +433,214 @@ class EarningsTranscriptsTransport:
             receipt.get(key) != value for key, value in expected.items()
         ):
             raise ValueError("company-wiki verified-open receipt mismatches SourceRef")
+        manifest = receipt.get("manifest")
+        if manifest is not None and not isinstance(manifest, dict):
+            raise ValueError("company-wiki verified-open manifest is invalid")
+        return receipt
+
+    @staticmethod
+    def _manifest_provider(receipt: object) -> str | None:
+        """Real provider of the verified bytes; unknown stays unknown, never a default."""
+        if not isinstance(receipt, dict):
+            return None
+        manifest = receipt.get("manifest")
+        if not isinstance(manifest, dict):
+            return None
+        value = manifest.get("provider")
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("company-wiki manifest provider is invalid")
+        return value.strip() or None
+
+    @staticmethod
+    def _manifest_published_date(
+        receipt: object, observed: str | None,
+    ) -> str | None:
+        """Publication date of the verified manifest, else the qualified observation."""
+        if not isinstance(receipt, dict):
+            return observed
+        manifest = receipt.get("manifest")
+        if not isinstance(manifest, dict):
+            return observed
+        value = manifest.get("published_date")
+        if value is None:
+            return observed
+        if not isinstance(value, str):
+            raise ValueError("company-wiki manifest publication date is invalid")
+        return value.strip() or None
+
+    @staticmethod
+    def _manifest_conflicts(receipt: object, expected: dict[str, Any]) -> bool:
+        """A verified manifest that contradicts the exact request cannot be reused."""
+        if not isinstance(receipt, dict):
+            return False
+        manifest = receipt.get("manifest")
+        if not isinstance(manifest, dict):
+            return False
+
+        def text(name: str) -> str | None:
+            value = manifest.get(name)
+            return value.strip() if isinstance(value, str) and value.strip() else None
+
+        def key(value: str) -> str:
+            return value.strip().lstrip("0").casefold()
+
+        period = text("fiscal_period")
+        if period is not None and str(expected.get("fiscal_period") or "").strip():
+            if period.casefold() != str(expected["fiscal_period"]).strip().casefold():
+                return True
+        year = manifest.get("fiscal_year")
+        if type(year) is int and expected.get("fiscal_year") is not None:
+            if year != expected["fiscal_year"]:
+                return True
+        market = text("market")
+        if market is not None and expected.get("market"):
+            if market.casefold() != str(expected["market"]).strip().casefold():
+                return True
+        security = text("security_id")
+        if security is not None and expected.get("security_id"):
+            if key(security) != key(str(expected["security_id"])):
+                return True
+        return False
+
+    def _verified_lookup(
+        self,
+        selection: Selection,
+        *,
+        provider_constraint: str | None,
+        expected: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Reuse one local candidate only after its bytes are read and verified."""
+        if selection.source_ref is None:
+            return {"status": "upstream_error", "reason": "transcript_lookup_contract"}
+        try:
+            ref = self._valid_ref(selection.source_ref.to_dict())
+        except (FilingFetchError, ValueError):
+            return {"status": "upstream_error", "reason": "transcript_lookup_source_ref"}
+        receipt = self._verified_open(ref)
+        if self._manifest_conflicts(receipt, expected):
+            # Verified bytes for another period/security are not this request.
+            return {"status": "upstream_error", "reason": "transcript_lookup_identity_mismatch"}
+        provider = self._manifest_provider(receipt)
+        if (
+            provider_constraint is not None
+            and provider is not None
+            and provider != provider_constraint
+        ):
+            # The explicit constraint is a request condition, not a label: a
+            # verified source from another provider cannot satisfy it.
+            return {"status": "upstream_error", "reason": "transcript_provider_mismatch"}
+        published = self._manifest_published_date(receipt, selection.published_date)
+        unknown = selection.kind == "unknown_publication" or published is None
+        result: dict[str, Any] = {
+            "status": "unknown_publication" if unknown else "found",
+            "source_ref": ref,
+            "publication_date": published,
+            "as_of_cutoff_verified": not unknown,
+            "provider_calls": 0,
+        }
+        if provider is not None:
+            result["provider"] = provider
+        return result
+
+    def _read_lookup(
+        self,
+        result: dict[str, Any],
+        *,
+        provider_constraint: str | None,
+        unknown_publication_is_excluded: bool,
+        expected: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Read one public query result without inventing a source or a provider."""
+        try:
+            selection = select_local_outcome(result)
+        except LocalQueryContractError:
+            return {"status": "upstream_error", "reason": "transcript_lookup_contract"}
+        if selection.kind == "missing":
+            return None
+        if selection.kind == "status":
+            return {
+                "status": (
+                    selection.provider_status
+                    if selection.provider_status in {"ambiguous", "blocked", "unavailable"}
+                    else "upstream_error"
+                ),
+                "reason": selection.reason or "transcript_lookup_unavailable",
+            }
+        if selection.kind == "gap":
+            return {
+                "status": "upstream_error",
+                "reason": selection.reason or "transcript_lookup_unavailable",
+                "provider_calls": 0,
+                **selection.exclusions(),
+            }
+        if (
+            selection.kind == "unknown_publication"
+            and unknown_publication_is_excluded
+            and selection.qualification is not None
+            and selection.source_ref is not None
+        ):
+            try:
+                ref = self._valid_ref(selection.source_ref.to_dict())
+            except (FilingFetchError, ValueError):
+                return {"status": "upstream_error", "reason": "transcript_lookup_source_ref"}
+            # A query observation, not a byte proof: no reader call, so no GET.
+            return {
+                "status": "unknown_publication",
+                "source_ref": ref,
+                "publication_date": None,
+                "as_of_cutoff_verified": False,
+                "qualification": selection.qualification,
+                "provider_calls": 0,
+            }
+        return self._verified_lookup(
+            selection,
+            provider_constraint=provider_constraint,
+            expected=expected,
+        )
 
     def lookup_exact(self, **kwargs: Any) -> dict[str, Any] | None:
+        provider = kwargs.get("provider")
+        if provider not in (None, "fmp"):
+            return {
+                "status": "upstream_error",
+                "reason": "unsupported_transcript_provider",
+                "provider_calls": 0,
+            }
+        identity = kwargs["identity"]
         source_request = self._source_request(
-            identity=kwargs["identity"],
+            identity=identity,
             fiscal_year=kwargs["fiscal_year"],
             fiscal_quarter=kwargs["fiscal_quarter"],
             as_of_date=kwargs["as_of_date"],
             allow_download=False,
+            provider=provider,
         )
-        result = self._query(source_request)
+        expected = {
+            "fiscal_year": kwargs["fiscal_year"],
+            "fiscal_period": f"Q{kwargs['fiscal_quarter']}",
+            "market": identity.get("market"),
+            "security_id": identity.get("security_id"),
+        }
+        # Omitted provider: cross-source local reuse first. Explicit provider:
+        # the existing provider-scoped import-dedup envelope.
+        result = (
+            self._query_local(source_request)
+            if provider is None
+            else self._query(source_request)
+        )
         self._pending = {
             "source_request": source_request,
             "request_id": result.get("request_id"),
             "kwargs": kwargs,
         }
-        status = result.get("status")
-        if status == "not_found":
-            return None
-        if status not in {"found", "unknown_publication"}:
-            return {
-                "status": status
-                if status in {"ambiguous", "blocked", "unavailable"}
-                else "upstream_error",
-                "reason": result.get("reason") or "transcript_lookup_unavailable",
-            }
-        candidates = result.get("candidates")
-        if not isinstance(candidates, list) or len(candidates) != 1:
-            raise ValueError("exact company-wiki transcript lookup is not unique")
-        candidate = candidates[0]
-        if not isinstance(candidate, dict):
-            raise ValueError("company-wiki transcript candidate is invalid")
-        ref = self._valid_ref(candidate.get("source_ref"))
-        self._verified_open(ref)
-        unknown = status == "unknown_publication" or candidate.get("published_date") is None
-        return {
-            "status": "unknown_publication" if unknown else "found",
-            "source_ref": ref,
-            "publication_date": candidate.get("published_date"),
-            "as_of_cutoff_verified": not unknown,
-            "provider": "fmp",
-            "fiscal_year": kwargs["fiscal_year"],
-            "fiscal_quarter": kwargs["fiscal_quarter"],
-            "provider_calls": 0,
-        }
+        return self._read_lookup(
+            result,
+            provider_constraint=provider,
+            unknown_publication_is_excluded=provider is None,
+            expected=expected,
+        )
 
     def _et_result(
         self,
@@ -656,21 +845,46 @@ class EarningsTranscriptsTransport:
         self._last_provider_usage = {}
         pending = self._pending
         if pending is None or pending.get("kwargs") != kwargs:
+            provider = kwargs.get("provider")
+            identity = kwargs["identity"]
             source_request = self._source_request(
-                identity=kwargs["identity"],
+                identity=identity,
                 fiscal_year=kwargs["fiscal_year"],
                 fiscal_quarter=kwargs["fiscal_quarter"],
                 as_of_date=kwargs["as_of_date"],
                 allow_download=False,
+                provider=provider,
             )
-            query = self._query(source_request)
-            if query.get("status") != "not_found":
+            query = (
+                self._query_local(source_request)
+                if provider is None
+                else self._query(source_request)
+            )
+            try:
+                selection = select_local_outcome(query)
+            except LocalQueryContractError:
                 return {
+                    "status": "upstream_error",
+                    "reason": "transcript_lookup_contract",
+                    "retryable": False,
+                    "provider_calls": 0,
+                }
+            if selection.kind != "missing":
+                # A concurrent write, an as-of-restricted local observation or an
+                # ambiguous catalog is a change of answer, never a download
+                # trigger; the bytes are deliberately not opened again here.
+                changed_answer: dict[str, Any] = {
                     "status": "upstream_error",
                     "reason": "transcript_lookup_changed",
                     "retryable": False,
                     "provider_calls": 0,
                 }
+                # Keep the pathless local duplicate-suppression evidence that
+                # turned the answer into a named gap instead of a download.
+                if selection.qualification is not None:
+                    changed_answer["qualification"] = selection.qualification
+                changed_answer.update(selection.exclusions())
+                return changed_answer
             pending = {
                 "source_request": source_request,
                 "request_id": query.get("request_id"),
@@ -791,11 +1005,17 @@ class EarningsTranscriptsTransport:
                 "retryable": False,
                 "provider_calls": 1,
             }
-        self._verified_open(ref)
-        return {
+        receipt = self._verified_open(ref)
+        # The verified manifest names the committed provenance. The CWP import
+        # contract already proved the tool result's provider equals the
+        # candidate's, so that declaration is the fallback, never a request default.
+        provider = self._manifest_provider(receipt)
+        if provider is None:
+            declared = fetched.get("provider")
+            provider = declared if isinstance(declared, str) and declared.strip() else None
+        result: dict[str, Any] = {
             "status": "downloaded",
             "source_ref": ref,
-            "provider": "fmp",
             "fiscal_year": kwargs["fiscal_year"],
             "fiscal_quarter": kwargs["fiscal_quarter"],
             "provider_document_id": fetched.get("provider_document_id"),
@@ -805,3 +1025,6 @@ class EarningsTranscriptsTransport:
             "provider_calls": fetched.get("provider_calls", 1),
             **self._last_provider_usage,
         }
+        if provider is not None:
+            result["provider"] = provider
+        return result

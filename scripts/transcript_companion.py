@@ -99,6 +99,7 @@ def _lookup_resolved(
         return _result("upstream_error", reason="transcript_lookup_contract")
     fields = _optional_fields(existing, (
         "provider", "publication_date", "as_of_cutoff_verified", "provider_calls",
+        "qualification", "excluded_candidates",
     ))
     if status == "unknown_publication":
         fields["as_of_cutoff_verified"] = False
@@ -115,6 +116,7 @@ def _lookup_unavailable(existing: dict[str, Any]) -> dict[str, Any]:
     status = "ambiguous" if existing["status"] == "ambiguous" else "upstream_error"
     return _result(
         status, reason=existing.get("reason") or "transcript_lookup_unavailable",
+        **_optional_fields(existing, ("provider_calls", "excluded_candidates")),
     )
 
 
@@ -201,7 +203,9 @@ def resolve_companion_transcript(
         "fiscal_year": prepared.year,
         "fiscal_quarter": prepared.quarter,
         "as_of_date": request.get("as_of_date"),
-        "provider": prepared.option.get("provider") or "fmp",
+        # Omitted stays omitted: reuse is source-neutral locally, and the
+        # acquisition provider is the transport's separate FMP decision.
+        "provider": prepared.option.get("provider"),
     }
     existing = _lookup(transport, arguments, prepared.year, prepared.quarter)
     if existing is not None:
