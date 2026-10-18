@@ -348,6 +348,7 @@ def test_unknown_publication_lookup_suppresses_second_provider_call(tmp_path, mo
                 "source_id": ref["source_id"],
                 "content_sha256": digest,
                 "byte_size": len(raw),
+                "manifest": {"provider": "fmp", "published_date": None},
             }
             return bounded_response(_completed(list(command), stdout=raw, stderr=json.dumps(receipt).encode()))
         payload = {

@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "returncode": 0,
+  "wall_seconds": 0.9103647000156343,
+  "owned_temp_removed": true,
+  "change": "Only known-provider/current-unknown-date fixture gains manifest proof;production untouched",
+  "fixture_sha256": "a1c7171d66c553d273a6f85072b731d0d7004e2e66f028051f4ac71607cf501b",
+  "normal_push_red": "ROOT CWP review/du11-ff-normal-push-after-type.log;872PASS7SKIP78subtests1FAIL97.84s",
+  "source_sha256": {
+    "scripts/transcript_reuse_selection.py": "66600ac99f48f43fc4ca332a71edd5ce6a2671173f4a4da97f99f3f724b41269",
+    "scripts/transcript_tool_transport.py": "4bb18006bb608c3dc706a6ca3f70e77fe03513798ff815b464aad208a8f33026"
+  }
+}
