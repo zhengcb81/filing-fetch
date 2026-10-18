@@ -1,0 +1,12 @@
+{
+  "status": "INDEPENDENT_PASS_NORMAL_RELEASE_READY",
+  "selection_sha256": "66600ac99f48f43fc4ca332a71edd5ce6a2671173f4a4da97f99f3f724b41269",
+  "hook_sha256": "85db7e3011cbd67f28c33b4208dcc52b186c75cd4f9e1aaee46265a10ff6fde7",
+  "transport_sha256": "4bb18006bb608c3dc706a6ca3f70e77fe03513798ff815b464aad208a8f33026",
+  "independent_receipt": "C:\\Users\\\u90d1\u66fe\u6ce2\\.codex\\worktrees\\du11-extractive-runtime\\company-wiki\\docs\\plans\\du11-source-closure-2026-10-18\\review\\du11-ff-type-route-independent.json",
+  "independent_receipt_sha256": "c18ffe14e2e155c0d0be288ee025e09f8d1abb731e392352c36b57fe9925f2d5",
+  "results": "Original public mypy PASS in owned reviewer snapshot;10schema/refusal/routing PASS0.169s;AST only annotation change;no reviewed source drift",
+  "own_results": "public mypy4.018s PASS;47pure selection0.32s PASS;Ruff PASS",
+  "actual_push_red_preserved": true,
+  "normal_release": "Normal commit -> main ff -> normal push; scoped installed sync after actual remote publication"
+}

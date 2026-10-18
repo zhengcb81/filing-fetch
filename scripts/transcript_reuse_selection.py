@@ -53,7 +53,7 @@ _REF_FIELDS = {
     "byte_size": int,
     "mime_type": str,
 }
-_QUALIFICATION_FIELDS = {
+_QUALIFICATION_FIELDS: dict[str, type[object] | tuple[type[object], ...]] = {
     "publication_status": str,
     "as_of_date": (str, type(None)),
     "local_bytes_status": str,

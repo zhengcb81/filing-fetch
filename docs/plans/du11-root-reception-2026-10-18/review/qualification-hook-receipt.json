@@ -1,0 +1,20 @@
+{
+  "status": "GREEN_AWAITING_DISTINCT_TYPE_HOOK_REVIEW",
+  "public_mypy_returncode": 0,
+  "public_mypy_wall_seconds": 4.0181679999805056,
+  "hook_entry": "python -m mypy scripts/filing_contracts.py scripts/fetch_filing.py",
+  "pass_filenames": false,
+  "routing_controls": {
+    "scripts/transcript_reuse_selection.py": true,
+    "scripts/filing_contracts.py": true,
+    "scripts/new_runtime.py": true,
+    "tests/test_any.py": false,
+    "docs/readme.md": false
+  },
+  "sha256": {
+    ".pre-commit-config.yaml": "85db7e3011cbd67f28c33b4208dcc52b186c75cd4f9e1aaee46265a10ff6fde7",
+    "scripts/transcript_reuse_selection.py": "66600ac99f48f43fc4ca332a71edd5ce6a2671173f4a4da97f99f3f724b41269",
+    "scripts/transcript_tool_transport.py": "4bb18006bb608c3dc706a6ca3f70e77fe03513798ff815b464aad208a8f33026"
+  },
+  "no_new_gate_or_full_project_mypy": true
+}

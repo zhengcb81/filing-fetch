@@ -20,8 +20,8 @@ repos:
         entry: python -m mypy scripts/filing_contracts.py scripts/fetch_filing.py
         language: system
         pass_filenames: false
-        # Run only when one of the checked modules is staged.
-        files: ^scripts/(filing_contracts\.py|fetch_filing\.py)$
+        # Public entrypoints import runtime modules under scripts/ transitively.
+        files: ^scripts/.*\.py$
 
       # FC-1307-a, vendored from company-wiki/scripts/host_assumption_guard.py
       # (byte-identical; tests/test_fc1307a_host_assumption_gate.py checks the drift
