@@ -32,6 +32,11 @@ CI_TESTS = (
     "tests/test_transcript_companion_transport.py",
     "tests/test_transcript_launch_contract.py",
     "tests/test_transcript_response_budget.py",
+    # Pure local reuse/current-reader regressions; the real frozen-CWP matrix
+    # remains a separate integration node instead of running on every push.
+    "tests/test_du11_transcript_reuse_selection.py",
+    "tests/test_du11_transcript_reuse_contract.py",
+    "tests/test_du11_verified_reader_revalidation.py",
     "tests/test_fetch_filing.py",
     "tests/test_fc802_gap_orchestration.py",
     "tests/test_fc1204_coverage_gap.py",

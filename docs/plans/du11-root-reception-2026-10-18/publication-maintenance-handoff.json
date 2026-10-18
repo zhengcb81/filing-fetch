@@ -1,0 +1,36 @@
+{
+  "schema_version": "du11-ff-publication-maintenance/1",
+  "status": "INDEPENDENT_PASS_NORMAL_COMMIT_READY_RF_PIN_PUBLICATION_PENDING",
+  "base_commit": "a9c2dcf7de2e70f50cb18caa8b4b038464391f9d",
+  "changed_source_test_sha256": {
+    "tools/complexity_diagnostics.py": "a6a0ef5e211dac9abc3874c95bb07fac23b54d8307d19c9ce6cf07fdf598ba2e",
+    "tools/ci_tests.py": "8ae5f51e611e8017439cf9748edff4e6fb17c111a33764c011e98d4b02850d96",
+    "tests/test_complexity_diagnostics.py": "603ff0d0bf772fe8293c81a9bc8f4b96558f9a01c3062aaa9d569fb7e42d8019",
+    "tests/test_ci_tests.py": "7bb9cca8c23a2e1dd35d50f3f8e56386902f6ab6ddbd1f38c8097414216f684d"
+  },
+  "unchanged_transport_sha256": "4bb18006bb608c3dc706a6ca3f70e77fe03513798ff815b464aad208a8f33026",
+  "behavior_red": "3FAIL1.45s; actual GBK child/Chinese path JSON decode2 + missing common CI scope1",
+  "focused_green": "135PASS5.29s",
+  "static": "Ruff4changedfilesPASS; git diff--check to follow",
+  "owned_temp_removed": true,
+  "full_suite_repeated": false,
+  "no_raw_key_configuration_api_access": true,
+  "independent_review": {
+    "verdict": "PASS",
+    "receipt": "C:\\Users\\郑曾波\\.codex\\worktrees\\du11-extractive-runtime\\company-wiki\\docs\\plans\\du11-source-closure-2026-10-18\\review\\du11-ff-publication-maintenance-independent.json",
+    "receipt_sha256": "b71568dcf53fc8cb751fb4d0f71106653c0377874683bbd1100bb69faf3ef000",
+    "independent": "7PASS1.848s; fourfile/transportSHA unchanged; no findings; original135receipt reused, not rerun",
+    "owned_temp_removed": true,
+    "network_attempts": 0
+  },
+  "normal_commit": "Normal isolated commit after this receipt; ROOT authorizes main fast-forward but push waits RF manifest remote confirmation",
+  "dependency_pin_owner": {
+    "workflow": "filing-fetch/.github/workflows/quality.yml clones revenue-forecast default branch and runs its tools/ci_checkout_siblings.py",
+    "manifest": "revenue-forecast/compatibility/current.json",
+    "observed_rf_head_and_cached_origin_main": "f8002f5fc8f56533c814f1616b7ecb68016f35e4",
+    "observed_wiki_pin": "6cd9b6d7ca4faee3348fdd8afcf70bf7e3d6a5fb",
+    "no_rf_edits": true,
+    "cwp_published_commit": "0ccdc6896ee58063ff827e9ceab16043c7550e0c",
+    "rf_pin_commit_pending_remote": "e7364639 (ROOT reports normal push in progress; no remote confirmation yet)"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "pytest_returncode": 0,
+  "ruff_returncode": 0,
+  "wall_seconds": 7.262321699992754,
+  "owned_temp_removed": true,
+  "nodes": [
+    "tests/test_complexity_diagnostics.py",
+    "tests/test_ci_tests.py",
+    "tests/test_du11_transcript_reuse_selection.py",
+    "tests/test_du11_transcript_reuse_contract.py",
+    "tests/test_du11_verified_reader_revalidation.py"
+  ],
+  "source_sha256": {
+    "tools/complexity_diagnostics.py": "a6a0ef5e211dac9abc3874c95bb07fac23b54d8307d19c9ce6cf07fdf598ba2e",
+    "tools/ci_tests.py": "8ae5f51e611e8017439cf9748edff4e6fb17c111a33764c011e98d4b02850d96",
+    "tests/test_complexity_diagnostics.py": "603ff0d0bf772fe8293c81a9bc8f4b96558f9a01c3062aaa9d569fb7e42d8019",
+    "tests/test_ci_tests.py": "7bb9cca8c23a2e1dd35d50f3f8e56386902f6ab6ddbd1f38c8097414216f684d",
+    "scripts/transcript_tool_transport.py": "4bb18006bb608c3dc706a6ca3f70e77fe03513798ff815b464aad208a8f33026"
+  },
+  "full_suite_not_run": true,
+  "real_api_config_raw_access": false
+}

@@ -16,4 +16,8 @@ New portable boundary cases plus only affected prior subset; no repeated102/109/
 
 ## Next step
 
-Normal commit of only the transport, dedicated test and this plan; source SHA before/after hooks. ROOT must publish CWP producer port first, then merge/push FF consumer. No merge/push/installed-skill sync from this worker. Independent actual cross-repo29unique evidence is across invocations, not a single29-PASS run.
+Transport/source contract node committed a9c2dcf. Current D tool/test follow-up independently PASS; normal isolated commit with source SHA before/after hooks, then authorized FFmain fast-forward. CWP producer0cc remote confirmed; FFpush still waits ET/RF centralized pin remote confirmation before scoped installed runtime sync. No premature main/publication/install writes. Independent prior cross-repo29unique evidence remains across invocations, not a single29-PASS run.
+
+## D — publication root-cause maintenance (focused GREEN; independent review PASS)
+
+ROOT authorized a common CLI JSON encoding fix and one focused-table update after read-only preflight. First RED: actual Chinese-path CLI subprocess forced to nonUTF8 GBK stdout (valid and invalid input), plus shared table lacking DU11 pure regressions. Then main emits stable ASCII JSON with unchanged decoded data/diagnostic semantics; one CI_TESTS table includes pure reuse/current-reader cases, no heavy frozen-source fixtures per push. Distinct reviewer before normal commit, transport4bb18006 stays frozen. No RF compatibility manifest/source edit, FF main merge/push or installed-skill writes until ROOT confirms remote CWP.

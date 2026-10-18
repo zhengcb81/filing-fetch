@@ -67,7 +67,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", type=Path, default=[SCRIPTS])
     report = measure(parser.parse_args(argv).paths)
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    # stdout is a JSON protocol, including on legacy Windows consoles. ASCII
+    # escapes preserve decoded paths while remaining valid UTF-8 under any
+    # configured text-stream encoding; the caller need not guess its locale.
+    print(json.dumps(report, ensure_ascii=True, indent=2))
     return 1 if report["errors"] else 0
 
 

@@ -1,0 +1,62 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+__ test_json_stdout_preserves_unicode_paths_under_non_utf8_child_stdio[True] __
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-json-hn48gp4t/pytest/test_json_stdout_preserves_uni0')
+exists = True
+
+    @pytest.mark.parametrize("exists", [True, False])
+    def test_json_stdout_preserves_unicode_paths_under_non_utf8_child_stdio(tmp_path, exists):
+        path = tmp_path / "\u4e2d\u6587\u8def\u5f84.py"
+        if exists:
+            path.write_text(SIMPLE, encoding="utf-8")
+        environment = dict(os.environ, PYTHONIOENCODING="gbk", PYTHONUTF8="0")
+        # Bytes capture checks the actual CLI wire, not a mocked print or the
+        # caller's locale decoder. Valid and failed inputs share the same owner.
+        result = subprocess.run([sys.executable, "-B", str(TOOL), str(path)],
+            env=environment, capture_output=True, timeout=20)
+        assert result.returncode == (0 if exists else 1)
+>       report = json.loads(result.stdout.decode("utf-8"))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd4 in position 182: invalid continuation byte
+
+tests\test_complexity_diagnostics.py:108: UnicodeDecodeError
+_ test_json_stdout_preserves_unicode_paths_under_non_utf8_child_stdio[False] __
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-json-hn48gp4t/pytest/test_json_stdout_preserves_uni1')
+exists = False
+
+    @pytest.mark.parametrize("exists", [True, False])
+    def test_json_stdout_preserves_unicode_paths_under_non_utf8_child_stdio(tmp_path, exists):
+        path = tmp_path / "\u4e2d\u6587\u8def\u5f84.py"
+        if exists:
+            path.write_text(SIMPLE, encoding="utf-8")
+        environment = dict(os.environ, PYTHONIOENCODING="gbk", PYTHONUTF8="0")
+        # Bytes capture checks the actual CLI wire, not a mocked print or the
+        # caller's locale decoder. Valid and failed inputs share the same owner.
+        result = subprocess.run([sys.executable, "-B", str(TOOL), str(path)],
+            env=environment, capture_output=True, timeout=20)
+        assert result.returncode == (0 if exists else 1)
+>       report = json.loads(result.stdout.decode("utf-8"))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd4 in position 199: invalid continuation byte
+
+tests\test_complexity_diagnostics.py:108: UnicodeDecodeError
+_ test_shared_ci_table_covers_pure_local_reuse_and_current_reader_regressions _
+
+    def test_shared_ci_table_covers_pure_local_reuse_and_current_reader_regressions():
+        runner = _load("ff_ci_du11_regressions", "tools/ci_tests.py")
+        for name in ("tests/test_du11_transcript_reuse_selection.py",
+                     "tests/test_du11_transcript_reuse_contract.py",
+                     "tests/test_du11_verified_reader_revalidation.py"):
+>           assert name in runner.CI_TESTS
+E           AssertionError: assert 'tests/test_du11_transcript_reuse_selection.py' in ('tests/test_architecture_quality.py', 'tests/test_m3_acquisition_usage_ff.py', 'tests/test_m3_acquisition_usage_accep...failure_usage_continuity.py', 'tests/test_s3_single_request_limits.py', 'tests/test_single_intent_acquisition.py', ...)
+E            +  where ('tests/test_architecture_quality.py', 'tests/test_m3_acquisition_usage_ff.py', 'tests/test_m3_acquisition_usage_accep...failure_usage_continuity.py', 'tests/test_s3_single_request_limits.py', 'tests/test_single_intent_acquisition.py', ...) = <module 'ff_ci_du11_regressions' from 'C:\\Users\\郑曾波\\.codex\\worktrees\\du11-ff-reception\\filing-fetch\\tools\\ci_tests.py'>.CI_TESTS
+
+tests\test_ci_tests.py:73: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_complexity_diagnostics.py::test_json_stdout_preserves_unicode_paths_under_non_utf8_child_stdio[True]
+FAILED tests/test_complexity_diagnostics.py::test_json_stdout_preserves_unicode_paths_under_non_utf8_child_stdio[False]
+FAILED tests/test_ci_tests.py::test_shared_ci_table_covers_pure_local_reuse_and_current_reader_regressions
+3 failed in 1.45s
+

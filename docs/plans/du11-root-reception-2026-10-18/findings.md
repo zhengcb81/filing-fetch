@@ -13,3 +13,9 @@ Project and parent AGENTS.md files were absent at the inspected FF paths. Projec
 ## Independent closure
 
 ROOT final du11-ff-final-integration.md/json is PASS_BOUNDED_ENGINEERING_RECEPTION at the four exact FF/CWP source SHAs. The additive producer port and real HK TXT chain are proven; publication is still ROOT's ordered responsibility.29unique independent cases are28boundary passes plus1separate actual-chain pass, not one29-PASS run.0ET/network, all owned Temp removed, source/raw restored. The older34a7dd71 support-pin concern is closed for this specifically bound new-port integration; the old receipt remains historical evidence only.
+
+## Publication JSON/common scope root repair
+
+New real forcedGBK subprocess controls prove the same UTF8 producer/consumer mismatch summarized by the historical complexity4fail receipt. Main now uses ensure_ascii=True, preserving all JSON values/paths and score-independent diagnostic exit semantics. Unique CI table adds3pure modules; heavy frozen-CWP E2E remains separate.135focusedPASS5.29s and Ruff PASS; transportSHA4bb unchanged. Distinct reviewer pending, so no self-approved commit yet. Central CI runtime selection is RF compatibility/current.json through RF tools/ci_checkout_siblings.py (FF quality.yml clones RF default HEAD), not automatically CWP latestmaster. No RF manifest edited.
+
+Publication-maintenance independent review has closed the delta at exact4SHA:7actual tests including emoji path success/error under forcedGBK and failure/timeout propagation. ASCII JSON guarantee is for ASCII-compatible streams (UTF8/GBK tested), not arbitraryUTF16 stdout. CWPproducer remote0cc is published. Only RFcentral pin remote confirmation remains before FFpush. No RFmanifest edits by this worker.

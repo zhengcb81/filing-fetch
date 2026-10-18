@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -91,3 +92,19 @@ def test_current_sources_are_measurable_without_score_thresholds():
     assert report["errors"] == []
     assert report["files"]
     assert all(isinstance(row["max_score"], int) for row in report["files"])
+
+
+@pytest.mark.parametrize("exists", [True, False])
+def test_json_stdout_preserves_unicode_paths_under_non_utf8_child_stdio(tmp_path, exists):
+    path = tmp_path / "\u4e2d\u6587\u8def\u5f84.py"
+    if exists:
+        path.write_text(SIMPLE, encoding="utf-8")
+    environment = dict(os.environ, PYTHONIOENCODING="gbk", PYTHONUTF8="0")
+    # Bytes capture checks the actual CLI wire, not a mocked print or the
+    # caller's locale decoder. Valid and failed inputs share the same owner.
+    result = subprocess.run([sys.executable, "-B", str(TOOL), str(path)],
+        env=environment, capture_output=True, timeout=20)
+    assert result.returncode == (0 if exists else 1)
+    report = json.loads(result.stdout.decode("utf-8"))
+    assert report["diagnostic_only"] is True
+    assert report["files" if exists else "errors"][0]["path"] == str(path.resolve())

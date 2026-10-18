@@ -65,6 +65,17 @@ def test_hook_and_ci_use_the_same_behavior_runner():
     assert all((ROOT / relative).is_file() for relative in runner.CI_TESTS)
 
 
+def test_shared_ci_table_covers_pure_local_reuse_and_current_reader_regressions():
+    runner = _load("ff_ci_du11_regressions", "tools/ci_tests.py")
+    for name in ("tests/test_du11_transcript_reuse_selection.py",
+                 "tests/test_du11_transcript_reuse_contract.py",
+                 "tests/test_du11_verified_reader_revalidation.py"):
+        assert name in runner.CI_TESTS
+    assert len(runner.CI_TESTS) == len(set(runner.CI_TESTS))
+    # The frozen-CWP archive/real CLI matrix remains a large-node exercise.
+    assert "tests/test_du11_transcript_reuse_e2e.py" not in runner.CI_TESTS
+
+
 def test_failure_keeps_full_node_output_exit_code_and_cleans_scratch(
     monkeypatch, tmp_path, capsys, wiki_source,
 ):
