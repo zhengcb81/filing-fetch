@@ -1,0 +1,56 @@
+{
+  "schema_version": "du11-ff-root-reception-handoff/1",
+  "status": "INDEPENDENT_REVIEWED_CROSS_REPO_PASS_AWAITING_ORDERED_PUBLICATION",
+  "base_commit": "8a83e27863269b14c897dc2c7ba953f3b9102ef1",
+  "branch": "codex/root-du11-ff-reception",
+  "source_and_test_sha256": {
+    "scripts/transcript_tool_transport.py": "4bb18006bb608c3dc706a6ca3f70e77fe03513798ff815b464aad208a8f33026",
+    "tests/test_du11_verified_reader_revalidation.py": "9ab30a5ba0f02c0753fb785b45b571cac6c5009b757827eb2d5213e959ca8318"
+  },
+  "changed_production_files": [
+    "scripts/transcript_tool_transport.py"
+  ],
+  "new_tests": [
+    "tests/test_du11_verified_reader_revalidation.py"
+  ],
+  "tests": {
+    "initial_behavior_red": "4FAIL /0.76s",
+    "projection_red": "7FAIL /0.54s",
+    "final_focused": "34PASS /0.92s",
+    "new_cases": 24,
+    "prior_affected_cases": 10,
+    "full_102_109_not_repeated": true
+  },
+  "cleanup": "all owned execution temp directories removed; no original/config/catalogue/key touched",
+  "integration_dependency": {
+    "owner": "ROOT CWP",
+    "cli": "company_wiki.source_catalog.source_reader_cli --include-canonical-identity",
+    "receipt_projection": {
+      "canonical_identity": {
+        "schema_version": "source-canonical-identity/1",
+        "market": "CWP canonical market",
+        "security_id": "CWP canonical_security_code output"
+      }
+    },
+    "legacy_behavior": "receipt without projection uses strict manifest security comparison, no FF market normalizer; old CLI unsupported flag fails honestly without retry/download",
+    "real_cross_repo_e2e": "PASS_BOUNDED: actual CWP query/reader to FF HK TXT reuse; observed9896/canonical09896, sourceSHA unchanged, zeroET/network; legacy receipt/raw tamper controls passed",
+    "producer_source_sha256": {
+      "C:\\Users\\郑曾波\\.codex\\worktrees\\du11-extractive-runtime\\company-wiki\\src\\company_wiki\\source_catalog\\source_reader.py": "89cbc7ef9d6c99ab9bac743b17505b66328edc4cfb4f1125ae7bd5d6795eea63",
+      "C:\\Users\\郑曾波\\.codex\\worktrees\\du11-extractive-runtime\\company-wiki\\src\\company_wiki\\source_catalog\\source_reader_cli.py": "7510ae0244a61cee61a201a32dff1a21ee637518d8b2e916271414dd6e101876"
+    },
+    "publication_order": "ROOT must publish the CWP producer port before publishing FF consumer. Independent producer integration is now PASS, publication remains ROOT responsibility."
+  },
+  "independent_review": {
+    "verdict": "PASS_BOUNDED_ENGINEERING_RECEPTION",
+    "receipt": "C:\\Users\\郑曾波\\.codex\\worktrees\\du11-extractive-runtime\\company-wiki\\docs\\plans\\du11-source-closure-2026-10-18\\review\\du11-ff-final-integration.json",
+    "receipt_sha256": "5dcbef1709469f1a6cf395260edb2abd2b7f408b1985e4a2324a9397d39f2d91",
+    "md": "C:\\Users\\郑曾波\\.codex\\worktrees\\du11-extractive-runtime\\company-wiki\\docs\\plans\\du11-source-closure-2026-10-18\\review\\du11-ff-final-integration.md",
+    "passed_unique_cases_across_invocations": 29,
+    "execution_shape": "28 boundary cases passed first; 1 real HK TXT chain passed separately after own harness corrections; not a single 29-PASS invocation",
+    "zero_et_network": true,
+    "owned_temp_removed": true
+  },
+  "commit": "Recorded by the normal git commit containing this handoff; no self-referential hash",
+  "push": false,
+  "production_source_or_api_io": false
+}

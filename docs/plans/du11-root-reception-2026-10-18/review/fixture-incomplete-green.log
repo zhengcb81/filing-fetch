@@ -1,0 +1,71 @@
+............FF.............                                              [100%]
+================================== FAILURES ===================================
+_________ test_missing_current_date_field_does_not_reinstate_old_date _________
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-fixnm4tu/pytest/test_missing_current_date_fiel0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000135A6F11850>
+
+    def test_missing_current_date_field_does_not_reinstate_old_date(tmp_path, monkeypatch):
+        tool = tmp_path / "offline_tool.py"
+        entry = reader_entry(LOCAL_RAW)
+        entry["receipt"]["manifest"].pop("published_date")
+        fake = FakeCWP(queries=[query_found(LOCAL_RAW)], reader=[entry])
+        result = resolve_companion_transcript(request=companion_request(), filing_handle=filing(),
+>           transport=build(monkeypatch, fake, tool))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_du11_verified_reader_revalidation.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_du11_transcript_reuse_contract.py:289: in build
+    return EarningsTranscriptsTransport(
+scripts\transcript_tool_transport.py:167: in __init__
+    self.transcript_tool = configured.resolve(strict=True) if configured else None
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Miniconda\Lib\pathlib\_local.py:670: in resolve
+    return self.with_segments(os.path.realpath(self, strict=strict))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\郑曾波\\AppData\\Local\\Temp\\du11-ff-revalidation-fixnm4tu\\pytest\\test_missing_current_date_fiel0\\offline_tool.py'
+strict = True
+
+>   ???
+E   FileNotFoundError: [WinError 2] 系统找不到指定的文件。: 'C:\\Users\\郑曾波\\AppData\\Local\\Temp\\du11-ff-revalidation-fixnm4tu\\pytest\\test_missing_current_date_fiel0\\offline_tool.py'
+
+<frozen ntpath>:738: FileNotFoundError
+______ test_explicit_provider_constraint_requires_current_provider_proof ______
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-fixnm4tu/pytest/test_explicit_provider_constra0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000135A6F12690>
+
+    def test_explicit_provider_constraint_requires_current_provider_proof(tmp_path, monkeypatch):
+        tool = tmp_path / "offline_tool.py"
+        fake = FakeCWP(queries=[query_found(LOCAL_RAW)], reader=[reader_entry(LOCAL_RAW, provider=None)])
+        result = resolve_companion_transcript(request=companion_request(provider="fmp"),
+>           filing_handle=filing(), transport=build(monkeypatch, fake, tool))
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_du11_verified_reader_revalidation.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_du11_transcript_reuse_contract.py:289: in build
+    return EarningsTranscriptsTransport(
+scripts\transcript_tool_transport.py:167: in __init__
+    self.transcript_tool = configured.resolve(strict=True) if configured else None
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Miniconda\Lib\pathlib\_local.py:670: in resolve
+    return self.with_segments(os.path.realpath(self, strict=strict))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = 'C:\\Users\\郑曾波\\AppData\\Local\\Temp\\du11-ff-revalidation-fixnm4tu\\pytest\\test_explicit_provider_constra0\\offline_tool.py'
+strict = True
+
+>   ???
+E   FileNotFoundError: [WinError 2] 系统找不到指定的文件。: 'C:\\Users\\郑曾波\\AppData\\Local\\Temp\\du11-ff-revalidation-fixnm4tu\\pytest\\test_explicit_provider_constra0\\offline_tool.py'
+
+<frozen ntpath>:738: FileNotFoundError
+=========================== short test summary info ===========================
+FAILED tests/test_du11_verified_reader_revalidation.py::test_missing_current_date_field_does_not_reinstate_old_date
+FAILED tests/test_du11_verified_reader_revalidation.py::test_explicit_provider_constraint_requires_current_provider_proof
+2 failed, 25 passed in 0.96s
+

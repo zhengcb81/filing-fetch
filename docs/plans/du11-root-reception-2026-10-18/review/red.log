@@ -1,0 +1,78 @@
+FFFF                                                                     [100%]
+================================== FAILURES ===================================
+_ test_current_reader_date_cannot_inherit_query_qualification[2027-01-01-publication_after_as_of] _
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-lq4ovivq/pytest/test_current_reader_date_canno0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016FC3135A70>
+published = '2027-01-01', reason = 'publication_after_as_of'
+
+    @pytest.mark.parametrize("published,reason", [
+        ("2027-01-01", "publication_after_as_of"),
+        ("not-a-date", "publication_date_invalid"),
+        (None, "publication_date_unknown"),
+    ])
+    def test_current_reader_date_cannot_inherit_query_qualification(tmp_path, monkeypatch, published, reason):
+        result = run_current_reader(tmp_path, monkeypatch, published_date=published)
+>       assert result["status"] != "reused", result
+E       AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}
+E       assert 'reused' != 'reused'
+
+tests\test_du11_verified_reader_revalidation.py:34: AssertionError
+_ test_current_reader_date_cannot_inherit_query_qualification[not-a-date-publication_date_invalid] _
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-lq4ovivq/pytest/test_current_reader_date_canno1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016FC3134510>
+published = 'not-a-date', reason = 'publication_date_invalid'
+
+    @pytest.mark.parametrize("published,reason", [
+        ("2027-01-01", "publication_after_as_of"),
+        ("not-a-date", "publication_date_invalid"),
+        (None, "publication_date_unknown"),
+    ])
+    def test_current_reader_date_cannot_inherit_query_qualification(tmp_path, monkeypatch, published, reason):
+        result = run_current_reader(tmp_path, monkeypatch, published_date=published)
+>       assert result["status"] != "reused", result
+E       AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}
+E       assert 'reused' != 'reused'
+
+tests\test_du11_verified_reader_revalidation.py:34: AssertionError
+_ test_current_reader_date_cannot_inherit_query_qualification[None-publication_date_unknown] _
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-lq4ovivq/pytest/test_current_reader_date_canno2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016FC30ED490>
+published = None, reason = 'publication_date_unknown'
+
+    @pytest.mark.parametrize("published,reason", [
+        ("2027-01-01", "publication_after_as_of"),
+        ("not-a-date", "publication_date_invalid"),
+        (None, "publication_date_unknown"),
+    ])
+    def test_current_reader_date_cannot_inherit_query_qualification(tmp_path, monkeypatch, published, reason):
+        result = run_current_reader(tmp_path, monkeypatch, published_date=published)
+>       assert result["status"] != "reused", result
+E       AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}
+E       assert 'reused' != 'reused'
+
+tests\test_du11_verified_reader_revalidation.py:34: AssertionError
+___________ test_us_zero_prefixed_security_is_a_different_security ____________
+
+tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-lq4ovivq/pytest/test_us_zero_prefixed_security0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016FC30B86B0>
+
+    def test_us_zero_prefixed_security_is_a_different_security(tmp_path, monkeypatch):
+        result = run_current_reader(tmp_path, monkeypatch, security_id="0MSFT")
+>       assert result["status"] == "upstream_error", result
+E       AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}
+E       assert 'reused' == 'upstream_error'
+E         
+E         - upstream_error
+E         + reused
+
+tests\test_du11_verified_reader_revalidation.py:41: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_du11_verified_reader_revalidation.py::test_current_reader_date_cannot_inherit_query_qualification[2027-01-01-publication_after_as_of]
+FAILED tests/test_du11_verified_reader_revalidation.py::test_current_reader_date_cannot_inherit_query_qualification[not-a-date-publication_date_invalid]
+FAILED tests/test_du11_verified_reader_revalidation.py::test_current_reader_date_cannot_inherit_query_qualification[None-publication_date_unknown]
+FAILED tests/test_du11_verified_reader_revalidation.py::test_us_zero_prefixed_security_is_a_different_security
+4 failed in 0.76s
+

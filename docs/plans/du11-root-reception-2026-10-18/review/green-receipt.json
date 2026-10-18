@@ -1,0 +1,20 @@
+{
+  "returncode": 0,
+  "wall_seconds": 1.6817993000149727,
+  "owned_temp_removed": true,
+  "nodes": [
+    "tests/test_du11_verified_reader_revalidation.py",
+    "tests/test_du11_transcript_reuse_contract.py::test_omitted_provider_queries_without_a_provider_and_reuses_the_local_source",
+    "tests/test_du11_transcript_reuse_contract.py::test_explicit_fmp_keeps_the_provider_scoped_lookup_envelope",
+    "tests/test_du11_transcript_reuse_contract.py::test_a_missing_manifest_provider_stays_unknown_and_is_never_relabelled_fmp",
+    "tests/test_du11_transcript_reuse_contract.py::test_a_manifest_provider_disagreeing_with_the_explicit_constraint_is_named",
+    "tests/test_du11_transcript_reuse_contract.py::test_a_manifest_contradicting_the_exact_request_is_never_reused",
+    "tests/test_du11_transcript_reuse_contract.py::test_a_single_unknown_publication_exclusion_keeps_the_observation_without_a_read",
+    "tests/test_du11_transcript_reuse_contract.py::test_reuse_only_intent_true_miss_is_not_found_with_zero_children"
+  ],
+  "source_sha256": {
+    "scripts/transcript_tool_transport.py": "4bb18006bb608c3dc706a6ca3f70e77fe03513798ff815b464aad208a8f33026",
+    "tests/test_du11_verified_reader_revalidation.py": "9ab30a5ba0f02c0753fb785b45b571cac6c5009b757827eb2d5213e959ca8318"
+  },
+  "no_real_network_api_original_read": true
+}

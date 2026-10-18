@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="0.593" timestamp="2026-10-18T04:04:05.259094+01:00" hostname="DESKTOP-156V213"><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_current_reader_date_cannot_inherit_query_qualification[2027-01-01-publication_after_as_of]" time="0.009"><failure message="AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}&#10;assert 'reused' != 'reused'">tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-lq4ovivq/pytest/test_current_reader_date_canno0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000016FC3135A70&gt;
+published = '2027-01-01', reason = 'publication_after_as_of'
+
+    @pytest.mark.parametrize("published,reason", [
+        ("2027-01-01", "publication_after_as_of"),
+        ("not-a-date", "publication_date_invalid"),
+        (None, "publication_date_unknown"),
+    ])
+    def test_current_reader_date_cannot_inherit_query_qualification(tmp_path, monkeypatch, published, reason):
+        result = run_current_reader(tmp_path, monkeypatch, published_date=published)
+&gt;       assert result["status"] != "reused", result
+E       AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}
+E       assert 'reused' != 'reused'
+
+tests\test_du11_verified_reader_revalidation.py:34: AssertionError</failure></testcase><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_current_reader_date_cannot_inherit_query_qualification[not-a-date-publication_date_invalid]" time="0.009"><failure message="AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}&#10;assert 'reused' != 'reused'">tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-lq4ovivq/pytest/test_current_reader_date_canno1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000016FC3134510&gt;
+published = 'not-a-date', reason = 'publication_date_invalid'
+
+    @pytest.mark.parametrize("published,reason", [
+        ("2027-01-01", "publication_after_as_of"),
+        ("not-a-date", "publication_date_invalid"),
+        (None, "publication_date_unknown"),
+    ])
+    def test_current_reader_date_cannot_inherit_query_qualification(tmp_path, monkeypatch, published, reason):
+        result = run_current_reader(tmp_path, monkeypatch, published_date=published)
+&gt;       assert result["status"] != "reused", result
+E       AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}
+E       assert 'reused' != 'reused'
+
+tests\test_du11_verified_reader_revalidation.py:34: AssertionError</failure></testcase><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_current_reader_date_cannot_inherit_query_qualification[None-publication_date_unknown]" time="0.009"><failure message="AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}&#10;assert 'reused' != 'reused'">tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-lq4ovivq/pytest/test_current_reader_date_canno2')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000016FC30ED490&gt;
+published = None, reason = 'publication_date_unknown'
+
+    @pytest.mark.parametrize("published,reason", [
+        ("2027-01-01", "publication_after_as_of"),
+        ("not-a-date", "publication_date_invalid"),
+        (None, "publication_date_unknown"),
+    ])
+    def test_current_reader_date_cannot_inherit_query_qualification(tmp_path, monkeypatch, published, reason):
+        result = run_current_reader(tmp_path, monkeypatch, published_date=published)
+&gt;       assert result["status"] != "reused", result
+E       AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}
+E       assert 'reused' != 'reused'
+
+tests\test_du11_verified_reader_revalidation.py:34: AssertionError</failure></testcase><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_us_zero_prefixed_security_is_a_different_security" time="0.007"><failure message="AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}&#10;assert 'reused' == 'upstream_error'&#10;  &#10;  - upstream_error&#10;  + reused">tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-revalidation-lq4ovivq/pytest/test_us_zero_prefixed_security0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000016FC30B86B0&gt;
+
+    def test_us_zero_prefixed_security_is_a_different_security(tmp_path, monkeypatch):
+        result = run_current_reader(tmp_path, monkeypatch, security_id="0MSFT")
+&gt;       assert result["status"] == "upstream_error", result
+E       AssertionError: {'status': 'reused', 'retryable': False, 'source_ref': {'schema_version': '2.0', 'document_id': 'urn:company-wiki:docu..., 'content_sha256': '4465312295921cbc6331c2d5dee0902a7689dbc9212645d7720d792f287b9944', ...}, 'fiscal_year': 2026, ...}
+E       assert 'reused' == 'upstream_error'
+E         
+E         - upstream_error
+E         + reused
+
+tests\test_du11_verified_reader_revalidation.py:41: AssertionError</failure></testcase></testsuite></testsuites>

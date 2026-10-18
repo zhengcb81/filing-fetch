@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="7" time="0.418" timestamp="2026-10-18T04:06:10.313618+01:00" hostname="DESKTOP-156V213"><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_canonical_projection_is_owned_by_reader_not_renormalized_in_ff[HK-09896-9896]" time="0.012"><failure message="AssertionError: {'status': 'upstream_error', 'retryable': False, 'reason': 'transcript_lookup_identity_mismatch'}&#10;assert 'upstream_error' == 'reused'&#10;  &#10;  - reused&#10;  + upstream_error">tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-projection-1p26ztz2/pytest/test_canonical_projection_is_o0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002048D2F9940&gt;
+market = 'HK', canonical = '09896', observed = '9896'
+
+    @pytest.mark.parametrize("market,canonical,observed", [("HK", "09896", "9896"), ("CN", "000001", "1")])
+    def test_canonical_projection_is_owned_by_reader_not_renormalized_in_ff(tmp_path, monkeypatch, market, canonical, observed):
+        tool = tmp_path / "offline_tool.py"
+        tool.write_text("# intercepted child\n", encoding="utf-8")
+        entry = reader_entry(LOCAL_RAW, market=market, security_id=observed)
+        entry["receipt"]["canonical_identity"] = {
+            "schema_version": "source-canonical-identity/1", "market": market, "security_id": canonical}
+        fake = FakeCWP(queries=[query_found(LOCAL_RAW)], reader=[entry])
+        handle = filing()
+        handle["company_identity"].update(market=market, security_id=canonical)
+        result = resolve_companion_transcript(request=companion_request(), filing_handle=handle,
+            transport=build(monkeypatch, fake, tool))
+&gt;       assert result["status"] == "reused", result
+E       AssertionError: {'status': 'upstream_error', 'retryable': False, 'reason': 'transcript_lookup_identity_mismatch'}
+E       assert 'upstream_error' == 'reused'
+E         
+E         - reused
+E         + upstream_error
+
+tests\test_du11_verified_reader_revalidation.py:104: AssertionError</failure></testcase><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_canonical_projection_is_owned_by_reader_not_renormalized_in_ff[CN-000001-1]" time="0.008"><failure message="AssertionError: {'status': 'upstream_error', 'retryable': False, 'reason': 'transcript_lookup_identity_mismatch'}&#10;assert 'upstream_error' == 'reused'&#10;  &#10;  - reused&#10;  + upstream_error">tmp_path = WindowsPath('C:/Users/郑曾波/AppData/Local/Temp/du11-ff-projection-1p26ztz2/pytest/test_canonical_projection_is_o1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002048D2F95B0&gt;
+market = 'CN', canonical = '000001', observed = '1'
+
+    @pytest.mark.parametrize("market,canonical,observed", [("HK", "09896", "9896"), ("CN", "000001", "1")])
+    def test_canonical_projection_is_owned_by_reader_not_renormalized_in_ff(tmp_path, monkeypatch, market, canonical, observed):
+        tool = tmp_path / "offline_tool.py"
+        tool.write_text("# intercepted child\n", encoding="utf-8")
+        entry = reader_entry(LOCAL_RAW, market=market, security_id=observed)
+        entry["receipt"]["canonical_identity"] = {
+            "schema_version": "source-canonical-identity/1", "market": market, "security_id": canonical}
+        fake = FakeCWP(queries=[query_found(LOCAL_RAW)], reader=[entry])
+        handle = filing()
+        handle["company_identity"].update(market=market, security_id=canonical)
+        result = resolve_companion_transcript(request=companion_request(), filing_handle=handle,
+            transport=build(monkeypatch, fake, tool))
+&gt;       assert result["status"] == "reused", result
+E       AssertionError: {'status': 'upstream_error', 'retryable': False, 'reason': 'transcript_lookup_identity_mismatch'}
+E       assert 'upstream_error' == 'reused'
+E         
+E         - reused
+E         + upstream_error
+
+tests\test_du11_verified_reader_revalidation.py:104: AssertionError</failure></testcase><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_direct_noncanonical_verified_fixture_is_not_silently_padded" time="0.001"><failure message="AssertionError: assert False&#10; +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'HK', 'security_id': '9896'}, 'canonical_identity': {'schema_version': 'source-canonical-identity/1', 'market': 'HK', 'security_id': '09896'}}, {'market': 'HK', 'security_id': '9896'})&#10; +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts">def test_direct_noncanonical_verified_fixture_is_not_silently_padded():
+        from transcript_tool_transport import EarningsTranscriptsTransport
+&gt;       assert EarningsTranscriptsTransport._manifest_conflicts(
+            {"manifest": {"market": "HK", "security_id": "9896"},
+             "canonical_identity": {"schema_version": "source-canonical-identity/1", "market": "HK", "security_id": "09896"}},
+            {"market": "HK", "security_id": "9896"})
+E       AssertionError: assert False
+E        +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'HK', 'security_id': '9896'}, 'canonical_identity': {'schema_version': 'source-canonical-identity/1', 'market': 'HK', 'security_id': '09896'}}, {'market': 'HK', 'security_id': '9896'})
+E        +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts
+
+tests\test_du11_verified_reader_revalidation.py:111: AssertionError</failure></testcase><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_bad_current_identity_projection_cannot_fall_back_to_manifest[None]" time="0.001"><failure message="AssertionError: assert False&#10; +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'US', 'security_id': 'MSFT'}, 'canonical_identity': None}, {'market': 'US', 'security_id': 'MSFT'})&#10; +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts">projection = None
+
+    @pytest.mark.parametrize("projection", [None, {}, {"schema_version": "wrong", "market": "US", "security_id": "MSFT"},
+        {"schema_version": "source-canonical-identity/1", "market": "US", "security_id": "0MSFT"}])
+    def test_bad_current_identity_projection_cannot_fall_back_to_manifest(projection):
+        from transcript_tool_transport import EarningsTranscriptsTransport
+&gt;       assert EarningsTranscriptsTransport._manifest_conflicts(
+            {"manifest": {"market": "US", "security_id": "MSFT"}, "canonical_identity": projection},
+            {"market": "US", "security_id": "MSFT"})
+E       AssertionError: assert False
+E        +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'US', 'security_id': 'MSFT'}, 'canonical_identity': None}, {'market': 'US', 'security_id': 'MSFT'})
+E        +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts
+
+tests\test_du11_verified_reader_revalidation.py:121: AssertionError</failure></testcase><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_bad_current_identity_projection_cannot_fall_back_to_manifest[projection1]" time="0.001"><failure message="AssertionError: assert False&#10; +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'US', 'security_id': 'MSFT'}, 'canonical_identity': {}}, {'market': 'US', 'security_id': 'MSFT'})&#10; +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts">projection = {}
+
+    @pytest.mark.parametrize("projection", [None, {}, {"schema_version": "wrong", "market": "US", "security_id": "MSFT"},
+        {"schema_version": "source-canonical-identity/1", "market": "US", "security_id": "0MSFT"}])
+    def test_bad_current_identity_projection_cannot_fall_back_to_manifest(projection):
+        from transcript_tool_transport import EarningsTranscriptsTransport
+&gt;       assert EarningsTranscriptsTransport._manifest_conflicts(
+            {"manifest": {"market": "US", "security_id": "MSFT"}, "canonical_identity": projection},
+            {"market": "US", "security_id": "MSFT"})
+E       AssertionError: assert False
+E        +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'US', 'security_id': 'MSFT'}, 'canonical_identity': {}}, {'market': 'US', 'security_id': 'MSFT'})
+E        +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts
+
+tests\test_du11_verified_reader_revalidation.py:121: AssertionError</failure></testcase><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_bad_current_identity_projection_cannot_fall_back_to_manifest[projection2]" time="0.001"><failure message="AssertionError: assert False&#10; +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'US', 'security_id': 'MSFT'}, 'canonical_identity': {'schema_version': 'wrong', 'market': 'US', 'security_id': 'MSFT'}}, {'market': 'US', 'security_id': 'MSFT'})&#10; +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts">projection = {'schema_version': 'wrong', 'market': 'US', 'security_id': 'MSFT'}
+
+    @pytest.mark.parametrize("projection", [None, {}, {"schema_version": "wrong", "market": "US", "security_id": "MSFT"},
+        {"schema_version": "source-canonical-identity/1", "market": "US", "security_id": "0MSFT"}])
+    def test_bad_current_identity_projection_cannot_fall_back_to_manifest(projection):
+        from transcript_tool_transport import EarningsTranscriptsTransport
+&gt;       assert EarningsTranscriptsTransport._manifest_conflicts(
+            {"manifest": {"market": "US", "security_id": "MSFT"}, "canonical_identity": projection},
+            {"market": "US", "security_id": "MSFT"})
+E       AssertionError: assert False
+E        +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'US', 'security_id': 'MSFT'}, 'canonical_identity': {'schema_version': 'wrong', 'market': 'US', 'security_id': 'MSFT'}}, {'market': 'US', 'security_id': 'MSFT'})
+E        +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts
+
+tests\test_du11_verified_reader_revalidation.py:121: AssertionError</failure></testcase><testcase classname="tests.test_du11_verified_reader_revalidation" name="test_bad_current_identity_projection_cannot_fall_back_to_manifest[projection3]" time="0.002"><failure message="AssertionError: assert False&#10; +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'US', 'security_id': 'MSFT'}, 'canonical_identity': {'schema_version': 'source-canonical-identity/1', 'market': 'US', 'security_id': '0MSFT'}}, {'market': 'US', 'security_id': 'MSFT'})&#10; +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts">projection = {'schema_version': 'source-canonical-identity/1', 'market': 'US', 'security_id': '0MSFT'}
+
+    @pytest.mark.parametrize("projection", [None, {}, {"schema_version": "wrong", "market": "US", "security_id": "MSFT"},
+        {"schema_version": "source-canonical-identity/1", "market": "US", "security_id": "0MSFT"}])
+    def test_bad_current_identity_projection_cannot_fall_back_to_manifest(projection):
+        from transcript_tool_transport import EarningsTranscriptsTransport
+&gt;       assert EarningsTranscriptsTransport._manifest_conflicts(
+            {"manifest": {"market": "US", "security_id": "MSFT"}, "canonical_identity": projection},
+            {"market": "US", "security_id": "MSFT"})
+E       AssertionError: assert False
+E        +  where False = &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt;({'manifest': {'market': 'US', 'security_id': 'MSFT'}, 'canonical_identity': {'schema_version': 'source-canonical-identity/1', 'market': 'US', 'security_id': '0MSFT'}}, {'market': 'US', 'security_id': 'MSFT'})
+E        +    where &lt;function EarningsTranscriptsTransport._manifest_conflicts at 0x000002048D309A80&gt; = &lt;class 'transcript_tool_transport.EarningsTranscriptsTransport'&gt;._manifest_conflicts
+
+tests\test_du11_verified_reader_revalidation.py:121: AssertionError</failure></testcase></testsuite></testsuites>

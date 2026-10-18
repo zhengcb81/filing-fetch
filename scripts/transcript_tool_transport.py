@@ -16,7 +16,7 @@ from typing import Any
 
 from et_v2_contract import ET_NOT_FOUND_DIAGNOSTICS
 from ff_configuration import expand_config_path, read_json_object
-from filing_contracts import FilingFetchError
+from filing_contracts import FilingFetchError, _validate_date
 from ff_source_ref import validate_source_ref
 from transcript_reuse_selection import (
     LocalQueryContractError,
@@ -405,6 +405,7 @@ class EarningsTranscriptsTransport:
             ref["content_sha256"],
             "--purpose",
             "preview",
+            "--include-canonical-identity",
         ]
         self.company_wiki_calls += 1
         stdout, stderr, code = _run_bounded_json(
@@ -456,25 +457,37 @@ class EarningsTranscriptsTransport:
     @staticmethod
     def _manifest_published_date(
         receipt: object, observed: str | None,
-    ) -> str | None:
-        """Publication date of the verified manifest, else the qualified observation."""
+    ) -> object:
+        """Current manifest value wins, including an explicit unknown date.
+
+        Legacy readers without a manifest can only supply the observed date;
+        the caller still validates that value and recomputes the cutoff.
+        """
         if not isinstance(receipt, dict):
             return observed
         manifest = receipt.get("manifest")
         if not isinstance(manifest, dict):
             return observed
-        value = manifest.get("published_date")
-        if value is None:
-            return observed
-        if not isinstance(value, str):
-            raise ValueError("company-wiki manifest publication date is invalid")
-        return value.strip() or None
+        return manifest.get("published_date")
 
     @staticmethod
     def _manifest_conflicts(receipt: object, expected: dict[str, Any]) -> bool:
         """A verified manifest that contradicts the exact request cannot be reused."""
         if not isinstance(receipt, dict):
             return False
+        canonical = None
+        if "canonical_identity" in receipt:
+            canonical = receipt["canonical_identity"]
+            if (not isinstance(canonical, dict)
+                    or canonical.get("schema_version") != "source-canonical-identity/1"
+                    or any(not isinstance(canonical.get(key), str)
+                           or not canonical[key] or canonical[key] != canonical[key].strip()
+                           for key in ("market", "security_id"))):
+                return True
+            # The reader and identify endpoint share CWP's one canonicalizer.
+            # FF compares their outputs; it does not implement market padding.
+            if any(canonical[key] != expected.get(key) for key in ("market", "security_id")):
+                return True
         manifest = receipt.get("manifest")
         if not isinstance(manifest, dict):
             return False
@@ -482,9 +495,6 @@ class EarningsTranscriptsTransport:
         def text(name: str) -> str | None:
             value = manifest.get(name)
             return value.strip() if isinstance(value, str) and value.strip() else None
-
-        def key(value: str) -> str:
-            return value.strip().lstrip("0").casefold()
 
         period = text("fiscal_period")
         if period is not None and str(expected.get("fiscal_period") or "").strip():
@@ -499,8 +509,10 @@ class EarningsTranscriptsTransport:
             if market.casefold() != str(expected["market"]).strip().casefold():
                 return True
         security = text("security_id")
-        if security is not None and expected.get("security_id"):
-            if key(security) != key(str(expected["security_id"])):
+        if canonical is None and security is not None and expected.get("security_id"):
+            # Identity is owned by company-wiki. In particular, removing zeroes
+            # globally would equate distinct US symbols or CN security codes.
+            if security.casefold() != str(expected["security_id"]).strip().casefold():
                 return True
         return False
 
@@ -521,18 +533,34 @@ class EarningsTranscriptsTransport:
         receipt = self._verified_open(ref)
         if self._manifest_conflicts(receipt, expected):
             # Verified bytes for another period/security are not this request.
-            return {"status": "upstream_error", "reason": "transcript_lookup_identity_mismatch"}
+            return {"status": "upstream_error", "reason": "transcript_lookup_identity_mismatch",
+                    "provider_calls": 0}
         provider = self._manifest_provider(receipt)
         if (
             provider_constraint is not None
-            and provider is not None
             and provider != provider_constraint
         ):
             # The explicit constraint is a request condition, not a label: a
             # verified source from another provider cannot satisfy it.
-            return {"status": "upstream_error", "reason": "transcript_provider_mismatch"}
+            return {"status": "upstream_error", "reason": "transcript_provider_mismatch",
+                    "provider_calls": 0}
         published = self._manifest_published_date(receipt, selection.published_date)
-        unknown = selection.kind == "unknown_publication" or published is None
+        unknown = published is None
+        if not unknown:
+            try:
+                published = _validate_date(published, "published_date", code="upstream_error")
+            except FilingFetchError:
+                return {"status": "upstream_error", "reason": "publication_date_invalid",
+                        "as_of_cutoff_verified": False, "provider_calls": 0}
+            try:
+                cutoff = _validate_date(expected.get("as_of_date"), "as_of_date", code="upstream_error")
+            except FilingFetchError:
+                return {"status": "upstream_error", "reason": "transcript_lookup_contract",
+                        "as_of_cutoff_verified": False, "provider_calls": 0}
+            if published > cutoff:
+                return {"status": "upstream_error", "reason": "publication_after_as_of",
+                        "publication_date": published, "as_of_cutoff_verified": False,
+                        "provider_calls": 0}
         result: dict[str, Any] = {
             "status": "unknown_publication" if unknown else "found",
             "source_ref": ref,
@@ -622,6 +650,7 @@ class EarningsTranscriptsTransport:
             "fiscal_period": f"Q{kwargs['fiscal_quarter']}",
             "market": identity.get("market"),
             "security_id": identity.get("security_id"),
+            "as_of_date": kwargs["as_of_date"],
         }
         # Omitted provider: cross-source local reuse first. Explicit provider:
         # the existing provider-scoped import-dedup envelope.

@@ -1,0 +1,11 @@
+{
+  "returncode": 1,
+  "wall_seconds": 1.8249573000357486,
+  "temp_removed": true,
+  "network_provider_calls": 0,
+  "source_before_implementation": {
+    "scripts/transcript_tool_transport.py": "20f8903df96af64de94d3ce6959ecdb0a36555589f6c410a8e83e9f9a6276999",
+    "scripts/transcript_reuse_selection.py": "8591e9968d5d23c4e056a32062ea4b4fdbac63c3421523d921f3176d93823231",
+    "scripts/transcript_companion.py": "7e3f28a5928270850af308b9d20f4187cbaa985f1e0a5b4dffb83c3a1c0084be"
+  }
+}
