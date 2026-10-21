@@ -1,0 +1,257 @@
+FFF......FFFFFFF                                                         [100%]
+================================== FAILURES ===================================
+__________ test_real_nonzero_query_retains_named_cold_catalog_reason __________
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/ff-red-tmp/test_real_nonzero_query_retain0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016C75A710F0>
+
+    def test_real_nonzero_query_retains_named_cold_catalog_reason(tmp_path, monkeypatch):
+        payload = {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable",
+                   "matches": [], "candidates": []}
+        real_transport = transport.run_bounded_json
+        monkeypatch.setattr(ff, "_run_bounded_json", lambda command, **kwargs:
+                            real_transport(child(payload), **{**kwargs, "input_bytes": None}))
+        with pytest.raises(FilingFetchError) as caught:
+            ff._run_source_query(root=tmp_path, normalized_request={"entity": "Fixture Co"},
+                                 deadline=time.monotonic()+20, stats={"calls": 0, "downloads": 0})
+>       assert caught.value.upstream_cause["code"] == "catalog_unavailable"
+E       AssertionError: assert 'producer_transport_failure' == 'catalog_unavailable'
+E         
+E         - catalog_unavailable
+E         + producer_transport_failure
+
+tests\test_r1_source_business_failure.py:49: AssertionError
+_______________ test_real_nonzero_local_prepare_preserves_limit _______________
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/ff-red-tmp/test_real_nonzero_local_prepar0')
+
+    def test_real_nonzero_local_prepare_preserves_limit(tmp_path):
+        def actual_transport(command, **kwargs):
+            return transport.run_bounded_json(child(prepared(), 1), **{**kwargs, "input_bytes": None})
+        with pytest.raises(FilingFetchError) as caught:
+            local.prepare_existing_local_source(root=tmp_path, source_request={"entity": "Fixture Co"},
+                deadline=time.monotonic()+20, stats={"calls": 0, "downloads": 0},
+                transport=actual_transport, physical_fields=ff._contains_physical_field)
+>       assert caught.value.upstream_cause["code"] == "local_candidate_limit"
+E       AssertionError: assert 'producer_transport_failure' == 'local_candidate_limit'
+E         
+E         - local_candidate_limit
+E         + producer_transport_failure
+
+tests\test_r1_source_business_failure.py:61: AssertionError
+___________ test_operation_accepts_current_closed_local_preparation ___________
+
+    def test_operation_accepts_current_closed_local_preparation():
+        payload = _operation_v2(status="blocked", outcome=None)
+        payload["local_preparation"] = {"status": "blocked", "reason": "local_metadata_gap",
+                                        "blocks_download": True, "causes": ["publication_date_unknown"]}
+>       assert ff._validated_operation(payload, "ensure") == payload
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_r1_source_business_failure.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+payload = {'operation_schema_version': '1.0', 'operation': 'ensure', 'status': 'blocked', 'request_id': 'urn:req:operation-v2', ...}
+operation = 'ensure'
+
+    def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise FilingFetchError(
+                "company-wiki operation result must be an object", code="upstream_error",
+                upstream_cause=ff_provider_cause.source_condition(operation, "invalid_producer_schema"),
+            )
+        upstream_cause = ff_provider_cause.diagnose_acquisition_failure(
+            operation, payload.get("acquisition_failure")
+        )
+        receipt = ff_provider_cause.validated_acquisition_failure(payload.get("acquisition_failure"))
+        observation = ff_provider_cause.validated_acquisition_observation(
+            payload.get("acquisition_observation"))
+        if (
+            payload.get("operation_schema_version") != _SOURCE_OPERATION_VERSION
+            or payload.get("operation") != operation
+            or not set(payload) <= _SOURCE_OPERATION_FIELDS
+        ):
+>           raise FilingFetchError(
+                "company-wiki operation contract is unsupported", code="upstream_error",
+                upstream_cause=upstream_cause or ff_provider_cause.source_condition(operation, "invalid_producer_schema"),
+                acquisition_failure=receipt,
+                acquisition_observation=observation,
+            )
+E           filing_contracts.FilingFetchError: company-wiki operation contract is unsupported
+
+scripts\fetch_filing.py:735: FilingFetchError
+___________ test_requested_companion_is_not_run_when_filing_failed ____________
+
+    def test_requested_companion_is_not_run_when_filing_failed():
+        result = error_envelope("upstream_error", "company-wiki ensure unavailable", retryable=False,
+                                request=request(), stats={"calls": 2, "downloads": 0})
+        companion = result["transcript"]
+>       assert companion["status"] == "not_run"
+E       AssertionError: assert 'not_requested' == 'not_run'
+E         
+E         - not_run
+E         + not_requested
+
+tests\test_r1_source_business_failure.py:96: AssertionError
+_ test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload0] __
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/ff-red-tmp/test_nonzero_query_never_accep0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016C75A72EA0>
+payload = []
+
+    @pytest.mark.parametrize("payload", [[], "<html>bad</html>", {"schema_version": "9", "status": "blocked"},
+        {"schema_version": "2.0", "status": "found", "reason": "catalog_unavailable", "matches": [], "candidates": []},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "path": "bad.pdf"},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "request_id": "wrong-request"},
+    ])
+    def test_nonzero_query_never_accepts_wrong_schema_request_or_storage(tmp_path, monkeypatch, payload):
+        monkeypatch.setattr(ff, "_run_bounded_json", lambda *a, **kw:
+            (_ for _ in ()).throw(transport.ChildFailed("failed", returncode=2,
+                                        stdout=json.dumps(payload).encode())))
+        with pytest.raises(FilingFetchError) as caught:
+            ff._run_source_query(root=tmp_path, normalized_request={"entity": "Fixture Co"},
+                                 deadline=time.monotonic()+5, stats={"calls": 0, "downloads": 0})
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+E       AssertionError: assert 'producer_transport_failure' == 'invalid_producer_schema'
+E         
+E         - invalid_producer_schema
+E         + producer_transport_failure
+
+tests\test_r1_source_business_failure.py:122: AssertionError
+_ test_nonzero_query_never_accepts_wrong_schema_request_or_storage[<html>bad</html>] _
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/ff-red-tmp/test_nonzero_query_never_accep1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016C75B6D130>
+payload = '<html>bad</html>'
+
+    @pytest.mark.parametrize("payload", [[], "<html>bad</html>", {"schema_version": "9", "status": "blocked"},
+        {"schema_version": "2.0", "status": "found", "reason": "catalog_unavailable", "matches": [], "candidates": []},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "path": "bad.pdf"},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "request_id": "wrong-request"},
+    ])
+    def test_nonzero_query_never_accepts_wrong_schema_request_or_storage(tmp_path, monkeypatch, payload):
+        monkeypatch.setattr(ff, "_run_bounded_json", lambda *a, **kw:
+            (_ for _ in ()).throw(transport.ChildFailed("failed", returncode=2,
+                                        stdout=json.dumps(payload).encode())))
+        with pytest.raises(FilingFetchError) as caught:
+            ff._run_source_query(root=tmp_path, normalized_request={"entity": "Fixture Co"},
+                                 deadline=time.monotonic()+5, stats={"calls": 0, "downloads": 0})
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+E       AssertionError: assert 'producer_transport_failure' == 'invalid_producer_schema'
+E         
+E         - invalid_producer_schema
+E         + producer_transport_failure
+
+tests\test_r1_source_business_failure.py:122: AssertionError
+_ test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload2] __
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/ff-red-tmp/test_nonzero_query_never_accep2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016C75ACF8A0>
+payload = {'schema_version': '9', 'status': 'blocked'}
+
+    @pytest.mark.parametrize("payload", [[], "<html>bad</html>", {"schema_version": "9", "status": "blocked"},
+        {"schema_version": "2.0", "status": "found", "reason": "catalog_unavailable", "matches": [], "candidates": []},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "path": "bad.pdf"},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "request_id": "wrong-request"},
+    ])
+    def test_nonzero_query_never_accepts_wrong_schema_request_or_storage(tmp_path, monkeypatch, payload):
+        monkeypatch.setattr(ff, "_run_bounded_json", lambda *a, **kw:
+            (_ for _ in ()).throw(transport.ChildFailed("failed", returncode=2,
+                                        stdout=json.dumps(payload).encode())))
+        with pytest.raises(FilingFetchError) as caught:
+            ff._run_source_query(root=tmp_path, normalized_request={"entity": "Fixture Co"},
+                                 deadline=time.monotonic()+5, stats={"calls": 0, "downloads": 0})
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+E       AssertionError: assert 'producer_transport_failure' == 'invalid_producer_schema'
+E         
+E         - invalid_producer_schema
+E         + producer_transport_failure
+
+tests\test_r1_source_business_failure.py:122: AssertionError
+_ test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload3] __
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/ff-red-tmp/test_nonzero_query_never_accep3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016C75ACEF10>
+payload = {'schema_version': '2.0', 'status': 'found', 'reason': 'catalog_unavailable', 'matches': [], ...}
+
+    @pytest.mark.parametrize("payload", [[], "<html>bad</html>", {"schema_version": "9", "status": "blocked"},
+        {"schema_version": "2.0", "status": "found", "reason": "catalog_unavailable", "matches": [], "candidates": []},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "path": "bad.pdf"},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "request_id": "wrong-request"},
+    ])
+    def test_nonzero_query_never_accepts_wrong_schema_request_or_storage(tmp_path, monkeypatch, payload):
+        monkeypatch.setattr(ff, "_run_bounded_json", lambda *a, **kw:
+            (_ for _ in ()).throw(transport.ChildFailed("failed", returncode=2,
+                                        stdout=json.dumps(payload).encode())))
+        with pytest.raises(FilingFetchError) as caught:
+            ff._run_source_query(root=tmp_path, normalized_request={"entity": "Fixture Co"},
+                                 deadline=time.monotonic()+5, stats={"calls": 0, "downloads": 0})
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+E       AssertionError: assert 'producer_transport_failure' == 'invalid_producer_schema'
+E         
+E         - invalid_producer_schema
+E         + producer_transport_failure
+
+tests\test_r1_source_business_failure.py:122: AssertionError
+_ test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload4] __
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/ff-red-tmp/test_nonzero_query_never_accep4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016C75B64B50>
+payload = {'schema_version': '2.0', 'status': 'unavailable', 'reason': 'catalog_unavailable', 'matches': [], ...}
+
+    @pytest.mark.parametrize("payload", [[], "<html>bad</html>", {"schema_version": "9", "status": "blocked"},
+        {"schema_version": "2.0", "status": "found", "reason": "catalog_unavailable", "matches": [], "candidates": []},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "path": "bad.pdf"},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "request_id": "wrong-request"},
+    ])
+    def test_nonzero_query_never_accepts_wrong_schema_request_or_storage(tmp_path, monkeypatch, payload):
+        monkeypatch.setattr(ff, "_run_bounded_json", lambda *a, **kw:
+            (_ for _ in ()).throw(transport.ChildFailed("failed", returncode=2,
+                                        stdout=json.dumps(payload).encode())))
+        with pytest.raises(FilingFetchError) as caught:
+            ff._run_source_query(root=tmp_path, normalized_request={"entity": "Fixture Co"},
+                                 deadline=time.monotonic()+5, stats={"calls": 0, "downloads": 0})
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+E       AssertionError: assert 'producer_transport_failure' == 'invalid_producer_schema'
+E         
+E         - invalid_producer_schema
+E         + producer_transport_failure
+
+tests\test_r1_source_business_failure.py:122: AssertionError
+_ test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload5] __
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/ff-red-tmp/test_nonzero_query_never_accep5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000016C75B65D50>
+payload = {'schema_version': '2.0', 'status': 'unavailable', 'reason': 'catalog_unavailable', 'matches': [], ...}
+
+    @pytest.mark.parametrize("payload", [[], "<html>bad</html>", {"schema_version": "9", "status": "blocked"},
+        {"schema_version": "2.0", "status": "found", "reason": "catalog_unavailable", "matches": [], "candidates": []},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "path": "bad.pdf"},
+        {"schema_version": "2.0", "status": "unavailable", "reason": "catalog_unavailable", "matches": [], "candidates": [], "request_id": "wrong-request"},
+    ])
+    def test_nonzero_query_never_accepts_wrong_schema_request_or_storage(tmp_path, monkeypatch, payload):
+        monkeypatch.setattr(ff, "_run_bounded_json", lambda *a, **kw:
+            (_ for _ in ()).throw(transport.ChildFailed("failed", returncode=2,
+                                        stdout=json.dumps(payload).encode())))
+        with pytest.raises(FilingFetchError) as caught:
+            ff._run_source_query(root=tmp_path, normalized_request={"entity": "Fixture Co"},
+                                 deadline=time.monotonic()+5, stats={"calls": 0, "downloads": 0})
+>       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+E       AssertionError: assert 'producer_transport_failure' == 'invalid_producer_schema'
+E         
+E         - invalid_producer_schema
+E         + producer_transport_failure
+
+tests\test_r1_source_business_failure.py:122: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_r1_source_business_failure.py::test_real_nonzero_query_retains_named_cold_catalog_reason
+FAILED tests/test_r1_source_business_failure.py::test_real_nonzero_local_prepare_preserves_limit
+FAILED tests/test_r1_source_business_failure.py::test_operation_accepts_current_closed_local_preparation
+FAILED tests/test_r1_source_business_failure.py::test_requested_companion_is_not_run_when_filing_failed
+FAILED tests/test_r1_source_business_failure.py::test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload0]
+FAILED tests/test_r1_source_business_failure.py::test_nonzero_query_never_accepts_wrong_schema_request_or_storage[<html>bad</html>]
+FAILED tests/test_r1_source_business_failure.py::test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload2]
+FAILED tests/test_r1_source_business_failure.py::test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload3]
+FAILED tests/test_r1_source_business_failure.py::test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload4]
+FAILED tests/test_r1_source_business_failure.py::test_nonzero_query_never_accepts_wrong_schema_request_or_storage[payload5]
+10 failed, 6 passed in 1.73s

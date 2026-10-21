@@ -1,0 +1,92 @@
+FFF.....F.                                                               [100%]
+================================== FAILURES ===================================
+______ test_failure_safe_projection_retains_requested_companion_and_exit ______
+
+    def test_failure_safe_projection_retains_requested_companion_and_exit():
+        observed = failure_observation(failed())
+>       assert observed["companion_observation"] == companion()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'companion_observation'
+
+tests\test_r1_source_boundary.py:39: KeyError
+_______________ test_client_exception_keeps_complete_ff_sidecar _______________
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/rf-red-tmp/test_client_exception_keeps_co0')
+
+    def test_client_exception_keeps_complete_ff_sidecar(tmp_path):
+        script = tmp_path / "scripts" / "fetch_filing.py"
+        script.parent.mkdir()
+        script.write_text("", encoding="utf-8")
+        payload = failed()
+        with patch.object(client.subprocess, "run", return_value=subprocess.CompletedProcess([], 2, json.dumps(payload), "")):
+            with pytest.raises(client._ClientError) as caught:
+                client.resolve_filing_result({}, filing_fetch_root=tmp_path, source_ref_v2=True)
+>       assert caught.value.filing_fetch_result == payload
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: '_ClientError' object has no attribute 'filing_fetch_result'
+
+tests\test_r1_source_boundary.py:52: AttributeError
+_______________ test_actual_rf_cli_chain_preserves_both_results _______________
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/rf-red-tmp/test_actual_rf_cli_chain_prese0')
+
+    def test_actual_rf_cli_chain_preserves_both_results(tmp_path):
+        fake = tmp_path / "ff"
+        (fake / "scripts").mkdir(parents=True)
+        payload = failed()
+        (fake / "scripts" / "fetch_filing.py").write_text(
+            "import json,sys;print(json.dumps(" + repr(payload) + "));sys.exit(2)", encoding="utf-8")
+        # The catalog config is validated for existence; no source reader runs after filing failure.
+        config = tmp_path / "catalog.yaml"
+        config.write_text("{}", encoding="utf-8")
+        result = subprocess.run([sys.executable, str(Path(prep.__file__)), "--result-envelope",
+            "--company-wiki-catalog-config", str(config), "--filing-fetch-root", str(fake),
+            "--timeout-seconds", "10"], input=json.dumps({"document_kind": "semi_annual_report"}),
+            text=True, encoding="utf-8", capture_output=True, timeout=30)
+        assert result.returncode == 3, result.stdout + result.stderr
+        error = json.loads(result.stderr)
+>       assert error["companion_observation"] == companion()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'companion_observation'
+
+tests\test_r1_source_boundary.py:71: KeyError
+______ test_current_open_qualifies_today_without_backdating_publication _______
+
+    def test_current_open_qualifies_today_without_backdating_publication():
+>       actual = qualify_source_information(source_sha256="a"*64, published_date=None,
+            as_of=date(2026,10,21), availability_evidence=proof())
+
+tests\test_r1_source_boundary.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+scripts\contracts\source_clock.py:103: in qualify_source_information
+    proof = validate_availability_evidence(availability_evidence, source_sha256)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = {'schema_version': 'source-availability-evidence/1', 'source_sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'available_by': '2026-10-21', 'basis': 'current_verified_open', ...}
+source_sha256 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def validate_availability_evidence(value: Any, source_sha256: str | None) -> dict[str, Any] | None:
+        """Validate the published DTO; upstream resolves the actual immutable proof.
+    
+        A timestamp/mtime supplied alone is never proof. This structural check does
+        not claim external authenticity: callers obtain this DTO from the declared
+        public source-reader producer and retain that transport in their lineage.
+        """
+        if value is None:
+            return None
+        if not isinstance(value, dict) or set(value) != _AVAILABILITY_FIELDS:
+            raise SourceClockError("source_availability_invalid: proof fields are not exact")
+        if value["schema_version"] != AVAILABILITY_SCHEMA_VERSION:
+            raise SourceClockError("source_availability_invalid: unsupported proof schema")
+        if value["basis"] not in {"prior_verified_capture", "primary_archive"}:
+>           raise SourceClockError("source_availability_invalid: unsupported proof basis")
+E           contracts.source_clock.SourceClockError: source_availability_invalid: unsupported proof basis
+
+scripts\contracts\source_clock.py:71: SourceClockError
+=========================== short test summary info ===========================
+FAILED tests/test_r1_source_boundary.py::test_failure_safe_projection_retains_requested_companion_and_exit
+FAILED tests/test_r1_source_boundary.py::test_client_exception_keeps_complete_ff_sidecar
+FAILED tests/test_r1_source_boundary.py::test_actual_rf_cli_chain_preserves_both_results
+FAILED tests/test_r1_source_boundary.py::test_current_open_qualifies_today_without_backdating_publication
+4 failed, 6 passed in 1.58s

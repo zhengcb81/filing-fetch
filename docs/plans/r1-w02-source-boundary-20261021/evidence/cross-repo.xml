@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="5.102" timestamp="2026-10-21T23:39:20.486911+01:00" hostname="DESKTOP-156V213"><testcase classname="tests.test_r1_source_boundary" name="test_real_cwp_ff_rf_cold_catalog_offline_contract" time="4.733" /></testsuite></testsuites>

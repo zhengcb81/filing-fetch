@@ -1,0 +1,9 @@
+# Findings
+
+真实bounded transport对非零返回抛ChildFailed并保留stdout，而三个消费者只读stderr或广泛捕TransportError，故有效CWP业务失败被错误压成transport。修在消费适配责任层，process原有字节/时间/进程树保护不改。
+
+operation生产DTO已有local_preparation；FF字段白名单落后。电话会请求在filing失败前未dispatch，被无条件not_requested掩盖；RF随后又丢伴随结果。这两个问题须同接口贯通，而不是扩大重试或假称provider不支持。
+
+RF使用现source_clock语义，仅新basis，不新建许可/身份/原文SHA链。独立叙述导出还有unknown-publication同根因，ROOT排W03统一，不在本包抢改或假称覆盖。
+
+显式CI表不会自动收新测试，已交ROOT统一插两行，防止新增回归再次只在本地存在。详见handoff。

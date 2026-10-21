@@ -1,0 +1,183 @@
+..........FFF...F                                                        [100%]
+================================== FAILURES ===================================
+________ test_malformed_companion_field_types_stay_safe[status-value0] ________
+
+field = 'status', value = []
+
+    @pytest.mark.parametrize("field,value", [("status", []), ("intent", {}), ("provider", []),
+        ("fiscal_year", "2026"), ("fiscal_quarter", True), ("provider_requests", False)])
+    def test_malformed_companion_field_types_stay_safe(field, value):
+        payload = failed()
+        payload["transcript"][field] = value
+>       observed = failure_observation(payload)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_r1_source_boundary.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+scripts\filing_upstream_cause.py:387: in failure_observation
+    companion = validated_companion_observation(payload.get("transcript", payload.get("companion_observation")))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = {'status': [], 'reason': 'filing_failed_before_companion_dispatch', 'retryable': False, 'intent': 'fetch_if_missing', ...}
+
+    def validated_companion_observation(value: Any) -> dict[str, Any] | None:
+        """Preserve an undispatched companion separately from the filing failure.
+    
+        These are observed zero-dispatch states, not provider capability claims.
+        A malformed object is omitted whole; arbitrary child bodies never become
+        public error text. Completed companion outcomes stay in the full success
+        envelope and are not reinterpreted here.
+        """
+        if not isinstance(value, dict):
+            return None
+        status = value.get("status")
+        if status == "not_requested":
+            return dict(value) if set(value) <= {"status", "retryable"} and value.get("retryable", False) is False else None
+>       if status in {"period_unresolved", "not_applicable", "request_error"}:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: cannot use 'list' as a set element (unhashable type: 'list')
+
+scripts\filing_upstream_cause.py:293: TypeError
+________ test_malformed_companion_field_types_stay_safe[intent-value1] ________
+
+field = 'intent', value = {}
+
+    @pytest.mark.parametrize("field,value", [("status", []), ("intent", {}), ("provider", []),
+        ("fiscal_year", "2026"), ("fiscal_quarter", True), ("provider_requests", False)])
+    def test_malformed_companion_field_types_stay_safe(field, value):
+        payload = failed()
+        payload["transcript"][field] = value
+>       observed = failure_observation(payload)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_r1_source_boundary.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+scripts\filing_upstream_cause.py:387: in failure_observation
+    companion = validated_companion_observation(payload.get("transcript", payload.get("companion_observation")))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = {'status': 'not_run', 'reason': 'filing_failed_before_companion_dispatch', 'retryable': False, 'intent': {}, ...}
+
+    def validated_companion_observation(value: Any) -> dict[str, Any] | None:
+        """Preserve an undispatched companion separately from the filing failure.
+    
+        These are observed zero-dispatch states, not provider capability claims.
+        A malformed object is omitted whole; arbitrary child bodies never become
+        public error text. Completed companion outcomes stay in the full success
+        envelope and are not reinterpreted here.
+        """
+        if not isinstance(value, dict):
+            return None
+        status = value.get("status")
+        if status == "not_requested":
+            return dict(value) if set(value) <= {"status", "retryable"} and value.get("retryable", False) is False else None
+        if status in {"period_unresolved", "not_applicable", "request_error"}:
+            reasons = {"period_unresolved": "exact_fy_q_required",
+                       "not_applicable": "filing_not_capture_ready",
+                       "request_error": "invalid_companion_request"}
+            return dict(value) if (set(value) == {"status", "reason", "retryable"}
+                and value["reason"] == reasons[status] and value["retryable"] is False) else None
+        required = {"status", "reason", "retryable", "intent", "fiscal_year", "fiscal_quarter",
+                    "provider_started", "provider_requests", "provider_response_bytes", "provider_usage_complete"}
+        if (status != "not_run" or not required <= set(value)
+                or not set(value) <= required | {"provider", "acquisition_limits"}
+                or value["reason"] != "filing_failed_before_companion_dispatch"
+                or value["retryable"] is not False or value["provider_started"] is not False
+                or type(value["provider_requests"]) is not int or value["provider_requests"] != 0
+                or type(value["provider_response_bytes"]) is not int or value["provider_response_bytes"] != 0
+                or value["provider_usage_complete"] is not True
+>               or value["intent"] not in {"reuse_only", "fetch_if_missing"}
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                or type(value["fiscal_year"]) is not int or not 1900 <= value["fiscal_year"] <= 2100
+                or type(value["fiscal_quarter"]) is not int or value["fiscal_quarter"] not in {1, 2, 3, 4}
+                or value.get("provider") not in {None, "fmp"}):
+E               TypeError: cannot use 'dict' as a set element (unhashable type: 'dict')
+
+scripts\filing_upstream_cause.py:308: TypeError
+_______ test_malformed_companion_field_types_stay_safe[provider-value2] _______
+
+field = 'provider', value = []
+
+    @pytest.mark.parametrize("field,value", [("status", []), ("intent", {}), ("provider", []),
+        ("fiscal_year", "2026"), ("fiscal_quarter", True), ("provider_requests", False)])
+    def test_malformed_companion_field_types_stay_safe(field, value):
+        payload = failed()
+        payload["transcript"][field] = value
+>       observed = failure_observation(payload)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_r1_source_boundary.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+scripts\filing_upstream_cause.py:387: in failure_observation
+    companion = validated_companion_observation(payload.get("transcript", payload.get("companion_observation")))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = {'status': 'not_run', 'reason': 'filing_failed_before_companion_dispatch', 'retryable': False, 'intent': 'fetch_if_missing', ...}
+
+    def validated_companion_observation(value: Any) -> dict[str, Any] | None:
+        """Preserve an undispatched companion separately from the filing failure.
+    
+        These are observed zero-dispatch states, not provider capability claims.
+        A malformed object is omitted whole; arbitrary child bodies never become
+        public error text. Completed companion outcomes stay in the full success
+        envelope and are not reinterpreted here.
+        """
+        if not isinstance(value, dict):
+            return None
+        status = value.get("status")
+        if status == "not_requested":
+            return dict(value) if set(value) <= {"status", "retryable"} and value.get("retryable", False) is False else None
+        if status in {"period_unresolved", "not_applicable", "request_error"}:
+            reasons = {"period_unresolved": "exact_fy_q_required",
+                       "not_applicable": "filing_not_capture_ready",
+                       "request_error": "invalid_companion_request"}
+            return dict(value) if (set(value) == {"status", "reason", "retryable"}
+                and value["reason"] == reasons[status] and value["retryable"] is False) else None
+        required = {"status", "reason", "retryable", "intent", "fiscal_year", "fiscal_quarter",
+                    "provider_started", "provider_requests", "provider_response_bytes", "provider_usage_complete"}
+        if (status != "not_run" or not required <= set(value)
+                or not set(value) <= required | {"provider", "acquisition_limits"}
+                or value["reason"] != "filing_failed_before_companion_dispatch"
+                or value["retryable"] is not False or value["provider_started"] is not False
+                or type(value["provider_requests"]) is not int or value["provider_requests"] != 0
+                or type(value["provider_response_bytes"]) is not int or value["provider_response_bytes"] != 0
+                or value["provider_usage_complete"] is not True
+                or value["intent"] not in {"reuse_only", "fetch_if_missing"}
+                or type(value["fiscal_year"]) is not int or not 1900 <= value["fiscal_year"] <= 2100
+                or type(value["fiscal_quarter"]) is not int or value["fiscal_quarter"] not in {1, 2, 3, 4}
+>               or value.get("provider") not in {None, "fmp"}):
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: cannot use 'list' as a set element (unhashable type: 'list')
+
+scripts\filing_upstream_cause.py:311: TypeError
+_________ test_current_basis_through_public_reader_and_source_record __________
+
+tmp_path = WindowsPath('C:/Users/֣����/Projects/company-wiki/.planning/r1-w02-test/rf-malformed-red-tmp/test_current_basis_through_pub0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002AA61B88C30>
+
+    def test_current_basis_through_public_reader_and_source_record(tmp_path, monkeypatch):
+        from test_company_wiki_source_reader_v2 import _ref, _receipt, BODY
+        import company_wiki_source_reader_v2 as reader
+        from company_wiki_source_v2 import build_revenue_source_record_from_verified_read
+        receipt = _receipt()
+        receipt["schema_version"] = "2.2"
+        receipt["read_at"] = "2026-10-21T15:00:00+00:00"
+        receipt["manifest"]["published_date"] = None
+        receipt["manifest"]["retrieved_at"] = None
+        receipt["availability_evidence"] = {**proof(), "source_sha256": _ref()["content_sha256"]}
+        monkeypatch.setattr(reader, "_run_reader", lambda *a, **kw: subprocess.CompletedProcess(
+            [], 0, BODY, (json.dumps(receipt)+"\n").encode()))
+>       raw, observed, manifest = reader.open_source_version_v2(source_ref=_ref(), catalog_config=tmp_path/"catalog.yaml",
+            as_of_date="2026-10-21", source_reader_receipt_version="2.2")
+E       TypeError: open_source_version_v2() missing 1 required keyword-only argument: 'expected_fiscal_year'
+
+tests\test_r1_source_boundary.py:138: TypeError
+=========================== short test summary info ===========================
+FAILED tests/test_r1_source_boundary.py::test_malformed_companion_field_types_stay_safe[status-value0]
+FAILED tests/test_r1_source_boundary.py::test_malformed_companion_field_types_stay_safe[intent-value1]
+FAILED tests/test_r1_source_boundary.py::test_malformed_companion_field_types_stay_safe[provider-value2]
+FAILED tests/test_r1_source_boundary.py::test_current_basis_through_public_reader_and_source_record
+4 failed, 13 passed in 1.48s

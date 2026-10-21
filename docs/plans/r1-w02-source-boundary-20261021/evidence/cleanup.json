@@ -1,0 +1,101 @@
+{
+  "owner": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.planning\\r1-w02-test",
+  "targets": [
+    {
+      "exists_after": false,
+      "bytes": 0,
+      "files": 0,
+      "name": "ff-red-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 667,
+      "files": 29,
+      "name": "ff-green1-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 323190,
+      "files": 144,
+      "name": "ff-green2-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 968,
+      "files": 3,
+      "name": "rf-red-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 6708,
+      "files": 27,
+      "name": "rf-green1-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 968,
+      "files": 3,
+      "name": "rf-malformed-red-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 0,
+      "files": 0,
+      "name": "ff-hardening-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 968,
+      "files": 3,
+      "name": "rf-hardening-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 1104655,
+      "files": 1009,
+      "name": "ff-final-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 44451,
+      "files": 47,
+      "name": "rf-final-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 850,
+      "files": 3,
+      "name": "cross-repo-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 1105316,
+      "files": 1009,
+      "name": "ff-final2-tmp",
+      "owned_pytest_fixture": true
+    },
+    {
+      "exists_after": false,
+      "bytes": 45300,
+      "files": 50,
+      "name": "rf-final2-tmp",
+      "owned_pytest_fixture": true
+    }
+  ],
+  "new_downloaded_originals": 0,
+  "observed_at_utc": "2026-10-21T22:45:19.4947219Z",
+  "production_originals_deleted": 0,
+  "removed_tests_only": true,
+  "schema_version": "w02-test-cleanup/1"
+}

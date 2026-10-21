@@ -1,0 +1,15 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+___ test_companion_preserves_valid_request_budget_without_new_consumer_cap ____
+
+    def test_companion_preserves_valid_request_budget_without_new_consumer_cap():
+        payload = failed()
+        payload["transcript"]["acquisition_limits"]["timeout_seconds"] = 1800
+>       assert failure_observation(payload)["companion_observation"]["acquisition_limits"]["timeout_seconds"] == 1800
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'companion_observation'
+
+tests\test_r1_source_boundary.py:207: KeyError
+=========================== short test summary info ===========================
+FAILED tests/test_r1_source_boundary.py::test_companion_preserves_valid_request_budget_without_new_consumer_cap
+1 failed in 0.87s

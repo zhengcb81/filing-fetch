@@ -1,0 +1,758 @@
+{
+  "schema_version": "r1-w02-handoff/1",
+  "package_id": "W02",
+  "run_id": "r1-20261021-cn-wuxi-apptec",
+  "attempt": "r1-systemic-fix",
+  "observed_at_utc": "2026-10-21T22:47:10.239592+00:00",
+  "status": "ENGINEERING_GREEN_READY_FOR_INDEPENDENT_ROOT_REVIEW",
+  "repositories": {
+    "filing_fetch": {
+      "source_repo": "C:\\Users\\郑曾波\\Projects\\filing-fetch",
+      "worktree": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-boundary",
+      "branch": "codex/r1-source-boundary",
+      "base_head": "e8740748f91999cb24169b42f8e789726ed50482",
+      "product_commit": "ed7188616a87369690b6a90ebf40c7b0d829d950",
+      "install_files": [
+        {
+          "relative_path": "scripts/fetch_filing.py",
+          "source_sha256": "31a9b205cc02bca3c98fc67c82c04caf0f5897b3b76b533b41342751b95bbc2b",
+          "normalized_lf_sha256": "eed0c2e729ccc9af5e57e6c67480d4d28be97ace4611c075c2c64777a9397f38",
+          "old_source_sha256_observed": "8e569e89c8af860d6966d104351933c20fe6260bb5281c13d613034d1373c3b7",
+          "new_file": false,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\filing-fetch\\scripts\\fetch_filing.py",
+              "exists": true,
+              "old_sha256_observed": "8e569e89c8af860d6966d104351933c20fe6260bb5281c13d613034d1373c3b7",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\filing-fetch\\scripts\\fetch_filing.py",
+              "exists": true,
+              "old_sha256_observed": "8e569e89c8af860d6966d104351933c20fe6260bb5281c13d613034d1373c3b7",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\filing-fetch\\scripts\\fetch_filing.py",
+              "exists": true,
+              "old_sha256_observed": "8e569e89c8af860d6966d104351933c20fe6260bb5281c13d613034d1373c3b7",
+              "modified_by_worker": false
+            }
+          ],
+          "expert_frozen_baseline": {
+            "repo": "filing_fetch",
+            "relative_path": "scripts/fetch_filing.py",
+            "source_path": "C:\\Users\\郑曾波\\Projects\\filing-fetch\\scripts\\fetch_filing.py",
+            "exists": true,
+            "sha256": "8e569e89c8af860d6966d104351933c20fe6260bb5281c13d613034d1373c3b7",
+            "installed_copies": [
+              {
+                "path": "C:\\Users\\郑曾波\\.agents\\skills\\filing-fetch\\scripts\\fetch_filing.py",
+                "exists": true,
+                "old_sha256": "8e569e89c8af860d6966d104351933c20fe6260bb5281c13d613034d1373c3b7"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.codex\\skills\\filing-fetch\\scripts\\fetch_filing.py",
+                "exists": true,
+                "old_sha256": "8e569e89c8af860d6966d104351933c20fe6260bb5281c13d613034d1373c3b7"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.claude\\skills\\filing-fetch\\scripts\\fetch_filing.py",
+                "exists": true,
+                "old_sha256": "8e569e89c8af860d6966d104351933c20fe6260bb5281c13d613034d1373c3b7"
+              }
+            ]
+          }
+        },
+        {
+          "relative_path": "scripts/filing_contracts.py",
+          "source_sha256": "93a073849d168ee2e63b22cd4f06048f062415449c158f1bfe98df07a7246237",
+          "normalized_lf_sha256": "2e58487cc0459b088652c6d9ceabd2a9974e9aeffde180169c13be4fa77a6b80",
+          "old_source_sha256_observed": "ddd6a0d36a658464757cc1016a31e79f85869623e68c06720d448a9199ed0d08",
+          "new_file": false,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\filing-fetch\\scripts\\filing_contracts.py",
+              "exists": true,
+              "old_sha256_observed": "ddd6a0d36a658464757cc1016a31e79f85869623e68c06720d448a9199ed0d08",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\filing-fetch\\scripts\\filing_contracts.py",
+              "exists": true,
+              "old_sha256_observed": "ddd6a0d36a658464757cc1016a31e79f85869623e68c06720d448a9199ed0d08",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\filing-fetch\\scripts\\filing_contracts.py",
+              "exists": true,
+              "old_sha256_observed": "ddd6a0d36a658464757cc1016a31e79f85869623e68c06720d448a9199ed0d08",
+              "modified_by_worker": false
+            }
+          ],
+          "expert_frozen_baseline": {
+            "repo": "filing_fetch",
+            "relative_path": "scripts/filing_contracts.py",
+            "source_path": "C:\\Users\\郑曾波\\Projects\\filing-fetch\\scripts\\filing_contracts.py",
+            "exists": true,
+            "sha256": "ddd6a0d36a658464757cc1016a31e79f85869623e68c06720d448a9199ed0d08",
+            "installed_copies": [
+              {
+                "path": "C:\\Users\\郑曾波\\.agents\\skills\\filing-fetch\\scripts\\filing_contracts.py",
+                "exists": true,
+                "old_sha256": "ddd6a0d36a658464757cc1016a31e79f85869623e68c06720d448a9199ed0d08"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.codex\\skills\\filing-fetch\\scripts\\filing_contracts.py",
+                "exists": true,
+                "old_sha256": "ddd6a0d36a658464757cc1016a31e79f85869623e68c06720d448a9199ed0d08"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.claude\\skills\\filing-fetch\\scripts\\filing_contracts.py",
+                "exists": true,
+                "old_sha256": "ddd6a0d36a658464757cc1016a31e79f85869623e68c06720d448a9199ed0d08"
+              }
+            ]
+          }
+        },
+        {
+          "relative_path": "scripts/ff_provider_cause.py",
+          "source_sha256": "da0d74c9f9b75bbb9ab5505a501a4f9eb4a96aac4b1a19cef12a7262d868aa45",
+          "normalized_lf_sha256": "3639e74779cdb641ea4c157304d313a679029d889a574498714f98b746fe1f25",
+          "old_source_sha256_observed": "351c7e3c6a917a4339a6a744eb009ca1ac8bef2449d054e4752ce618c320922a",
+          "new_file": false,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\filing-fetch\\scripts\\ff_provider_cause.py",
+              "exists": true,
+              "old_sha256_observed": "351c7e3c6a917a4339a6a744eb009ca1ac8bef2449d054e4752ce618c320922a",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\filing-fetch\\scripts\\ff_provider_cause.py",
+              "exists": true,
+              "old_sha256_observed": "351c7e3c6a917a4339a6a744eb009ca1ac8bef2449d054e4752ce618c320922a",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\filing-fetch\\scripts\\ff_provider_cause.py",
+              "exists": true,
+              "old_sha256_observed": "351c7e3c6a917a4339a6a744eb009ca1ac8bef2449d054e4752ce618c320922a",
+              "modified_by_worker": false
+            }
+          ]
+        },
+        {
+          "relative_path": "scripts/ff_source_failure.py",
+          "source_sha256": "348e7802823e5814b6739486c5d5854adb42996ff88ef4b5b75305329003e83f",
+          "normalized_lf_sha256": "25b2efa46932ba887aa0ebbfd6e5b994bb3307a90962888343473c16996e4de5",
+          "old_source_sha256_observed": null,
+          "new_file": true,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\filing-fetch\\scripts\\ff_source_failure.py",
+              "exists": false,
+              "old_sha256_observed": null,
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\filing-fetch\\scripts\\ff_source_failure.py",
+              "exists": false,
+              "old_sha256_observed": null,
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\filing-fetch\\scripts\\ff_source_failure.py",
+              "exists": false,
+              "old_sha256_observed": null,
+              "modified_by_worker": false
+            }
+          ]
+        },
+        {
+          "relative_path": "scripts/ff_local_source_prepare.py",
+          "source_sha256": "5f6d8b9466d563ebd7c495b906c9c1fffecfae556231b56eafbd88d08083f137",
+          "normalized_lf_sha256": "97b469d6df2c3e600ae768153bd78857f55770d664996b5916d0070bfc392377",
+          "old_source_sha256_observed": "e7620fc21d22a53f57f4789b12142c999b808bda5266614f57ed691c8a326ddb",
+          "new_file": false,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\filing-fetch\\scripts\\ff_local_source_prepare.py",
+              "exists": true,
+              "old_sha256_observed": "e7620fc21d22a53f57f4789b12142c999b808bda5266614f57ed691c8a326ddb",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\filing-fetch\\scripts\\ff_local_source_prepare.py",
+              "exists": true,
+              "old_sha256_observed": "e7620fc21d22a53f57f4789b12142c999b808bda5266614f57ed691c8a326ddb",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\filing-fetch\\scripts\\ff_local_source_prepare.py",
+              "exists": true,
+              "old_sha256_observed": "e7620fc21d22a53f57f4789b12142c999b808bda5266614f57ed691c8a326ddb",
+              "modified_by_worker": false
+            }
+          ]
+        },
+        {
+          "relative_path": "scripts/ff_v2_envelope.py",
+          "source_sha256": "be72beebc25fbba8c6e4611950caa3434f2e397d37c74dcc7cc9b82fba1031fd",
+          "normalized_lf_sha256": "8950720f1b83119053ca055ee4585f40a422e1c6bd01db19ee427b2ec24980b9",
+          "old_source_sha256_observed": "78c6a51afef3fd00fe6deed0e17b651e965b0c4ccb5ddf5fbc669e767aaf3346",
+          "new_file": false,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py",
+              "exists": true,
+              "old_sha256_observed": "78c6a51afef3fd00fe6deed0e17b651e965b0c4ccb5ddf5fbc669e767aaf3346",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py",
+              "exists": true,
+              "old_sha256_observed": "78c6a51afef3fd00fe6deed0e17b651e965b0c4ccb5ddf5fbc669e767aaf3346",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py",
+              "exists": true,
+              "old_sha256_observed": "78c6a51afef3fd00fe6deed0e17b651e965b0c4ccb5ddf5fbc669e767aaf3346",
+              "modified_by_worker": false
+            }
+          ],
+          "expert_frozen_baseline": {
+            "repo": "filing_fetch",
+            "relative_path": "scripts/ff_v2_envelope.py",
+            "source_path": "C:\\Users\\郑曾波\\Projects\\filing-fetch\\scripts\\ff_v2_envelope.py",
+            "exists": true,
+            "sha256": "78c6a51afef3fd00fe6deed0e17b651e965b0c4ccb5ddf5fbc669e767aaf3346",
+            "installed_copies": [
+              {
+                "path": "C:\\Users\\郑曾波\\.agents\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py",
+                "exists": true,
+                "old_sha256": "78c6a51afef3fd00fe6deed0e17b651e965b0c4ccb5ddf5fbc669e767aaf3346"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.codex\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py",
+                "exists": true,
+                "old_sha256": "78c6a51afef3fd00fe6deed0e17b651e965b0c4ccb5ddf5fbc669e767aaf3346"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.claude\\skills\\filing-fetch\\scripts\\ff_v2_envelope.py",
+                "exists": true,
+                "old_sha256": "78c6a51afef3fd00fe6deed0e17b651e965b0c4ccb5ddf5fbc669e767aaf3346"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "revenue_forecast": {
+      "source_repo": "C:\\Users\\郑曾波\\Projects\\revenue-forecast",
+      "worktree": "C:\\Users\\郑曾波\\Projects\\revenue-forecast-r1-boundary",
+      "branch": "codex/r1-source-boundary",
+      "base_head": "9669c4d79cff7bf3e023dbd6cb74c411f4bef7bf",
+      "product_commit": "809a80f2341156421b87b7e0b945badca6c96e27",
+      "install_files": [
+        {
+          "relative_path": "scripts/contracts/source_clock.py",
+          "source_sha256": "9e60c85f57b4616905427e1ec6204c938a537895fe4daec2adb7b67eedb3a9fe",
+          "normalized_lf_sha256": "417e10d7e8d8aefa1090435e64d4314b00f174344e3e1afa482b5521a80a193a",
+          "old_source_sha256_observed": "194abc751640892bd38d0ad84ee482ac6797859cf27508abb88131fcf3376c3b",
+          "new_file": false,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\revenue-forecast\\scripts\\contracts\\source_clock.py",
+              "exists": true,
+              "old_sha256_observed": "194abc751640892bd38d0ad84ee482ac6797859cf27508abb88131fcf3376c3b",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\revenue-forecast\\scripts\\contracts\\source_clock.py",
+              "exists": true,
+              "old_sha256_observed": "194abc751640892bd38d0ad84ee482ac6797859cf27508abb88131fcf3376c3b",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\revenue-forecast\\scripts\\contracts\\source_clock.py",
+              "exists": true,
+              "old_sha256_observed": "194abc751640892bd38d0ad84ee482ac6797859cf27508abb88131fcf3376c3b",
+              "modified_by_worker": false
+            }
+          ],
+          "expert_frozen_baseline": {
+            "repo": "revenue_forecast",
+            "relative_path": "scripts/contracts/source_clock.py",
+            "source_path": "C:\\Users\\郑曾波\\Projects\\revenue-forecast\\scripts\\contracts\\source_clock.py",
+            "exists": true,
+            "sha256": "194abc751640892bd38d0ad84ee482ac6797859cf27508abb88131fcf3376c3b",
+            "installed_copies": [
+              {
+                "path": "C:\\Users\\郑曾波\\.agents\\skills\\revenue-forecast\\scripts\\contracts\\source_clock.py",
+                "exists": true,
+                "old_sha256": "194abc751640892bd38d0ad84ee482ac6797859cf27508abb88131fcf3376c3b"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.codex\\skills\\revenue-forecast\\scripts\\contracts\\source_clock.py",
+                "exists": true,
+                "old_sha256": "194abc751640892bd38d0ad84ee482ac6797859cf27508abb88131fcf3376c3b"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.claude\\skills\\revenue-forecast\\scripts\\contracts\\source_clock.py",
+                "exists": true,
+                "old_sha256": "194abc751640892bd38d0ad84ee482ac6797859cf27508abb88131fcf3376c3b"
+              }
+            ]
+          }
+        },
+        {
+          "relative_path": "scripts/filing_fetch_client.py",
+          "source_sha256": "7eea52e6319200603c7d6e0daaf0aade5366d3921d6d69fee3564a203c81e66d",
+          "normalized_lf_sha256": "d5acb5a1e31445db06d92cd1b7fdd9381399825ab7f3d9270c562f29bb6d44bc",
+          "old_source_sha256_observed": "c44ed08c7ebcc5ae41a88671fc4e535752d0ad0f5d91f5f28fdba514550d8757",
+          "new_file": false,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\revenue-forecast\\scripts\\filing_fetch_client.py",
+              "exists": true,
+              "old_sha256_observed": "c44ed08c7ebcc5ae41a88671fc4e535752d0ad0f5d91f5f28fdba514550d8757",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\revenue-forecast\\scripts\\filing_fetch_client.py",
+              "exists": true,
+              "old_sha256_observed": "c44ed08c7ebcc5ae41a88671fc4e535752d0ad0f5d91f5f28fdba514550d8757",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\revenue-forecast\\scripts\\filing_fetch_client.py",
+              "exists": true,
+              "old_sha256_observed": "c44ed08c7ebcc5ae41a88671fc4e535752d0ad0f5d91f5f28fdba514550d8757",
+              "modified_by_worker": false
+            }
+          ]
+        },
+        {
+          "relative_path": "scripts/filing_upstream_cause.py",
+          "source_sha256": "82fd7a4a1bdb43197c90372ca9ad782ca62289e9eb30ba0efee1c8c2e939eeb6",
+          "normalized_lf_sha256": "9eeeb5d636f0c0c3b855934f5884bca9aa69567389284db688dd2301d9030dfa",
+          "old_source_sha256_observed": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95",
+          "new_file": false,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\revenue-forecast\\scripts\\filing_upstream_cause.py",
+              "exists": true,
+              "old_sha256_observed": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\revenue-forecast\\scripts\\filing_upstream_cause.py",
+              "exists": true,
+              "old_sha256_observed": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\revenue-forecast\\scripts\\filing_upstream_cause.py",
+              "exists": true,
+              "old_sha256_observed": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95",
+              "modified_by_worker": false
+            }
+          ],
+          "expert_frozen_baseline": {
+            "repo": "revenue_forecast",
+            "relative_path": "scripts/filing_upstream_cause.py",
+            "source_path": "C:\\Users\\郑曾波\\Projects\\revenue-forecast\\scripts\\filing_upstream_cause.py",
+            "exists": true,
+            "sha256": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95",
+            "installed_copies": [
+              {
+                "path": "C:\\Users\\郑曾波\\.agents\\skills\\revenue-forecast\\scripts\\filing_upstream_cause.py",
+                "exists": true,
+                "old_sha256": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.codex\\skills\\revenue-forecast\\scripts\\filing_upstream_cause.py",
+                "exists": true,
+                "old_sha256": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.claude\\skills\\revenue-forecast\\scripts\\filing_upstream_cause.py",
+                "exists": true,
+                "old_sha256": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95"
+              }
+            ]
+          }
+        },
+        {
+          "relative_path": "scripts/source_preparation.py",
+          "source_sha256": "17a439fb9a48719e57f2fcc5345dc938a5cfa99a94d0ec004a596d18d922be9b",
+          "normalized_lf_sha256": "b5a50e9e3495aacdcdf9862fec1b836abe5d4f5a55ac5de49a15feaef4b494f7",
+          "old_source_sha256_observed": "7b570ec7fed1ed2bfa5e34262d3f211cdde4bf79a9af6e8c83816ce0639e2be5",
+          "new_file": false,
+          "installed_copies": [
+            {
+              "path": "C:\\Users\\郑曾波\\.agents\\skills\\revenue-forecast\\scripts\\source_preparation.py",
+              "exists": true,
+              "old_sha256_observed": "7b570ec7fed1ed2bfa5e34262d3f211cdde4bf79a9af6e8c83816ce0639e2be5",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.claude\\skills\\revenue-forecast\\scripts\\source_preparation.py",
+              "exists": true,
+              "old_sha256_observed": "7b570ec7fed1ed2bfa5e34262d3f211cdde4bf79a9af6e8c83816ce0639e2be5",
+              "modified_by_worker": false
+            },
+            {
+              "path": "C:\\Users\\郑曾波\\.codex\\skills\\revenue-forecast\\scripts\\source_preparation.py",
+              "exists": true,
+              "old_sha256_observed": "7b570ec7fed1ed2bfa5e34262d3f211cdde4bf79a9af6e8c83816ce0639e2be5",
+              "modified_by_worker": false
+            }
+          ],
+          "expert_frozen_baseline": {
+            "repo": "revenue_forecast",
+            "relative_path": "scripts/source_preparation.py",
+            "source_path": "C:\\Users\\郑曾波\\Projects\\revenue-forecast\\scripts\\source_preparation.py",
+            "exists": true,
+            "sha256": "7b570ec7fed1ed2bfa5e34262d3f211cdde4bf79a9af6e8c83816ce0639e2be5",
+            "installed_copies": [
+              {
+                "path": "C:\\Users\\郑曾波\\.agents\\skills\\revenue-forecast\\scripts\\source_preparation.py",
+                "exists": true,
+                "old_sha256": "7b570ec7fed1ed2bfa5e34262d3f211cdde4bf79a9af6e8c83816ce0639e2be5"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.codex\\skills\\revenue-forecast\\scripts\\source_preparation.py",
+                "exists": true,
+                "old_sha256": "7b570ec7fed1ed2bfa5e34262d3f211cdde4bf79a9af6e8c83816ce0639e2be5"
+              },
+              {
+                "path": "C:\\Users\\郑曾波\\.claude\\skills\\revenue-forecast\\scripts\\source_preparation.py",
+                "exists": true,
+                "old_sha256": "7b570ec7fed1ed2bfa5e34262d3f211cdde4bf79a9af6e8c83816ce0639e2be5"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "public_interfaces": {
+    "ff_operation_1_0": "Adds current closed local_preparation {status,reason,blocks_download,causes}; blocked accepted, malformed/wrong action remains failure.",
+    "nonzero": "Typed ChildFailed stdout decoded at three FF adapters; only exact business-failure shapes admitted, request fingerprint checked when present; original producer_exit_code integer retained. Generic transport is unchanged.",
+    "companion": "Requested exact FY/Q not dispatched due filing failure is not_run/filing_failed_before_companion_dispatch, preserves intent/provider/limits; provider_started=false/provider_requests=0 observed. No request=not_requested, incomplete FY/Q=period_unresolved. Ordinary filing GAP retains not_applicable compatibility.",
+    "rf_failure": "Safe companion_observation and producer_exit_code cross client/preparation boundaries. Small closed/pathless FF error envelope retained as filing_fetch_result; malformed/unsafe envelope omitted without erasing separate safe cause.",
+    "source_clock": "Existing availability evidence/1 additionally accepts current_verified_open with unchanged receipt2.2 lineage; null publication stays null, cutoff and known future publication still enforced.",
+    "compatibility": "No default selector/identity resolver/raw hash/permission/paid dispatch or provider retry changed. Legacy v1 and success paths preserved."
+  },
+  "red_tests": {
+    "ff": {
+      "tests": 16,
+      "failures": 10,
+      "errors": 0,
+      "skipped": 0,
+      "time_seconds": 1.616,
+      "skips": []
+    },
+    "rf": {
+      "tests": 10,
+      "failures": 4,
+      "errors": 0,
+      "skipped": 0,
+      "time_seconds": 1.483,
+      "skips": []
+    },
+    "malformed_new_validator": {
+      "tests": 17,
+      "failures": 4,
+      "errors": 0,
+      "skipped": 0,
+      "time_seconds": 1.414,
+      "skips": []
+    },
+    "notes": [
+      "RF malformed RED contains three actual unhashable-field failures plus one author test invocation missing expected_fiscal_year; corrected the fixture call, not production API.",
+      "An accidental consumer 600-second limit was caught by a new valid 1800-second request regression, removed to match the existing FF contract; no new cap is introduced.",
+      "Initial FF static check found unused imports/local and two mypy narrowing errors; fixed. One Windows absolute negative-test path was replaced by host-neutral slash-containing invalid reason, without a gate exemption."
+    ]
+  },
+  "green_tests": {
+    "ff": {
+      "tests": 351,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "time_seconds": 47.777,
+      "skips": [
+        {
+          "node": "tests.test_source_ref_v2_db_query::test_real_db_only_reuse_accepts_configured_root_with_legacy_labels_false",
+          "reason": "set CWP_V2_CODE_ROOT to the isolated CWP checkout"
+        },
+        {
+          "node": "tests.test_transcript_launch_contract::test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[HKEX-unsupported_market]",
+          "reason": "W07 real ET checkout integration requires an explicit test tool path"
+        },
+        {
+          "node": "tests.test_transcript_launch_contract::test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[NASDAQ-provider_credentials_missing]",
+          "reason": "W07 real ET checkout integration requires an explicit test tool path"
+        },
+        {
+          "node": "tests.test_transcript_launch_contract::test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero[TOKYO-unsupported_exchange]",
+          "reason": "W07 real ET checkout integration requires an explicit test tool path"
+        },
+        {
+          "node": "tests.test_fetch_filing.FilingFetchTests::test_cli_stdin_accepts_utf8_chinese_query",
+          "reason": "production security-master snapshots not present"
+        }
+      ]
+    },
+    "rf": {
+      "tests": 143,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1,
+      "time_seconds": 29.639,
+      "skips": [
+        {
+          "node": "tests.test_narrative_source_preparation_transport::test_posix_cli_smoke_uses_own_nonblocking_transport",
+          "reason": "POSIX executable-provider CLI smoke"
+        }
+      ]
+    },
+    "three_repo_offline": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "time_seconds": 5.102,
+      "skips": []
+    },
+    "ff_console_summary": "307 passed, 5 skipped, 39 subtests passed in 47.84s",
+    "rf_console_summary": "142 passed, 1 skipped in 29.71s; includes actual CWP/FF/RF cold catalog CLI chain",
+    "static": "Both normal git commit hooks passed ruff, public-contract mypy and host assumption guard. Separate mypy receipts included.",
+    "three_repo_version_note": "Actual working CWP checkout was used read-only while ROOT owns W01. This is an offline failure-protocol integration observation, not final frozen three-repo acceptance or real document/content quality."
+  },
+  "actual_live_calls": 0,
+  "provider_requests": 0,
+  "model_requests": 0,
+  "downloads": 0,
+  "budget": {
+    "new_known_tokens": 0,
+    "new_unknown_tokens": 0,
+    "new_known_micro_usd": 0,
+    "native_fee_stores_modified": false,
+    "old_unknown_holds_unchanged": true
+  },
+  "preservation": {
+    "production_raw_modified": false,
+    "production_config_modified": false,
+    "dayu_code_modified": false,
+    "installations_modified": false,
+    "parent_execution_reports_modified": false,
+    "primary_repository_index_modified": false
+  },
+  "cleanup": {
+    "owner": "C:\\Users\\郑曾波\\Projects\\company-wiki\\.planning\\r1-w02-test",
+    "targets": [
+      {
+        "exists_after": false,
+        "bytes": 0,
+        "files": 0,
+        "name": "ff-red-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 667,
+        "files": 29,
+        "name": "ff-green1-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 323190,
+        "files": 144,
+        "name": "ff-green2-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 968,
+        "files": 3,
+        "name": "rf-red-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 6708,
+        "files": 27,
+        "name": "rf-green1-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 968,
+        "files": 3,
+        "name": "rf-malformed-red-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 0,
+        "files": 0,
+        "name": "ff-hardening-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 968,
+        "files": 3,
+        "name": "rf-hardening-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 1104655,
+        "files": 1009,
+        "name": "ff-final-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 44451,
+        "files": 47,
+        "name": "rf-final-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 850,
+        "files": 3,
+        "name": "cross-repo-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 1105316,
+        "files": 1009,
+        "name": "ff-final2-tmp",
+        "owned_pytest_fixture": true
+      },
+      {
+        "exists_after": false,
+        "bytes": 45300,
+        "files": 50,
+        "name": "rf-final2-tmp",
+        "owned_pytest_fixture": true
+      }
+    ],
+    "new_downloaded_originals": 0,
+    "observed_at_utc": "2026-10-21T22:45:19.4947219Z",
+    "production_originals_deleted": 0,
+    "removed_tests_only": true,
+    "schema_version": "w02-test-cleanup/1"
+  },
+  "space": {
+    "retained_evidence_bytes": 150473,
+    "peak_measured": false,
+    "note": "Owned temporary fixtures removed; retained bounded logs/XML only. No independent scratch peak claim."
+  },
+  "receipts": [
+    {
+      "path": "evidence/ff-red.log",
+      "sha256": "c9d03c31070a8f3e1fcdb65eff9f26062c5415c250e3eaf18324a69d87536223",
+      "bytes": 17826
+    },
+    {
+      "path": "evidence/ff-red.xml",
+      "sha256": "5f5c1fc3a22cbcc9deac462af8938f93c300d0088738f89b3d744f358bef8894",
+      "bytes": 20007
+    },
+    {
+      "path": "evidence/rf-red.log",
+      "sha256": "904533a75f72c6960900142b12f46e781f89ebed3e0c6c2ba34d8dc92191e41c",
+      "bytes": 5765
+    },
+    {
+      "path": "evidence/rf-red.xml",
+      "sha256": "0ceb71f0b8e86d3cfd7c0969b47e452ee54412123890c7e87ac36dfb81da7c9f",
+      "bytes": 6684
+    },
+    {
+      "path": "evidence/rf-malformed-red.log",
+      "sha256": "c532623de4f48e2e1372f4627e10695bd9dfcc866b4f848b1b4f1e09bd05fb7f",
+      "bytes": 11916
+    },
+    {
+      "path": "evidence/rf-malformed-red.xml",
+      "sha256": "1a13fd0b1391ccf2e243d1b628bc855a229d11fa34c5e1712204aa97d17af77e",
+      "bytes": 13926
+    },
+    {
+      "path": "evidence/rf-limit-red.log",
+      "sha256": "f0982e54f050ca51dd6eb11fdcdbbf8283e5653e5afbf666ec8147f908e30ab4",
+      "bytes": 930
+    },
+    {
+      "path": "evidence/ff-final2.log",
+      "sha256": "a29dcc6dd9e66fb5fba33cf9c5da4ce26f80178dddb7009bd78ca1c2239f0489",
+      "bytes": 419
+    },
+    {
+      "path": "evidence/ff-final2.xml",
+      "sha256": "65cbeb54e172448e05b6229b894f6d2406379293c57f56030f425039080b385d",
+      "bytes": 48923
+    },
+    {
+      "path": "evidence/rf-final2.log",
+      "sha256": "761749260dd4ac35a6975c227c6a5b1325043a843b26613bfb2c26e7d1c31b3d",
+      "bytes": 195
+    },
+    {
+      "path": "evidence/rf-final2.xml",
+      "sha256": "56c723ff311b907124cd12a6b808af8112466e2c48f9697c5cdaa990a31dec95",
+      "bytes": 20989
+    },
+    {
+      "path": "evidence/cross-repo.log",
+      "sha256": "61a76c91ad11df64a26f5ed6656742c37378f861ab6288774f25364a7b1b963d",
+      "bytes": 100
+    },
+    {
+      "path": "evidence/cross-repo.xml",
+      "sha256": "2f7994c03d2e481d545aecae0e9794b1dc2d7e90b5a34d824fa7559094a61aa3",
+      "bytes": 375
+    },
+    {
+      "path": "evidence/ff-mypy.log",
+      "sha256": "0c37c4158c91ef55c724ba017bf6465f26018199badb08e3ff13f98acdf056c2",
+      "bytes": 44
+    },
+    {
+      "path": "evidence/rf-mypy.log",
+      "sha256": "ce32e21ee307d2da61637151f2f239cf8568be270711ff04e8e3025805ab7f57",
+      "bytes": 45
+    },
+    {
+      "path": "evidence/cleanup.json",
+      "sha256": "bd68d85fccabe237b6c84dc4998bed8f35cbf25e556579443e1008fe164f26c5",
+      "bytes": 2329
+    }
+  ],
+  "remaining_issue_ids": [
+    "RC-01/RC-02 final W07 integration and independent fetch/process acceptance"
+  ],
+  "remaining_external_limits": [
+    "No provider capability, FMP entitlement or new original availability tested; absence of companion dispatch is not a provider failure.",
+    "RF narrative _manifest still requires publication and its /1 receipt is exact. ROOT reserved W03 to add the one optional availability extension consistently, including source-owner behavior; no unsupported pass is claimed.",
+    "New regression files must be added by ROOT to the existing explicit FF CI_TESTS and RF SMOKE_TESTS tables, coordinated with W05; no new gate or live test requested."
+  ],
+  "recommended_next_action": "ROOT independent review exact product commits; fix findings, add two regression table rows, integrate dependencies, selective install old-SHA plan/apply/check; W07 actual documents and formal four-role acceptance remain OPEN.",
+  "resume_commands": {
+    "ff": "python -m pytest tests/test_r1_source_business_failure.py tests/test_local_source_prepare.py tests/test_source_ref_v2_db_query.py tests/test_source_ref_v2.py tests/test_ff_v2_contract.py tests/test_transcript_launch_contract.py tests/test_transcript_companion_transport.py tests/test_fetch_filing.py tests/test_provider_cause_contract.py tests/test_du10_ff41_rootcause.py -q",
+    "rf": "python -m pytest tests/test_r1_source_boundary.py tests/test_source_failure_cause.py tests/test_source_clock.py tests/test_source_preparation_complete_result.py tests/test_source_preparation.py tests/test_source_preparation_deadline.py tests/test_filing_fetch_client.py tests/test_narrative_source_preparation_transport.py -q",
+    "cross_repo_env": "CWP_V2_CODE_ROOT=<CWP checkout>; W02_FF_CODE_ROOT=<FF checkout>; python -m pytest tests/test_r1_source_boundary.py::test_real_cwp_ff_rf_cold_catalog_offline_contract -q"
+  }
+}
