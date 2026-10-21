@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="0.745" timestamp="2026-10-21T23:56:37.655204+01:00" hostname="DESKTOP-156V213"><testcase classname="tests.test_r1_source_business_failure" name="test_nonzero_operation_accounting_must_be_consistent[change0]" time="0.264"><failure message="AssertionError: assert 'local_candidate_limit' == 'invalid_producer_schema'&#10;  &#10;  - invalid_producer_schema&#10;  + local_candidate_limit">tmp_path = WindowsPath('C:/Users/郑曾波/Projects/company-wiki/.planning/r1-w02-test/ff-accounting-red-tmp/test_nonzero_operation_account0')
+change = {'download_events': False}
+
+    @pytest.mark.parametrize("change", [{"download_events": False}, {"outcome": "downloaded_new"}])
+    def test_nonzero_operation_accounting_must_be_consistent(tmp_path, change):
+        from ff_source_failure import source_request_id
+        current = {"entity": "Fixture Co", "document_kind": "annual_report", "as_of_date": "2026-10-21"}
+        payload = _operation_v2(status="unavailable", outcome=None)
+        payload["request_id"] = source_request_id(current)
+        payload["local_preparation"] = {"status": "unavailable", "reason": "local_candidate_limit", "blocks_download": True, "causes": []}
+        payload.update(change)
+        with pytest.raises(FilingFetchError) as caught:
+            ff._run_company_wiki_json(command=child(payload), root=tmp_path, timeout_seconds=20,
+                                      action="ensure", source_request=current)
+&gt;       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+E       AssertionError: assert 'local_candidate_limit' == 'invalid_producer_schema'
+E         
+E         - invalid_producer_schema
+E         + local_candidate_limit
+
+tests\test_r1_source_business_failure.py:362: AssertionError</failure></testcase><testcase classname="tests.test_r1_source_business_failure" name="test_nonzero_operation_accounting_must_be_consistent[change1]" time="0.245"><failure message="AssertionError: assert 'local_candidate_limit' == 'invalid_producer_schema'&#10;  &#10;  - invalid_producer_schema&#10;  + local_candidate_limit">tmp_path = WindowsPath('C:/Users/郑曾波/Projects/company-wiki/.planning/r1-w02-test/ff-accounting-red-tmp/test_nonzero_operation_account1')
+change = {'outcome': 'downloaded_new'}
+
+    @pytest.mark.parametrize("change", [{"download_events": False}, {"outcome": "downloaded_new"}])
+    def test_nonzero_operation_accounting_must_be_consistent(tmp_path, change):
+        from ff_source_failure import source_request_id
+        current = {"entity": "Fixture Co", "document_kind": "annual_report", "as_of_date": "2026-10-21"}
+        payload = _operation_v2(status="unavailable", outcome=None)
+        payload["request_id"] = source_request_id(current)
+        payload["local_preparation"] = {"status": "unavailable", "reason": "local_candidate_limit", "blocks_download": True, "causes": []}
+        payload.update(change)
+        with pytest.raises(FilingFetchError) as caught:
+            ff._run_company_wiki_json(command=child(payload), root=tmp_path, timeout_seconds=20,
+                                      action="ensure", source_request=current)
+&gt;       assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+E       AssertionError: assert 'local_candidate_limit' == 'invalid_producer_schema'
+E         
+E         - invalid_producer_schema
+E         + local_candidate_limit
+
+tests\test_r1_source_business_failure.py:362: AssertionError</failure></testcase></testsuite></testsuites>

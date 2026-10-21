@@ -1,0 +1,26 @@
+.................s.FF.........                                           [100%]
+================================== FAILURES ===================================
+____ test_normal_gap_complete_result_is_preserved_without_error_retryable _____
+
+    def test_normal_gap_complete_result_is_preserved_without_error_retryable():
+        payload = normal_gap()
+        observed = failure_observation(payload)
+>       assert observed["filing_fetch_result"] == payload
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'filing_fetch_result'
+
+tests\test_r1_source_boundary.py:413: KeyError
+_ test_undispatched_provider_is_an_intent_token_not_a_second_capability_list __
+
+    def test_undispatched_provider_is_an_intent_token_not_a_second_capability_list():
+        payload = failed()
+        payload["transcript"]["provider"] = "company_ir"
+>       assert failure_observation(payload)["companion_observation"] == payload["transcript"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'companion_observation'
+
+tests\test_r1_source_boundary.py:420: KeyError
+=========================== short test summary info ===========================
+FAILED tests/test_r1_source_boundary.py::test_normal_gap_complete_result_is_preserved_without_error_retryable
+FAILED tests/test_r1_source_boundary.py::test_undispatched_provider_is_an_intent_token_not_a_second_capability_list
+2 failed, 27 passed, 1 skipped in 1.46s

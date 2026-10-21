@@ -3,20 +3,20 @@
   "package_id": "W02",
   "run_id": "r1-20261021-cn-wuxi-apptec",
   "attempt": "r1-systemic-fix",
-  "observed_at_utc": "2026-10-21T22:47:10.239592+00:00",
-  "status": "ENGINEERING_GREEN_READY_FOR_INDEPENDENT_ROOT_REVIEW",
+  "observed_at_utc": "2026-10-21T23:01:13.874883+00:00",
+  "status": "REVIEWED_ENGINEERING_GREEN_PENDING_ROOT_INTEGRATION",
   "repositories": {
     "filing_fetch": {
       "source_repo": "C:\\Users\\郑曾波\\Projects\\filing-fetch",
       "worktree": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-boundary",
       "branch": "codex/r1-source-boundary",
       "base_head": "e8740748f91999cb24169b42f8e789726ed50482",
-      "product_commit": "ed7188616a87369690b6a90ebf40c7b0d829d950",
+      "product_commit": "cf15aeaa90667a8b8aeac01af713dd984f057fe5",
       "install_files": [
         {
           "relative_path": "scripts/fetch_filing.py",
-          "source_sha256": "31a9b205cc02bca3c98fc67c82c04caf0f5897b3b76b533b41342751b95bbc2b",
-          "normalized_lf_sha256": "eed0c2e729ccc9af5e57e6c67480d4d28be97ace4611c075c2c64777a9397f38",
+          "source_sha256": "d59987a871af19849c43dce45cd15cab4467baa8876d742250c84b3b0be00326",
+          "normalized_lf_sha256": "1566516dde93945502c2107e19d6192c5b6f16394fc808c8780e9954aa1659a9",
           "old_source_sha256_observed": "8e569e89c8af860d6966d104351933c20fe6260bb5281c13d613034d1373c3b7",
           "new_file": false,
           "installed_copies": [
@@ -117,8 +117,8 @@
         },
         {
           "relative_path": "scripts/ff_provider_cause.py",
-          "source_sha256": "da0d74c9f9b75bbb9ab5505a501a4f9eb4a96aac4b1a19cef12a7262d868aa45",
-          "normalized_lf_sha256": "3639e74779cdb641ea4c157304d313a679029d889a574498714f98b746fe1f25",
+          "source_sha256": "3ec19c0558f5ce4283b8ac9297f464222bb4ee8950840d666c4c8f2042f0d5fe",
+          "normalized_lf_sha256": "84e2de504b1c2c03774beb3cc4e548d4b8a26b8532a6464dd38f50f3569fbeeb",
           "old_source_sha256_observed": "351c7e3c6a917a4339a6a744eb009ca1ac8bef2449d054e4752ce618c320922a",
           "new_file": false,
           "installed_copies": [
@@ -254,7 +254,7 @@
       "worktree": "C:\\Users\\郑曾波\\Projects\\revenue-forecast-r1-boundary",
       "branch": "codex/r1-source-boundary",
       "base_head": "9669c4d79cff7bf3e023dbd6cb74c411f4bef7bf",
-      "product_commit": "809a80f2341156421b87b7e0b945badca6c96e27",
+      "product_commit": "768b6dd392d98df67d8eeb1d7ce428ef014cca7c",
       "install_files": [
         {
           "relative_path": "scripts/contracts/source_clock.py",
@@ -336,8 +336,8 @@
         },
         {
           "relative_path": "scripts/filing_upstream_cause.py",
-          "source_sha256": "82fd7a4a1bdb43197c90372ca9ad782ca62289e9eb30ba0efee1c8c2e939eeb6",
-          "normalized_lf_sha256": "9eeeb5d636f0c0c3b855934f5884bca9aa69567389284db688dd2301d9030dfa",
+          "source_sha256": "624571108b01a1e7f429258b659994d75fef73097529c5f49ed9249a6ab73f1c",
+          "normalized_lf_sha256": "2c954a0498bd55efd88e82e1108a9b9ad27aa0db78b08b062b7eedd986a1624b",
           "old_source_sha256_observed": "0663e7a9f9d5123a675dc80addcc350dc43c2d9c09a7f4e2c1eeb24181762a95",
           "new_file": false,
           "installed_copies": [
@@ -532,7 +532,14 @@
     "ff_console_summary": "307 passed, 5 skipped, 39 subtests passed in 47.84s",
     "rf_console_summary": "142 passed, 1 skipped in 29.71s; includes actual CWP/FF/RF cold catalog CLI chain",
     "static": "Both normal git commit hooks passed ruff, public-contract mypy and host assumption guard. Separate mypy receipts included.",
-    "three_repo_version_note": "Actual working CWP checkout was used read-only while ROOT owns W01. This is an offline failure-protocol integration observation, not final frozen three-repo acceptance or real document/content quality."
+    "three_repo_version_note": "Actual working CWP checkout was used read-only while ROOT owns W01. This is an offline failure-protocol integration observation, not final frozen three-repo acceptance or real document/content quality.",
+    "post_review_incremental": {
+      "ff": "52 passed / 3.22s on final product cf15aeaa",
+      "rf": "44 passed / 1 skipped / 6.94s on final product 768b6dd3",
+      "earlier_wide_after_gap_fix": "152 passed / 2 skipped / 20.68s before finite-reason-only alignment",
+      "public_mypy": "11 public sources passed after gap/provider/local-reason changes; final normal FF hooks passed all, RF helper-only commit hook skips mypy so the exact shared command was also run explicitly.",
+      "independent": "35 passed / 9.62s / 0 skipped, all final runtime file SHA unchanged"
+    }
   },
   "actual_live_calls": 0,
   "provider_requests": 0,
@@ -646,74 +653,59 @@
         "files": 50,
         "name": "rf-final2-tmp",
         "owned_pytest_fixture": true
+      },
+      {
+        "files": 3,
+        "name": "rf-review-red-tmp",
+        "bytes": 968,
+        "exists_after": false,
+        "owned_pytest_fixture": true
+      },
+      {
+        "files": 47,
+        "name": "rf-review-green-tmp",
+        "bytes": 44451,
+        "exists_after": false,
+        "owned_pytest_fixture": true
+      },
+      {
+        "files": 0,
+        "name": "ff-accounting-red-tmp",
+        "bytes": 0,
+        "exists_after": false,
+        "owned_pytest_fixture": true
+      },
+      {
+        "files": 0,
+        "name": "ff-accounting-green-tmp",
+        "bytes": 0,
+        "exists_after": false,
+        "owned_pytest_fixture": true
+      },
+      {
+        "files": 22,
+        "name": "rf-accounting-green-tmp",
+        "bytes": 6704,
+        "exists_after": false,
+        "owned_pytest_fixture": true
       }
     ],
     "new_downloaded_originals": 0,
-    "observed_at_utc": "2026-10-21T22:45:19.4947219Z",
+    "observed_at_utc": "2026-10-21T22:58:28.8067245Z",
     "production_originals_deleted": 0,
     "removed_tests_only": true,
     "schema_version": "w02-test-cleanup/1"
   },
   "space": {
-    "retained_evidence_bytes": 150473,
+    "retained_evidence_bytes": 203621,
     "peak_measured": false,
     "note": "Owned temporary fixtures removed; retained bounded logs/XML only. No independent scratch peak claim."
   },
   "receipts": [
     {
-      "path": "evidence/ff-red.log",
-      "sha256": "c9d03c31070a8f3e1fcdb65eff9f26062c5415c250e3eaf18324a69d87536223",
-      "bytes": 17826
-    },
-    {
-      "path": "evidence/ff-red.xml",
-      "sha256": "5f5c1fc3a22cbcc9deac462af8938f93c300d0088738f89b3d744f358bef8894",
-      "bytes": 20007
-    },
-    {
-      "path": "evidence/rf-red.log",
-      "sha256": "904533a75f72c6960900142b12f46e781f89ebed3e0c6c2ba34d8dc92191e41c",
-      "bytes": 5765
-    },
-    {
-      "path": "evidence/rf-red.xml",
-      "sha256": "0ceb71f0b8e86d3cfd7c0969b47e452ee54412123890c7e87ac36dfb81da7c9f",
-      "bytes": 6684
-    },
-    {
-      "path": "evidence/rf-malformed-red.log",
-      "sha256": "c532623de4f48e2e1372f4627e10695bd9dfcc866b4f848b1b4f1e09bd05fb7f",
-      "bytes": 11916
-    },
-    {
-      "path": "evidence/rf-malformed-red.xml",
-      "sha256": "1a13fd0b1391ccf2e243d1b628bc855a229d11fa34c5e1712204aa97d17af77e",
-      "bytes": 13926
-    },
-    {
-      "path": "evidence/rf-limit-red.log",
-      "sha256": "f0982e54f050ca51dd6eb11fdcdbbf8283e5653e5afbf666ec8147f908e30ab4",
-      "bytes": 930
-    },
-    {
-      "path": "evidence/ff-final2.log",
-      "sha256": "a29dcc6dd9e66fb5fba33cf9c5da4ce26f80178dddb7009bd78ca1c2239f0489",
-      "bytes": 419
-    },
-    {
-      "path": "evidence/ff-final2.xml",
-      "sha256": "65cbeb54e172448e05b6229b894f6d2406379293c57f56030f425039080b385d",
-      "bytes": 48923
-    },
-    {
-      "path": "evidence/rf-final2.log",
-      "sha256": "761749260dd4ac35a6975c227c6a5b1325043a843b26613bfb2c26e7d1c31b3d",
-      "bytes": 195
-    },
-    {
-      "path": "evidence/rf-final2.xml",
-      "sha256": "56c723ff311b907124cd12a6b808af8112466e2c48f9697c5cdaa990a31dec95",
-      "bytes": 20989
+      "path": "evidence/cleanup.json",
+      "sha256": "6b55b3e748d0891b8714ac943b1c40cfe1f3802c417e31f34aee8df55505ce35",
+      "bytes": 3133
     },
     {
       "path": "evidence/cross-repo.log",
@@ -726,9 +718,84 @@
       "bytes": 375
     },
     {
+      "path": "evidence/ff-accounting-green.log",
+      "sha256": "700513a62441df274be913f9ba2d206fb306c417e1ee6346c3a67197a1f960fe",
+      "bytes": 101
+    },
+    {
+      "path": "evidence/ff-accounting-green.xml",
+      "sha256": "3eed091424d91e2f2167a42a38e083924a313344fb6848152bb912edc1393d61",
+      "bytes": 7817
+    },
+    {
+      "path": "evidence/ff-accounting-red.log",
+      "sha256": "b635184d7e51ece6ac3ab53c76c55a66508afe3f376dab21a1af9c71be6d0a14",
+      "bytes": 3421
+    },
+    {
+      "path": "evidence/ff-accounting-red.xml",
+      "sha256": "4c9a6a55747362a09587d35731d445b6020d1be6314d215fa309a6dc897db1ff",
+      "bytes": 3666
+    },
+    {
+      "path": "evidence/ff-final2.log",
+      "sha256": "a29dcc6dd9e66fb5fba33cf9c5da4ce26f80178dddb7009bd78ca1c2239f0489",
+      "bytes": 419
+    },
+    {
+      "path": "evidence/ff-final2.xml",
+      "sha256": "65cbeb54e172448e05b6229b894f6d2406379293c57f56030f425039080b385d",
+      "bytes": 48923
+    },
+    {
       "path": "evidence/ff-mypy.log",
       "sha256": "0c37c4158c91ef55c724ba017bf6465f26018199badb08e3ff13f98acdf056c2",
       "bytes": 44
+    },
+    {
+      "path": "evidence/ff-red.log",
+      "sha256": "c9d03c31070a8f3e1fcdb65eff9f26062c5415c250e3eaf18324a69d87536223",
+      "bytes": 17826
+    },
+    {
+      "path": "evidence/ff-red.xml",
+      "sha256": "5f5c1fc3a22cbcc9deac462af8938f93c300d0088738f89b3d744f358bef8894",
+      "bytes": 20007
+    },
+    {
+      "path": "evidence/rf-accounting-green.log",
+      "sha256": "163602ce0edf4d0baab26584bdfe7e235dde0191d7a0e9e714b69744fda10465",
+      "bytes": 112
+    },
+    {
+      "path": "evidence/rf-accounting-green.xml",
+      "sha256": "74480d9c51ac7603e70e9c0f6b844b4a292cae1f3401633971aec456b456e091",
+      "bytes": 6909
+    },
+    {
+      "path": "evidence/rf-final2.log",
+      "sha256": "761749260dd4ac35a6975c227c6a5b1325043a843b26613bfb2c26e7d1c31b3d",
+      "bytes": 195
+    },
+    {
+      "path": "evidence/rf-final2.xml",
+      "sha256": "56c723ff311b907124cd12a6b808af8112466e2c48f9697c5cdaa990a31dec95",
+      "bytes": 20989
+    },
+    {
+      "path": "evidence/rf-limit-red.log",
+      "sha256": "f0982e54f050ca51dd6eb11fdcdbbf8283e5653e5afbf666ec8147f908e30ab4",
+      "bytes": 930
+    },
+    {
+      "path": "evidence/rf-malformed-red.log",
+      "sha256": "c532623de4f48e2e1372f4627e10695bd9dfcc866b4f848b1b4f1e09bd05fb7f",
+      "bytes": 11916
+    },
+    {
+      "path": "evidence/rf-malformed-red.xml",
+      "sha256": "1a13fd0b1391ccf2e243d1b628bc855a229d11fa34c5e1712204aa97d17af77e",
+      "bytes": 13926
     },
     {
       "path": "evidence/rf-mypy.log",
@@ -736,9 +803,39 @@
       "bytes": 45
     },
     {
-      "path": "evidence/cleanup.json",
-      "sha256": "bd68d85fccabe237b6c84dc4998bed8f35cbf25e556579443e1008fe164f26c5",
-      "bytes": 2329
+      "path": "evidence/rf-red.log",
+      "sha256": "904533a75f72c6960900142b12f46e781f89ebed3e0c6c2ba34d8dc92191e41c",
+      "bytes": 5765
+    },
+    {
+      "path": "evidence/rf-red.xml",
+      "sha256": "0ceb71f0b8e86d3cfd7c0969b47e452ee54412123890c7e87ac36dfb81da7c9f",
+      "bytes": 6684
+    },
+    {
+      "path": "evidence/rf-review-green.log",
+      "sha256": "1a4418562fceb14b56b3067a649164de9c566860fc9577f530a7d8e2f3efef7b",
+      "bytes": 276
+    },
+    {
+      "path": "evidence/rf-review-green.xml",
+      "sha256": "09cdba108a16395bc83bb485b198b42a3c74e2c915b5da8c139f667e144eebe3",
+      "bytes": 22908
+    },
+    {
+      "path": "evidence/rf-review-mypy.log",
+      "sha256": "ce32e21ee307d2da61637151f2f239cf8568be270711ff04e8e3025805ab7f57",
+      "bytes": 45
+    },
+    {
+      "path": "evidence/rf-review-red.log",
+      "sha256": "2034abfaee1e6d60eb73f5fe89014747750e92d7cbdb7803fefb9e9d0902c900",
+      "bytes": 1469
+    },
+    {
+      "path": "evidence/rf-review-red.xml",
+      "sha256": "1b7a61b5546169e868b359771d8481d1b08685a93481bdf7f36b1a40a4120132",
+      "bytes": 5620
     }
   ],
   "remaining_issue_ids": [
@@ -749,10 +846,43 @@
     "RF narrative _manifest still requires publication and its /1 receipt is exact. ROOT reserved W03 to add the one optional availability extension consistently, including source-owner behavior; no unsupported pass is claimed.",
     "New regression files must be added by ROOT to the existing explicit FF CI_TESTS and RF SMOKE_TESTS tables, coordinated with W05; no new gate or live test requested."
   ],
-  "recommended_next_action": "ROOT independent review exact product commits; fix findings, add two regression table rows, integrate dependencies, selective install old-SHA plan/apply/check; W07 actual documents and formal four-role acceptance remain OPEN.",
+  "recommended_next_action": "ROOT integrate the independently reviewed exact versions, add existing CI list rows/transitive hook trigger, selective install/publication/PWF, then pause per latest user. Do not start W03 or paid live work now.",
   "resume_commands": {
     "ff": "python -m pytest tests/test_r1_source_business_failure.py tests/test_local_source_prepare.py tests/test_source_ref_v2_db_query.py tests/test_source_ref_v2.py tests/test_ff_v2_contract.py tests/test_transcript_launch_contract.py tests/test_transcript_companion_transport.py tests/test_fetch_filing.py tests/test_provider_cause_contract.py tests/test_du10_ff41_rootcause.py -q",
     "rf": "python -m pytest tests/test_r1_source_boundary.py tests/test_source_failure_cause.py tests/test_source_clock.py tests/test_source_preparation_complete_result.py tests/test_source_preparation.py tests/test_source_preparation_deadline.py tests/test_filing_fetch_client.py tests/test_narrative_source_preparation_transport.py -q",
     "cross_repo_env": "CWP_V2_CODE_ROOT=<CWP checkout>; W02_FF_CODE_ROOT=<FF checkout>; python -m pytest tests/test_r1_source_boundary.py::test_real_cwp_ff_rf_cold_catalog_offline_contract -q"
-  }
+  },
+  "initial_product_commits": {
+    "filing_fetch": "ed7188616a87369690b6a90ebf40c7b0d829d950",
+    "revenue_forecast": "809a80f2341156421b87b7e0b945badca6c96e27"
+  },
+  "independent_review": {
+    "reviewer": "/root/r1_w04_summary_runtime",
+    "status": "PASS_ENGINEERING_CONTENT_BOUND",
+    "passed": 35,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 9.62,
+    "runtime_hashes_before_after_equal": true,
+    "report": "C:/Users/郑曾波/Projects/company-wiki/docs/plans/du11-source-closure-2026-10-18/review/r1-w02-independent-20261021.json",
+    "note": "Final source versions match FF cf15aeaa / RF 768b6dd3. ROOT integration/W07 live content remains OPEN."
+  },
+  "review_fixes": [
+    {
+      "root": "Requested provider intent was narrowed to a consumer capability list.",
+      "fix": "RF uses the exact public FF provider-token grammar; undispatched company_ir remains an intent, not a claim that a provider was invoked or supported."
+    },
+    {
+      "root": "Only exception shape was retained although FF has both normal metadata GAP and exception results.",
+      "fix": "Closed validation now recognizes existing normal GAP gap_hash/download_events with not_applicable companion, without inventing retryable."
+    },
+    {
+      "root": "A numeric equality accepted bool zero and contradictory download outcome as local no-provider evidence.",
+      "fix": "Nonzero business failure requires an actual int zero and null outcome; inconsistent accounting returns invalid_producer_schema with unknown provider/usage."
+    },
+    {
+      "root": "Finite source-owner reason additions were not in the consumer wire vocabulary.",
+      "fix": "Three actual local reasons are aligned; budget_exceeded retains its existing acquisition receipt meaning and local propagation. No schema or permission fields added."
+    }
+  ]
 }

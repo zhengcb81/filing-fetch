@@ -1,6 +1,6 @@
 # W02 交接：来源业务失败与独立电话会结果
 
-状态：**ENGINEERING_GREEN_READY_FOR_INDEPENDENT_ROOT_REVIEW**。不是W07来源覆盖/研究质量/整个PWF完成。产品冻结：FF `ed7188616a87369690b6a90ebf40c7b0d829d950`；RF `809a80f2341156421b87b7e0b945badca6c96e27`。两个工区均为 `codex/r1-source-boundary`，未并主线、未推送、未安装。
+状态：**REVIEWED_ENGINEERING_GREEN_PENDING_ROOT_INTEGRATION**。不是W07来源覆盖/研究质量/整个PWF完成。产品冻结：FF `cf15aeaa90667a8b8aeac01af713dd984f057fe5`；RF `768b6dd392d98df67d8eeb1d7ce428ef014cca7c`。两个工区均为 `codex/r1-source-boundary`，未并主线、未推送、未安装。
 
 ## 已实现
 
@@ -30,8 +30,18 @@
 
 ## 剩余与下一步
 
-ROOT独立审两个精确产品版本→修问题→集中CI表接线/合主线/安装→W07真实公司资料链与四路审查。
+固定35例独审已通过→ROOT集中CI表接线/合主线/安装/提交推送/PWF后暂停。W07真实公司资料链与四路审查留下一阶段。
 
 ROOT新发现的unknown publication叙述口仍有同根因：RF `company_wiki_narrative_contracts._manifest` 与receipt exact需要W03的一致optional availability扩展；本包未抢改该接口，也不声称已覆盖。已知发布日期的原年报路径不受该剩余项影响。
 
 机器交接、文件SHA、安装旧SHA、完整测试命令和收据：[handoff.json](handoff.json)。母包仍为 `revenue-forecast-audit/runs/r1-20261021-cn-wuxi-apptec/remediation`，本目录为本包交付证据，不新增竞争总计划。
+
+## 独立审查后的最终冻结（优先于上方初轮工程记录）
+
+最终产品：FF `cf15aeaa90667a8b8aeac01af713dd984f057fe5`；RF `768b6dd392d98df67d8eeb1d7ce428ef014cca7c`。独立审查者 `/root/r1_w04_summary_runtime` 固定35例最终 **35PASS/0FAIL/0SKIP，9.62s**，运行前后所有runtime SHA一致；ROOT独立报告绑定同版本。
+
+复核发现并全部修复三类共因：RF不应把合法provider意图收窄成fmp白名单；完整FF侧单同时有正常GAP与exception两种既有形状；非零operation失败的下载观察必须是严格整数零且outcome为空，不能用bool零或downloaded_new矛盾体宣称provider未启动。同步来源owner三个新增有限reason，未移除既有budget_exceeded acquisition receipt兼容。未知usage仍null，不增加重试或权限门。
+
+最后增量FF52PASS，RF44PASS/1既有SKIP，公共mypy11源码通过；初轮宽测307/142及中间152记录均保留为对应历史版本，不冒充新一轮全套执行。最终独审35例直接绑定最后产品。
+
+18个本lane pytest临时目录已恢复不存在，累计清2,686,164 bytes；只保留有界日志/XML。下一步由ROOT整合、现有CI表接线/定点安装/提交推送/PWF后暂停，不启动W03、付费或新公司循环。未知publication叙述口剩余项只记下一次。

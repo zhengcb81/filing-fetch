@@ -91,10 +91,45 @@
       "files": 50,
       "name": "rf-final2-tmp",
       "owned_pytest_fixture": true
+    },
+    {
+      "files": 3,
+      "name": "rf-review-red-tmp",
+      "bytes": 968,
+      "exists_after": false,
+      "owned_pytest_fixture": true
+    },
+    {
+      "files": 47,
+      "name": "rf-review-green-tmp",
+      "bytes": 44451,
+      "exists_after": false,
+      "owned_pytest_fixture": true
+    },
+    {
+      "files": 0,
+      "name": "ff-accounting-red-tmp",
+      "bytes": 0,
+      "exists_after": false,
+      "owned_pytest_fixture": true
+    },
+    {
+      "files": 0,
+      "name": "ff-accounting-green-tmp",
+      "bytes": 0,
+      "exists_after": false,
+      "owned_pytest_fixture": true
+    },
+    {
+      "files": 22,
+      "name": "rf-accounting-green-tmp",
+      "bytes": 6704,
+      "exists_after": false,
+      "owned_pytest_fixture": true
     }
   ],
   "new_downloaded_originals": 0,
-  "observed_at_utc": "2026-10-21T22:45:19.4947219Z",
+  "observed_at_utc": "2026-10-21T22:58:28.8067245Z",
   "production_originals_deleted": 0,
   "removed_tests_only": true,
   "schema_version": "w02-test-cleanup/1"
