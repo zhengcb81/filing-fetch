@@ -818,7 +818,8 @@ def _raise_operation_business_failure(
         if (result.get("status") not in {"blocked", "unavailable", "ambiguous", "not_found"}
                 or result["request_id"] != source_request_id(source_request)
                 or result.get("source_ref") is not None or result.get("candidate") is not None
-                or result.get("download_events") != 0):
+                or type(result.get("download_events")) is not int
+                or result["download_events"] != 0 or result.get("outcome") is not None):
             raise invalid_result(action, returncode)
         _pathless_operation_handle(result, operation=action, request=source_request,
                                     company_identity={}, stats=None)

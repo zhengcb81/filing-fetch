@@ -347,3 +347,29 @@ def test_public_request_fingerprints_match_native_cwp_freeze():
     )
     for case in fixture["cases"]:
         assert source_request_id(case["request"]) == case["request_id"]
+
+
+@pytest.mark.parametrize("change", [{"download_events": False}, {"outcome": "downloaded_new"}])
+def test_nonzero_operation_accounting_must_be_consistent(tmp_path, change):
+    from ff_source_failure import source_request_id
+
+    current = {"entity": "Fixture Co", "document_kind": "annual_report", "as_of_date": "2026-10-21"}
+    payload = _operation_v2(status="unavailable", outcome=None)
+    payload["request_id"] = source_request_id(current)
+    payload["local_preparation"] = {
+        "status": "unavailable",
+        "reason": "local_candidate_limit",
+        "blocks_download": True,
+        "causes": [],
+    }
+    payload.update(change)
+    with pytest.raises(FilingFetchError) as caught:
+        ff._run_company_wiki_json(
+            command=child(payload),
+            root=tmp_path,
+            timeout_seconds=20,
+            action="ensure",
+            source_request=current,
+        )
+    assert caught.value.upstream_cause["code"] == "invalid_producer_schema"
+    assert caught.value.upstream_cause["provider_started"] is None

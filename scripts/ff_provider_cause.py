@@ -167,6 +167,7 @@ LOCAL_SOURCE_CODES = frozenset({
     "local_metadata_byte_limit", "local_metadata_changed", "local_metadata_unreadable",
     "local_metadata_incomplete", "local_original_registration_failed", "local_source_changed",
     "placeholder_not_hydrated", "publication_date_unknown", "invalid_request",
+    "local_document_kind_unresolved", "local_original_unreadable", "primary_issuer_conflict",
 })
 _KNOWN_CAUSE_CODES = (
     frozenset({cause for _, cause in _CWP_STDERR_CODES.values()})
@@ -368,7 +369,7 @@ def validated_acquisition_observation(value: Any) -> dict[str, Any] | None:
 
 def source_condition(operation: str, reason: Any) -> dict[str, Any]:
     """Finite source condition, independent of provider acquisition failures."""
-    code = reason if isinstance(reason, str) and reason in LOCAL_SOURCE_CODES else "unknown"
+    code = reason if isinstance(reason, str) and reason in LOCAL_SOURCE_CODES | {"budget_exceeded"} else "unknown"
     local_only = operation in {"query", "local_prepare"} and code != "invalid_producer_schema"
     return build_cause(operation, code, provider_started=False if local_only else None,
                        usage_complete=True if local_only else None)
