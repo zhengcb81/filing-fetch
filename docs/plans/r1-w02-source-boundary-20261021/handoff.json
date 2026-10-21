@@ -858,13 +858,13 @@
   },
   "independent_review": {
     "reviewer": "/root/r1_w04_summary_runtime",
-    "status": "PASS_ENGINEERING_CONTENT_BOUND",
+    "status": "PASS_ENGINEERING_BOUNDARY_ONLY",
     "passed": 35,
     "failed": 0,
     "skipped": 0,
     "seconds": 9.62,
     "runtime_hashes_before_after_equal": true,
-    "report": "C:/Users/郑曾波/Projects/company-wiki/docs/plans/du11-source-closure-2026-10-18/review/r1-w02-independent-20261021.json",
+    "report": "C:/Users/郑曾波/Projects/company-wiki/docs/plans/du11-source-closure-2026-10-18/review/r1-w02-boundary-review-20261021.json",
     "note": "Final source versions match FF cf15aeaa / RF 768b6dd3. ROOT integration/W07 live content remains OPEN."
   },
   "review_fixes": [
