@@ -58,6 +58,7 @@ from ff_process_transport import (  # noqa: E402
 # R6-FF-CAUSE: the single stderr parse + closed-vocabulary diagnostics shared
 # by classification and the optional upstream_cause envelope field.
 import ff_provider_cause
+from ff_source_failure import decode_failure, invalid_result, source_request_id, validate_query_failure
 
 from ff_configuration import load_connection_root, validate_company_wiki_root
 from ff_source_candidate import (
@@ -194,6 +195,7 @@ def _run_company_wiki_json(
     timeout_seconds: float,
     action: str,
     stats: dict[str, int] | None = None,
+    source_request: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One company-wiki CLI call through the shared bounded process layer.
 
@@ -236,6 +238,9 @@ def _run_company_wiki_json(
             upstream_cause=cause,
         ) from exc
     except _ProcessChildFailed as exc:
+        if source_request is not None and action in {"ensure", "close-gap"} and exc.stdout:
+            _raise_operation_business_failure(exc.stdout, action=action,
+                returncode=exc.returncode, source_request=source_request)
         # Static child failure: report the exit status and the classified
         # stderr code + safe cause only. The raw stderr body is consumed for
         # classification but never echoed - it routinely carries absolute
@@ -277,6 +282,9 @@ def _run_company_wiki_json(
             f"company-wiki {action} transport failed", code="fatal", upstream_cause=cause,
         ) from exc
     if returncode != 0:
+        if source_request is not None and action in {"ensure", "close-gap"} and stdout:
+            _raise_operation_business_failure(stdout, action=action,
+                returncode=returncode, source_request=source_request)
         # Static failure: report the exit status and the classified code +
         # safe cause only. The raw stderr body is consumed for classification
         # but never echoed - it routinely carries absolute paths and provider
@@ -330,6 +338,7 @@ def _run_company_wiki_json_retry(
     action: str,
     deadline: float,
     stats: dict[str, int] | None = None,
+    source_request: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a company-wiki CLI call, retrying transient catalog lock
     contention with jittered exponential backoff (5s, 10s, ... capped at
@@ -373,6 +382,7 @@ def _run_company_wiki_json_retry(
                 timeout_seconds=remaining,
                 action=action,
                 stats=stats,
+                **({"source_request": source_request} if source_request is not None else {}),
             )
         except FilingFetchError as exc:
             if exc.code not in _CATALOG_RETRY_CODES:
@@ -562,6 +572,8 @@ def _run_source_query(
             code=code,
             upstream_cause=cause,
         ) from exc
+    except _ProcessChildFailed as exc:
+        stdout, returncode = exc.stdout, exc.returncode
     except _ProcessChildStartFailed as exc:
         _, cause = ff_provider_cause.condition_cause("query", "producer_start_failed")
         raise FilingFetchError(
@@ -591,6 +603,7 @@ def _run_source_query(
             "company-wiki source query stdout is not JSON",
             code="upstream_error",
             stage="source_query",
+            producer_exit_code=returncode,
             upstream_cause=ff_provider_cause.source_condition("query", "invalid_producer_schema"),
         ) from exc
     if not isinstance(payload, dict) or payload.get("schema_version") != "2.0":
@@ -598,9 +611,12 @@ def _run_source_query(
             "company-wiki source query schema is unsupported",
             code="upstream_error",
             stage="source_query",
+            producer_exit_code=returncode,
             upstream_cause=ff_provider_cause.source_condition("query", "invalid_producer_schema"),
         )
     status = payload.get("status")
+    if returncode != 0:
+        validate_query_failure(payload, query, returncode=returncode)
     if status != "found":
         errors = {
             "not_found": "not_found",
@@ -617,6 +633,7 @@ def _run_source_query(
             code=errors[status],
             stage="source_query",
             upstream_cause=ff_provider_cause.source_condition("query", payload.get("reason")),
+            producer_exit_code=returncode,
         )
     if returncode != 0:
         raise FilingFetchError(
@@ -699,6 +716,7 @@ _SOURCE_OPERATION_FIELDS = frozenset(
         "gap_plan",
         "acquisition_failure",
         "acquisition_observation",
+        "local_preparation",
     }
 )
 _SOURCE_OPERATION_STATUSES = frozenset(
@@ -708,6 +726,7 @@ _SOURCE_OPERATION_STATUSES = frozenset(
         "ambiguous",
         "not_found",
         "unavailable",
+        "blocked",
     }
 )
 
@@ -738,13 +757,24 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             acquisition_failure=receipt,
             acquisition_observation=observation,
         )
-    if payload.get("status") not in _SOURCE_OPERATION_STATUSES:
+    if not isinstance(payload.get("status"), str) or payload["status"] not in _SOURCE_OPERATION_STATUSES:
         raise FilingFetchError(
             "company-wiki operation status is invalid", code="upstream_error",
             upstream_cause=upstream_cause or ff_provider_cause.source_condition(operation, "invalid_producer_schema"),
             acquisition_failure=receipt,
             acquisition_observation=observation,
         )
+    local = payload.get("local_preparation")
+    if local is not None and (
+        not isinstance(local, dict) or set(local) != {"status", "reason", "blocks_download", "causes"}
+        or not isinstance(local.get("status"), str)
+        or local["status"] not in {"blocked", "unavailable", "ambiguous"}
+        or local.get("status") != payload.get("status") or local.get("blocks_download") is not True
+        or not isinstance(local.get("causes"), list) or len(local["causes"]) > 64
+        or not all(isinstance(x, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", x)
+                   for x in [local.get("reason"), *local.get("causes", [])])
+    ):
+        raise invalid_result(operation)
     if _contains_physical_field({
         key: value for key, value in payload.items() if key != "acquisition_failure"
     }):
@@ -777,6 +807,24 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             acquisition_observation=observation,
         )
     return payload
+
+
+def _raise_operation_business_failure(
+    stdout: bytes, *, action: str, returncode: int, source_request: dict[str, Any],
+) -> None:
+    payload = decode_failure(stdout, action=action, returncode=returncode)
+    try:
+        result = _validated_operation(payload, action)
+        if (result.get("status") not in {"blocked", "unavailable", "ambiguous", "not_found"}
+                or result["request_id"] != source_request_id(source_request)
+                or result.get("source_ref") is not None or result.get("candidate") is not None
+                or result.get("download_events") != 0):
+            raise invalid_result(action, returncode)
+        _pathless_operation_handle(result, operation=action, request=source_request,
+                                    company_identity={}, stats=None)
+    except FilingFetchError as exc:
+        exc.producer_exit_code = returncode
+        raise
 
 
 def _pathless_operation_gap(
@@ -840,15 +888,21 @@ def _pathless_operation_handle(
             "ambiguous": ("ambiguous", "ambiguous"),
             "not_found": ("not_found", "not_found"),
             "unavailable": ("upstream_error", "upstream_error"),
+            "blocked": ("source_blocked", "source_operation"),
         }
         code, stage = errors.get(result["status"], ("upstream_error", "source_operation"))
+        local = result.get("local_preparation")
+        local_cause = None
+        if isinstance(local, dict):
+            local_cause = ff_provider_cause.source_condition(operation, local["reason"])
+            local_cause.update(provider_started=False, usage_complete=True)
         raise FilingFetchError(
             f"company-wiki {operation} {result['status']}",
             code=code,
             stage=stage,
             upstream_cause=ff_provider_cause.diagnose_acquisition_failure(
                 operation, result.get("acquisition_failure")
-            ) or ff_provider_cause.source_condition(operation, "source_not_found" if result["status"] == "not_found" else "unknown"),
+            ) or local_cause or ff_provider_cause.source_condition(operation, "source_not_found" if result["status"] == "not_found" else "unknown"),
             acquisition_failure=ff_provider_cause.validated_acquisition_failure(result.get("acquisition_failure")),
             acquisition_observation=ff_provider_cause.validated_acquisition_observation(
                 result.get("acquisition_observation")),
@@ -933,6 +987,7 @@ def _resolve_source_ref_v2(
         action="ensure",
         deadline=deadline,
         stats=stats,
+        source_request=normalized_request,
     )
 
     if payload.get("status") != "gap":
@@ -1553,6 +1608,7 @@ def main(argv: list[str] | None = None) -> int:
                 attempts=exc.attempts,
                 acquisition_observation=exc.acquisition_observation,
                 request_diagnostic=exc.request_diagnostic,
+                producer_exit_code=exc.producer_exit_code,
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")

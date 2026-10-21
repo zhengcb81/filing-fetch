@@ -76,6 +76,8 @@ def prepare_existing_local_source(
             input_bytes=json.dumps(request, ensure_ascii=False).encode("utf-8"),
             cwd=str(root), env=environment,
         )
+    except ff_process_transport.ChildFailed as exc:
+        stdout, returncode = exc.stdout, exc.returncode
     except ff_process_transport.ChildTimeout as exc:
         raise FilingFetchError("local preparation exceeded deadline", code="upstream_error", stage="local_prepare",
                                upstream_cause=condition_cause("local_prepare", "producer_deadline_exceeded")[1]) from exc
@@ -93,7 +95,11 @@ def prepare_existing_local_source(
     except (UnicodeError, ValueError) as exc:
         raise FilingFetchError("invalid local preparation receipt", code="upstream_error", stage="local_prepare",
                                upstream_cause=source_condition("local_prepare", "invalid_producer_schema")) from exc
-    _validated(payload, physical_fields)
+    try:
+        _validated(payload, physical_fields)
+    except FilingFetchError as exc:
+        exc.producer_exit_code = returncode
+        raise
     if returncode != 0:
         raise FilingFetchError("ready local preparation returned nonzero exit",
                                code="upstream_error", stage="local_prepare")

@@ -1,0 +1,41 @@
+{
+  "schema_version": "source-request-fingerprint-fixture/1",
+  "producer": "company_wiki.source_catalog.resolver.SourceRequest",
+  "cases": [
+    {
+      "request": {
+        "entity": "Fixture Co",
+        "market": "HK",
+        "security_id": "09999",
+        "document_kind": "semi_annual_report",
+        "fiscal_year": 2026,
+        "fiscal_period": "H1",
+        "as_of_date": "2026-10-21"
+      },
+      "request_id": "urn:company-wiki:source-request:sha256:4a5429f335f6c75f4db25db8e063e133ed170be707c93daddfa1cd68934b2ae2"
+    },
+    {
+      "request": {
+        "entity": "Other Co",
+        "market": "US",
+        "security_id": "OTHER",
+        "document_kind": "annual_report",
+        "mode": "latest_as_of",
+        "as_of_date": "2026-10-21"
+      },
+      "request_id": "urn:company-wiki:source-request:sha256:a4a73fb8b433a6be9dc24a29f43751b386f64bd0bb8319db6a53da7ca2542c50"
+    },
+    {
+      "request": {
+        "entity": "第三公司",
+        "market": "cn",
+        "security_id": "688999",
+        "provider": "CNINFO",
+        "document_kind": "annual_report",
+        "fiscal_year": 2025,
+        "as_of_date": "2026-10-21"
+      },
+      "request_id": "urn:company-wiki:source-request:sha256:f9459e7b07bde0d8f6c9971b19f1317d84a6b3aee80674fa7c57147f7c6aec84"
+    }
+  ]
+}

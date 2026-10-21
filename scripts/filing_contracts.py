@@ -73,9 +73,11 @@ class FilingFetchError(RuntimeError):
         acquisition_failure: dict[str, Any] | None = None,
         acquisition_observation: dict[str, Any] | None = None,
         request_diagnostic: dict[str, Any] | None = None,
+        producer_exit_code: int | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
+        self.producer_exit_code = producer_exit_code if type(producer_exit_code) is int else None
         # ZR-205: retryable = the caller may retry. catalog_busy (raw SQLite
         # busy/locked) and db_timeout join catalog_locked/worker_paused; the
         # deadline-aware auto-retry loop in fetch_filing only spins on the

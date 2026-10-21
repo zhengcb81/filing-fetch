@@ -151,6 +151,14 @@ def test_query_status_fails_closed_without_legacy_resolve(
     payload["candidates"] = []
     payload["matches"] = []
     rc = 2 if status in {"blocked", "unavailable"} else 0
+    if rc:
+        # An error receipt belongs to this exact normalized public request,
+        # rather than the historical fixture's unrelated placeholder digest.
+        from ff_source_failure import source_request_id
+        payload["request_id"] = source_request_id({
+            "entity": "Advanced Micro Devices, Inc.", "market": "US", "security_id": "AMD",
+            "document_kind": "annual_report", "fiscal_year": 2025, "as_of_date": "2026-07-18",
+        })
     with patch(
         "fetch_filing._run_bounded_json",
         side_effect=bounded_side_effect([_completed(_identity()), _completed(payload, rc)]),

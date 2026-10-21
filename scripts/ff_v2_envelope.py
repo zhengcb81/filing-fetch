@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from filing_contracts import FilingFetchError, FILING_V2_RESPONSE_SCHEMA_VERSION
+from filing_contracts import FilingFetchError, FILING_V2_RESPONSE_SCHEMA_VERSION, _validate_companion_request
 from ff_source_ref import validate_source_ref as _reference
 from ff_provider_cause import (
     STAGES,
@@ -16,7 +16,7 @@ from ff_provider_cause import (
 
 
 _TRANSCRIPT_KEYS = (
-    "status", "reason", "retryable", "source_ref", "provider",
+    "status", "reason", "retryable", "source_ref", "provider", "intent", "acquisition_limits",
     "fiscal_year", "fiscal_quarter", "content_sha256", "locator",
     "provider_document_id", "call_date", "publication_date",
     "as_of_cutoff_verified", "provider_calls",
@@ -117,6 +117,23 @@ def success_envelope(
     return result
 
 
+def _undispatched_companion(request: dict[str, Any]) -> dict[str, Any]:
+    option = request.get("companion_transcript")
+    if option is None:
+        return {"status": "not_requested", "retryable": False}
+    try:
+        _validate_companion_request(option)
+    except (FilingFetchError, TypeError, ValueError):
+        return {"status": "request_error", "reason": "invalid_companion_request", "retryable": False}
+    if option.get("fiscal_year") is None or option.get("fiscal_quarter") is None:
+        return {"status": "period_unresolved", "reason": "exact_fy_q_required", "retryable": False}
+    return {"status": "not_run", "reason": "filing_failed_before_companion_dispatch",
+            "retryable": False,
+            **{key: option[key] for key in ("intent", "fiscal_year", "fiscal_quarter", "provider", "acquisition_limits") if key in option},
+            "provider_started": False, "provider_requests": 0,
+            "provider_response_bytes": 0, "provider_usage_complete": True}
+
+
 def error_envelope(
     code: str, reason: str, *, retryable: bool, stats: dict[str, int] | None = None,
     request: dict[str, Any] | None = None,
@@ -126,9 +143,12 @@ def error_envelope(
     attempts: int | None = None,
     acquisition_observation: dict[str, Any] | None = None,
     request_diagnostic: dict[str, Any] | None = None,
+    producer_exit_code: int | None = None,
 ) -> dict[str, Any]:
     stats = stats or {"calls": 0, "downloads": 0}
     filing: dict[str, Any] = {"status": code, "reason": reason, "retryable": retryable}
+    if type(producer_exit_code) is int:
+        filing["producer_exit_code"] = producer_exit_code
     diagnostic = validated_request_diagnostic(request_diagnostic)
     if diagnostic is not None:
         filing["request_diagnostic"] = diagnostic
@@ -148,7 +168,7 @@ def error_envelope(
         "status": code,
         "request_period": _request_period(request or {}),
         "filing": filing,
-        "transcript": {"status": "not_requested", "retryable": False},
+        "transcript": _undispatched_companion(request or {}),
         "calls": stats["calls"],
         "downloads": stats["downloads"],
     }

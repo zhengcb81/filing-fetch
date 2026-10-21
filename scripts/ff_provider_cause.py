@@ -160,12 +160,19 @@ _CALLER_DECISION_CODES = frozenset(
         "producer_transport_failure",
     }
 )
+LOCAL_SOURCE_CODES = frozenset({
+    "local_metadata_gap", "no_registered_local_source", "no_local_match", "source_not_found",
+    "invalid_producer_schema", "catalog_unavailable", "reader_unavailable", "local_candidate_limit",
+    "local_prepare_deadline", "local_source_group_limit", "local_discovery_entry_limit",
+    "local_metadata_byte_limit", "local_metadata_changed", "local_metadata_unreadable",
+    "local_metadata_incomplete", "local_original_registration_failed", "local_source_changed",
+    "placeholder_not_hydrated", "publication_date_unknown", "invalid_request",
+})
 _KNOWN_CAUSE_CODES = (
     frozenset({cause for _, cause in _CWP_STDERR_CODES.values()})
     | frozenset(_PRODUCER_CONDITIONS)
     | ACQUISITION_FAILURE_CODES
-    | {"unknown", "local_metadata_gap", "no_registered_local_source", "no_local_match",
-       "source_not_found", "invalid_producer_schema"}
+    | {"unknown"} | LOCAL_SOURCE_CODES
 )
 
 # Defense-in-depth on top of the transport layer's own stderr cap: payloads
@@ -361,9 +368,7 @@ def validated_acquisition_observation(value: Any) -> dict[str, Any] | None:
 
 def source_condition(operation: str, reason: Any) -> dict[str, Any]:
     """Finite source condition, independent of provider acquisition failures."""
-    reasons = {"local_metadata_gap", "no_registered_local_source", "no_local_match",
-               "source_not_found", "invalid_producer_schema"}
-    code = reason if isinstance(reason, str) and reason in reasons else "unknown"
+    code = reason if isinstance(reason, str) and reason in LOCAL_SOURCE_CODES else "unknown"
     local_only = operation in {"query", "local_prepare"} and code != "invalid_producer_schema"
     return build_cause(operation, code, provider_started=False if local_only else None,
                        usage_complete=True if local_only else None)
