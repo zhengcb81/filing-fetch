@@ -23,6 +23,7 @@ CI_TESTS = (
     "e2e/test_source_ref_v2_cli.py",
     "tests/test_ff_v2_contract.py",
     "tests/test_provider_cause_contract.py",
+    "tests/test_r1_source_business_failure.py",
     "tests/test_acquisition_failure_consumer.py",
     "tests/test_ff_golden.py",
     "tests/test_source_ref_v2.py",
