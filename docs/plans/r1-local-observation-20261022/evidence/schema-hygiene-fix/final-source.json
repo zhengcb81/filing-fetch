@@ -1,0 +1,17 @@
+{
+  "product_commit": "a30024e57fd22b68662fbdfb1c344b8709391556",
+  "files": {
+    "scripts/ff_local_preparation_observation.py": {
+      "git_lf_sha256": "27471fa8ffabced85ba4ae6891fe0fec0fcac5aec98b8d5098144fec5c1a38b8",
+      "worktree_sha256": "27471fa8ffabced85ba4ae6891fe0fec0fcac5aec98b8d5098144fec5c1a38b8"
+    },
+    "tests/test_local_preparation_observation.py": {
+      "git_lf_sha256": "30037d0ab3d88d84ebf792194c264d09c5babeae28807fa835c9bded60944942",
+      "worktree_sha256": "30037d0ab3d88d84ebf792194c264d09c5babeae28807fa835c9bded60944942"
+    },
+    "tests/contract/host_assumption_baseline.json": {
+      "git_lf_sha256": "06f3217c7ee65311676411974faf6eb12c0021fc0e96186945bc94614515bafa",
+      "worktree_sha256": "06f3217c7ee65311676411974faf6eb12c0021fc0e96186945bc94614515bafa"
+    }
+  }
+}

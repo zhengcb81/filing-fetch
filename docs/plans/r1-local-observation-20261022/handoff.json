@@ -4,7 +4,7 @@
   "worktree": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation",
   "branch": "codex/r1-local-budget-observation",
   "base": "a1cb84da5e055e41a21305147d1991b839f47aba",
-  "product_commit": "6dbb9e84d8389f4d4f2d8305c788b59e4f91d2bd",
+  "product_commit": "a30024e57fd22b68662fbdfb1c344b8709391556",
   "files": {
     "scripts/fetch_filing.py": {
       "physical_sha256": "09a522bb2f9c5532e5f23aedaf316712275c9f26024294cf6461d091ca106e84",
@@ -27,14 +27,14 @@
       "physical_bytes": 33679
     },
     "scripts/ff_local_preparation_observation.py": {
-      "physical_sha256": "b80a0e97e2f53407acf134f369b03d68f288bf0c350ba6898c1b7ee6e3a4df7c",
-      "git_lf_blob_sha256": "4fb929471bb05eeda1598b77227a833654eaca0c0a15d6ffff0c9da5f32c345b",
-      "physical_bytes": 4267
+      "physical_sha256": "27471fa8ffabced85ba4ae6891fe0fec0fcac5aec98b8d5098144fec5c1a38b8",
+      "git_lf_blob_sha256": "27471fa8ffabced85ba4ae6891fe0fec0fcac5aec98b8d5098144fec5c1a38b8",
+      "physical_bytes": 4452
     },
     "tests/test_local_preparation_observation.py": {
-      "physical_sha256": "e3cb6716f343ff3695450a9479c47eabb5f2ccb8ef63d5af7233a57a418ee3cd",
-      "git_lf_blob_sha256": "8ae4e7e81d5b4fdef6f4c753aa0b5d7bab6b9b43aad673875e248540a6ade202",
-      "physical_bytes": 9616
+      "physical_sha256": "30037d0ab3d88d84ebf792194c264d09c5babeae28807fa835c9bded60944942",
+      "git_lf_blob_sha256": "30037d0ab3d88d84ebf792194c264d09c5babeae28807fa835c9bded60944942",
+      "physical_bytes": 11107
     },
     "tests/test_ci_tests.py": {
       "physical_sha256": "4633d759b2847f813522fa667fe54fb0d4a97adef6fc0f5995c03a2c15006e83",
@@ -68,11 +68,11 @@
       "elapsed_seconds": 2.19
     },
     "final": {
-      "receipt": "evidence/final-current.xml",
-      "passed": 127,
+      "receipt": "evidence/schema-hygiene-fix/final-green.xml",
+      "passed": 139,
       "failed": 0,
       "skipped": 0,
-      "elapsed_seconds": 15.77,
+      "elapsed_seconds": 24.29,
       "command": "python -m pytest tests/test_local_preparation_observation.py tests/test_local_source_prepare.py tests/test_r1_source_business_failure.py tests/test_provider_cause_contract.py tests/test_ff_v2_contract.py tests/test_ci_tests.py tests/test_selective_installation.py tests/test_install_runtime_diagnostics.py -q --tb=short --basetemp <owned-short-temp> --junitxml <owned-result.xml>"
     },
     "initial_setup_errors": "evidence/setup-errors.xml; missing temporary parent corrected before accepted3F, not behavioral RED",
@@ -86,7 +86,22 @@
       "existing W02/local/cause/v2/CI/installation regressions"
     ],
     "static": "Ruff all8 changed Python files; original mypy2 public entrypoints pass transitively",
-    "normal_commit_hooks": "Ruff/mypy/host-assumption-guard all PASS; no skip or hook change"
+    "normal_commit_hooks": "Ruff/mypy/host-assumption-guard PASS. Two exact malicious absolute-address string inputs are registered with cross-platform-only rationales in original baseline; no gate bypass or change.",
+    "pre_independent_review_final": {
+      "receipt": "evidence/final-current.xml",
+      "passed": 127,
+      "failed": 0,
+      "skipped": 0,
+      "elapsed_seconds": 15.77,
+      "command": "python -m pytest tests/test_local_preparation_observation.py tests/test_local_source_prepare.py tests/test_r1_source_business_failure.py tests/test_provider_cause_contract.py tests/test_ff_v2_contract.py tests/test_ci_tests.py tests/test_selective_installation.py tests/test_install_runtime_diagnostics.py -q --tb=short --basetemp <owned-short-temp> --junitxml <owned-result.xml>"
+    },
+    "schema_address_red": {
+      "receipt": "evidence/schema-hygiene-fix/old-source-red.xml",
+      "old_source": "6dbb9e84:scripts/ff_local_preparation_observation.py loaded in memory; worktree bytes unchanged",
+      "failed": 5,
+      "passed": 7,
+      "elapsed_seconds": 0.78
+    }
   },
   "wire": {
     "version": "filing-fetch2.0 unchanged; optional top-level local_preparation_observation",
@@ -101,7 +116,8 @@
     "owner_budget_operation": "local-read-budget/1 passed verbatim; not reinterpreted or recomputed",
     "cause_schema": "filing-upstream-cause/1 unchanged6keys",
     "provider_zero_not_local_zero": true,
-    "scope_limits": "actual FF local request64 candidates/128MiB/min(remaining,600)s; distinct from download cap; unchanged"
+    "scope_limits": "actual FF local request64 candidates/128MiB/min(remaining,600)s; distinct from download cap; unchanged",
+    "schema_address_hygiene": "all token strings reject explicit ^[A-Za-z]:/ or ^[A-Za-z][A-Za-z0-9+.-]*://; no unknown namespace/owner whitelist"
   },
   "producer_gap": {
     "owner": "ROOT CWP isolated lane",
@@ -138,5 +154,14 @@
     "ROOT integrate producer budget operation and RF optional+bounded large-error compatibility, then offline CWP→FF→RF check",
     "ROOT targeted install all5 runtime files together, preserving config/output/keys",
     "ROOT commit/push merged work and only then rerun authorized W06/H1 preparation; this lane never rescans real lake"
-  ]
+  ],
+  "previous_product_commit": "6dbb9e84d8389f4d4f2d8305c788b59e4f91d2bd",
+  "independent_review_repair": {
+    "finding": "nested schema_version admitted explicit drive or file URI addresses",
+    "fix": "reject explicit drive:/ or scheme:// prefixes; original opaque schema/token grammar retained",
+    "product_commit": "a30024e57fd22b68662fbdfb1c344b8709391556",
+    "independent_recheck": "W02 pending at author handoff",
+    "source_receipt": "evidence/schema-hygiene-fix/final-source.json",
+    "historical_intermediate": "red.xml included one later-rejected narrowing requirement owner/schema/1; final old-source-red.xml supersedes only that test specification, final keeps it positive. green.xml 137P tested intermediate narrower grammar, NOT final acceptance."
+  }
 }
