@@ -39,3 +39,6 @@ W02 re-review on the new frozen source is pending; this repair does not claim cr
 ### Final same-class file URI supplement
 
 W02 a300 recheck17P exposed one additional standard file:/ absolute URI form (18-case recheck17P/1RED). Source136ab5a627083f173c60fc88b7b3f74879a4bf99 adds only case-insensitive file:/ prefix refusal. file:missing remains positive and owner schema namespaces remain unconstrained by business enums. New3 URI variants: RED3F/5P0.35s → entire observation test file32P/2.83s; normal Ruff/mypy/host guard PASS. The earlier139P/24.29s binds a300, not falsely relabelled136. Final W02 18-case frozen recheck pending. file-uri-final-source.json is the latest source binding.
+
+
+W02 final non-author fixed18 cases on product136ab5a6:18P/2.21s; Ruff10 files and original public2-entrypoint mypy PASS;9 source/test/baseline hashes unchanged before/after. All identified address findings closed. Author temporary file-uri test roots already removed; evidence committed8d67c87. This is FF package acceptance evidence, not ROOT cross-layer/live acceptance.

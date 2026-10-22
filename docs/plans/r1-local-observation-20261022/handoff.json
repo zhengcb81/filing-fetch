@@ -1,6 +1,6 @@
 {
   "schema_version": "ff-local-observation-handoff/1",
-  "status": "engineering_candidate_pending_root_independent_review",
+  "status": "author_complete_non_author_review_passed_pending_root_integration",
   "worktree": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation",
   "branch": "codex/r1-local-budget-observation",
   "base": "a1cb84da5e055e41a21305147d1991b839f47aba",
@@ -161,7 +161,7 @@
     "push_or_merge": false
   },
   "remaining": [
-    "ROOT non-author same-SHA review and fix any findings",
+    "ROOT receive final W02 report; frozen independent18P accepted, no remaining finding",
     "ROOT integrate producer budget operation and RF optional+bounded large-error compatibility, then offline CWP→FF→RF check",
     "ROOT targeted install all5 runtime files together, preserving config/output/keys",
     "ROOT commit/push merged work and only then rerun authorized W06/H1 preparation; this lane never rescans real lake"
@@ -178,7 +178,7 @@
       "finding": "standard single slash file:/ absolute URI leaked same address class",
       "fix": "case-insensitive file:/ prefix refusal; file:missing retained",
       "product_commit": "136ab5a627083f173c60fc88b7b3f74879a4bf99",
-      "independent_recheck": "W02 final18 pending",
+      "independent_recheck": "W02 fixed18 cases18P/2.21s; Ruff10 files and public mypy2 PASS; source bytes unchanged",
       "receipt": "evidence/schema-hygiene-fix/file-uri-final-source.json"
     }
   },
