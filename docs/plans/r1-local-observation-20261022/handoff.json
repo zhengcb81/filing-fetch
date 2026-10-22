@@ -4,7 +4,7 @@
   "worktree": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation",
   "branch": "codex/r1-local-budget-observation",
   "base": "a1cb84da5e055e41a21305147d1991b839f47aba",
-  "product_commit": "a30024e57fd22b68662fbdfb1c344b8709391556",
+  "product_commit": "136ab5a627083f173c60fc88b7b3f74879a4bf99",
   "files": {
     "scripts/fetch_filing.py": {
       "physical_sha256": "09a522bb2f9c5532e5f23aedaf316712275c9f26024294cf6461d091ca106e84",
@@ -27,14 +27,14 @@
       "physical_bytes": 33679
     },
     "scripts/ff_local_preparation_observation.py": {
-      "physical_sha256": "27471fa8ffabced85ba4ae6891fe0fec0fcac5aec98b8d5098144fec5c1a38b8",
-      "git_lf_blob_sha256": "27471fa8ffabced85ba4ae6891fe0fec0fcac5aec98b8d5098144fec5c1a38b8",
-      "physical_bytes": 4452
+      "physical_sha256": "f9194e4fd8eb311930e2e5151c57f0ccc57dbd0e8690df8ce32341a8fd32b26f",
+      "git_lf_blob_sha256": "f9194e4fd8eb311930e2e5151c57f0ccc57dbd0e8690df8ce32341a8fd32b26f",
+      "physical_bytes": 4474
     },
     "tests/test_local_preparation_observation.py": {
-      "physical_sha256": "30037d0ab3d88d84ebf792194c264d09c5babeae28807fa835c9bded60944942",
-      "git_lf_blob_sha256": "30037d0ab3d88d84ebf792194c264d09c5babeae28807fa835c9bded60944942",
-      "physical_bytes": 11107
+      "physical_sha256": "1f36424a1df6434b1ac910c1ac15ddba9a996c7a4a50b064cc8cbb65394392f1",
+      "git_lf_blob_sha256": "1f36424a1df6434b1ac910c1ac15ddba9a996c7a4a50b064cc8cbb65394392f1",
+      "physical_bytes": 11177
     },
     "tests/test_ci_tests.py": {
       "physical_sha256": "4633d759b2847f813522fa667fe54fb0d4a97adef6fc0f5995c03a2c15006e83",
@@ -101,6 +101,17 @@
       "failed": 5,
       "passed": 7,
       "elapsed_seconds": 0.78
+    },
+    "file_uri_repair": {
+      "red": "evidence/schema-hygiene-fix/file-uri-red.xml",
+      "red_failed": 3,
+      "red_passed": 5,
+      "red_seconds": 0.35,
+      "green": "evidence/schema-hygiene-fix/file-uri-green.xml",
+      "green_passed": 32,
+      "green_failed": 0,
+      "green_seconds": 2.83,
+      "scope": "entire observation test file; prior139 same-group remains historical a300, not relabelled as136"
     }
   },
   "wire": {
@@ -117,7 +128,7 @@
     "cause_schema": "filing-upstream-cause/1 unchanged6keys",
     "provider_zero_not_local_zero": true,
     "scope_limits": "actual FF local request64 candidates/128MiB/min(remaining,600)s; distinct from download cap; unchanged",
-    "schema_address_hygiene": "all token strings reject explicit ^[A-Za-z]:/ or ^[A-Za-z][A-Za-z0-9+.-]*://; no unknown namespace/owner whitelist"
+    "schema_address_hygiene": "all token strings reject explicit ^[A-Za-z]:/ or ^file:/ or ^[A-Za-z][A-Za-z0-9+.-]*:// case-insensitively; no unknown namespace/owner whitelist"
   },
   "producer_gap": {
     "owner": "ROOT CWP isolated lane",
@@ -162,6 +173,14 @@
     "product_commit": "a30024e57fd22b68662fbdfb1c344b8709391556",
     "independent_recheck": "W02 pending at author handoff",
     "source_receipt": "evidence/schema-hygiene-fix/final-source.json",
-    "historical_intermediate": "red.xml included one later-rejected narrowing requirement owner/schema/1; final old-source-red.xml supersedes only that test specification, final keeps it positive. green.xml 137P tested intermediate narrower grammar, NOT final acceptance."
-  }
+    "historical_intermediate": "red.xml included one later-rejected narrowing requirement owner/schema/1; final old-source-red.xml supersedes only that test specification, final keeps it positive. green.xml 137P tested intermediate narrower grammar, NOT final acceptance.",
+    "file_uri_supplement": {
+      "finding": "standard single slash file:/ absolute URI leaked same address class",
+      "fix": "case-insensitive file:/ prefix refusal; file:missing retained",
+      "product_commit": "136ab5a627083f173c60fc88b7b3f74879a4bf99",
+      "independent_recheck": "W02 final18 pending",
+      "receipt": "evidence/schema-hygiene-fix/file-uri-final-source.json"
+    }
+  },
+  "previous_review_repair_commit": "a30024e57fd22b68662fbdfb1c344b8709391556"
 }

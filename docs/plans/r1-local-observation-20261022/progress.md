@@ -18,3 +18,8 @@ W02 found two genuine nested schema_version address leaks (old source 6dbb9e84: 
 Final same-group139P/24.29s (no skip), Ruff and existing two-entrypoint mypy pass. Final12-case test against the old Git helper loaded in memory is5F/7P (0.78s), retaining safe cause when the optional observation is rejected. evidence/schema-hygiene-fix/final-source.json binds actual and Git LF bytes. Earlier red.xml contains one overly narrow slash test later converted to a positive; use old-source-red.xml and final-green.xml as the final RED/GREEN pair. Initial green.xml137P was intermediate and is not final acceptance. Normal commit hook originally flagged two malicious test inputs as absolute host assumptions; exact original baseline entries now document that the strings never reach filesystem/Path operations and rejection must hold on every OS. No skip, computed-path concealment, gate removal or blanket exemption was used.
 
 W02 re-review on the new frozen source is pending; this repair does not claim cross-layer acceptance. All prior runtime installation requirements and ROOT responsibilities remain.
+
+
+### Final same-class file URI supplement
+
+W02 a300 recheck17P exposed one additional standard file:/ absolute URI form (18-case recheck17P/1RED). Source136ab5a627083f173c60fc88b7b3f74879a4bf99 adds only case-insensitive file:/ prefix refusal. file:missing remains positive and owner schema namespaces remain unconstrained by business enums. New3 URI variants: RED3F/5P0.35s → entire observation test file32P/2.83s; normal Ruff/mypy/host guard PASS. The earlier139P/24.29s binds a300, not falsely relabelled136. Final W02 18-case frozen recheck pending. file-uri-final-source.json is the latest source binding.
