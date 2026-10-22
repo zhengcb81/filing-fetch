@@ -74,12 +74,23 @@ def test_local_condition_is_safe_machine_subtype(reason, expected):
     payload = {"schema_version": "local-source-prepare/1", "status": "blocked", "reason": reason,
                "source_ref": None, "blocks_download": True, "operations": [], "diagnostics": [], "download_events": 0}
     with pytest.raises(fetch.FilingFetchError) as caught:
-        local._validated(payload, lambda value: False)
+        local._validated(payload, lambda value: False, limits={
+            "max_candidates": 64, "max_bytes": 134217728, "timeout_seconds": 10,
+        })
     assert caught.value.upstream_cause["operation"] == "local_prepare"
     assert caught.value.upstream_cause["code"] == expected
     assert caught.value.upstream_cause["provider_started"] is False
     assert caught.value.upstream_cause["usage_complete"] is True
     assert "synthetic-w08-secret" not in str(caught.value)
+    observation = caught.value.local_preparation_observation
+    if expected == "unknown":
+        assert observation is None  # arbitrary unsafe text is never a machine diagnostic
+    else:
+        assert observation["reason"] == expected
+        assert observation["local_read_limits"] == {
+            "max_candidates": 64, "max_bytes": 134217728, "timeout_seconds": 10,
+        }
+        assert observation["local_io_usage"] is None
 
 
 def test_invalid_operation_schema_has_finite_condition_without_usage_inference():
@@ -118,5 +129,7 @@ def test_invalid_provider_wire_keeps_named_schema_diagnostic(tmp_path, body):
 
 def test_invalid_local_wire_is_different_from_real_metadata_gap():
     with pytest.raises(fetch.FilingFetchError) as caught:
-        local._validated({"schema_version": "unknown"}, lambda value: False)
+        local._validated({"schema_version": "unknown"}, lambda value: False, limits={
+            "max_candidates": 64, "max_bytes": 134217728, "timeout_seconds": 10,
+        })
     assert caught.value.upstream_cause["code"] == "invalid_producer_schema"

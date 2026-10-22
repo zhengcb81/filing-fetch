@@ -26,3 +26,7 @@ W02 a300 recheck17P exposed one additional standard file:/ absolute URI form (18
 
 
 W02 final non-author fixed18 cases on product136ab5a6:18P/2.21s; Ruff10 files and original public2-entrypoint mypy PASS;9 source/test/baseline hashes unchanged before/after. All identified address findings closed. Author temporary file-uri test roots already removed; evidence committed8d67c87. This is FF package acceptance evidence, not ROOT cross-layer/live acceptance.
+
+## ROOT integration 2026-10-22
+
+Normal push caught four old direct-helper tests missing the newly explicit local-read limits argument (927 passed, 4 failed, 7 existing skips, 78 subtests). No remote write occurred. ROOT adapted only tests/test_failure_usage_continuity.py to pass the actual request limits and strengthened safe-cause/unknown-diagnostic/local_io_usage assertions; the entire module passed 19 tests in 3.27s. Runtime source and the independently reviewed 136ab5a6 hashes are unchanged. Normal push is retried; existing gates are not bypassed.
