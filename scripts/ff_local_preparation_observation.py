@@ -21,6 +21,9 @@ _FORBIDDEN = {'body', 'content', 'text', 'raw', 'stdout', 'stderr', 'headers', '
 _KEY = re.compile(r'[a-zA-Z][a-zA-Z0-9_]{0,63}\Z')
 _TOKEN = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.:+-]{0,255}\Z')
 _SCHEMA_TOKEN = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.:+/-]{0,255}\Z')
+# Opaque owner namespaces (e.g. urn:owner:budget/2) are identifiers. Reject
+# explicit addresses separately so their names do not become a schema whitelist.
+_ADDRESS = re.compile(r'(?:[a-zA-Z]:/|[a-zA-Z][a-zA-Z0-9+.-]*://)')
 
 
 def _machine(value: Any, depth: int = 0, *, key: str = '') -> bool:
@@ -31,7 +34,8 @@ def _machine(value: Any, depth: int = 0, *, key: str = '') -> bool:
     if type(value) is float:
         return math.isfinite(value)
     if isinstance(value, str):
-        return bool((_SCHEMA_TOKEN if key == 'schema_version' else _TOKEN).fullmatch(value))
+        return not _ADDRESS.match(value) and bool(
+            (_SCHEMA_TOKEN if key == 'schema_version' else _TOKEN).fullmatch(value))
     if isinstance(value, list):
         return len(value) <= 1024 and all(_machine(v, depth+1) for v in value)
     if isinstance(value, dict):

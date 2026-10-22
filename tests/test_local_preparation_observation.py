@@ -174,3 +174,36 @@ def test_native_local_budget_operation_is_verbatim_and_is_not_provider_usage():
     assert 'acquisition_observation' not in output
     operation['triggered_bound'] = None
     assert local_preparation_observation(payload, limits)['operations'][-1]['triggered_bound'] is None
+
+
+@pytest.mark.parametrize('schema', [
+    'C:/Users/example/raw.pdf', 'file:///C:/Users/example/raw.pdf',
+    'D:/1', 'https://example.com/1', 'FILE:///tmp/raw.pdf',
+])
+def test_nested_schema_is_a_machine_identifier_not_a_physical_address(schema):
+    from ff_local_preparation_observation import local_preparation_observation
+    from ff_v2_envelope import error_envelope
+    from ff_provider_cause import source_condition
+    payload = receipt()
+    payload['operations'].append({'schema_version': schema})
+    observed = local_preparation_observation(payload,
+        {'max_candidates': 64, 'max_bytes': 134217728, 'timeout_seconds': 10})
+    assert observed is None
+    cause = source_condition('local_prepare', 'budget_exceeded')
+    output = error_envelope('upstream_error', 'budget_exceeded', retryable=True,
+        upstream_cause=cause, local_preparation_observation=observed)
+    assert output['filing']['upstream_cause'] == cause
+    assert 'local_preparation_observation' not in output
+
+
+@pytest.mark.parametrize('schema', ['future-owner/2.1', 'local-read-budget/1',
+    'future-owner', 'urn:owner:v2', 'owner+namespace/3-beta', 'urn:owner:budget/2',
+    'owner/schema/1'])
+def test_unknown_schema_machine_identifiers_remain_verbatim(schema):
+    from ff_local_preparation_observation import local_preparation_observation
+    payload = receipt()
+    payload['operations'].append({'schema_version': schema, 'future_counter': 7,
+        'reason': 'file:missing'})
+    observed = local_preparation_observation(payload,
+        {'max_candidates': 64, 'max_bytes': 134217728, 'timeout_seconds': 10})
+    assert observed['operations'] == payload['operations']
