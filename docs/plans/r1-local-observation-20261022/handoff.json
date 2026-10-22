@@ -1,0 +1,142 @@
+{
+  "schema_version": "ff-local-observation-handoff/1",
+  "status": "engineering_candidate_pending_root_independent_review",
+  "worktree": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation",
+  "branch": "codex/r1-local-budget-observation",
+  "base": "a1cb84da5e055e41a21305147d1991b839f47aba",
+  "product_commit": "6dbb9e84d8389f4d4f2d8305c788b59e4f91d2bd",
+  "files": {
+    "scripts/fetch_filing.py": {
+      "physical_sha256": "09a522bb2f9c5532e5f23aedaf316712275c9f26024294cf6461d091ca106e84",
+      "git_lf_blob_sha256": "a004bee1db025dafbcffd55bc73dea3a9064f122f3e5296e88173052ce7665c4",
+      "physical_bytes": 71829
+    },
+    "scripts/ff_local_source_prepare.py": {
+      "physical_sha256": "e02d37f4ffb5f61ab190b00ca8082dd0c0e4556b428ad3ba7f4dc73f75022ccd",
+      "git_lf_blob_sha256": "34193905be4503303a636e2c025075da8b4a29cb8cffcb759aaec5c87163daee",
+      "physical_bytes": 6066
+    },
+    "scripts/ff_v2_envelope.py": {
+      "physical_sha256": "97f65b1bbcc6c0a6ba7988ec89d028ab59b1d8c630cad368d0fdaa2034cacb36",
+      "git_lf_blob_sha256": "a4a5e3e5946d23e7c0fa3e22158d29a9b0b5ae41d539cf60ba06ff393469e67f",
+      "physical_bytes": 8489
+    },
+    "scripts/filing_contracts.py": {
+      "physical_sha256": "b11c9fbb1c0d248f9fe602e1d01b5decdb90c21df6d6f58f20abc560b9305efb",
+      "git_lf_blob_sha256": "033248d7f6bb72801428fc886aa5a32b2357de88e1179c892b237ac2eee65659",
+      "physical_bytes": 33679
+    },
+    "scripts/ff_local_preparation_observation.py": {
+      "physical_sha256": "b80a0e97e2f53407acf134f369b03d68f288bf0c350ba6898c1b7ee6e3a4df7c",
+      "git_lf_blob_sha256": "4fb929471bb05eeda1598b77227a833654eaca0c0a15d6ffff0c9da5f32c345b",
+      "physical_bytes": 4267
+    },
+    "tests/test_local_preparation_observation.py": {
+      "physical_sha256": "e3cb6716f343ff3695450a9479c47eabb5f2ccb8ef63d5af7233a57a418ee3cd",
+      "git_lf_blob_sha256": "8ae4e7e81d5b4fdef6f4c753aa0b5d7bab6b9b43aad673875e248540a6ade202",
+      "physical_bytes": 9616
+    },
+    "tests/test_ci_tests.py": {
+      "physical_sha256": "4633d759b2847f813522fa667fe54fb0d4a97adef6fc0f5995c03a2c15006e83",
+      "git_lf_blob_sha256": "ba8d6cad6a53e5ed6731b7d35027bd267ae893033f3a166c1c046788b9d4fcfa",
+      "physical_bytes": 10429
+    },
+    "tools/ci_tests.py": {
+      "physical_sha256": "acba5a47d8f6ab17e9c5d9dfc60edd4e8236c543aafd98055257bcc287de83c6",
+      "git_lf_blob_sha256": "33b98e113d17243597d3d9b1375963104c0fa499ccfd3c239db2f2887a2b1e66",
+      "physical_bytes": 5027
+    }
+  },
+  "runtime_install_together": [
+    "scripts/fetch_filing.py",
+    "scripts/ff_local_source_prepare.py",
+    "scripts/ff_v2_envelope.py",
+    "scripts/filing_contracts.py",
+    "scripts/ff_local_preparation_observation.py"
+  ],
+  "new_runtime_dependency": "scripts/ff_local_preparation_observation.py",
+  "tests": {
+    "red": {
+      "receipt": "evidence/red.xml",
+      "failed": 3,
+      "errors": 0,
+      "elapsed_seconds": 4.4
+    },
+    "first_green": {
+      "receipt": "evidence/green.xml",
+      "passed": 3,
+      "elapsed_seconds": 2.19
+    },
+    "final": {
+      "receipt": "evidence/final-current.xml",
+      "passed": 127,
+      "failed": 0,
+      "skipped": 0,
+      "elapsed_seconds": 15.77,
+      "command": "python -m pytest tests/test_local_preparation_observation.py tests/test_local_source_prepare.py tests/test_r1_source_business_failure.py tests/test_provider_cause_contract.py tests/test_ff_v2_contract.py tests/test_ci_tests.py tests/test_selective_installation.py tests/test_install_runtime_diagnostics.py -q --tb=short --basetemp <owned-short-temp> --junitxml <owned-result.xml>"
+    },
+    "initial_setup_errors": "evidence/setup-errors.xml; missing temporary parent corrected before accepted3F, not behavioral RED",
+    "coverage": [
+      "real bounded producer children at exit0/1",
+      "real FF CLI identity/query/local_prepare three child routes, no provider route",
+      "small and >64KiB/600-diagnostic failure envelopes",
+      "native-format budget operation verbatim including charged vs observed rejected tail",
+      "deep-copy isolation",
+      "malformed/path/raw header/size/NaN/huge integer reject optional observation and retain safe cause",
+      "existing W02/local/cause/v2/CI/installation regressions"
+    ],
+    "static": "Ruff all8 changed Python files; original mypy2 public entrypoints pass transitively",
+    "normal_commit_hooks": "Ruff/mypy/host-assumption-guard all PASS; no skip or hook change"
+  },
+  "wire": {
+    "version": "filing-fetch2.0 unchanged; optional top-level local_preparation_observation",
+    "schema": "filing-local-preparation-observation/1",
+    "outer_keys": 9,
+    "scope": "local_original_verification",
+    "compact_utf8_max_bytes": 131072,
+    "max_depth_root_zero": 8,
+    "max_list_items": 1024,
+    "max_dict_keys": 32,
+    "local_io_usage": null,
+    "owner_budget_operation": "local-read-budget/1 passed verbatim; not reinterpreted or recomputed",
+    "cause_schema": "filing-upstream-cause/1 unchanged6keys",
+    "provider_zero_not_local_zero": true,
+    "scope_limits": "actual FF local request64 candidates/128MiB/min(remaining,600)s; distinct from download cap; unchanged"
+  },
+  "producer_gap": {
+    "owner": "ROOT CWP isolated lane",
+    "facts": "old producer discarded partial progress/counters on budget SourceReadError",
+    "change_not_done_here": "ROOT adds pathless budget operation inside existing operations, not new producer top-level schema"
+  },
+  "consumer_gap": {
+    "owner": "ROOT/RF independent lane",
+    "facts": "RF rejects unknown optional sibling then has16KiB full-sidecar and64KiB error reader windows",
+    "interface": "INTERFACE.md",
+    "large_fixture": "evidence/wire-large-valid.json",
+    "large_sizes": {
+      "optional_compact_bytes": 108288,
+      "full_compact_bytes": 108904,
+      "ff_indent2_bytes": 135853
+    }
+  },
+  "fixtures_mode": "offline synthetic producer DTOs; FF production serializer/child transport exercised; not live CWP corpus metering proof",
+  "cleanup": "evidence/cleanup.json",
+  "prohibited_actions": {
+    "downloads": 0,
+    "provider_requests": 0,
+    "llm_calls": 0,
+    "key_reads": 0,
+    "real_scans": 0,
+    "production_config_changes": false,
+    "W06_history_changes": false,
+    "other_repo_changes": false,
+    "install_changes": false,
+    "push_or_merge": false
+  },
+  "remaining": [
+    "ROOT non-author same-SHA review and fix any findings",
+    "ROOT integrate producer budget operation and RF optional+bounded large-error compatibility, then offline CWP→FF→RF check",
+    "ROOT targeted install all5 runtime files together, preserving config/output/keys",
+    "ROOT commit/push merged work and only then rerun authorized W06/H1 preparation; this lane never rescans real lake"
+  ]
+}
