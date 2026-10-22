@@ -1,0 +1,58 @@
+{
+  "final-all.xml": {
+    "tests": "124",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "18.194"
+  },
+  "final-current.xml": {
+    "tests": "127",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "15.702"
+  },
+  "final.xml": {
+    "tests": "88",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "6.962"
+  },
+  "focused.xml": {
+    "tests": "87",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "5.897"
+  },
+  "green.xml": {
+    "tests": "3",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "2.127"
+  },
+  "red.xml": {
+    "tests": "3",
+    "failures": "3",
+    "errors": "0",
+    "skipped": "0",
+    "time": "4.341"
+  },
+  "sealed.xml": {
+    "tests": "126",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "15.966"
+  },
+  "setup-errors.xml": {
+    "tests": "3",
+    "failures": "0",
+    "errors": "3",
+    "skipped": "0",
+    "time": "0.908"
+  }
+}

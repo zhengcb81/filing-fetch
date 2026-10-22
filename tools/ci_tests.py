@@ -29,6 +29,7 @@ CI_TESTS = (
     "tests/test_source_ref_v2.py",
     "tests/test_source_ref_v2_db_query.py",
     "tests/test_local_source_prepare.py",
+    "tests/test_local_preparation_observation.py",
     "tests/test_transcript_companion.py",
     "tests/test_transcript_companion_transport.py",
     "tests/test_transcript_launch_contract.py",

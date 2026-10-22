@@ -74,6 +74,7 @@ class FilingFetchError(RuntimeError):
         acquisition_observation: dict[str, Any] | None = None,
         request_diagnostic: dict[str, Any] | None = None,
         producer_exit_code: int | None = None,
+        local_preparation_observation: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -123,6 +124,10 @@ class FilingFetchError(RuntimeError):
         if request_diagnostic is not None and diagnostic is None:
             raise TypeError("request_diagnostic must be a validated filing-request-diagnostic/1 object")
         self.request_diagnostic = diagnostic
+        # Lazy import avoids a contract/candidate dependency cycle. This is an
+        # optional observation only; it does not decide eligibility or usage.
+        from ff_local_preparation_observation import validated_local_preparation_observation
+        self.local_preparation_observation = validated_local_preparation_observation(local_preparation_observation)
 
 
 # ---------------------------------------------------------------------------
