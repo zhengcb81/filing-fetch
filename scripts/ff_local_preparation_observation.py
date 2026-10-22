@@ -23,7 +23,7 @@ _TOKEN = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.:+-]{0,255}\Z')
 _SCHEMA_TOKEN = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_.:+/-]{0,255}\Z')
 # Opaque owner namespaces (e.g. urn:owner:budget/2) are identifiers. Reject
 # explicit addresses separately so their names do not become a schema whitelist.
-_ADDRESS = re.compile(r'(?:[a-zA-Z]:/|[a-zA-Z][a-zA-Z0-9+.-]*://)')
+_ADDRESS = re.compile(r'(?:[a-zA-Z]:/|file:/|[a-zA-Z][a-zA-Z0-9+.-]*://)', re.IGNORECASE)
 
 
 def _machine(value: Any, depth: int = 0, *, key: str = '') -> bool:

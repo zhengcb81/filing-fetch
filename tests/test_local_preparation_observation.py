@@ -179,6 +179,7 @@ def test_native_local_budget_operation_is_verbatim_and_is_not_provider_usage():
 @pytest.mark.parametrize('schema', [
     'C:/Users/example/raw.pdf', 'file:///C:/Users/example/raw.pdf',
     'D:/1', 'https://example.com/1', 'FILE:///tmp/raw.pdf',
+    'file:/C:/Users/example/raw.pdf', 'FiLe:/tmp/raw.pdf', 'file:/1',
 ])
 def test_nested_schema_is_a_machine_identifier_not_a_physical_address(schema):
     from ff_local_preparation_observation import local_preparation_observation
