@@ -6,6 +6,7 @@ from typing import Any
 
 from filing_contracts import FilingFetchError, FILING_V2_RESPONSE_SCHEMA_VERSION, _validate_companion_request
 from ff_source_ref import validate_source_ref as _reference
+from ff_local_preparation_observation import validated_local_preparation_observation
 from ff_provider_cause import (
     STAGES,
     validated_acquisition_failure,
@@ -144,6 +145,7 @@ def error_envelope(
     acquisition_observation: dict[str, Any] | None = None,
     request_diagnostic: dict[str, Any] | None = None,
     producer_exit_code: int | None = None,
+    local_preparation_observation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     stats = stats or {"calls": 0, "downloads": 0}
     filing: dict[str, Any] = {"status": code, "reason": reason, "retryable": retryable}
@@ -176,4 +178,7 @@ def error_envelope(
     observation = validated_acquisition_observation(acquisition_observation)
     if observation is not None:
         result["acquisition_observation"] = observation
+    local = validated_local_preparation_observation(local_preparation_observation)
+    if local is not None:
+        result['local_preparation_observation'] = local
     return result

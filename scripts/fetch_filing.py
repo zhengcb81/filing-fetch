@@ -1610,6 +1610,7 @@ def main(argv: list[str] | None = None) -> int:
                 acquisition_observation=exc.acquisition_observation,
                 request_diagnostic=exc.request_diagnostic,
                 producer_exit_code=exc.producer_exit_code,
+                local_preparation_observation=exc.local_preparation_observation,
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")

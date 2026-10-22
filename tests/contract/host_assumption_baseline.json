@@ -5,9 +5,13 @@
     "host-absolute-path|tests/test_dropbox_config_invariants.py|/tmp",
     "host-absolute-path|tests/test_fetch_filing.py|/tmp",
     "host-absolute-path|tests/test_policy_containment_fc501.py|/tmp",
-    "host-absolute-path|tests/support/p5_process_probe.py|/proc/"
+    "host-absolute-path|tests/support/p5_process_probe.py|/proc/",
+    "host-absolute-path|tests/test_local_preparation_observation.py|C:/Users/example/raw.pdf",
+    "host-absolute-path|tests/test_local_preparation_observation.py|D:/1"
   ],
   "rationales": {
-    "host-absolute-path|tests/support/p5_process_probe.py|/proc/": "Linux kernel procfs PID state, checked only after the Windows branch returns and only when the stat file exists. It distinguishes already terminated zombies from running leaked children; this is an OS interface, not a fixture tied to one host directory. No concatenation workaround or global exemption."
+    "host-absolute-path|tests/support/p5_process_probe.py|/proc/": "Linux kernel procfs PID state, checked only after the Windows branch returns and only when the stat file exists. It distinguishes already terminated zombies from running leaked children; this is an OS interface, not a fixture tied to one host directory. No concatenation workaround or global exemption.",
+    "host-absolute-path|tests/test_local_preparation_observation.py|C:/Users/example/raw.pdf": "Deliberately malicious schema_version input; compared only as opaque JSON/string data and never passed to Path, filesystem, subprocess cwd or a host capability. The same rejection must hold on every operating system. This exact fixture closes the independent-review physical-address leak; it is not a host-specific expected path or a blanket test exemption.",
+    "host-absolute-path|tests/test_local_preparation_observation.py|D:/1": "Deliberately malicious schema_version input; compared only as opaque JSON/string data and never passed to Path, filesystem, subprocess cwd or a host capability. The same rejection must hold on every operating system. This exact fixture closes the independent-review physical-address leak; it is not a host-specific expected path or a blanket test exemption."
   }
 }

@@ -1,0 +1,19 @@
+.....FFF                                                                 [100%]
+================================== FAILURES ===================================
+_ test_nested_schema_is_a_machine_identifier_not_a_physical_address[file:/C:/Users/example/raw.pdf] _
+tests\test_local_preparation_observation.py:192: in test_nested_schema_is_a_machine_identifier_not_a_physical_address
+    assert observed is None
+E   AssertionError: assert {'schema_version': 'filing-local-preparation-observation/1', 'usage_scope': 'local_original_verification', 'status': 'unavailable', 'reason': 'budget_exceeded', ...} is None
+_ test_nested_schema_is_a_machine_identifier_not_a_physical_address[FiLe:/tmp/raw.pdf] _
+tests\test_local_preparation_observation.py:192: in test_nested_schema_is_a_machine_identifier_not_a_physical_address
+    assert observed is None
+E   AssertionError: assert {'schema_version': 'filing-local-preparation-observation/1', 'usage_scope': 'local_original_verification', 'status': 'unavailable', 'reason': 'budget_exceeded', ...} is None
+_ test_nested_schema_is_a_machine_identifier_not_a_physical_address[file:/1] __
+tests\test_local_preparation_observation.py:192: in test_nested_schema_is_a_machine_identifier_not_a_physical_address
+    assert observed is None
+E   AssertionError: assert {'schema_version': 'filing-local-preparation-observation/1', 'usage_scope': 'local_original_verification', 'status': 'unavailable', 'reason': 'budget_exceeded', ...} is None
+=========================== short test summary info ===========================
+FAILED tests/test_local_preparation_observation.py::test_nested_schema_is_a_machine_identifier_not_a_physical_address[file:/C:/Users/example/raw.pdf]
+FAILED tests/test_local_preparation_observation.py::test_nested_schema_is_a_machine_identifier_not_a_physical_address[FiLe:/tmp/raw.pdf]
+FAILED tests/test_local_preparation_observation.py::test_nested_schema_is_a_machine_identifier_not_a_physical_address[file:/1]
+3 failed, 5 passed, 24 deselected in 0.35s

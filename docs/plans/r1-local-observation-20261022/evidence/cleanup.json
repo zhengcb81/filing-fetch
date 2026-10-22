@@ -1,0 +1,288 @@
+{
+  "baseline": "fresh tracked-clean sparse worktree; all test roots initially absent",
+  "owned_paths": [
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-sealed\\test_literal_cli_three_tempora0\\claude\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-current\\test_literal_cli_three_tempora0\\codex\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-current\\test_literal_cli_three_tempora0\\claude\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-sealed\\test_literal_cli_three_tempora0\\codex\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-sealed\\test_literal_cli_three_tempora0\\agents\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-all\\test_literal_cli_three_tempora0\\agents\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-all\\test_literal_cli_three_tempora0\\codex\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-all\\test_literal_cli_three_tempora0\\claude\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-current\\test_literal_cli_three_tempora0\\agents\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-all\\test_mid_batch_failure_reports0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-current\\test_mid_batch_failure_reports0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-all\\test_apply_remains_scoped_and_0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-sealed\\test_full_install_preserves_ex0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-all\\test_full_scope_can_complete_b0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-sealed\\test_full_scope_can_complete_b0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-current\\test_full_install_preserves_ex0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-sealed\\test_mid_batch_failure_reports0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-current\\test_apply_remains_scoped_and_0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-all\\test_full_install_preserves_ex0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-sealed\\test_apply_remains_scoped_and_0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-current\\test_selected_install_changes_0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-sealed\\test_selected_install_changes_0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-current\\test_full_scope_can_complete_b0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-all\\test_selected_install_changes_0\\skills\\filing-fetch\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 28,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\tests\\support\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 1915,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-green",
+      "owner": "this isolated FF lane",
+      "files_before": 4,
+      "bytes_before": 1169,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\tests\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 12,
+      "bytes_before": 432704,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red",
+      "owner": "this isolated FF lane",
+      "files_before": 4,
+      "bytes_before": 1167,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\tools\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 3,
+      "bytes_before": 44932,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-current",
+      "owner": "this isolated FF lane",
+      "files_before": 369,
+      "bytes_before": 1002389,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\e2e\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 1,
+      "bytes_before": 15856,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final-all",
+      "owner": "this isolated FF lane",
+      "files_before": 363,
+      "bytes_before": 887588,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-final",
+      "owner": "this isolated FF lane",
+      "files_before": 15,
+      "bytes_before": 1406,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\scripts\\__pycache__",
+      "owner": "this isolated FF lane",
+      "files_before": 13,
+      "bytes_before": 218250,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-mypy",
+      "owner": "this isolated FF lane",
+      "files_before": 225,
+      "bytes_before": 11491847,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-sealed",
+      "owner": "this isolated FF lane",
+      "files_before": 369,
+      "bytes_before": 1002354,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-focused",
+      "owner": "this isolated FF lane",
+      "files_before": 15,
+      "bytes_before": 1408,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.ruff_cache",
+      "owner": "this isolated FF lane",
+      "files_before": 5,
+      "bytes_before": 631,
+      "exists_after": false
+    },
+    {
+      "path": "C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.pytest_cache",
+      "owner": "this isolated FF lane",
+      "files_before": 5,
+      "bytes_before": 14911,
+      "exists_after": false
+    }
+  ],
+  "provider_requests": 0,
+  "downloads": 0,
+  "llm_calls": 0,
+  "real_originals_touched": false,
+  "mother_ff_untracked_preserved": [
+    ".planning/du11-empty-placeholder-original.py",
+    "config/FMP_API_KEY.txt"
+  ],
+  "w06_evidence_unchanged": true,
+  "full_restore_backup_exercise": false
+}

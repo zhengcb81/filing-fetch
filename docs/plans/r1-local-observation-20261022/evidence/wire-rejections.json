@@ -1,0 +1,230 @@
+{
+  "outer_array": [],
+  "wrong_schema": {
+    "schema_version": "bad/1",
+    "usage_scope": "local_original_verification",
+    "status": "unavailable",
+    "reason": "budget_exceeded",
+    "blocks_download": true,
+    "operations": [
+      {
+        "status": "recorded",
+        "assertion_id": "assertion-fixture",
+        "restore_audit_id": null
+      },
+      {
+        "schema_version": "local-read-budget/1",
+        "operation": "local_read_budget",
+        "usage_scope": "local_original_verification",
+        "phase": "original_read",
+        "reason": "budget_exceeded",
+        "limits": {
+          "max_candidates": 64,
+          "max_bytes": 134217728,
+          "timeout_seconds": 18.5,
+          "max_discovery_groups": 256,
+          "max_discovery_entries": 4096
+        },
+        "consumed": {
+          "candidates": 5,
+          "charged_read_bytes": 134217720,
+          "observed_charge_bytes": 134217729,
+          "discovery_groups": 9,
+          "discovery_entries": 42,
+          "elapsed_seconds": 0.125
+        },
+        "triggered_bound": "max_bytes"
+      }
+    ],
+    "diagnostics": [
+      {
+        "document_id": "urn:company-wiki:document:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+        "reason": "local_original_missing",
+        "status": "unavailable"
+      }
+    ],
+    "local_read_limits": {
+      "max_candidates": 64,
+      "max_bytes": 134217728,
+      "timeout_seconds": 18.5
+    },
+    "local_io_usage": null
+  },
+  "physical": {
+    "schema_version": "filing-local-preparation-observation/1",
+    "usage_scope": "local_original_verification",
+    "status": "unavailable",
+    "reason": "budget_exceeded",
+    "blocks_download": true,
+    "operations": [
+      {
+        "status": "recorded",
+        "assertion_id": "assertion-fixture",
+        "restore_audit_id": null
+      },
+      {
+        "schema_version": "local-read-budget/1",
+        "operation": "local_read_budget",
+        "usage_scope": "local_original_verification",
+        "phase": "original_read",
+        "reason": "budget_exceeded",
+        "limits": {
+          "max_candidates": 64,
+          "max_bytes": 134217728,
+          "timeout_seconds": 18.5,
+          "max_discovery_groups": 256,
+          "max_discovery_entries": 4096
+        },
+        "consumed": {
+          "candidates": 5,
+          "charged_read_bytes": 134217720,
+          "observed_charge_bytes": 134217729,
+          "discovery_groups": 9,
+          "discovery_entries": 42,
+          "elapsed_seconds": 0.125
+        },
+        "triggered_bound": "max_bytes"
+      }
+    ],
+    "diagnostics": [
+      {
+        "canonical_path": "unwanted/file.pdf"
+      }
+    ],
+    "local_read_limits": {
+      "max_candidates": 64,
+      "max_bytes": 134217728,
+      "timeout_seconds": 18.5
+    },
+    "local_io_usage": null
+  },
+  "raw_header": {
+    "schema_version": "filing-local-preparation-observation/1",
+    "usage_scope": "local_original_verification",
+    "status": "unavailable",
+    "reason": "budget_exceeded",
+    "blocks_download": true,
+    "operations": [
+      {
+        "headers": {
+          "Authorization": "synthetic-disallowed-token"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "document_id": "urn:company-wiki:document:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+        "reason": "local_original_missing",
+        "status": "unavailable"
+      }
+    ],
+    "local_read_limits": {
+      "max_candidates": 64,
+      "max_bytes": 134217728,
+      "timeout_seconds": 18.5
+    },
+    "local_io_usage": null
+  },
+  "wrong_reason_type": {
+    "schema_version": "filing-local-preparation-observation/1",
+    "usage_scope": "local_original_verification",
+    "status": "unavailable",
+    "reason": {},
+    "blocks_download": true,
+    "operations": [
+      {
+        "status": "recorded",
+        "assertion_id": "assertion-fixture",
+        "restore_audit_id": null
+      },
+      {
+        "schema_version": "local-read-budget/1",
+        "operation": "local_read_budget",
+        "usage_scope": "local_original_verification",
+        "phase": "original_read",
+        "reason": "budget_exceeded",
+        "limits": {
+          "max_candidates": 64,
+          "max_bytes": 134217728,
+          "timeout_seconds": 18.5,
+          "max_discovery_groups": 256,
+          "max_discovery_entries": 4096
+        },
+        "consumed": {
+          "candidates": 5,
+          "charged_read_bytes": 134217720,
+          "observed_charge_bytes": 134217729,
+          "discovery_groups": 9,
+          "discovery_entries": 42,
+          "elapsed_seconds": 0.125
+        },
+        "triggered_bound": "max_bytes"
+      }
+    ],
+    "diagnostics": [
+      {
+        "document_id": "urn:company-wiki:document:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+        "reason": "local_original_missing",
+        "status": "unavailable"
+      }
+    ],
+    "local_read_limits": {
+      "max_candidates": 64,
+      "max_bytes": 134217728,
+      "timeout_seconds": 18.5
+    },
+    "local_io_usage": null
+  },
+  "invented_zero_usage": {
+    "schema_version": "filing-local-preparation-observation/1",
+    "usage_scope": "local_original_verification",
+    "status": "unavailable",
+    "reason": "budget_exceeded",
+    "blocks_download": true,
+    "operations": [
+      {
+        "status": "recorded",
+        "assertion_id": "assertion-fixture",
+        "restore_audit_id": null
+      },
+      {
+        "schema_version": "local-read-budget/1",
+        "operation": "local_read_budget",
+        "usage_scope": "local_original_verification",
+        "phase": "original_read",
+        "reason": "budget_exceeded",
+        "limits": {
+          "max_candidates": 64,
+          "max_bytes": 134217728,
+          "timeout_seconds": 18.5,
+          "max_discovery_groups": 256,
+          "max_discovery_entries": 4096
+        },
+        "consumed": {
+          "candidates": 5,
+          "charged_read_bytes": 134217720,
+          "observed_charge_bytes": 134217729,
+          "discovery_groups": 9,
+          "discovery_entries": 42,
+          "elapsed_seconds": 0.125
+        },
+        "triggered_bound": "max_bytes"
+      }
+    ],
+    "diagnostics": [
+      {
+        "document_id": "urn:company-wiki:document:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+        "reason": "local_original_missing",
+        "status": "unavailable"
+      }
+    ],
+    "local_read_limits": {
+      "max_candidates": 64,
+      "max_bytes": 134217728,
+      "timeout_seconds": 18.5
+    },
+    "local_io_usage": {
+      "bytes_read": 0
+    }
+  }
+}

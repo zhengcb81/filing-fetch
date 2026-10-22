@@ -1,0 +1,81 @@
+{
+  "schema_version": "2.0",
+  "status": "upstream_error",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": 2026,
+    "fiscal_period": "H1",
+    "as_of_date": "2026-10-21"
+  },
+  "filing": {
+    "status": "upstream_error",
+    "reason": "local source preparation unavailable: budget_exceeded",
+    "retryable": true,
+    "producer_exit_code": 0,
+    "upstream_cause": {
+      "schema_version": "filing-upstream-cause/1",
+      "operation": "local_prepare",
+      "code": "budget_exceeded",
+      "provider_started": false,
+      "usage_complete": true,
+      "retry_scope": "none"
+    },
+    "stage": "local_prepare"
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 3,
+  "downloads": 0,
+  "local_preparation_observation": {
+    "schema_version": "filing-local-preparation-observation/1",
+    "usage_scope": "local_original_verification",
+    "status": "unavailable",
+    "reason": "budget_exceeded",
+    "blocks_download": true,
+    "operations": [
+      {
+        "status": "recorded",
+        "assertion_id": "assertion-fixture",
+        "restore_audit_id": null
+      },
+      {
+        "schema_version": "local-read-budget/1",
+        "operation": "local_read_budget",
+        "usage_scope": "local_original_verification",
+        "phase": "original_read",
+        "reason": "budget_exceeded",
+        "limits": {
+          "max_candidates": 64,
+          "max_bytes": 134217728,
+          "timeout_seconds": 18.5,
+          "max_discovery_groups": 256,
+          "max_discovery_entries": 4096
+        },
+        "consumed": {
+          "candidates": 5,
+          "charged_read_bytes": 134217720,
+          "observed_charge_bytes": 134217729,
+          "discovery_groups": 9,
+          "discovery_entries": 42,
+          "elapsed_seconds": 0.125
+        },
+        "triggered_bound": "max_bytes"
+      }
+    ],
+    "diagnostics": [
+      {
+        "document_id": "urn:company-wiki:document:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+        "reason": "local_original_missing",
+        "status": "unavailable"
+      }
+    ],
+    "local_read_limits": {
+      "max_candidates": 64,
+      "max_bytes": 134217728,
+      "timeout_seconds": 18.5
+    },
+    "local_io_usage": null
+  }
+}

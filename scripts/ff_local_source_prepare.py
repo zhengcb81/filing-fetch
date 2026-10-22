@@ -12,6 +12,7 @@ from typing import Any
 import ff_process_transport
 from ff_provider_cause import condition_cause, source_condition
 from ff_source_ref import validate_source_ref
+from ff_local_preparation_observation import local_preparation_observation
 from filing_contracts import FilingFetchError
 
 _RESULT_FIELDS = frozenset({
@@ -20,7 +21,7 @@ _RESULT_FIELDS = frozenset({
 })
 
 
-def _validated(payload: Any, physical_fields: Callable[[object], bool]) -> bool:
+def _validated(payload: Any, physical_fields: Callable[[object], bool], *, limits: dict) -> bool:
     if (not isinstance(payload, dict) or set(payload) != _RESULT_FIELDS
             or payload.get("schema_version") != "local-source-prepare/1"
             or type(payload.get("download_events")) is not int or payload["download_events"] != 0
@@ -46,7 +47,8 @@ def _validated(payload: Any, physical_fields: Callable[[object], bool]) -> bool:
     cause = source_condition("local_prepare", payload["reason"])
     raise FilingFetchError(f"local source preparation {status}: {cause['code']}",
                            code=errors[status], stage="local_prepare",
-                           upstream_cause=cause)
+                           upstream_cause=cause,
+                           local_preparation_observation=local_preparation_observation(payload, limits))
 
 
 def prepare_existing_local_source(
@@ -59,7 +61,7 @@ def prepare_existing_local_source(
     if remaining <= 0:
         raise FilingFetchError("deadline exceeded before local preparation",
                                code="upstream_error", stage="local_prepare")
-    request = {
+    request: dict[str, Any] = {
         "schema_version": "local-source-prepare-request/1",
         "source_request": {**source_request, "schema_version": "1.0", "allow_download": False},
         "limits": {"max_candidates": 64, "max_bytes": 128 * 1024 * 1024,
@@ -96,7 +98,7 @@ def prepare_existing_local_source(
         raise FilingFetchError("invalid local preparation receipt", code="upstream_error", stage="local_prepare",
                                upstream_cause=source_condition("local_prepare", "invalid_producer_schema")) from exc
     try:
-        _validated(payload, physical_fields)
+        _validated(payload, physical_fields, limits=request["limits"])
     except FilingFetchError as exc:
         exc.producer_exit_code = returncode
         raise

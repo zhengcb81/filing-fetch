@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="3" failures="0" skipped="0" tests="3" time="0.908" timestamp="2026-10-22T20:44:51.531192+01:00" hostname="DESKTOP-156V213"><testcase classname="tests.test_local_preparation_observation" name="test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[0]" time="0.004"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red'&quot;">..\company-wiki\.venv\Lib\site-packages\pytest_asyncio\plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+..\..\AppData\Roaming\uv\python\cpython-3.14-windows-x86_64-none\Lib\pathlib\__init__.py:1011: in mkdir
+    os.mkdir(self, mode)
+E   FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red'</error></testcase><testcase classname="tests.test_local_preparation_observation" name="test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[1]" time="0.001"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red'&quot;">..\company-wiki\.venv\Lib\site-packages\pytest_asyncio\plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+..\..\AppData\Roaming\uv\python\cpython-3.14-windows-x86_64-none\Lib\pathlib\__init__.py:1011: in mkdir
+    os.mkdir(self, mode)
+E   FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red'</error></testcase><testcase classname="tests.test_local_preparation_observation" name="test_real_ff_cli_preserves_bounded_local_failure_without_retry_or_provider" time="0.002"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red'&quot;">..\company-wiki\.venv\Lib\site-packages\pytest_asyncio\plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+..\..\AppData\Roaming\uv\python\cpython-3.14-windows-x86_64-none\Lib\pathlib\__init__.py:1011: in mkdir
+    os.mkdir(self, mode)
+E   FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'C:\\Users\\郑曾波\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red'</error></testcase></testsuite></testsuites>

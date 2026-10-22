@@ -1,0 +1,22 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_ test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[0] _
+tests\test_local_preparation_observation.py:47: in test_real_child_preserves_local_receipt_and_actual_distinct_request_limits
+    observation = error.local_preparation_observation
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'FilingFetchError' object has no attribute 'local_preparation_observation'
+_ test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[1] _
+tests\test_local_preparation_observation.py:47: in test_real_child_preserves_local_receipt_and_actual_distinct_request_limits
+    observation = error.local_preparation_observation
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'FilingFetchError' object has no attribute 'local_preparation_observation'
+_ test_real_ff_cli_preserves_bounded_local_failure_without_retry_or_provider __
+tests\test_local_preparation_observation.py:95: in test_real_ff_cli_preserves_bounded_local_failure_without_retry_or_provider
+    assert output['local_preparation_observation']['diagnostics'] == receipt()['diagnostics']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'local_preparation_observation'
+=========================== short test summary info ===========================
+FAILED tests/test_local_preparation_observation.py::test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[0]
+FAILED tests/test_local_preparation_observation.py::test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[1]
+FAILED tests/test_local_preparation_observation.py::test_real_ff_cli_preserves_bounded_local_failure_without_retry_or_provider
+3 failed in 4.40s

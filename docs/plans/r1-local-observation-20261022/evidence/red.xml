@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="4.341" timestamp="2026-10-22T20:45:08.202625+01:00" hostname="DESKTOP-156V213"><testcase classname="tests.test_local_preparation_observation" name="test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[0]" time="0.769"><failure message="AttributeError: 'FilingFetchError' object has no attribute 'local_preparation_observation'">tests\test_local_preparation_observation.py:47: in test_real_child_preserves_local_receipt_and_actual_distinct_request_limits
+    observation = error.local_preparation_observation
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'FilingFetchError' object has no attribute 'local_preparation_observation'</failure></testcase><testcase classname="tests.test_local_preparation_observation" name="test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[1]" time="0.582"><failure message="AttributeError: 'FilingFetchError' object has no attribute 'local_preparation_observation'">tests\test_local_preparation_observation.py:47: in test_real_child_preserves_local_receipt_and_actual_distinct_request_limits
+    observation = error.local_preparation_observation
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'FilingFetchError' object has no attribute 'local_preparation_observation'</failure></testcase><testcase classname="tests.test_local_preparation_observation" name="test_real_ff_cli_preserves_bounded_local_failure_without_retry_or_provider" time="2.072"><failure message="KeyError: 'local_preparation_observation'">tests\test_local_preparation_observation.py:95: in test_real_ff_cli_preserves_bounded_local_failure_without_retry_or_provider
+    assert output['local_preparation_observation']['diagnostics'] == receipt()['diagnostics']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'local_preparation_observation'</failure></testcase></testsuite></testsuites>

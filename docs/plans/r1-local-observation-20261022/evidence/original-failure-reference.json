@@ -1,0 +1,13 @@
+{
+  "path": "C:\\Users\\郑曾波\\Projects\\revenue-forecast-audit\\runs\\r1-20261021-cn-wuxi-apptec\\execution_replays\\r1-remediation-01\\roles\\executor\\commands\\aed2cca569084ea7bc160cc5ef633a7d\\stderr.txt",
+  "sha256": "295477ec5e01fb2801475277215a6bfa2e3c407c0f3c37f24b13d0e87dc3ed30",
+  "read_only": true,
+  "copied_original_body": false,
+  "code": "budget_exceeded",
+  "stage": "local_prepare",
+  "producer_exit_code": 0,
+  "provider_started": false,
+  "usage_complete": true,
+  "calls": 3,
+  "downloads": 0
+}

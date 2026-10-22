@@ -1,0 +1,37 @@
+[
+  {
+    "path": ".planning/ffloc-schema-green",
+    "bytes": 1003025.0,
+    "exists_after": false
+  },
+  {
+    "path": ".planning/ffloc-schema-final",
+    "bytes": 1003163.0,
+    "exists_after": false
+  },
+  {
+    "path": ".pytest_cache",
+    "bytes": 17215.0,
+    "exists_after": false
+  },
+  {
+    "path": ".mypy_cache",
+    "bytes": 22699521.0,
+    "exists_after": false
+  },
+  {
+    "path": "scripts/__pycache__",
+    "bytes": 218468.0,
+    "exists_after": false
+  },
+  {
+    "path": "tests/__pycache__",
+    "bytes": 377432.0,
+    "exists_after": false
+  },
+  {
+    "path": "tools/__pycache__",
+    "bytes": 44932.0,
+    "exists_after": false
+  }
+]

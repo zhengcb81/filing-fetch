@@ -1,0 +1,28 @@
+EEE                                                                      [100%]
+=================================== ERRORS ====================================
+_ ERROR at setup of test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[0] _
+..\company-wiki\.venv\Lib\site-packages\pytest_asyncio\plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+..\..\AppData\Roaming\uv\python\cpython-3.14-windows-x86_64-none\Lib\pathlib\__init__.py:1011: in mkdir
+    os.mkdir(self, mode)
+E   FileNotFoundError: [WinError 3] ϵͳ�Ҳ���ָ����·����: 'C:\\Users\\֣����\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red'
+_ ERROR at setup of test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[1] _
+..\company-wiki\.venv\Lib\site-packages\pytest_asyncio\plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+..\..\AppData\Roaming\uv\python\cpython-3.14-windows-x86_64-none\Lib\pathlib\__init__.py:1011: in mkdir
+    os.mkdir(self, mode)
+E   FileNotFoundError: [WinError 3] ϵͳ�Ҳ���ָ����·����: 'C:\\Users\\֣����\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red'
+_ ERROR at setup of test_real_ff_cli_preserves_bounded_local_failure_without_retry_or_provider _
+..\company-wiki\.venv\Lib\site-packages\pytest_asyncio\plugin.py:924: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+..\..\AppData\Roaming\uv\python\cpython-3.14-windows-x86_64-none\Lib\pathlib\__init__.py:1011: in mkdir
+    os.mkdir(self, mode)
+E   FileNotFoundError: [WinError 3] ϵͳ�Ҳ���ָ����·����: 'C:\\Users\\֣����\\Projects\\filing-fetch-r1-local-observation\\.planning\\ffloc-red'
+=========================== short test summary info ===========================
+ERROR tests/test_local_preparation_observation.py::test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[0]
+ERROR tests/test_local_preparation_observation.py::test_real_child_preserves_local_receipt_and_actual_distinct_request_limits[1]
+ERROR tests/test_local_preparation_observation.py::test_real_ff_cli_preserves_bounded_local_failure_without_retry_or_provider
+3 errors in 0.98s
