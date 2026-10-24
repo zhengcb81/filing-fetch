@@ -67,6 +67,9 @@ from ff_source_candidate import (
     contains_physical_field as _contains_physical_field,
     validate_source_candidate,
 )
+from ff_local_preparation_observation import (
+    local_preparation_observation as _local_preparation_observation,
+)
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
@@ -765,8 +768,10 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             acquisition_observation=observation,
         )
     local = payload.get("local_preparation")
+    local_fields = {"status", "reason", "blocks_download", "causes"}
     if local is not None and (
-        not isinstance(local, dict) or set(local) != {"status", "reason", "blocks_download", "causes"}
+        not isinstance(local, dict)
+        or set(local) not in (local_fields, local_fields | {"local_read_budget"})
         or not isinstance(local.get("status"), str)
         or local["status"] not in {"blocked", "unavailable", "ambiguous"}
         or local.get("status") != payload.get("status") or local.get("blocks_download") is not True
@@ -775,6 +780,9 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
                    for x in [local.get("reason"), *local.get("causes", [])])
     ):
         raise invalid_result(operation)
+    if isinstance(local, dict) and "local_read_budget" in local:
+        if _local_preparation_observation_from_operation(local) is None:
+            raise invalid_result(operation)
     if _contains_physical_field({
         key: value for key, value in payload.items() if key != "acquisition_failure"
     }):
@@ -807,6 +815,30 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             acquisition_observation=observation,
         )
     return payload
+
+
+def _local_preparation_observation_from_operation(
+    local: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Adapt CWP's validated owner counters to FF's existing local-IO envelope."""
+    budget = local.get("local_read_budget")
+    if not isinstance(budget, dict):
+        return None
+    limits = budget.get("limits")
+    if not isinstance(limits, dict):
+        return None
+    local_limits = {
+        key: limits.get(key)
+        for key in ("max_candidates", "max_bytes", "timeout_seconds")
+    }
+    payload = {
+        "status": local.get("status"),
+        "reason": local.get("reason"),
+        "blocks_download": local.get("blocks_download"),
+        "operations": [budget],
+        "diagnostics": [{"reason": reason} for reason in local.get("causes", [])],
+    }
+    return _local_preparation_observation(payload, local_limits)
 
 
 def _raise_operation_business_failure(
@@ -894,9 +926,12 @@ def _pathless_operation_handle(
         code, stage = errors.get(result["status"], ("upstream_error", "source_operation"))
         local = result.get("local_preparation")
         local_cause = None
+        local_observation = None
         if isinstance(local, dict):
             local_cause = ff_provider_cause.source_condition(operation, local["reason"])
             local_cause.update(provider_started=False, usage_complete=True)
+            if "local_read_budget" in local:
+                local_observation = _local_preparation_observation_from_operation(local)
         raise FilingFetchError(
             f"company-wiki {operation} {result['status']}",
             code=code,
@@ -907,6 +942,7 @@ def _pathless_operation_handle(
             acquisition_failure=ff_provider_cause.validated_acquisition_failure(result.get("acquisition_failure")),
             acquisition_observation=ff_provider_cause.validated_acquisition_observation(
                 result.get("acquisition_observation")),
+            local_preparation_observation=local_observation,
         )
     outcome = result.get("outcome")
     events = result.get("download_events")

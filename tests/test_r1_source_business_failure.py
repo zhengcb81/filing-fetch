@@ -50,6 +50,26 @@ def prepared(status="unavailable", reason="local_candidate_limit"):
     }
 
 
+def local_read_budget():
+    return {
+        "schema_version": "local-read-budget/1",
+        "operation": "local_read_budget",
+        "usage_scope": "local_original_verification",
+        "phase": "source_group_discovery",
+        "reason": "local_source_group_limit",
+        "limits": {
+            "max_candidates": 16, "max_bytes": 268435456,
+            "timeout_seconds": 30.0, "max_discovery_groups": 256,
+            "max_discovery_entries": 4096,
+        },
+        "consumed": {
+            "candidates": 0, "charged_read_bytes": 0, "observed_charge_bytes": 0,
+            "discovery_groups": 257, "discovery_entries": 0, "elapsed_seconds": 0.125,
+        },
+        "triggered_bound": "max_discovery_groups",
+    }
+
+
 def child(payload, rc=2):
     return [
         sys.executable,
@@ -124,11 +144,41 @@ def test_operation_accepts_current_closed_local_preparation():
     assert caught.value.upstream_cause["provider_started"] is False
 
 
+def test_ensure_local_read_budget_reaches_existing_local_observation_envelope():
+    operation = local_read_budget()
+    payload = _operation_v2(status="blocked", outcome=None)
+    payload["local_preparation"] = {
+        "status": "blocked", "reason": "local_source_group_limit",
+        "blocks_download": True, "causes": [], "local_read_budget": operation,
+    }
+    assert ff._validated_operation(payload, "ensure") == payload
+    with pytest.raises(FilingFetchError) as caught:
+        ff._pathless_operation_handle(
+            payload,
+            operation="ensure",
+            request=request(),
+            company_identity={},
+            stats={"calls": 0, "downloads": 0},
+        )
+    observation = caught.value.local_preparation_observation
+    assert observation["schema_version"] == "filing-local-preparation-observation/1"
+    assert observation["local_read_limits"] == {
+        "max_candidates": 16, "max_bytes": 268435456, "timeout_seconds": 30.0,
+    }
+    assert observation["operations"] == [operation]
+    assert observation["operations"][0]["triggered_bound"] == "max_discovery_groups"
+    assert observation["operations"][0]["consumed"]["discovery_groups"] == 257
+    assert observation["local_io_usage"] is None
+    assert caught.value.upstream_cause["provider_started"] is False
+    assert caught.value.upstream_cause["usage_complete"] is True
+
+
 @pytest.mark.parametrize(
     "change",
     [
         {"path": "hidden/original.pdf"},
         {"extra": "not part of contract"},
+        {"local_read_budget": {"schema_version": "local-read-budget/1", "operation": "local_read_budget"}},
         {"blocks_download": False},
         {"status": "completed"},
         {"reason": "hidden/original.pdf"},
