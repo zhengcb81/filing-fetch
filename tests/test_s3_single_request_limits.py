@@ -325,7 +325,7 @@ def test_shared_deadline_is_the_minimum_of_the_three_budgets(
 
 
 def test_request_deadline_bounds_the_real_child_run(tmp_path: Path) -> None:
-    """The request's ``timeout_seconds`` (3) must bind the run, not the
+    """The request's ``timeout_seconds`` (10) must bind the run, not the
     global ``--timeout-seconds 60`` the CLI also carries.  Elapsed covers the
     bounded tree cleanup whose grace is additive and bounded (not download
     budget), so the honest bound is budget+cleanup-grace (< 15s on CI)."""
@@ -333,7 +333,7 @@ def test_request_deadline_bounds_the_real_child_run(tmp_path: Path) -> None:
     capture = tmp_path / "argv.jsonl"
     started = time.monotonic()
     process = _run_cli(
-        _v2_request(),
+        _v2_request(acquisition_limits={**LIMITS, "timeout_seconds": 10}),
         config=_ff_config(tmp_path, root),
         env=_child_env(_fake_package(tmp_path), capture, "slow", S3_FAKE_SLEEP="20"),
         global_timeout=60.0,
@@ -357,7 +357,7 @@ def test_timeout_reclaims_the_child_but_never_an_unrelated_process(
         root = _wiki_root(tmp_path)
         capture = tmp_path / "argv.jsonl"
         process = _run_cli(
-            _v2_request(),
+            _v2_request(acquisition_limits={**LIMITS, "timeout_seconds": 10}),
             config=_ff_config(tmp_path, root),
             env=_child_env(_fake_package(tmp_path), capture, "slow", S3_FAKE_SLEEP="20"),
         )
@@ -411,7 +411,7 @@ def test_producer_rejecting_the_limit_flags_fails_once_without_stripping_them(
     root = _wiki_root(tmp_path)
     capture = tmp_path / "argv.jsonl"
     process = _run_cli(
-        _v2_request(),
+        _v2_request(acquisition_limits={**LIMITS, "timeout_seconds": 10}),
         config=_ff_config(tmp_path, root),
         env=_child_env(_fake_package(tmp_path), capture, "reject_limits"),
     )

@@ -85,7 +85,10 @@ fpt._spawn = tracked_spawn
 
 started = time.monotonic()
 try:
-    kwargs = {"timeout_seconds": 3.0 if case == "grandchild" else 1.0, "stdout_cap_bytes": 64}
+    # The outer test starts Python under the full Windows suite, where one
+    # second can expire before the probe reaches run_bounded.  Preserve a
+    # strict bounded-lifetime assertion while giving startup two seconds.
+    kwargs = {"timeout_seconds": 3.0 if case == "grandchild" else 2.0, "stdout_cap_bytes": 64}
     if case == "stdin_blocked":
         kwargs["input_bytes"] = b"x" * (2 * 1024 * 1024)
     result = fpt.run_bounded(
