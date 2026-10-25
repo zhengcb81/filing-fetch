@@ -74,6 +74,10 @@ def validate_request(payload: Any) -> dict[str, Any]:
         raise FilingFetchError(
             "continuation must be non-empty text", code="request_error"
         )
+    if continuation is not None and payload.get("intent", "fetch_if_missing") == "reuse_only":
+        raise FilingFetchError(
+            "continuation is not supported with reuse_only", code="request_error"
+        )
     query = payload.get("company_query")
     if not isinstance(query, str) or not query.strip() or query != query.strip():
         raise FilingFetchError(
