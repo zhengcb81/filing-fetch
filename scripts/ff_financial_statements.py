@@ -52,12 +52,27 @@ def validate_request(payload: Any) -> dict[str, Any]:
     allowed_fields = {
         "schema_version", "company_query", "market", "statements", "report_types",
         "period_end_from", "period_end_to", "all_history", "knowledge_mode",
-        "as_of_date", "intent", "acquisition_limits",
+        "as_of_date", "intent", "acquisition_limits", "fields", "continuation",
     }
     unknown = set(payload) - allowed_fields
     if unknown:
         raise FilingFetchError(
             f"unknown request fields: {sorted(unknown)}", code="request_error"
+        )
+    fields = payload.get("fields")
+    if fields is not None:
+        if not isinstance(fields, list) or not fields:
+            raise FilingFetchError("fields must be a non-empty list", code="request_error")
+        if not all(isinstance(item, str) and item.strip() for item in fields):
+            raise FilingFetchError(
+                "fields items must be non-empty text", code="request_error"
+            )
+    continuation = payload.get("continuation")
+    if continuation is not None and (
+        not isinstance(continuation, str) or not continuation.strip()
+    ):
+        raise FilingFetchError(
+            "continuation must be non-empty text", code="request_error"
         )
     query = payload.get("company_query")
     if not isinstance(query, str) or not query.strip() or query != query.strip():
@@ -116,6 +131,21 @@ def build_cwp_command(root: Path) -> list[str]:
     return [sys.executable, "-m", CWP_MODULE, "--wiki-root", str(root)]
 
 
+def _valid_error_envelope(stdout: bytes) -> dict[str, Any] | None:
+    """Parse a child stdout that carries a structured error envelope."""
+    try:
+        envelope = json.loads(stdout.decode("utf-8", errors="strict"))
+    except (UnicodeError, json.JSONDecodeError, AttributeError):
+        return None
+    if not isinstance(envelope, dict):
+        return None
+    if envelope.get("schema_version") != STATEMENTS_RESPONSE_SCHEMA_VERSION:
+        return None
+    if envelope.get("status") not in ("request_error", "config_error", "fatal"):
+        return None
+    return envelope
+
+
 def fetch_statements(
     *,
     config_path: Path | None,
@@ -141,6 +171,12 @@ def fetch_statements(
             stdout_cap_bytes=MAX_STDOUT_BYTES,
         )
     except ChildFailed as exc:
+        # W19-R3: a CWP-side request/config refusal is a business answer, not
+        # an upstream fault — pass its envelope through with the true status
+        # instead of mislabeling it upstream_error/retryable.
+        passthrough = _valid_error_envelope(exc.stdout)
+        if passthrough is not None:
+            return passthrough
         raise FilingFetchError(
             "company-wiki financial statements child exited nonzero",
             code="upstream_error",

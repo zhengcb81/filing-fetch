@@ -109,6 +109,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     json.dump(envelope, sys.stdout, ensure_ascii=False, indent=2 if args.pretty else None)
     sys.stdout.write("\n")
+    # W19-R3: a structured CWP error status maps to its own exit code.
+    status = envelope.get("status")
+    if status in ("request_error", "config_error"):
+        return 2
+    if status == "fatal":
+        return 1
     return 0
 
 

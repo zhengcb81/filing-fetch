@@ -237,3 +237,71 @@ class TestCliMain:
         code, payload = self._run_main(tmp_path, dict(REQUEST, market="XX"))
         assert code == 2
         assert payload["status"] == "request_error"
+
+
+class TestReviewFixRegressions:
+    def test_cwp_request_error_envelope_passes_through(self, tmp_path):
+        # W19-R3: a CWP-side request_error keeps its status and exit 2 rather
+        # than being relabeled upstream_error/retryable.
+        config = _wiki_root(tmp_path)
+        refusal = {
+            "schema_version": "financial-statements-response/1",
+            "status": "request_error",
+            "error": "unknown request fields: ['bogus']",
+        }
+        from ff_process_transport import ChildFailed
+
+        failure = ChildFailed(
+            "child exited 2", returncode=2,
+            stdout=json.dumps(refusal, ensure_ascii=False).encode("utf-8"),
+            stderr=b"",
+        )
+        with patch.object(
+            ff_financial_statements, "_run_bounded_json", side_effect=failure
+        ):
+            envelope = ff_financial_statements.fetch_statements(
+                config_path=config, request=REQUEST, timeout_seconds=60
+            )
+        assert envelope["status"] == "request_error"
+
+    def test_main_exit_two_for_pass_through_request_error(self, tmp_path):
+        import io
+
+        from ff_process_transport import ChildFailed
+
+        from fetch_statements import main
+
+        refusal = {
+            "schema_version": "financial-statements-response/1",
+            "status": "request_error",
+            "error": "nope",
+        }
+        failure = ChildFailed(
+            "child exited 2", returncode=2,
+            stdout=json.dumps(refusal, ensure_ascii=False).encode("utf-8"),
+            stderr=b"",
+        )
+        buffer = io.StringIO()
+        with patch.object(
+            ff_financial_statements, "_run_bounded_json", side_effect=failure
+        ):
+            with patch("sys.stdin", io.StringIO(json.dumps(REQUEST))):
+                with patch("sys.stdout", buffer):
+                    code = main(["--config", str(_wiki_root(tmp_path))])
+        assert code == 2
+        assert json.loads(buffer.getvalue())["status"] == "request_error"
+
+    def test_fields_and_continuation_are_accepted(self, tmp_path):
+        config = _wiki_root(tmp_path)
+        request = dict(REQUEST, fields=["BASICEPS"], continuation="fsv-abc:77")
+        with patch.object(
+            ff_financial_statements,
+            "_run_bounded_json",
+            return_value=(
+                json.dumps(ENVELOPE, ensure_ascii=False).encode("utf-8"), b"", 0
+            ),
+        ):
+            envelope = ff_financial_statements.fetch_statements(
+                config_path=config, request=request, timeout_seconds=60
+            )
+        assert envelope["status"] == "complete"
