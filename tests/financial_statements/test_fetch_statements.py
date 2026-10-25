@@ -97,7 +97,11 @@ class TestThinClientContract:
         def fake_run(command, **kwargs):
             captured["command"] = command
             captured["kwargs"] = kwargs
-            return _completed(ENVELOPE)
+            return (
+                json.dumps(ENVELOPE, ensure_ascii=False).encode("utf-8"),
+                b"",
+                0,
+            )
 
         with patch.object(ff_financial_statements, "_run_bounded_json", side_effect=fake_run):
             envelope = ff_financial_statements.fetch_statements(
@@ -105,7 +109,7 @@ class TestThinClientContract:
             )
         assert envelope["status"] == "complete"
         command = captured["command"]
-        assert command[:4] == [
+        assert command[:3] == [
             sys.executable, "-m",
             "company_wiki.source_catalog.financial_statements.cli",
         ]

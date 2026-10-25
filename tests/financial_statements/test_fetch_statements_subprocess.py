@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 SKILL_ROOT = Path(__file__).resolve().parents[2]
 
@@ -57,7 +55,14 @@ sys.stdout.write(json.dumps(body, ensure_ascii=False))
 def _fake_package(tmp: Path) -> Path:
     package = tmp / "fake_pkgs" / "company_wiki" / "source_catalog" / "financial_statements"
     package.mkdir(parents=True)
-    (package / "__init__.py").write_text("", encoding="utf-8")
+    # Regular packages (explicit __init__.py at every level): namespace
+    # portions are not reliably importable in this Windows/Miniconda setup.
+    for parent in (
+        tmp / "fake_pkgs" / "company_wiki",
+        tmp / "fake_pkgs" / "company_wiki" / "source_catalog",
+        package,
+    ):
+        (parent / "__init__.py").write_text("", encoding="utf-8")
     (package / "cli.py").write_text(FAKE_CLI, encoding="utf-8")
     return tmp / "fake_pkgs"
 
@@ -118,10 +123,11 @@ def _run_cli(tmp_path: Path, request: dict, mode: str = "ok",
         stdin = None
     else:
         stdin = json.dumps(request, ensure_ascii=False).encode("utf-8")
-    return subprocess.run(
+    proc = subprocess.run(
         argv, input=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         cwd=str(SKILL_ROOT), env=env, timeout=60,
     )
+    return proc
 
 
 class TestSubprocessFlow:
