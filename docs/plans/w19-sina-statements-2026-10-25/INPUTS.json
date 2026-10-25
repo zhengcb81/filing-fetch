@@ -1,0 +1,9 @@
+{
+  "schema_version": "w19-seed-inputs/1",
+  "base_commit": "e0d96426445e4b93bc6cc7a6e6014996ad0a777d",
+  "package": "W19-SINA-STATEMENTS",
+  "card_sha256": "f6136751da78f3b718e4cea230968325344927f4361e70c06c010aeea2f97cdf",
+  "packet_review_sha256": "a979fc7243133cdc006f6ed9f05256e6957cfba17d4ceb323861a33d5b67a655",
+  "counterpart_worktree": "C:\\Users\\郑曾波\\Projects\\company-wiki-w19-sina-statements",
+  "product_implementation_started": false
+}

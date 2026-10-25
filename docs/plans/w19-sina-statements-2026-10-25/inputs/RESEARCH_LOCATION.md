@@ -1,0 +1,1 @@
+Research and exact fixtures are in the companion CWP worktree: ../company-wiki-w19-sina-statements/docs/plans/w19-sina-statements-2026-10-25/inputs/research/. One harness owns both worktrees; do not fetch the same fixtures again.
