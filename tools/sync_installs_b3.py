@@ -25,7 +25,7 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import sys
-import tempfile
+import uuid
 
 HOME = Path.home()
 SKILL = "filing-fetch"
@@ -234,6 +234,23 @@ def installation_diff(destination: Path, files: list[str] | None = None) -> list
     return row["needs_update"]
 
 
+def _stage_file(parent: Path) -> tuple[int, Path]:
+    """Exclusive same-directory staging with finite collision handling.
+
+    Windows tempfile treats some PermissionErrors as name collisions and may
+    spin through TMP_MAX candidates. Permissions are not collisions: surface
+    them immediately, retaining the real error and selected-file scope.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    for _ in range(8):
+        name = parent / (".ff-install-" + uuid.uuid4().hex[:12])
+        try:
+            return os.open(name, flags, 0o600), name
+        except FileExistsError:
+            continue
+    raise FileExistsError("install staging collision limit reached (8 attempts)")
+
+
 def _apply(plan: dict) -> dict:
     rows = []
     for planned in plan["targets"]:
@@ -260,8 +277,7 @@ def _apply(plan: dict) -> dict:
                     raise ValueError(f"source changed: {relative}")
                 target = _safe_path(root, relative)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                descriptor, name = tempfile.mkstemp(prefix=".ff-install-", dir=target.parent)
-                temporary = Path(name)
+                descriptor, temporary = _stage_file(target.parent)
                 with os.fdopen(descriptor, "wb") as stream:
                     stream.write(content)
                     stream.flush()
