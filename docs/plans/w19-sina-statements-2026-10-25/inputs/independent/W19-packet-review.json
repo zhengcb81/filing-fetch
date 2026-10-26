@@ -1,0 +1,68 @@
+{
+  "schema_version": "harness-packet-independent-review/1",
+  "package_id": "W19-SINA-STATEMENTS",
+  "review_date": "2026-10-25",
+  "reviewer": "/root/w16_w18_packet_review",
+  "independent_of_research_and_packet_authoring": true,
+  "final_verdict": "PASS",
+  "findings": [],
+  "unresolved_finding_count": 0,
+  "reviewed_file_sha256": {
+    "W19-SINA-STATEMENTS.md": "f6136751da78f3b718e4cea230968325344927f4361e70c06c010aeea2f97cdf",
+    "../../review/sina-statements-research-20261025/README.md": "108c32e1d5965b1b0a679aab2ad8e937cb3be8f39bdd6c43062fbb57cad5f50c",
+    "../../review/sina-statements-research-20261025/capture/manifest.json": "81c79b286bd8f952ee2d20922e01abab13244271342f398bb76c21e1949f602c",
+    "../../review/sina-statements-research-20261025/capture/observations.json": "c884caa75d48648864e4aab51ec92d3584fb743fecd9c345b3bf60572121097d"
+  },
+  "independent_capture_checks": {
+    "fixture_count": 18,
+    "decompressed_sha_and_length_matches": 18,
+    "result_status_matches": 18,
+    "gzip_bytes": 175785,
+    "api_original_bytes": 2572006,
+    "page_bytes_from_manifest": 47010,
+    "javascript_bytes_from_manifest": 15373,
+    "total_bytes": 2634389,
+    "matches_manifest": true,
+    "sh688012_full_history": {
+      "lrb": {"pages": 4, "unique_report_periods": 36, "source_rows": 2772},
+      "fzb": {"pages": 4, "unique_report_periods": 33, "source_rows": 4653},
+      "llb": {"pages": 4, "unique_report_periods": 36, "source_rows": 2304},
+      "total_source_rows": 9729,
+      "earliest_period_end": "2016-12-31",
+      "latest_period_end": "2026-06-30",
+      "rows_include_structure_and_nulls": true
+    },
+    "provider_publish_date_counterexamples_verified": [
+      {"period_end": "2023-12-31", "statement": "lrb", "provider_publish_date": "20250418"},
+      {"period_end": "2025-12-31", "statement": "fzb", "provider_publish_date": "20260820"}
+    ],
+    "midea_total_operating_revenue_differs_from_operating_revenue": true
+  },
+  "design_checks": {
+    "api_cwp_tables_ff_callable_route_covered": "PASS",
+    "research_does_not_claim_financial_correctness": "PASS",
+    "decimal_units_periods_pit_and_versions_defined": "PASS",
+    "one_canonical_writer_and_catalog_schema_owner": "PASS",
+    "dedup_replay_migrations_readonly_queries_and_bounds_defined": "PASS",
+    "non_overlapping_worktrees_and_paths": "PASS",
+    "offline_and_real_cli_e2e_and_official_comparison_defined": "PASS",
+    "independent_review_all_substantive_fixes_and_final_binding_required": "PASS",
+    "test_restore_and_space_measurement_defined": "PASS",
+    "no_redundant_permission_or_small_node_signoff": "PASS"
+  },
+  "worktree_setup_verified": false,
+  "worktree_setup_note": "ROOT正在准备W19工区与setup记录，本轮仅验施工设计与捕获证据，未证明工区已就绪",
+  "product_implementation_accepted": false,
+  "product_scripts_executed": 0,
+  "product_tests_run": 0,
+  "network_calls": 0,
+  "model_calls": 0,
+  "credentials_read": false,
+  "reviewer_written_paths": ["W19-packet-review.md", "W19-packet-review.json"],
+  "limits": [
+    "财务逐值/单位/期间正确性仍需施工C节点官方原件独立校对",
+    "BJ、母公司口径和历史修订序列未被现研究验证",
+    "18份API原字节已独立验SHA；网页与JS本轮仅核manifest记录",
+    "施工卡PASS不等于产品实现、入库、FF调用、RF采用或公司内容验收通过"
+  ]
+}

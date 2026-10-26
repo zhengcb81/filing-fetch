@@ -1,0 +1,21 @@
+{
+  "schema_version": "w19-sina-statements-handoff/1",
+  "package_id": "W19-SINA-STATEMENTS",
+  "status": "NOT_STARTED",
+  "repos": [
+    {"name": "company-wiki", "workdir": "C:/Users/郑曾波/Projects/company-wiki-w19-sina-statements", "branch": "codex/w19-sina-statements-20261025", "base_commit": "243993d2c9e12c2a9cb6e2b728e547928607abff", "code_commit": null, "handoff_commit": null, "changed_paths": [], "shared_seams": [], "remote": null, "pushed": false},
+    {"name": "filing-fetch", "workdir": "C:/Users/郑曾波/Projects/filing-fetch-w19-sina-statements", "branch": "codex/w19-sina-statements-20261025", "base_commit": "e0d96426445e4b93bc6cc7a6e6014996ad0a777d", "code_commit": null, "handoff_commit": null, "changed_paths": [], "remote": null, "pushed": false}
+  ],
+  "requirements": [],
+  "tests": [],
+  "real_e2e": {"companies": [], "statement_coverage": [], "official_value_checks": [], "FF_to_CWP_actual_cli": false, "repeat_zero_http": false, "root_relocation": false, "partial_not_complete": false},
+  "independent_review": {"agent": null, "verdict": "NOT_REVIEWED", "report": null, "reviewed_code_commits": {}, "reviewed_file_sha256": {}, "findings": [], "independent_behavior_executed": []},
+  "usage": {"provider_http_requests": null, "provider_response_bytes": null, "llm_calls": 0, "cost_usd": "0.00", "raw_downloads": null},
+  "storage": {"initial_original_bytes": null, "initial_catalog_delta_bytes": null, "repeat_new_files": null, "repeat_new_versions": null, "repeat_new_values": null, "fixture_bytes": null, "delivery_bytes": null},
+  "cleanup": {"owned_test_roots": [], "restored": false, "production_config_unchanged": false, "production_catalog_unchanged": false, "original_fingerprints_unchanged": false, "receipt": null},
+  "point_in_time_limitations": [],
+  "unsupported_capabilities": [],
+  "installation_files": [],
+  "root_integration_steps": [],
+  "interface_requests": []
+}
