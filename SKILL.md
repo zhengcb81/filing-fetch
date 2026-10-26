@@ -19,6 +19,19 @@ New callers use `2.0`. The older schemas keep working for existing callers and
 retain their result shapes. Legacy acquisition requests may provide the same
 validated `acquisition_limits` object; existing read-only reuse does not need it.
 
+## Routing: filings vs historical statement values
+
+| The task needs | Entry point |
+|---|---|
+| The **original filing document** (PDF/HTML annual, quarterly, regulatory filing, transcripts) or its narrative | `scripts/fetch_filing.py` (this file's main command) |
+| **Historical financial statement VALUES** for an A-share company (income statement / balance sheet / cash flow rows across periods) | `scripts/fetch_statements.py` (see the section below) |
+
+A company task that needs both calls each entry point once, independently —
+`fetch_statements` never downloads PDFs and `fetch_filing` never fetches
+statement datasets. Do not attach a full-history statements request to a plain
+filing download, and do not use statement rows as a substitute for the original
+filing when the task cites the document.
+
 ## Task authorization and acquisition intent
 
 An authorized company task covers the bounded source acquisition needed for that
@@ -251,6 +264,70 @@ Error: `{schema_version:"1.1", status:"<code>", error:"…", error_code:"<code>"
 | 0 | capture-ready, pathless candidate, or a structured `gap` |
 | 2 | **every** structured error — `request_error`, `config_error`, `identity_error`, `not_found`, `upstream_error`, `catalog_locked`, `worker_paused`, `fatal` |
 | 1 | only an unexpected, non-`FilingFetchError` exception |
+
+## Historical financial statements (fetch_statements)
+
+Fetch or reuse **A-share historical statement values** (income statement /
+balance sheet / cash flow, `market=CN` only) through company-wiki's Sina public
+provider. Zero cost, no API key, no LLM. Company identity is resolved once
+inside company-wiki; the first request commits each provider page as an
+immutable third-party dataset original and publishes normalized versions, so a
+second identical request is served locally with **zero HTTP**.
+
+```bash
+echo '{
+  "schema_version": "financial-statements-request/1",
+  "company_query": "中微公司",
+  "market": "CN",
+  "statements": ["income_statement", "balance_sheet", "cash_flow"],
+  "report_types": ["annual", "semi_annual", "q1", "q3"],
+  "period_end_from": "2016-01-01",
+  "period_end_to": "2026-06-30",
+  "knowledge_mode": "current_snapshot",
+  "as_of_date": "2026-10-25",
+  "intent": "fetch_if_missing",
+  "acquisition_limits": {"max_bytes": 8000000, "timeout_seconds": 120, "max_cost_usd": "0.00"}
+}' | python scripts/fetch_statements.py --config <company_wiki.json> --timeout-seconds 300
+```
+
+- `--request-file <path>` reads the request from a file instead of stdin;
+  `--pretty` indents the response.
+- `intent` is `reuse_only` (zero network, no `acquisition_limits` needed),
+  `fetch_if_missing` (default; bounded by the three limits) or `refresh`
+  (explicit refresh of provider data, same limits).
+- `all_history: true` (instead of `period_end_from`) pages back to the
+  provider's earliest period, still inside the same limits.
+
+The response is one `financial-statements-response/1` JSON on stdout: a
+`request` echo, one `company_identity`, an overall `status` and per-statement
+`statements[]` entries. Each statement carries `status`, `provider`,
+`knowledge_mode`, `point_in_time_quality`, `coverage` (advertised/observed
+period counts, pages, first/last period, terminal reason), real `usage`
+(`http_requests` / `response_bytes` / `cost_usd`) and `reports[]`. Each report
+row has `provider_field`, `label`, exact decimal `value_decimal` (string),
+`value_kind` (`numeric|null|empty|non_numeric|group` — null, empty and zero
+are distinct), `unit`/`scale` (only where proven; otherwise `null`), and a
+`json_pointer` back into the committed original, e.g.
+`/result/data/report_list/20251231/data/7/item_value`. Each report's
+`source_ref` + `source_locator` let any consumer re-verify a value against the
+stored original bytes through company-wiki's public reader.
+
+Status semantics: `complete` when every requested statement covers its range;
+`partial` when any statement failed or a limit stopped pagination (one
+statement failing never rolls back the others); `not_found` for an unresolved
+company or a provider with no data (this endpoint currently returns **no data
+for BSE tickers** — that is a named capability gap, not an error);
+`unavailable` for provider/HTTP failures. Business statuses exit `0`;
+`request_error`/`config_error` exit `2`.
+
+`knowledge_mode` honesty: `current_snapshot` returns today's values for
+historical period ends — the provider's `publish_date` may post-date the
+period (e.g. a 2023-12-31 income statement published 2025-04-18), and that
+verbatim provenance is preserved. `point_in_time` only serves versions with
+capture evidence not later than `as_of_date`; anything else is reported as
+`point_in_time_quality: "historical_asof_unverifiable"` instead of pretending
+to be a past-as-of snapshot. Do not use freshly fetched history as
+point-in-time evidence for backtests.
 
 ## Hard failure gates
 
