@@ -7,12 +7,48 @@ import os
 from pathlib import Path, PureWindowsPath
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "tools"))
 import sync_installs_b3 as installer  # noqa: E402
+
+
+def test_staging_permission_error_is_reported_once_without_collision_spin(canonical, tmp_path, monkeypatch):
+    attempts = []
+    original_open = os.open
+    def denied(path, flags, *args, **kwargs):
+        if Path(path).name.startswith(".ff-install-"):
+            attempts.append(path)
+            raise PermissionError(13, "controlled permission denial", str(path))
+        return original_open(path, flags, *args, **kwargs)
+    # Bound the old stdlib Windows loop so the RED itself cannot hang.
+    monkeypatch.setattr(tempfile, "TMP_MAX", 32)
+    monkeypatch.setattr(os, "open", denied)
+    result = installer.sync(tmp_path / "skills", files=["SKILL.md"])
+    assert result["status"] == "failed"
+    assert len(attempts) == 1
+    assert "permission denial" in result["targets"][0]["errors"][0]["reason"]
+    assert result["targets"][0]["written"] == []
+    assert not (tmp_path / "skills" / installer.SKILL / "SKILL.md").exists()
+
+
+def test_staging_collision_retry_is_finite(canonical, tmp_path, monkeypatch):
+    attempts = []
+    original_open = os.open
+    def collisions(path, flags, *args, **kwargs):
+        if Path(path).name.startswith(".ff-install-"):
+            attempts.append(path)
+            raise FileExistsError(17, "controlled collision", str(path))
+        return original_open(path, flags, *args, **kwargs)
+    monkeypatch.setattr(tempfile, "TMP_MAX", 32)
+    monkeypatch.setattr(os, "open", collisions)
+    result = installer.sync(tmp_path / "skills", files=["SKILL.md"])
+    assert result["status"] == "failed"
+    assert 1 < len(attempts) <= 8
+    assert not (tmp_path / "skills" / installer.SKILL / "SKILL.md").exists()
 
 SELECTED = ["SKILL.md", "scripts/fetch_filing.py", "scripts/filing_contracts.py"]
 
@@ -244,13 +280,13 @@ def test_concurrent_target_edit_survives_with_conflict_diagnostic(
     target = parent / installer.SKILL / SELECTED[1]
     target.parent.mkdir(parents=True)
     target.write_bytes(b"old bytes")
-    mkstemp = installer.tempfile.mkstemp
+    stage_file = installer._stage_file
 
     def target_edit(*args, **kwargs):
         target.write_bytes(b"concurrent owner edit")
-        return mkstemp(*args, **kwargs)
+        return stage_file(*args, **kwargs)
 
-    monkeypatch.setattr(installer.tempfile, "mkstemp", target_edit)
+    monkeypatch.setattr(installer, "_stage_file", target_edit)
     result = installer.sync(parent, files=[SELECTED[1]])
     assert result["status"] == "failed"
     assert result["targets"][0]["conflicts"] == [SELECTED[1]]
@@ -329,14 +365,14 @@ def test_physical_root_retargeted_during_staging_is_not_used_for_final_write(
     marker.parent.mkdir(parents=True)
     marker.write_bytes(b"old bytes")  # Equal bytes alone must not prove path ownership.
     moved = tmp_path / "original-root"
-    mkstemp = installer.tempfile.mkstemp
+    stage_file = installer._stage_file
 
     def retarget(*args, **kwargs):
         root.rename(moved)
         _directory_link(root, outside)
-        return mkstemp(*args, **kwargs)
+        return stage_file(*args, **kwargs)
 
-    monkeypatch.setattr(installer.tempfile, "mkstemp", retarget)
+    monkeypatch.setattr(installer, "_stage_file", retarget)
     try:
         result = installer.sync(parent, files=[SELECTED[1]])
         assert result["status"] == "failed"
