@@ -34,3 +34,29 @@ ROOT准备事实（2026-10-28）：新独立工区`C:\Users\郑曾波\Projects\f
 | 错误身份/期间/材料hash | 单元最全+矩阵original_wrong_sha等 | verified-open回执身份键被换的矩阵case可补 |
 | 旧/部分回执 | 回执身份绑定代码完备；DU67回放.partial治理 | 回执文件篡改后重读的直接case缺 |
 | 再次请求/并发同公司期次 | transcript_lookup_changed单元级 | 矩阵级并发同请求case缺 |
+
+## A阶段冻结（作者，2026-10-28）——设计决定
+
+### 代码视图（R7）
+- 已按DU10配方在FF工区`.w20-deps/{cwp,et}`重建：CWP `618df929`(src+pyproject,403文件) + ET `2584b7ee`(8文件最小闭包:transcript_tool/transcript_api/retrieval_runtime/transcript_extraction/retrieval_budget+tests seam)。cat-file全量字节核验0不匹配；manifest=receipts/dependency-record.json。拒绝复用.du10-deps（绑旧900dbf64）。ET最小闭包依据：模块仅env驱动配置、无仓内文件读取；ET全树17MB含transcripts/130文件(疑真实资料)故不取全树。测试后删除视图。
+
+### 关键机制事实（B/C依据）
+- ET假会话`get`记录先于stall落盘(tests/test_retrieval_runtime.py:169-180)→kill-before-durable判据=calls_file出现get记录。
+- CWP导入时序：transcript_import.py先验证material.text_sha256==声明sha(:131)→staged→canonical→DB；source_query走SQLite。ET谎报sha会在CWP导入处被拒(transcript_import_rejected)，FF侧:1030 hash对比是第二道。→hash_lie场景两个结局都诚实，断言析取+记录分支。
+- canonical文件+sidecar出现在import CLI内；FF其后还有verified-open子进程(≥1.5s)→"文件出现即杀"确定性落在FF退出前；是否已DB注册由恢复运行事后判定(reused=已持久/downloaded=未持久)。
+- FF子进程树回收复用scripts/ff_process_tree.py(WindowsJob/KILL_ON_JOB_CLOSE,POSIX killpg)。
+- 适配器fetch完成日志(adapter_invocations.log action=fetch)即"provider已返回、CWP导入窗口"判据→财报kill case无需改adapter。
+
+### 实施设计（B/C）
+新增（均在allowlist内）：
+1. tools/offline_contract_matrix/w20_fault_cases.py——补充注册表(schema w20-supplemental/1)+9个case handler：w20_call_kill_before_durable(stall杀)/w20_call_kill_after_import(文件出现杀,分支记录)/w20_call_et_truncated/w20_call_et_exit_nonzero/w20_call_hash_lie/w20_call_stale_receipt(旧/截断回执不误读)/w20_call_concurrent_same(并发同请求)/w20_filing_kill_recovery(CN prospectus)/w20_filing_concurrent_cross_company(CN+HK同年并发)。复用CaseSpec/RunSpec数据类；ctx.active_case_spec机制可绑定补充spec。
+2. et_transcript_proxy.py新增场景truncated_json/crash_after_result/hash_lie/stale_usage——全部在test-proxy边界对真实ET输出做后处理，不动产品。
+3. cli_main.py加通用`--cases id[,id...]`显式过滤（注册表=41+补充并集）；selection进report.scope.selection{mode:selected,selected,completed,skipped}；未选=NOT_RUN具名reason；required_cases恒为41权威；选择运行exit 0仅当所选全PASS且selection一致；无--cases路径字节级不变。oracle.audit按selection分支（选择运行跳过全量coverage_gap、校验选择一致性；全量运行不变）。
+4. seed_plan_for解析spec改为并集注册表（补充case多为全新FY无需warm seed）。
+5. tests/test_w20_replay_selection.py（选择/标注/exit语义/RED：缩required_cases冒full、未选非NOT_RUN等）+test_w20_replay_faults.py（代理后处理纯函数+FF侧坏ET stdout/旧回执单元反证，复用DU11 FakeCWP seam）。
+6. README补W20节。产品FF零改动预期（行为已正确则交付回归+no-code结论）。
+
+### 明确不做
+- 不改case_specs.py的41权威与_METADATA；不跑/不破坏41全量既有通过状态（DU10 41/41@97.68s为保留证据）；C阶段只跑补充选择+代表性base子集，全量41按卡R6/R8不重跑（如时间/负载允许可选一次，失败如实记录负载原因不追绿）。
+- 结构化三表（W19 fetch_statements薄客户端）：独立CWP数据服务，无FF侧下载/导入状态，与中断恢复机制无关→不强加case，交接说明。
+- 并发case不承诺exactly-once下载：并发窗口双GET是诚实可能；断言=最终恰一持久版本、无跨公司混用、无假成功、后续复用0下载（R3措辞）。
