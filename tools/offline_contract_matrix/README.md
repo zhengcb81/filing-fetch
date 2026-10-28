@@ -164,3 +164,43 @@ python -B tools/offline_contract_matrix/run.py replay \
 - 不覆写原 report、原 artifacts 或已有重放输出；新输出必须是明确独立路径。
 - 重放只证明“保留字节 + 当前 oracle”的结果；**不等于**重新读取生产原文、重新下载、重跑 41 链、
   或认证真实供应商/公司数字（与 fresh 真实 41 链 scope 分列声明）。
+
+## 中断恢复反证与显式 case 选择（W20-FF-REPLAY）
+
+**通用显式 case 选择**（不改变无参数完整命令的语义）：
+
+```
+python -B tools/offline_contract_matrix/run.py \
+  --cwp-project <cwp-code-root> --et-project <et-code-root> \
+  --owned-root <new-owned-root> --out-root <new-attempt-root> \
+  --cases id1,id2
+```
+
+`--cases` 从"41 个必需 case + 注册的补充套件"的并集中显式选择子集运行。
+选择运行是 **supplemental/partial**：报告带 `scope.selection`
+（selected/completed/skipped 集合与"仅证明所选 case"的声明），未选 case 全部
+如实 `NOT_RUN`（具名 "not selected" reason），`required_cases` 恒为完整 41 例
+权威（缩小即被 oracle 以 `required_cases_shrunk` 拒绝）。退出码 0 只代表所选
+case 全 PASS，永远不是 41 例完整通过；DU6 replay 对含 NOT_RUN 的报告维持不可
+认证。oracle 在选择模式下检查选择一致性（行缺失/重复/标签错置）而非全量覆盖，
+并对 harness 真正杀掉的 run 豁免"当时不存在的 ET 回执"（GET 计数与请求/响应
+字节绑定仍照常审计）。
+
+**W20 补充故障套件**（`w20_case_specs.py`，9 例，schema `w20-supplemental/1`）
+覆盖六类中断反证，全部只在测试边界注入（ET test-proxy 结果/回执流后处理、
+FF 真子进程树 kill），产品无 failpoint：
+
+| case | 故障点 | 反证 |
+|---|---|---|
+| w20_call_kill_before_durable | provider GET 在途时杀 FF 树 | 无假成功、无持久残留；恢复恰好 1 次下载→复用 0 请求 |
+| w20_call_kill_after_import | 规范原件落盘瞬间杀 FF 树 | durable-at-kill 分支由恢复运行事后判定（reused=已持久/downloaded=未持久），最终复用 0 请求 |
+| w20_call_et_truncated | ET 结果流截断 JSON | `provider_result_invalid`，无持久，恢复 1 次下载→复用 |
+| w20_call_et_exit_nonzero | ET 完整结果后非零退出 | `provider_tool_failed`，同上 |
+| w20_call_hash_lie | ET 谎报 payload sha | 具名拒绝（导入校验或 FF 对比），无假成功；恢复分支如实记录 |
+| w20_call_receipt_binding | 旧回执（他人 request_id）/截断回执 | 用量保持 unknown（null 非 0），调用不吞；回放复用 0 请求 |
+| w20_call_concurrent_same | 并发同公司期次两 FF 进程 | 无假成功、单一持久版本（并发窗口不承诺 exactly-once 下载）、回放 0 请求 |
+| w20_filing_kill_recovery | 财报供应商已返回、CWP 导入窗口杀 FF | 无持久残留；恢复恰好 1 次 fetch→复用 0 fetch |
+| w20_filing_concurrent_cross_company | CN/HK 同年并发年报 | 各自公司身份/期间绑定，互不复用；回放各 0 fetch |
+
+CWP 原件/SHA/事务锁仍归 CWP（本套件只核其效果）；FF 不新建第二状态库。
+结构化三表走 W19 专用数据服务（无 FF 侧下载/导入状态），与该机制无关，不设 case。

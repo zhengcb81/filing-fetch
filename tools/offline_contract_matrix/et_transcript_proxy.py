@@ -34,6 +34,57 @@ def _load_state() -> dict:
     return json.loads(Path(state_path).read_text(encoding="utf-8"))
 
 
+def _apply_result_fault(out_text: str, scenario: str) -> tuple[str, int | None]:
+    """Post-process the REAL ET result stream at this test boundary (W20).
+
+    The worker HTTP still ran the real supervisor/worker/``transcript_api``
+    chain; these scenarios corrupt only what the consumer sees, exactly at the
+    producer boundary the harness owns. Returns ``(text, forced_exit_code)``.
+    """
+    if scenario == "truncated_json" and out_text:
+        cut = max(1, len(out_text) // 2)
+        return out_text[:cut], None
+    if scenario == "hash_lie" and out_text:
+        try:
+            payload = json.loads(out_text)
+        except ValueError:
+            return out_text, None
+        if isinstance(payload, dict) and payload.get("status") == "fetched":
+            # Lie about the payload digests while the base64 bytes stay real:
+            # every honest validator (FF contract, CWP import) must reject it.
+            for field in ("provider_payload_sha256", "canonical_content_sha256"):
+                if isinstance(payload.get(field), str):
+                    payload[field] = "0" * 64
+            return json.dumps(payload, ensure_ascii=False), None
+        return out_text, None
+    if scenario == "crash_after_result":
+        # The full, valid result is emitted — then the tool dies (nonzero exit).
+        return out_text, 1
+    return out_text, None
+
+
+def _apply_usage_fault(err_text: str, scenario: str) -> str:
+    """Corrupt the usage receipt stream at this test boundary (W20).
+
+    ``stale_usage`` rewrites the receipt into a well-formed receipt that binds
+    a DIFFERENT request id (an old/foreign receipt); ``truncated_usage`` cuts
+    the receipt bytes in half. Both must leave the consumer's usage unknown,
+    never a fabricated zero, and must not swallow the provider call.
+    """
+    if scenario == "stale_usage" and err_text:
+        try:
+            receipt = json.loads(err_text)
+        except ValueError:
+            return err_text
+        if isinstance(receipt, dict) and receipt.get("schema_version") == "earnings-retrieval-usage/1":
+            receipt["request_id"] = "urn:company-wiki:source-request:sha256:" + "0" * 64
+            return json.dumps(receipt, ensure_ascii=False)
+        return err_text
+    if scenario == "truncated_usage" and err_text:
+        return err_text[: max(1, len(err_text) // 2)]
+    return err_text
+
+
 def _build_fmp_payload(request: dict, state: dict) -> bytes:
     """Synthesise a provider response in the requested fiscal identity.
 
@@ -135,8 +186,15 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             sys.stdout, sys.stderr = real_out, real_err
         out_text, err_text = cap_out.getvalue(), cap_err.getvalue()
-        # Persist real ET receipts (result JSON on stdout, usage receipt on
-        # stderr) as test-proxy artifacts for the report's receipt refs.
+        # W20 boundary faults (only scenarios that name one): the worker HTTP
+        # above already ran the real chain; this reshapes only the emitted
+        # result/usage stream so the consumer's parsing/binding is exercised.
+        out_text, forced_rc = _apply_result_fault(out_text, scenario)
+        err_text = _apply_usage_fault(err_text, scenario)
+        if forced_rc is not None:
+            rc = forced_rc
+        # Persist the receipts exactly as the consumer saw them (test-proxy
+        # artifacts for the report's receipt refs).
         receipts = Path(state.get("receipts_dir") or (runtime.parent / "receipts"))
         receipts.mkdir(parents=True, exist_ok=True)
         tag = state.get("receipt_tag") or "et"

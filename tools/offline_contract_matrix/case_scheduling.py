@@ -81,7 +81,7 @@ def static_cost(entries: Sequence[tuple[int, tuple[str, Any]]],
     ``actual.elapsed_seconds`` from an earlier run). Return ``None`` from it for
     cases without a measurement and the frozen static estimate is used instead.
     """
-    from case_specs import get_spec
+    from case_registry import resolve_spec
 
     model: dict[str, float] = {}
     for _pos, (cid, _runner) in entries:
@@ -90,7 +90,7 @@ def static_cost(entries: Sequence[tuple[int, tuple[str, Any]]],
             if value is not None:
                 model[cid] = float(value)
                 continue
-        spec = get_spec(cid)
+        spec = resolve_spec(cid)
         runs = len(getattr(spec, "runs", ()) or ())
         model[cid] = DEFAULT_COST_SECONDS + RUN_WEIGHT_SECONDS * max(0, runs - 1)
     return model

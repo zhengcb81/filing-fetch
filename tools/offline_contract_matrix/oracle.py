@@ -32,6 +32,8 @@ import hashlib
 import json
 from matrix_outcome import count, source_ref
 from case_specs import audit_coverage, get_spec
+from case_specs import case_specs as _base_case_specs
+from w20_case_specs import w20_case_specs as _supplemental_case_specs
 
 
 @dataclass
@@ -53,6 +55,79 @@ def _real_layer_ok(case: dict[str, Any]) -> bool:
     )
 
 
+def _selection_mode(report: dict[str, Any]) -> dict[str, Any] | None:
+    selection = (report.get("scope") or {}).get("selection") or {}
+    return selection if isinstance(selection, dict) and selection.get("mode") == "selected" else None
+
+
+def _is_not_selected_row(case: dict[str, Any]) -> bool:
+    """A row that claims nothing: NOT_RUN with the named not-selected reason."""
+    return case.get("result") == "NOT_RUN" and any(
+        isinstance(item, str) and item.startswith("not selected")
+        for item in (case.get("diagnostics") or [])
+    )
+
+
+def _known_case_ids() -> set[str]:
+    return {spec.id for spec in _base_case_specs()} | {spec.id for spec in _supplemental_case_specs()}
+
+
+def _selection_findings(report: dict[str, Any]) -> list[Finding]:
+    """Consistency of a supplemental selection report (never a certification).
+
+    The fixed required-case authority may not shrink, every known case must
+    appear exactly once, unselected rows must be honest NOT_RUN rows carrying
+    the named reason, and selected rows must never wear the not-selected label.
+    A selection report can still never certify the full matrix: that is a
+    property of the runner's exit semantics and the DU6 replay path, not a
+    finding to be re-derived here.
+    """
+    findings: list[Finding] = []
+    selection = _selection_mode(report) or {}
+    selected = [cid for cid in (selection.get("selected") or []) if isinstance(cid, str)]
+    selected_set = set(selected)
+    required = report.get("required_cases")
+    if required is not None and sorted(required) != sorted(s.id for s in _base_case_specs()):
+        findings.append(Finding(
+            "required_cases_shrunk", None,
+            "required_cases differs from the fixed authority; a selection may "
+            "never shrink the required set to look complete",
+        ))
+    known = _known_case_ids()
+    unknown = [cid for cid in selected if cid not in known]
+    if unknown:
+        findings.append(Finding(
+            "selection_unknown_case", None,
+            f"selection names unknown case ids: {sorted(unknown)}",
+        ))
+    observed = [case.get("id") for case in report.get("cases") or []]
+    duplicate = sorted({cid for cid in observed if observed.count(cid) > 1})
+    if duplicate:
+        findings.append(Finding("selection_duplicate_row", None, f"duplicate rows: {duplicate}"))
+    missing = sorted(known - set(observed))
+    if missing:
+        findings.append(Finding(
+            "selection_row_missing", None,
+            f"every known case needs a row (executed or honest NOT_RUN); missing: {missing}",
+        ))
+    extra = sorted(set(observed) - known)
+    if extra:
+        findings.append(Finding("unknown_case", None, f"unknown case rows: {extra}"))
+    for case in report.get("cases") or []:
+        cid = case.get("id")
+        if cid in selected_set and _is_not_selected_row(case):
+            findings.append(Finding(
+                "selection_row_mislabelled", cid,
+                "a selected case carries the not-selected NOT_RUN label",
+            ))
+        elif cid not in selected_set and not _is_not_selected_row(case):
+            findings.append(Finding(
+                "selection_row_mislabelled", cid,
+                "an unselected case must stay NOT_RUN with the named not-selected reason",
+            ))
+    return findings
+
+
 def audit(report: dict[str, Any], *, evidence_root: str | Path | None = None) -> list[Finding]:
     """Audit one matrix report.
 
@@ -70,9 +145,16 @@ def audit(report: dict[str, Any], *, evidence_root: str | Path | None = None) ->
         findings.append(
             Finding("unbound_code", None, "supplied producer code binding is unverified")
         )
-    # Fixed code registry is authoritative even if runner/required_cases is erased.
-    for detail in audit_coverage(cases):
-        findings.append(Finding("coverage_gap", None, detail))
+    selection = _selection_mode(report)
+    if selection is not None:
+        # Supplemental selection run: the base full-coverage predicate does not
+        # apply (cases are deliberately incomplete); selection consistency is
+        # the coverage authority instead.
+        findings.extend(_selection_findings(report))
+    else:
+        # Fixed code registry is authoritative even if runner/required_cases is erased.
+        for detail in audit_coverage(cases):
+            findings.append(Finding("coverage_gap", None, detail))
     if report.get("runner"):
         if (report.get("code_binding") or {}).get("verified") is not True:
             findings.append(Finding("unbound_code", None, "matrix lacks verified import binding"))
@@ -83,9 +165,16 @@ def audit(report: dict[str, Any], *, evidence_root: str | Path | None = None) ->
         case_id = case.get("id")
         spec = get_spec(case_id)
         if spec is None:
+            from w20_case_specs import get_w20_spec
+            spec = get_w20_spec(case_id)
+        if spec is None:
             findings.append(
                 Finding("unknown_case", case_id, "case has no fixed executable definition")
             )
+            continue
+        if selection is not None and _is_not_selected_row(case):
+            # An explicitly unselected row claims nothing; auditing it as a
+            # failure would demand evidence the selection never claimed.
             continue
         findings.extend(audit_case(spec, case))
 
@@ -224,12 +313,18 @@ def _bound_evidence(report: dict, evidence_root: str | Path | None = None) -> li
     proofs = (report.get("source_proofs") or {}).get("proofs") or {}
     for case in report.get("cases", []):
         cid = case.get("id")
+        if _is_not_selected_row(case):
+            # An explicitly unselected row claims no evidence and no result.
+            continue
         if (case.get("actual") or {}).get("elapsed_seconds", float("inf")) > 30 and case.get(
             "result"
         ) == "PASS":
             findings.append(Finding("case_deadline_exceeded", cid, "late case cannot PASS"))
         runs = (case.get("actual") or {}).get("runs") or []
         spec = get_spec(cid)
+        if spec is None:
+            from w20_case_specs import get_w20_spec
+            spec = get_w20_spec(cid)
         if spec and case.get("result") == "PASS" and len(runs) != len(spec.runs):
             findings.append(
                 Finding("case_run_count_mismatch", cid, "required number of attempts not observed")
@@ -303,8 +398,16 @@ def _bound_evidence(report: dict, evidence_root: str | Path | None = None) -> li
                         findings.append(Finding("invalid_bound_evidence", cid, f"fixture: {exc}"))
             if run.get("et_fixture_requests", 0) > 0:
                 for receipt_kind in ("result", "usage"):
+                    key = f"et_{receipt_kind}_receipt"
+                    if key not in run and run.get("killed") is True:
+                        # The harness interrupted the FF tree while the ET call
+                        # was still in flight: the proxy was killed before it
+                        # could persist this receipt, so no receipt bytes ever
+                        # existed to bind. The in-flight GET itself is still
+                        # counted and audited above; nothing is excused.
+                        continue
                     try:
-                        record = run[f"et_{receipt_kind}_receipt"]
+                        record = run[key]
                         receipt_path = (root / record["file"]).resolve()
                         if not receipt_path.is_relative_to(root):
                             raise ValueError("ET receipt escapes attempt")

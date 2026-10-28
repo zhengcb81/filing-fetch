@@ -106,11 +106,11 @@ def seed_plan_for(case_ids) -> dict:
     union of all groups' plans equals the full fixed warm list, so coverage
     never shrinks — only the per-group duplication is removed.
     """
-    from case_specs import get_spec
+    from case_registry import resolve_spec
 
     wanted: set = set()
     for cid in case_ids:
-        spec = get_spec(cid)
+        spec = resolve_spec(cid)
         if spec is None:
             raise ValueError(f"seed plan for unknown case id: {cid}")
         wanted |= warm_consumption(spec)

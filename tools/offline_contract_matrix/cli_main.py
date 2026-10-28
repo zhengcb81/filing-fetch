@@ -18,6 +18,8 @@ from run import (  # noqa: E402
 )
 from runtime import Deadline, DeadlineExceeded, OwnedAttempt, run_process, guard_events  # noqa: E402
 from matrix_cases import seed_all  # noqa: E402
+import case_registry  # noqa: E402
+import case_selection  # noqa: E402
 import case_scheduling  # noqa: E402
 from measurement import (  # noqa: E402
     PhaseTimer, merge_launch_reports, launch_report, cache_stats,
@@ -126,6 +128,11 @@ def _case_registry() -> list[tuple[str, Callable[[Context], CaseResult]]]:
     return [(spec.id, spec.execute) for spec in case_specs()]
 
 
+def _resolve_case_spec(cid: str):
+    """Spec lookup across the base authority and supplemental suites."""
+    return case_registry.resolve_spec(cid)
+
+
 def _case_cost_estimates(registry: list[tuple[str, Callable[[Context], CaseResult]]] | None = None) -> dict[str, float]:
     """Per-case cost estimate consumed by the scheduling owner.
 
@@ -203,8 +210,6 @@ def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]]
     reuse case chain stays whole inside one group; the final fresh source proof
     runs only after all groups joined (by the caller).
     """
-    from case_specs import get_spec
-
     done: list[tuple[int, CaseResult]] = []
     stop_reason = None
     phases = getattr(ctx, "phases", None)
@@ -231,7 +236,7 @@ def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]]
         case_start = time.monotonic()
         try:
             ctx.begin_case()
-            ctx.active_case_spec = get_spec(cid)
+            ctx.active_case_spec = _resolve_case_spec(cid)
             result = runner(ctx)
             errors = ctx.active_case_spec.metadata_errors(result.to_dict())
             if errors:
@@ -240,7 +245,7 @@ def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]]
             result = CaseResult(id=cid, title=cid, declared_layer="unknown", result="PARTIAL", actual={"error":str(exc)})
         except Exception as exc:
             result = CaseResult(id=cid, title=cid, declared_layer="unknown", result="FAIL", actual={"error":f"{type(exc).__name__}: {exc}"})
-        spec = get_spec(cid)
+        spec = _resolve_case_spec(cid)
         result.declared_layer, result.scope, result.expected = spec.declared_layer, spec.scope, spec.expected()
         elapsed = time.monotonic() - case_start
         result.actual["elapsed_seconds"] = round(elapsed, 4)
@@ -414,6 +419,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--workers", type=int, choices=range(1, WORKERS + 1), default=WORKERS,
                         help="concurrent worker groups (each owns an independent wiki/proxy)")
+    parser.add_argument("--cases", action="append", default=None,
+                        help="explicit supplemental case selection: comma-separated ids, "
+                             "repeatable. Runs only the named subset; the report labels "
+                             "itself supplemental, unselected known cases stay NOT_RUN and "
+                             "the required-case authority never shrinks. Exit 0 speaks only "
+                             "for the selected cases and is never a full-matrix pass.")
     args = parser.parse_args(raw)
     workers = args.workers
     start = time.monotonic()
@@ -424,6 +435,7 @@ def main(argv: list[str] | None = None) -> int:
     attempt = OwnedAttempt.create(args.owned_root, args.out_root, protected)
     results, binding, proofs, deps, events = [], {"verified":False}, {"proofs": {}, "catalog_snapshot": []}, [], []
     registry = []
+    base_registry, union, selection = [], [], None
     ctxs = []
     error = None
     stop_reason = None
@@ -434,7 +446,15 @@ def main(argv: list[str] | None = None) -> int:
                                "parent_calls": {}, "parent_launch_total": 0},
                   "child_spans": {}}
     try:
-        registry = _case_registry()
+        base_registry = _case_registry()
+        union = case_registry.union_entries()
+        if args.cases:
+            ids = case_selection.parse_case_ids(args.cases)
+            selection = case_selection.validate_selection(ids, [cid for cid, _ in union])
+            registry = case_selection.select_entries(union, selection)
+        else:
+            selection = None
+            registry = base_registry
         env = None
         for index in range(workers):
             ctxs.append(Context(ff_root=ff_root, cwp_root=cwp_root, et_root=et_root,
@@ -517,11 +537,17 @@ def main(argv: list[str] | None = None) -> int:
                 restore["production_metadata_unchanged"] = guard.unchanged(after)
                 restore["restored"] &= restore["production_metadata_unchanged"]
     observed = {r.id for r in results}
-    for cid, _ in registry:
+    # Full runs report exactly the required base registry, exactly as before
+    # this suite existed. Selection runs additionally carry honest NOT_RUN rows
+    # for the supplemental ids so the selected/completed/skipped sets close.
+    not_run_source = union if selection is not None else base_registry
+    for cid, _ in not_run_source:
         if cid not in observed:
-            from case_specs import get_spec
-            spec = get_spec(cid)
-            results.append(CaseResult(id=cid, title=cid, declared_layer=spec.declared_layer, scope=spec.scope, expected=spec.expected(), result="NOT_RUN", diagnostics=[error or stop_reason or "batch deadline exhausted"]))
+            spec = case_registry.resolve_spec(cid)
+            reason = (case_selection.NOT_SELECTED_REASON
+                      if selection is not None and cid not in set(selection["selected"])
+                      else error or stop_reason or "batch deadline exhausted")
+            results.append(CaseResult(id=cid, title=cid, declared_layer=spec.declared_layer, scope=spec.scope, expected=spec.expected(), result="NOT_RUN", diagnostics=[reason]))
     elapsed = time.monotonic() - start
     timer.record("total", elapsed)
     cost = {"real_provider_calls":0 if events and not any(e["op"] == "network_denied" for e in events) else None,
@@ -540,8 +566,15 @@ def main(argv: list[str] | None = None) -> int:
              "case_scheduling":scheduling,
              "stop_reason":stop_reason,
              "error":error, "production_baseline_scope":"stat only; no real key/config bytes read or hashed"}
+    if selection is not None:
+        # Supplemental selection labelling: honest selected/completed/skipped
+        # sets. This run can never be presented as the full required matrix.
+        scope["selection"] = case_selection.summarize(
+            selection, results=[r.to_dict() for r in results],
+            known_ids=[cid for cid, _ in union])
     report = build_report(dependencies=deps, cases=results, cost=cost, scope=scope, restore=restore)
-    report.update({"code_binding":binding, "required_cases":[c for c, _ in registry],
+    report.update({"code_binding":binding, "required_cases":[c for c, _ in base_registry],
+                   "supplemental_cases":[cid for cid, _ in union if case_registry.is_supplemental(cid)],
                    "evidence_root":str(attempt.output / "artifacts"), "source_proofs":proofs})
     findings = oracle_mod.audit(report)
     # Unmeasured downstream evidence cannot leave a base predicate labelled PASS.
@@ -557,6 +590,17 @@ def main(argv: list[str] | None = None) -> int:
     emit(report, attempt.output / "report.json")
     (attempt.output / "restore.json").write_text(json.dumps(restore, indent=2), encoding="utf-8")
     counts = {kind:sum(r.result == kind for r in results) for kind in ("PASS", "FAIL", "PARTIAL", "NOT_RUN")}
+    if selection is not None:
+        selected_set = set(selection["selected"])
+        selected_rows = [r for r in results if r.id in selected_set]
+        selected_ok = (bool(selected_rows) and all(r.result == "PASS" for r in selected_rows)
+                       and not findings and not error)
+        print(f"cases: {counts}; seconds={elapsed:.2f}; oracle findings={len(findings)}; "
+              f"SUPPLEMENTAL selection={len(selection['selected'])} selected")
+        print(f"report: {attempt.output / 'report.json'}")
+        # Exit 0 certifies the selected cases only; the full required matrix
+        # remains NOT_RUN in this report and needs its own complete run.
+        return 0 if selected_ok else 1
     print(f"cases: {counts}; seconds={elapsed:.2f}; oracle findings={len(findings)}")
     print(f"report: {attempt.output / 'report.json'}")
     return 0 if results and all(r.result == "PASS" for r in results) and not findings and not error else 1
