@@ -255,6 +255,7 @@ def _execute(ctx: Context, prepared: dict[str, Any], *,
 
 def _result(ctx: Context, cid: str, title: str, actual: dict[str, Any]) -> CaseResult:
     spec = _active_spec(ctx, cid)
+    actual["runs"] = ctx.traces.get(cid, [])
     result = CaseResult(id=cid, title=title, declared_layer=spec.declared_layer,
                         observed_layer="w20 fault/recovery chain (real FF CLI + "
                                        "test-proxy boundary + real CWP import)",
@@ -326,10 +327,9 @@ def _et_fault_case(ctx: Context, cid: str, scenario: str, content: str) -> CaseR
     durable_after_fault = bool(_transcript_sidecars(ctx))
     p2 = _prepare_run(ctx, cid, "run2", "success", content, 1)
     _execute(ctx, p2)
-    p3 = _prepare_run(ctx, cid, "run3", "success", content, 2)
-    _execute(ctx, p3)
     return _result(ctx, cid, f"ET {scenario} at the test-proxy boundary; named failure, "
-                             "one recovery download, then pure reuse", {
+                             "one recovery download (nothing durable survived the fault, "
+                             "so there is nothing to reuse)", {
         "durable_after_fault": durable_after_fault,
     })
 
