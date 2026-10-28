@@ -342,8 +342,9 @@ def case_hash_lie(ctx: Context) -> CaseResult:
     cid = "w20_call_hash_lie"
     content = "Synthetic W20 hash-lie transcript FY2035 Q1."
     p1 = _prepare_run(ctx, cid, "run1", "hash_lie", content, 0)
+    before = {q.name for q in _transcript_sidecars(ctx)}
     _execute(ctx, p1)
-    durable_after_fault = bool(_transcript_sidecars(ctx))
+    durable_after_fault = any(q.name not in before for q in _transcript_sidecars(ctx))
     p2 = _prepare_run(ctx, cid, "run2", "success", content, 1)
     run2 = _execute(ctx, p2)
     t2 = (run2.get("response") or {}).get("transcript") or {}
