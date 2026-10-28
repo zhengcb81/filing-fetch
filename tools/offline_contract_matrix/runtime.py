@@ -68,8 +68,8 @@ def _children_metadata(path: Path) -> dict:
 # file for a moment after the batch's children exit. Deletion is retried a
 # bounded number of times; exhaustion keeps the honest failure instead of
 # pretending the scratch was restored.
-RMTREE_ATTEMPTS = 5
-RMTREE_BACKOFF_SECONDS = 0.5
+RMTREE_ATTEMPTS = 20
+RMTREE_BACKOFF_SECONDS = 1.0
 
 
 def _rmtree_bounded(path: Path) -> bool:
