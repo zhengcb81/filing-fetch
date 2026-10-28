@@ -1,0 +1,216 @@
+{
+  "card_id": "w20-ff-replay-2026-10-28",
+  "status": "READY_FOR_ROOT_REVIEW",
+  "workdir": "C:\\Users\\郑曾波\\Projects\\filing-fetch-w20-replay",
+  "branch": "codex/w20-ff-replay-20261028",
+  "base_commit": "5396bd688e5b775e746fe3290852f0532d4548f8",
+  "implementation_commits": [
+    "f255321",
+    "38e59ff",
+    "3dd6eb1",
+    "bebd009",
+    "4f016cf",
+    "2ad2677",
+    "c6a10d2",
+    "3e8d1be",
+    "e15640c",
+    "eadb10c",
+    "e07b424"
+  ],
+  "tested_code_commit": "e07b424",
+  "reviewed_code_commit": "e07b424",
+  "commit_note": "tested==reviewed==final tree (e07b424). e15640c was the last Python-source commit; e15640c..e07b424 touches only README one-line precision fix (initial-review F5) plus docs/receipts — no Python source change between them.",
+  "files": [
+    {
+      "path": "tools/offline_contract_matrix/case_selection.py",
+      "sha256": "9b12cc21ec6e94630cd3ffa7737f9b0b7d36291fe15c8527206f64be37cb237e"
+    },
+    {
+      "path": "tools/offline_contract_matrix/case_registry.py",
+      "sha256": "d80c706cf4f070314650e9e360ec0b15864b5abbb1379e0fcf2d208d017043f7"
+    },
+    {
+      "path": "tools/offline_contract_matrix/w20_case_specs.py",
+      "sha256": "776f0cbaf865d8139900dee49ba65b5330b438ab5993a8cd2fce11f34731a0fe"
+    },
+    {
+      "path": "tools/offline_contract_matrix/w20_fault_cases.py",
+      "sha256": "add5c17681523b166a1157aac1f862540ff4290c0729537a040d421db400c8dc"
+    },
+    {
+      "path": "tools/offline_contract_matrix/cli_main.py",
+      "sha256": "12c6be7446f3ad967731d4f9a7dffdf2f5d18b8903bcbc15ce8dc9e90330a9f7"
+    },
+    {
+      "path": "tools/offline_contract_matrix/oracle.py",
+      "sha256": "2795167935295adf3982bc4ae7f65559a71860d1427384a442c42aa0308b661b"
+    },
+    {
+      "path": "tools/offline_contract_matrix/et_transcript_proxy.py",
+      "sha256": "3f0d63b0a15b8125e48e37408cc85c11965a367a2c98d8cde0b1b8d048a18d19"
+    },
+    {
+      "path": "tools/offline_contract_matrix/runtime.py",
+      "sha256": "a419ccedfb3435a553f49f1175abe3211754aa15c24787220e3dff271e8d538b"
+    },
+    {
+      "path": "tools/offline_contract_matrix/matrix_cases.py",
+      "sha256": "083cfb46394e62715227f2e8b0b977f770d3f67b25ca7dd550e47fc1e8c42bd0"
+    },
+    {
+      "path": "tools/offline_contract_matrix/case_scheduling.py",
+      "sha256": "2dc91ac6318ecaa064fb1df89a5fa7eaa157f9b1ed0e2d886030e4e6855cee39"
+    },
+    {
+      "path": "tools/offline_contract_matrix/README.md",
+      "sha256": "59ef20388656b7622e1c79454b7805b68368241444e99b4d7798e3907808f957"
+    },
+    {
+      "path": "tests/test_w20_replay_selection.py",
+      "sha256": "4769479b277d54b7086dc0a501b2fcf1dffa73639e64e240f44c751ee42bb88f"
+    },
+    {
+      "path": "tests/test_w20_replay_faults.py",
+      "sha256": "cf81441e0b795b6fbebbc18a3bcd8446742a4b81d9693c9e4deea18244149dfc"
+    },
+    {
+      "path": "delivery/w20-ff-replay/handoff.md",
+      "sha256": "4241c3442545bb88347b128dea64162eee7d84033441a5b3f2f7c93382b127db"
+    },
+    {
+      "path": "delivery/w20-ff-replay/review/initial.md",
+      "sha256": "f00c7c8bfe218a9be51c108c5286355713dd106b04cc9f3e29b19bb6123b1808"
+    },
+    {
+      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/dependency-record.json",
+      "sha256": "21c96f1856df1f2a4c71362d63268de134b765743123e1ed05e0749ddc048146"
+    },
+    {
+      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/run-receipts.json",
+      "sha256": "a863cc936fd9c632ded2baaf30612a08a930665ef90cab1a709f2ba40367bb2d"
+    },
+    {
+      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/cleanup-receipt.json",
+      "sha256": "c782cfa2465fdc1c81cdee8828172972c5e49a511d05496ab24749828e50e975"
+    },
+    {
+      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/baseline-preexisting-failures.txt",
+      "sha256": "b57fb7a2ba91bac9cefdb940a96e6991f7d9c289ca2045278b454b9e47ac3cd9"
+    },
+    {
+      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/branch-failures.txt",
+      "sha256": "9e9dea37ce280cd3e324004ac0b32a18e4a103969889b50151db38c98763744b"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "R1 调查/冻结/测试边界注入",
+      "evidence": "findings.md A阶段冻结; 无产品failpoint(独审核实); launch_ff_run杀真实FF树; traces含killed/kill_reason/gets/refs",
+      "status": "PASS"
+    },
+    {
+      "id": "R2 六类故障覆盖",
+      "evidence": "w20_case_specs.py 9 case ↔ 卡六向量映射(README W20表); 真实链PASS证据 run-receipts.json single_case_green_map",
+      "status": "PASS"
+    },
+    {
+      "id": "R3 durable复用/未durable不混成功/不假exactly-once",
+      "evidence": "kill_after_import分支判定; concurrent_same无exactly-once承诺且回放0请求; 复用经CWP公开query(verified open)",
+      "status": "PASS"
+    },
+    {
+      "id": "R4 非年报/电话会/三表",
+      "evidence": "CN/HK/US并发年报case+filing kill case; 电话会走现有ET adapter不翻译; 三表=W19独立数据服务无FF下载状态→说明而不强加case(handoff limitations)",
+      "status": "PASS"
+    },
+    {
+      "id": "R5 显式源码根/合成环境/真实链",
+      "evidence": "dependency-record.json(cat-file全量字节核验); synthetic_env; FF公开CLI→真实ET supervisor/worker(HTTP边界fixture)→真实CWP import→SourceVersionReader实读; FMP密钥未读取",
+      "status": "PASS"
+    },
+    {
+      "id": "R6 限额不变/小范围补跑/partial保留",
+      "evidence": "30s/180s/workers≤2/proof reserve常量零改动(独审核实); 批间小范围--cases补跑; PARTIAL具名保留(3bb0a6bc等)",
+      "status": "PASS"
+    },
+    {
+      "id": "R7 冻结commit视图/不用DU10旧视图/测试后删除",
+      "evidence": "CWP 618df929+ET 2584b7ee视图, manifest=dependency-record.json; .du10-deps(900dbf64)拒绝复用(记录在manifest); cleanup-receipt.json deleted=true",
+      "status": "PASS"
+    },
+    {
+      "id": "R8 部分运行不冒充41例",
+      "evidence": "required_cases恒41(oracle required_cases_shrunk RED测试); 未选=NOT_RUN具名; 选择exit只对所选负责; scope.selection含certifies声明; DU6 replay对NOT_RUN报告仍不可认证",
+      "status": "PASS"
+    },
+    {
+      "id": "节点B TDD/no-code结论",
+      "evidence": "22项新单元测试+232项既有矩阵回归全绿; 产品FF源码零diff(git diff 5396bd6..e07b424 -- scripts/ 为空)",
+      "status": "PASS"
+    },
+    {
+      "id": "节点C 真实CLI端到端/独审/清理",
+      "evidence": "17 attempt真实链记录(run-receipts.json); 独审initial.md APPROVE_WITH_FIXES→F1-F9已修; cleanup-receipt.json",
+      "status": "PASS"
+    }
+  ],
+  "tests": [
+    {
+      "command": "python -B -m pytest -q tests/test_w20_replay_selection.py tests/test_w20_replay_faults.py",
+      "exit_code": 0,
+      "passed": 22,
+      "failed": 0,
+      "seconds": 2.3,
+      "scope": "W20新增单元/契约(选择语义RED向量+FF侧故障分类+proxy成形)"
+    },
+    {
+      "command": "python -B -m pytest -q tests/test_w06_contract_matrix.py tests/test_w06_matrix_runtime.py tests/test_w06_case_authority.py tests/test_du8_matrix_scheduling.py tests/test_du8_matrix_deadline_recovery.py",
+      "exit_code": 0,
+      "passed": 232,
+      "failed": 0,
+      "seconds": 12.9,
+      "scope": "既有矩阵套件回归(提交3dd6eb1后)"
+    },
+    {
+      "command": "python -B -m pytest -q tests/ --ignore=tests/e2e",
+      "exit_code": 0,
+      "passed": 1462,
+      "failed": 13,
+      "seconds": 404.6,
+      "scope": "全仓套件; 13项失败经冻结基线worktree同命令复判全部为基线既有(receipts/baseline-preexisting-failures.txt), 与W20改动零关联"
+    },
+    {
+      "command": "python -B tools/offline_contract_matrix/run.py --cwp-project .w20-deps/cwp --et-project .w20-deps/et --owned-root ... --out-root ... --cases <selection>",
+      "exit_code": 0,
+      "passed": null,
+      "failed": null,
+      "seconds": null,
+      "scope": "真实链矩阵选择运行17 attempt(run-receipts.json): 9补充case全部至少一次整链PASS; 后期整批窗口宿主负载致部分case诚实PARTIAL(30s界, 具名); 部分运行未冒充41例完整通过"
+    }
+  ],
+  "review": {
+    "agent_id": "independent-reviewer-initial (general-purpose agent, 2026-10-28); final re-review agent id recorded in review/final.json",
+    "report": "review/initial.md",
+    "open_findings": []
+  },
+  "cleanup": {
+    "before": "owned scratch root did not exist before card; .w20-deps absent at baseline",
+    "after": ".w20-deps (6,265,876 B) deleted; _w20-runs/owned (19,540,614 B) removed; 17-attempt evidence retained 4,685,224 B outside repo",
+    "restored": true,
+    "bytes_added": 4685224
+  },
+  "compatibility": [
+    "无--cases完整命令/报告schema/oracle全量路径/DU6 replay语义不变; required_cases恒41",
+    "全量报告新增顶层附加键supplemental_cases(恒9个补充id, 只增不改既有键) — 语义/兼容不变, 字节非严格不变",
+    "seed_plan_for/static_cost改经union解析spec, 41侧行为不变(232回归验证)"
+  ],
+  "limitations": [
+    "3-run补充case在高负载宿主上30s/case界紧张: 后期整批窗口出现具名PARTIAL(矩阵既有诚实语义); 每case整链PASS证据见run-receipts.json single_case_green_map",
+    "结构化三表(W19)为独立CWP数据服务, 无FF侧下载/导入状态, 与本中断恢复机制无关 — 按卡R4说明而不强加case"
+  ],
+  "root_followups": [
+    "ET真实子进程非零退出归类于共享传输失败reason provider_result_oversized(ChildFailed⊂TransportError); 行为诚实(具名/保留calls/无重试)但reason语义宽泛, 可由ET/FF owner考虑单列",
+    "全量41的当日复跑受宿主负载影响(2-4x, W07已知), 沿用DU10安静窗口惯例"
+  ],
+  "remote_status": "pushed: origin/codex/w20-ff-replay-20261028 (https://github.com/zhengcb81/filing-fetch.git)"
+}
