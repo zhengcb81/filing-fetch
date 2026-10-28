@@ -217,6 +217,7 @@ W20_METADATA = {
                  "false success) and the recovery run records whether anything "
                  "durable survived; final run reuses with zero requests",
         "expected": {"failure_reasons": ["transcript_import_rejected",
+                                          "transcript_import_failed",
                                           "transcript_import_hash_mismatch",
                                           "provider_result_invalid"],
                      "final_reuse_zero_requests": True},

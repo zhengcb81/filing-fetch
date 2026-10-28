@@ -275,8 +275,11 @@ def case_call_kill_before_durable(ctx: Context) -> CaseResult:
     content = "Synthetic W20 pre-durable interrupt transcript FY2034 Q1."
     p1 = _prepare_run(ctx, cid, "run1", "stall", content, 0)
     calls = Path(json.loads(p1["state_path"].read_text(encoding="utf-8"))["calls_file"])
+    # Durability is judged by THIS case's delta: sidecars unknown before the
+    # interrupted run. Earlier cases in the group own their own imports.
+    before = {p.name for p in _transcript_sidecars(ctx)}
     run1 = _execute(ctx, p1, kill_when=lambda: ctx.fixture_requests(calls) >= 1)
-    durable_at_kill = bool(_transcript_sidecars(ctx))
+    durable_at_kill = any(p.name not in before for p in _transcript_sidecars(ctx))
     p2 = _prepare_run(ctx, cid, "run2", "success", content, 1)
     _execute(ctx, p2)
     p3 = _prepare_run(ctx, cid, "run3", "success", content, 2)
@@ -391,8 +394,9 @@ def case_filing_kill_recovery(ctx: Context) -> CaseResult:
     cid = "w20_filing_kill_recovery"
     p1 = _prepare_run(ctx, cid, "run1", "success", "", 0)
     tag = f"{cid}.run1"
+    before = {p.name for p in _filing_originals(ctx, CN, "prospectus")}
     run1 = _execute(ctx, p1, kill_when=lambda: _adapter_rows(ctx, tag, "fetch") >= 1)
-    durable_at_kill = bool(_filing_originals(ctx, CN, "prospectus"))
+    durable_at_kill = any(p.name not in before for p in _filing_originals(ctx, CN, "prospectus"))
     p2 = _prepare_run(ctx, cid, "run2", "success", "", 1)
     _execute(ctx, p2)
     p3 = _prepare_run(ctx, cid, "run3", "success", "", 2)
