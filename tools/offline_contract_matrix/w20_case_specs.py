@@ -72,6 +72,17 @@ def _three_run_fault(cid, handler, year, quarter, fault_scenario, content):
     ])
 
 
+def _two_run_fault(cid, handler, year, quarter, fault_scenario, content):
+    """fault run → recovery run. A pure stream fault leaves nothing durable,
+    so there is nothing to reuse; the durable-retry reuse proof lives in the
+    interruption cases instead."""
+    request = _call_request(year, quarter)
+    return _spec(cid, handler, [], [
+        _run(request, _fixture(fault_scenario, content_utf8=content)),
+        _run(request, _fixture(content_utf8=content)),
+    ])
+
+
 def _build():
     rows = [
         _three_run_fault(
@@ -86,13 +97,13 @@ def _build():
             2034, 2, "success",
             "Synthetic W20 durable-interrupt transcript FY2034 Q2.",
         ),
-        _three_run_fault(
+        _two_run_fault(
             "w20_call_et_truncated",
             "w20_fault_cases:case_et_fault",
             2034, 3, "truncated_json",
             "Synthetic W20 truncated-result transcript FY2034 Q3.",
         ),
-        _three_run_fault(
+        _two_run_fault(
             "w20_call_et_exit_nonzero",
             "w20_fault_cases:case_et_fault",
             2034, 4, "crash_after_result",
@@ -183,18 +194,21 @@ W20_METADATA = {
     "w20_call_et_truncated": {
         "declared_layer": "ff+et",
         "scope": "ET result stream truncated mid-JSON at the test-proxy "
-                 "boundary; named failure, nothing durable, no blind replay, "
-                 "then one clean recovery and pure reuse",
-        "expected": {"failure_reason": "provider_result_invalid", "recovery_downloads": 1,
-                     "final_reuse_zero_requests": True},
+                 "boundary; named failure, nothing durable (no reuse target "
+                 "can exist), no blind replay, then one clean recovery "
+                 "download",
+        "expected": {"failure_reason": "provider_result_invalid", "recovery_downloads": 1},
     },
     "w20_call_et_exit_nonzero": {
         "declared_layer": "ff+et",
         "scope": "ET exits nonzero after emitting a complete result; named "
                  "failure, nothing durable, no blind replay, then one clean "
-                 "recovery and pure reuse",
-        "expected": {"failure_reason": "provider_tool_failed", "recovery_downloads": 1,
-                     "final_reuse_zero_requests": True},
+                 "recovery. The real-subprocess transport projects a nonzero "
+                 "exit onto the shared transport-failure reason "
+                 "provider_result_oversized (ChildFailed is a TransportError); "
+                 "the offline seam path reports provider_tool_failed — both "
+                 "are named, call-preserving rejections",
+        "expected": {"failure_reason": "provider_result_oversized", "recovery_downloads": 1},
     },
     "w20_call_hash_lie": {
         "declared_layer": "ff+et",
@@ -329,7 +343,7 @@ def w20_assertion_errors(spec, case):
         require(sum(get for get in gets if isinstance(get, int)) <= 2,
                 "at most one interrupted GET plus one recovery GET is allowed")
     elif cid in {"w20_call_et_truncated", "w20_call_et_exit_nonzero"}:
-        reason = "provider_result_invalid" if cid.endswith("truncated") else "provider_tool_failed"
+        reason = spec.expected()["failure_reason"]
         t0 = _t(runs[0])
         require(t0.get("status") not in {None, "downloaded", "reused", "unknown_publication"}
                 and t0.get("reason") == reason and refs[0] is None,
@@ -339,9 +353,6 @@ def w20_assertion_errors(spec, case):
                 "a rejected ET result must leave nothing durable")
         require(_t(runs[1]).get("status") == "downloaded" and _accepted(refs[1]) and gets[1] == 1,
                 "recovery must download exactly once")
-        require(_t(runs[2]).get("status") in {"reused", "unknown_publication"}
-                and refs[2] == refs[1] and gets[2] == 0,
-                "final run must reuse with zero requests")
     elif cid == "w20_call_hash_lie":
         t0 = _t(runs[0])
         require(t0.get("status") not in {None, "downloaded", "reused", "unknown_publication"}

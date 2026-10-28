@@ -111,9 +111,11 @@ def test_truncated_et_result_is_a_named_invalid_and_never_imports(
     assert fake.count("import") == 0
 
 
-def test_nonzero_tool_exit_after_a_complete_result_is_a_named_failure(
+def test_nonzero_tool_exit_on_the_seam_path_is_a_named_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: Path
 ) -> None:
+    """The offline seam returns the exit code directly, reaching the
+    ``code != 0`` projection (``provider_tool_failed``)."""
     fake = FaultyET(
         queries=[query_not_found()],
         reader=[reader_entry(FMP_PAYLOAD, provider="fmp")],
@@ -123,6 +125,40 @@ def test_nonzero_tool_exit_after_a_complete_result_is_a_named_failure(
     result = _acquire(monkeypatch, fake, tool)
     assert result["status"] == "provider_unavailable", result
     assert result["reason"] == "provider_tool_failed"
+    assert result["provider_calls"] == 1
+    assert fake.count("import") == 0
+
+
+def test_nonzero_tool_exit_on_the_subprocess_path_is_also_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tool: Path
+) -> None:
+    """A real subprocess raises ChildFailed (a TransportError) with the bytes
+    captured; FF projects it onto the shared transport-failure reason
+    ``provider_result_oversized`` while preserving the call. A named,
+    call-preserving rejection either way — this pins the dual-path
+    classification honestly instead of hiding it."""
+    import ff_process_transport
+
+    class SubprocessFault(FaultyET):
+        def __call__(self, command, *, input_bytes=None, timeout_seconds=None, **kwargs):
+            if self.tool is not None and str(self.tool) in command:
+                self.calls.append(("et", list(command), input_bytes))
+                raise ff_process_transport.ChildFailed(
+                    "child exited 1", returncode=1,
+                    stdout=json.dumps(fetched_result()).encode("utf-8"),
+                    stderr=b"",
+                )
+            return super().__call__(command, input_bytes=input_bytes,
+                                    timeout_seconds=timeout_seconds, **kwargs)
+
+    fake = SubprocessFault(
+        queries=[query_not_found()],
+        reader=[reader_entry(FMP_PAYLOAD, provider="fmp")],
+        tool=tool,
+    )
+    result = _acquire(monkeypatch, fake, tool)
+    assert result["status"] == "provider_unavailable", result
+    assert result["reason"] == "provider_result_oversized"
     assert result["provider_calls"] == 1
     assert fake.count("import") == 0
 

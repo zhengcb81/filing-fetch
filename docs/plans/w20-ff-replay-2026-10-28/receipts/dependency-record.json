@@ -26,14 +26,18 @@
     "fixed_commit_used": "2584b7eed062a9a30254bc06b4f19ab5471b414e",
     "fixed_commit_origin": "A-phase read-only resolution of committed HEAD (main, unchanged since 2026-10-17; equals DU11 frozen ET commit)",
     "paths": [
-      "transcript_tool.py",
-      "transcript_api.py",
-      "retrieval_runtime.py",
-      "transcript_extraction.py",
+      "cache.py",
+      "config.py",
+      "legacy_projection_comparison.py",
       "retrieval_budget.py",
+      "retrieval_runtime.py",
       "tests/__init__.py",
       "tests/test_retrieval_runtime.py",
-      "tests/test_transcript_api.py"
+      "tests/test_transcript_api.py",
+      "transcript_api.py",
+      "transcript_extraction.py",
+      "transcript_tool.py",
+      "translator.py"
     ],
     "snapshot_root": "C:\\Users\\郑曾波\\Projects\\filing-fetch-w20-replay\\.w20-deps\\et",
     "snapshot_has_git": false,
@@ -41,10 +45,12 @@
     "files_total": 8,
     "verified": true,
     "verification": {
-      "files_compared": 8,
-      "method": "git cat-file blob <commit>:<path> sha256 vs extracted file sha256 (full coverage, no filters)",
+      "files_compared": 12,
+      "method": "git cat-file blob sha256 vs extracted file sha256 (full coverage, AST-derived transitive closure)",
       "mismatches": 0
-    }
+    },
+    "retrieval_worker_note": "retrieval_runtime spawns retrieval_worker.py (WORKER_PATH); added to the minimal closure after A-phase re-check",
+    "closure_method": "seed 8 files + retrieval_worker.py; AST-parsed repo-local import closure iterated to fixpoint"
   },
   "method": "git -c core.autocrlf=false archive <commit> <paths> | tar -x (DU10 recipe); extracted bytes verified against git blob ids (sample incl. all ET files)",
   "du10_view_reuse": "refused: .du10-deps/cwp binds 900dbf6489 (older than this card's frozen 618df929)",

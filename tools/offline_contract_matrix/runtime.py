@@ -64,6 +64,29 @@ def _children_metadata(path: Path) -> dict:
             for p in path.iterdir()}
 
 
+# A producer side worker can hold a Windows sharing lock on an owned scratch
+# file for a moment after the batch's children exit. Deletion is retried a
+# bounded number of times; exhaustion keeps the honest failure instead of
+# pretending the scratch was restored.
+RMTREE_ATTEMPTS = 5
+RMTREE_BACKOFF_SECONDS = 0.5
+
+
+def _rmtree_bounded(path: Path) -> bool:
+    last_error: OSError | None = None
+    for attempt in range(RMTREE_ATTEMPTS):
+        if not path.exists():
+            return True
+        try:
+            shutil.rmtree(path)
+            return not path.exists()
+        except OSError as exc:
+            last_error = exc
+            if attempt + 1 < RMTREE_ATTEMPTS:
+                time.sleep(RMTREE_BACKOFF_SECONDS)
+    raise last_error if last_error is not None else OSError(f"rmtree failed: {path}")
+
+
 @dataclass
 class OwnedAttempt:
     scratch: Path
@@ -144,12 +167,12 @@ class OwnedAttempt:
                 not _reparse(self.scratch))
         if not safe:
             raise ValueError("owned scratch identity changed; refusing cleanup")
-        shutil.rmtree(self.scratch)
+        scratch_torn_down = _rmtree_bounded(self.scratch)
         # Only the exclusive cache created by this attempt is removed.
         # Pre-existing caches are never used and remain untouched.
         cache_torn_down = True
         if self.cache_created and self.cache is not None and self.cache.exists() and not _reparse(self.cache):
-            shutil.rmtree(self.cache)
+            cache_torn_down = _rmtree_bounded(self.cache)
         if self.cache_created:
             cache_torn_down = self.cache is not None and not self.cache.exists()
         owned_after, out_after = _children_metadata(self.owned_parent), _children_metadata(self.out_parent)
@@ -162,10 +185,10 @@ class OwnedAttempt:
         return {"owned_parent_shape_preserved":shape_preserved,
                 "output_parent_initially_existed":self.out_existed,
                 "retained_output_is_explicit_evidence":True,
-                "scratch_torn_down": not self.scratch.exists(),
+                "scratch_torn_down": scratch_torn_down,
                 "bytecode_cache_torn_down": cache_torn_down,
                 "preexisting_parent_entries_preserved": preserved,
-                "restored": preserved and shape_preserved and not self.scratch.exists() and cache_torn_down,
+                "restored": preserved and shape_preserved and scratch_torn_down and cache_torn_down,
                 "output": str(self.output)}
 
 
