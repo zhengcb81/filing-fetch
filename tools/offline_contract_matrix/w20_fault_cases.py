@@ -326,8 +326,9 @@ def case_et_fault(ctx: Context) -> CaseResult:
 
 def _et_fault_case(ctx: Context, cid: str, scenario: str, content: str) -> CaseResult:
     p1 = _prepare_run(ctx, cid, "run1", scenario, content, 0)
+    before = {q.name for q in _transcript_sidecars(ctx)}
     _execute(ctx, p1)
-    durable_after_fault = bool(_transcript_sidecars(ctx))
+    durable_after_fault = any(q.name not in before for q in _transcript_sidecars(ctx))
     p2 = _prepare_run(ctx, cid, "run2", "success", content, 1)
     _execute(ctx, p2)
     return _result(ctx, cid, f"ET {scenario} at the test-proxy boundary; named failure, "
