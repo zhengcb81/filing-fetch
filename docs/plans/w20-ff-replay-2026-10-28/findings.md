@@ -60,3 +60,11 @@ ROOT准备事实（2026-10-28）：新独立工区`C:\Users\郑曾波\Projects\f
 - 不改case_specs.py的41权威与_METADATA；不跑/不破坏41全量既有通过状态（DU10 41/41@97.68s为保留证据）；C阶段只跑补充选择+代表性base子集，全量41按卡R6/R8不重跑（如时间/负载允许可选一次，失败如实记录负载原因不追绿）。
 - 结构化三表（W19 fetch_statements薄客户端）：独立CWP数据服务，无FF侧下载/导入状态，与中断恢复机制无关→不强加case，交接说明。
 - 并发case不承诺exactly-once下载：并发窗口双GET是诚实可能；断言=最终恰一持久版本、无跨公司混用、无假成功、后续复用0下载（R3措辞）。
+
+## C阶段真实链发现（作者，2026-10-28）
+1. **ET非零退出双路径分类**（产品事实，非缺陷改判）：真实子进程非零退出→ChildFailed(TransportError子类)→FF归为`provider_result_oversized`；离线seam路径（DU11 FakeCWP直接返回code）→`provider_tool_failed`。两者都是具名、保留调用次数的拒绝。未改产品；W20 spec按真实子进程路径冻结，单测钉住双路径。root_followup候选：为非零退出单列reason。
+2. **hash谎报实测**：ET谎报payload sha→CWP导入端拒绝→FF报`transcript_import_failed`（具名upstream_error、calls=1、无重试无假成功）。反证成立，预期reason表已收编该码。
+3. **并发同请求实测**：两FF进程并发→一方导入成功一方具名`transcript_import_failed`（CWP规范写入唯一性），最终单一持久版本、回放0请求。无假成功、无重复版本。exactly-once下载未承诺（诚实）。
+4. **组内durable判定污染**：kill/hash case的"是否持久"检查须按本case文件名差集，不能全wiki判断（先行case的导入会污染）。已修。
+5. **cleanup Windows共享锁**：kill case的ET孙进程握句柄至自身deadline；harness清理加有界耐心（20×1s）+如实失败。一次restore=false为手动rm竞态瞬态，复现实验（前后快照0 delta）证明非稳态。
+6. **宿主负载**：全天2-4×波动（W07已知）；3-run补充case与base chainA均间歇撞30s/case界→诚实PARTIAL。按R8停止追绿：9 case均至少一次真实链PASS（跨attempt互证，run-receipts.json全录17 attempt）；kill_before_durable第3段复用在所有全批窗口被负载阻断，最佳单attempt PARTIAL具名。

@@ -1,0 +1,21 @@
+{
+  "schema_version": "w20-cleanup-receipt/1",
+  "date": "2026-10-28",
+  "w20_deps_view": {
+    "path": "C:\\Users\\\u90d1\u66fe\u6ce2\\Projects\\filing-fetch-w20-replay\\.w20-deps",
+    "bytes": 6265876,
+    "deleted": true
+  },
+  "owned_scratch_root": {
+    "path": "C:\\Users\\\u90d1\u66fe\u6ce2\\Projects\\_w20-runs\\owned",
+    "bytes_before": 19540614,
+    "existed_before_card": false,
+    "removed": true
+  },
+  "retained_evidence": {
+    "path": "C:\\Users\\\u90d1\u66fe\u6ce2\\Projects\\_w20-runs\\out",
+    "bytes": 4685224,
+    "attempts": 17,
+    "note": "per-case request/response/fixture JSON artifacts + reports; no page copies or large responses"
+  }
+}

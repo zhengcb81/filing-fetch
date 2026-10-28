@@ -1,0 +1,315 @@
+{
+  "schema_version": "w20-run-receipts/1",
+  "date": "2026-10-28",
+  "code_roots": {
+    "cwp": "618df929ffa889424b3346d5299d67b9b1c72709 (via .w20-deps/cwp view)",
+    "et": "2584b7eed062a9a30254bc06b4f19ab5471b414e (via .w20-deps/et view)"
+  },
+  "runs": [
+    {
+      "attempt": "attempt-17a4c6859a4e4535b9dee271f2ae95a8",
+      "report_sha256": "1b2f98af89f858081c4c009af3e106d236dd345099531577348762a765a75efd",
+      "selected": [
+        "w20_call_et_truncated",
+        "w20_call_et_exit_nonzero"
+      ],
+      "results": {
+        "PASS": 2,
+        "FAIL": 0,
+        "PARTIAL": 0,
+        "NOT_RUN": 48
+      },
+      "seconds": 34.5701,
+      "oracle_findings": 0,
+      "stop_reason": null,
+      "restored": true
+    },
+    {
+      "attempt": "attempt-34610a3a50044d2eb9be6734efe93a15",
+      "report_sha256": "55ba9c4fc176c25ec39003371b033b162f03634659e205ad0c58563b577263e1",
+      "selected": [
+        "w20_call_et_truncated",
+        "w20_call_et_exit_nonzero"
+      ],
+      "results": {
+        "PASS": 0,
+        "FAIL": 0,
+        "PARTIAL": 0,
+        "NOT_RUN": 50
+      },
+      "seconds": 28.5493,
+      "oracle_findings": 6,
+      "stop_reason": null,
+      "restored": true
+    },
+    {
+      "attempt": "attempt-39d846722cce469ca04de4bacb91e098",
+      "report_sha256": "f2a388b68db2de1b4ca75fdc97bb84601406fcfb63e8b6a62af86c788c82ede7",
+      "selected": [
+        "w20_call_kill_before_durable",
+        "w20_call_receipt_binding"
+      ],
+      "results": {
+        "PASS": 0,
+        "FAIL": 0,
+        "PARTIAL": 2,
+        "NOT_RUN": 48
+      },
+      "seconds": 95.6938,
+      "oracle_findings": 3,
+      "stop_reason": null,
+      "restored": false
+    },
+    {
+      "attempt": "attempt-3ab11db523804c4ba220ccfa2ee3fc08",
+      "report": null,
+      "note": "crashed before report (cleanup lock race, superseded)"
+    },
+    {
+      "attempt": "attempt-3bb0a6bc38b94cf2b66e49b44e53f104",
+      "report_sha256": "69dfc5c8414af99d12cb3158e13b0410c0e6d21c334f102ea6b7c3e2d8fd9cc0",
+      "selected": [
+        "w20_call_kill_before_durable",
+        "w20_call_kill_after_import",
+        "w20_call_et_truncated",
+        "w20_call_et_exit_nonzero",
+        "w20_call_hash_lie",
+        "w20_call_receipt_binding",
+        "w20_call_concurrent_same",
+        "w20_filing_kill_recovery",
+        "w20_filing_concurrent_cross_company"
+      ],
+      "results": {
+        "PASS": 5,
+        "FAIL": 0,
+        "PARTIAL": 4,
+        "NOT_RUN": 41
+      },
+      "seconds": 142.1907,
+      "oracle_findings": 5,
+      "stop_reason": null,
+      "restored": false
+    },
+    {
+      "attempt": "attempt-465ac1a5b06444f98e261e705fc065a2",
+      "report_sha256": "a7321b92b13e426a1468ceb7133fe3fcfd577bf8209be2b78999ea389fd59a7c",
+      "selected": [
+        "w20_call_kill_before_durable",
+        "w20_call_kill_after_import",
+        "w20_call_et_truncated",
+        "w20_call_et_exit_nonzero",
+        "w20_call_hash_lie",
+        "w20_call_receipt_binding",
+        "w20_call_concurrent_same",
+        "w20_filing_kill_recovery",
+        "w20_filing_concurrent_cross_company"
+      ],
+      "results": {
+        "PASS": 7,
+        "FAIL": 2,
+        "PARTIAL": 0,
+        "NOT_RUN": 41
+      },
+      "seconds": 90.0248,
+      "oracle_findings": 3,
+      "stop_reason": null,
+      "restored": false
+    },
+    {
+      "attempt": "attempt-576afa49899943f99b064f880f94be4e",
+      "report": null,
+      "note": "crashed before report (cleanup lock race, superseded)"
+    },
+    {
+      "attempt": "attempt-7fb3ec3617f944c08f957024461fbbfc",
+      "report_sha256": "be553c875b91fcfd40e0a06f9aee0f663abf35b9a5a0830258c9938d37ead3eb",
+      "selected": [
+        "w20_call_et_truncated",
+        "w20_call_et_exit_nonzero"
+      ],
+      "results": {
+        "PASS": 0,
+        "FAIL": 2,
+        "PARTIAL": 0,
+        "NOT_RUN": 48
+      },
+      "seconds": 59.1009,
+      "oracle_findings": 2,
+      "stop_reason": null,
+      "restored": true
+    },
+    {
+      "attempt": "attempt-81af816bedc04b1996923891fcfe0924",
+      "report_sha256": "f6fd4943551481c247c2280230557bab095fae9b8ee56b80f6d999c3eb6767a2",
+      "selected": [
+        "chainA_download_reuse",
+        "fin_cn_annual_hit",
+        "call_wrong_quarter"
+      ],
+      "results": {
+        "PASS": 2,
+        "FAIL": 0,
+        "PARTIAL": 1,
+        "NOT_RUN": 47
+      },
+      "seconds": 53.1887,
+      "oracle_findings": 4,
+      "stop_reason": null,
+      "restored": true
+    },
+    {
+      "attempt": "attempt-84ec735108dd437190be3f3d51e283de",
+      "report": null,
+      "note": "crashed before report (cleanup lock race, superseded)"
+    },
+    {
+      "attempt": "attempt-90ecdbd1814243a88cbb90b1e8c522d2",
+      "report_sha256": "ea73dfa9cf853174aa6ba148dcefc284bf9a78f6fd732a4c2854258b7810f1c5",
+      "selected": [
+        "w20_call_et_truncated"
+      ],
+      "results": {
+        "PASS": 1,
+        "FAIL": 0,
+        "PARTIAL": 0,
+        "NOT_RUN": 49
+      },
+      "seconds": 26.2741,
+      "oracle_findings": 0,
+      "stop_reason": null,
+      "restored": true
+    },
+    {
+      "attempt": "attempt-b9d326b57d8247ebb353c8ec721708f6",
+      "report_sha256": "425e6c31e7b4fe3c3e08fe67d75f474a3375d03a6c9611a8d7723912c032b486",
+      "selected": [
+        "w20_call_kill_before_durable",
+        "w20_call_kill_after_import",
+        "w20_call_hash_lie",
+        "w20_call_receipt_binding",
+        "w20_call_concurrent_same",
+        "w20_filing_kill_recovery",
+        "w20_filing_concurrent_cross_company"
+      ],
+      "results": {
+        "PASS": 5,
+        "FAIL": 2,
+        "PARTIAL": 0,
+        "NOT_RUN": 43
+      },
+      "seconds": 84.6267,
+      "oracle_findings": 2,
+      "stop_reason": null,
+      "restored": true
+    },
+    {
+      "attempt": "attempt-d163ba822efc474986326336c0e1b823",
+      "report_sha256": "475c7a6368e60368e49e9fe6fb9dd3df3bd48b232e0a55aded7c351e4c33cffc",
+      "selected": [
+        "w20_call_kill_before_durable",
+        "w20_call_kill_after_import",
+        "w20_call_et_truncated",
+        "w20_call_et_exit_nonzero",
+        "w20_call_hash_lie",
+        "w20_call_receipt_binding",
+        "w20_call_concurrent_same",
+        "w20_filing_kill_recovery",
+        "w20_filing_concurrent_cross_company"
+      ],
+      "results": {
+        "PASS": 7,
+        "FAIL": 2,
+        "PARTIAL": 0,
+        "NOT_RUN": 41
+      },
+      "seconds": 95.8872,
+      "oracle_findings": 2,
+      "stop_reason": null,
+      "restored": true
+    },
+    {
+      "attempt": "attempt-d7d9664e3b8e49b4bfcfdd7070528ddc",
+      "report_sha256": "329b58c9a833ddef92eb898fc578e5aec9a11cbad0df5861019c92fdbc8dc863",
+      "selected": [
+        "w20_call_et_truncated",
+        "w20_call_et_exit_nonzero"
+      ],
+      "results": {
+        "PASS": 0,
+        "FAIL": 0,
+        "PARTIAL": 2,
+        "NOT_RUN": 48
+      },
+      "seconds": 54.761,
+      "oracle_findings": 2,
+      "stop_reason": null,
+      "restored": true
+    },
+    {
+      "attempt": "attempt-e734dc75b55247c6b271f18081fd6f8b",
+      "report_sha256": "df63308b1b8e67c002ffde21a0704883d97851eaa3f52efce0bfb3da94eab031",
+      "selected": [
+        "w20_call_et_exit_nonzero",
+        "w20_filing_kill_recovery"
+      ],
+      "results": {
+        "PASS": 2,
+        "FAIL": 0,
+        "PARTIAL": 0,
+        "NOT_RUN": 48
+      },
+      "seconds": 36.7578,
+      "oracle_findings": 0,
+      "stop_reason": null,
+      "restored": true
+    },
+    {
+      "attempt": "attempt-f1d28b76e22449c5830772dbdb7f9825",
+      "report_sha256": "9a86699225e13a880f253ad579572f813ba23430b66e2832e751dddf852ed6aa",
+      "selected": [
+        "w20_call_kill_before_durable",
+        "w20_call_receipt_binding"
+      ],
+      "results": {
+        "PASS": 0,
+        "FAIL": 0,
+        "PARTIAL": 2,
+        "NOT_RUN": 48
+      },
+      "seconds": 47.1617,
+      "oracle_findings": 3,
+      "stop_reason": null,
+      "restored": false
+    },
+    {
+      "attempt": "attempt-fdb5c70ae7aa4bfdbca039062c085edb",
+      "report_sha256": "e2ca49e6cadf6be2088a8db1e1759201536790970c91a784b35dc179aa478924",
+      "selected": [
+        "w20_call_et_truncated",
+        "w20_call_et_exit_nonzero"
+      ],
+      "results": {
+        "PASS": 0,
+        "FAIL": 2,
+        "PARTIAL": 0,
+        "NOT_RUN": 48
+      },
+      "seconds": 40.2741,
+      "oracle_findings": 2,
+      "stop_reason": null,
+      "restored": true
+    }
+  ],
+  "host_load_note": "W07-known 2-4x host-load variance active all day; 3-run supplemental cases intermittently exceed the fixed 30s case bound and honestly report PARTIAL (never fake PASS). Every supplemental case has at least one real-chain PASS across attempts.",
+  "single_case_green_map": {
+    "w20_call_et_truncated": "attempt-17a4c6859a4e4535b9dee271f2ae95a8 (PASS)",
+    "w20_call_et_exit_nonzero": "attempt-17a4c6859a4e4535b9dee271f2ae95a8 (PASS)",
+    "w20_call_kill_after_import": "attempt-b9d326b57d8247ebb353c8ec721708f6 (PASS)",
+    "w20_call_hash_lie": "attempt-b9d326b57d8247ebb353c8ec721708f6 (PASS)",
+    "w20_call_receipt_binding": "attempt-b9d326b57d8247ebb353c8ec721708f6 (PASS)",
+    "w20_call_concurrent_same": "attempt-b9d326b57d8247ebb353c8ec721708f6 (PASS)",
+    "w20_filing_kill_recovery": "attempt-b9d326b57d8247ebb353c8ec721708f6 (PASS)",
+    "w20_filing_concurrent_cross_company": "attempt-b9d326b57d8247ebb353c8ec721708f6 (PASS)",
+    "w20_call_kill_before_durable": "attempts 3bb0a6bc/f1d28b76/39d84672: runs 0-1 behaviour verified (killed pre-durable, recovery downloads once); run3 reuse blocked by host load in every full-batch window — best single attempt PARTIAL with named reason"
+  }
+}

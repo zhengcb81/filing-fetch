@@ -1,0 +1,18 @@
+FAILED tests/test_du11_transcript_reuse_e2e.py::test_real_cwp_explicit_fmp_does_not_reuse_another_providers_source
+FAILED tests/test_du11_transcript_reuse_e2e.py::test_real_cwp_explicit_fmp_lookup_finds_and_reuses_its_own_source
+FAILED tests/test_du11_transcript_reuse_e2e.py::test_real_cwp_missing_then_one_download_then_replay_is_pure_reuse
+FAILED tests/test_du11_transcript_reuse_e2e.py::test_real_cwp_qualified_match_wins_over_an_unknown_observation
+FAILED tests/test_du11_transcript_reuse_e2e.py::test_real_cwp_reuses_a_motley_fool_transcript_without_any_download
+FAILED tests/test_du11_transcript_reuse_e2e.py::test_real_ff_cli_reuses_the_registered_transcript_end_to_end
+FAILED tests/test_fc1307a_host_assumption_gate.py::test_fc1307a_the_three_vendored_copies_are_content_identical
+FAILED tests/test_fc803_minimal_download.py::Fc803MinimalDownloadTests::test_lt01_local_is_latest_fetch_zero
+FAILED tests/test_fc803_minimal_download.py::Fc803MinimalDownloadTests::test_lt02_reuse_old_download_missing_new_only
+FAILED tests/test_fc803_minimal_download.py::Fc803MinimalDownloadTests::test_lt05_provider_unavailable_keeps_local_reuse
+FAILED tests/test_fc803_minimal_download.py::Fc803MinimalDownloadTests::test_lt07_future_filing_never_leaks_into_gap
+FAILED tests/test_fc803_minimal_download.py::Fc803MinimalDownloadTests::test_lt09_second_request_zero_fetch_write
+
+# 归属判定（2026-10-28，作者）
+# 上列 12 项在冻结基线 5396bd6 的临时 worktree 中同样失败（git worktree 5396bd6，同命令）。
+# 第 13 项（fc501 allowlist schema）单独在基线 worktree 验证同样失败。
+# 结论：本分支全量套件（tests/ 除 e2e）13 failed / 1462 passed 中的全部失败均为基线既有，与 W20 改动零关联。
+# du11 e2e / fc803 依赖真实 CWP 子进程链，失败模式与当日宿主负载及 DU11 冻结仓状态相关，归 ROOT/DU11 owner。
