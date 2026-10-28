@@ -195,7 +195,7 @@ FF 真子进程树 kill），产品无 failpoint：
 | w20_call_kill_before_durable | provider GET 在途时杀 FF 树 | 无假成功、无持久残留；恢复恰好 1 次下载→复用 0 请求 |
 | w20_call_kill_after_import | 规范原件落盘瞬间杀 FF 树 | durable-at-kill 分支由恢复运行事后判定（reused=已持久/downloaded=未持久），最终复用 0 请求 |
 | w20_call_et_truncated | ET 结果流截断 JSON | `provider_result_invalid`，无持久，恢复 1 次下载→复用 |
-| w20_call_et_exit_nonzero | ET 完整结果后非零退出 | `provider_tool_failed`，同上 |
+| w20_call_et_exit_nonzero | ET 完整结果后非零退出 | 真实子进程路径 `provider_result_oversized`（共享传输失败总类；seam 路径 `provider_tool_failed`），无持久，恢复 1 次下载→复用 |
 | w20_call_hash_lie | ET 谎报 payload sha | 具名拒绝（导入校验或 FF 对比），无假成功；恢复分支如实记录 |
 | w20_call_receipt_binding | 旧回执（他人 request_id）/截断回执 | 用量保持 unknown（null 非 0），调用不吞；回放复用 0 请求 |
 | w20_call_concurrent_same | 并发同公司期次两 FF 进程 | 无假成功、单一持久版本（并发窗口不承诺 exactly-once 下载）、回放 0 请求 |

@@ -31,6 +31,7 @@
       "legacy_projection_comparison.py",
       "retrieval_budget.py",
       "retrieval_runtime.py",
+      "retrieval_worker.py",
       "tests/__init__.py",
       "tests/test_retrieval_runtime.py",
       "tests/test_transcript_api.py",
@@ -42,12 +43,12 @@
     "snapshot_root": "C:\\Users\\郑曾波\\Projects\\filing-fetch-w20-replay\\.w20-deps\\et",
     "snapshot_has_git": false,
     "tests_seam_present": true,
-    "files_total": 8,
     "verified": true,
     "verification": {
-      "files_compared": 12,
+      "files_compared": 13,
       "method": "git cat-file blob sha256 vs extracted file sha256 (full coverage, AST-derived transitive closure)",
-      "mismatches": 0
+      "mismatches": 0,
+      "note": "full byte coverage of the extracted view at final closure (13 files incl. AST-derived additions)"
     },
     "retrieval_worker_note": "retrieval_runtime spawns retrieval_worker.py (WORKER_PATH); added to the minimal closure after A-phase re-check",
     "closure_method": "seed 8 files + retrieval_worker.py; AST-parsed repo-local import closure iterated to fixpoint"
