@@ -302,7 +302,7 @@
   ],
   "host_load_note": "W07-known 2-4x host-load variance active all day; 3-run supplemental cases and base chainA intermittently exceeded the fixed 30s case bound in LATE full-batch windows and honestly reported PARTIAL (never fake PASS). Every one of the 9 supplemental cases has at least one real-chain full PASS (see single_case_green_map); later batches re-running them hit load PARTIALs, which is the matrix's existing honest-stop semantics, not a product defect.",
   "single_case_green_map": {
-    "w20_call_et_truncated": "attempt-17a4c6859a4e4535b9dee271f2ae95a8 (PASS); also 465ac1a/d163ba8",
+    "w20_call_et_truncated": "attempt-17a4c6859a4e4535b9dee271f2ae95a8 (PASS)",
     "w20_call_et_exit_nonzero": "attempt-17a4c6859a4e4535b9dee271f2ae95a8 (PASS)",
     "w20_call_kill_before_durable": "attempt-465ac1a5b06444f98e261e705fc065a2 and attempt-d163ba822e (full-chain PASS: killed->1-GET recovery->0-GET reuse)",
     "w20_call_kill_after_import": "attempt-465ac1a5b06444f98e261e705fc065a2 and attempt-d163ba822e (PASS)",

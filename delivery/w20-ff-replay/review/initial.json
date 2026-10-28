@@ -1,0 +1,111 @@
+{
+  "schema_version": "w20-initial-review/1",
+  "card_id": "w20-ff-replay-2026-10-28",
+  "date": "2026-10-28",
+  "verdict": "APPROVE_WITH_FIXES",
+  "role": "initial independent review (author-distinct; this file is the structured transcription of review/initial.md — conclusions unchanged)",
+  "workdir": "C:\\Users\\郑曾波\\Projects\\filing-fetch-w20-replay",
+  "branch": "codex/w20-ff-replay-20261028",
+  "reviewed_code_commit": "eadb10c",
+  "reviewed_code_commit_note": "eadb10c is the reviewed HEAD; source is identical to e15640c (eadb10c adds docs/receipts only). Base: 5396bd688e5b775e746fe3290852f0532d4548f8.",
+  "report": "delivery/w20-ff-replay/review/initial.md",
+  "verification_commands": [
+    "python -B -m pytest -q tests/test_w20_replay_selection.py tests/test_w20_replay_faults.py tests/test_w06_contract_matrix.py tests/test_w06_case_authority.py  -> 203 passed",
+    "python -B -m pytest -q tests/test_w06_contract_matrix.py tests/test_w06_matrix_runtime.py tests/test_w06_case_authority.py tests/test_du8_matrix_scheduling.py tests/test_du8_matrix_deadline_recovery.py  -> 232 passed",
+    "case_specs.AUTHORITY_VERSION=w06-cases/1, base=41, supplemental=9 (w20-supplemental/1), union=50, id sets disjoint",
+    "attempt report sha256 vs run-receipts.json: b9d326/3bb0a6b/17a4c68 all match",
+    "_w20-runs/out: 17 attempt dirs, 4685224 bytes == cleanup-receipt.retained_evidence.bytes",
+    ".w20-deps absent; _w20-runs/owned absent; full-suite log tail '13 failed, 1462 passed' matches branch-failures.txt; fc501 reproduced at HEAD",
+    "git diff 5396bd6..HEAD -- scripts/ and FF thin adapters: empty (product zero-change confirmed)",
+    "CASE_TIMEOUT=30 / BATCH_DEADLINE=180 / WORKERS=2 / PROOF_RESERVE_SECONDS=10 unchanged; Deadline.case absolute, not renewed",
+    "no environ/getenv reads in new modules; W06_MATRIX_STATE is the pre-existing harness-only boundary var (product scripts never read it)",
+    "cli_main.py replay certification requires rows == base 41 and all PASS: selection/NOT_RUN reports can never certify"
+  ],
+  "requirements_status": {
+    "R1": "PASS — injection only at harness-owned boundaries (ET test-proxy stream post-processing; real FF child-tree kill via ff_process_tree); product failpoint/env backdoor absent; failed traces carry stage/counts/refs and oracle byte-binds them",
+    "R2": "PASS — six fault classes mapped (kill_before_durable/et_truncated/et_exit_nonzero/hash_lie/kill_after_import/receipt_binding/concurrent_same + base wrong-identity/period); upstream locks verified by effect only, no second state store",
+    "R3": "PASS — durable retry reuses via real CWP public path (same source_ref, 0 GETs, SourceVersionReader proofs enforced); no exactly-once promise for the concurrent window (declared); non-durable failures explicitly asserted not-durable and never reported as success",
+    "R4": "PASS — original-language call TXT (US), CN prospectus, CN/HK same-year annuals; three-table service explained as out of scope per card instead of forced cases",
+    "R5": "PASS — frozen-commit git-archive views with full cat-file byte verification, DU10 old 900dbf6489 view explicitly refused, synthetic env, real FF CLI → real ET supervisor/worker → real CWP import chain, no key reads, offline guard enforced",
+    "R6": "PASS — limits unchanged, generic --cases over the union registry (no W20-specific branch), partial/failed attempts preserved (17 attempts), no full-batch re-run to chase green",
+    "R7": "PASS — CWP 618df929 (card-frozen) + ET 2584b7ee recorded with origin, byte-verified manifest, views deleted after tests, other repos' git state untouched (minor receipt inconsistency logged as F6)",
+    "R8": "PASS — required_cases stays 41 (shrinking rejected by oracle), unselected cases are named NOT_RUN rows, scope.selection labels supplemental, selected-only exit semantics, no partial run ever presented as 41/41"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "P2",
+      "location": "docs/plans/w20-ff-replay-2026-10-28/receipts/run-receipts.json single_case_green_map.w20_call_kill_before_durable; delivery/w20-ff-replay/handoff.md §3/§5",
+      "problem": "Receipt says 'best single attempt PARTIAL' and handoff claims the third (reuse) segment was load-blocked 'in every full-batch window'. False: attempts d163ba8 and 465ac1a show this case fully PASS (killed run0 → recovery 1 GET → reuse 0 GETs, 'all supplemental assertions observed'), and the case's handler/assertions are byte-identical from 2ad2677 to HEAD (git diff 2ad2677..HEAD -- w20_case_specs.py empty; w20_fault_cases.py delta touches only et_fault/hash_lie). Under-claim, but the evidence map is wrong and makes root_followup(2) unnecessary.",
+      "suggested_fix": "Correct the green-map row and handoff §3/§5 to cite d163ba8/465ac1a as full-chain PASS (those batches contained then-unfixed sibling ET-fault assertion defects, but this case's assertions equal the final code); downgrade root_followup(2) to optional.",
+      "status_at_initial_review": "open"
+    },
+    {
+      "id": "F2",
+      "severity": "P2",
+      "location": "docs/plans/w20-ff-replay-2026-10-28/receipts/run-receipts.json single_case_green_map.w20_call_hash_lie",
+      "problem": "Maps to 'attempt-b9d326 (PASS)', but in that attempt hash_lie FAILED (diagnostic: 'a lying payload sha must surface as a named rejection, never a success'; the expected-reason list then lacked transcript_import_failed, fixed in 2ad2677). Real green attempts: 465ac1a/d163ba8/3bb0a6b. Evidence pointer error harming traceability.",
+      "suggested_fix": "Repoint to 465ac1a/d163ba8/3bb0a6b.",
+      "status_at_initial_review": "open"
+    },
+    {
+      "id": "F3",
+      "severity": "P3",
+      "location": "delivery/w20-ff-replay/handoff.md §3",
+      "problem": "'attempt-b9d326 6/7 PASS' contradicts the report: that batch was 5 PASS + 2 FAIL (kill_before_durable, hash_lie).",
+      "suggested_fix": "Correct to 5/7.",
+      "status_at_initial_review": "open"
+    },
+    {
+      "id": "F4",
+      "severity": "P3",
+      "location": "delivery/w20-ff-replay/handoff.md §1",
+      "problem": "'No --cases path byte-level unchanged' overstates: cli_main.py report.update now unconditionally adds the top-level supplemental_cases key (9 ids) to full-run reports as well; semantics/compat/exit/DU6 are unchanged, bytes are not.",
+      "suggested_fix": "Rephrase as 'semantics and compatibility unchanged; full-run report gains an additive supplemental_cases key'.",
+      "status_at_initial_review": "open"
+    },
+    {
+      "id": "F5",
+      "severity": "P3",
+      "location": "tools/offline_contract_matrix/README.md W20 table, w20_call_et_exit_nonzero row",
+      "problem": "Names only the seam-path reason provider_tool_failed; the matrix case authority (real subprocess path) expects provider_result_oversized (dual path is honestly explained in spec metadata and unit tests, but the README row misleads reproducers).",
+      "suggested_fix": "Table cell: 'real subprocess provider_result_oversized (seam path provider_tool_failed)'.",
+      "status_at_initial_review": "open"
+    },
+    {
+      "id": "F6",
+      "severity": "P3",
+      "location": "docs/plans/w20-ff-replay-2026-10-28/receipts/dependency-record.json (et block)",
+      "problem": "Internal inconsistency: files_total=8 vs files_compared=12 vs a 12-entry paths list that omits retrieval_worker.py (which retrieval_worker_note says was added to the closure); the manifest should independently replay the extracted set.",
+      "suggested_fix": "List all actually extracted files in paths and align files_total with files_compared.",
+      "status_at_initial_review": "open"
+    },
+    {
+      "id": "F7",
+      "severity": "P3",
+      "location": "delivery/w20-ff-replay/handoff.md (missing statement)",
+      "problem": "Concurrent cases briefly run 2 FF children inside one worker group (ThreadPoolExecutor max_workers=2), so a full batch can momentarily exceed 2 child processes when the other group is also active. This is the tested fault itself (R2 concurrency), not a --workers scheduling increase (still ≤2), but the handoff does not say so.",
+      "suggested_fix": "State it in handoff limitations or compatibility.",
+      "status_at_initial_review": "open"
+    },
+    {
+      "id": "F8",
+      "severity": "P3",
+      "location": "repository / handoff.json (missing)",
+      "problem": "Card requires pushing the card branch when a remote is configured: origin exists (github.com/zhengcb81/filing-fetch.git) but codex/w20-ff-replay-20261028 was not pushed (git ls-remote shows no such head).",
+      "suggested_fix": "Push the branch or record the actual unpushed state and reason in handoff.json remote_status.",
+      "status_at_initial_review": "open"
+    },
+    {
+      "id": "F9",
+      "severity": "P3",
+      "location": "delivery/w20-ff-replay/handoff.json",
+      "problem": "File missing entirely; the card's fixed handoff interface requires handoff.md AND handoff.json (review/initial.json also required and produced by the author from this review).",
+      "suggested_fix": "Create handoff.json with all card-required fields using measured values (card_id, status, workdir, branch, base_commit, implementation_commits [f255321,38e59ff,3dd6eb1,bebd009,4f016cf,2ad2677,c6a10d2,3e8d1be,e15640c,eadb10c], tested_code_commit/reviewed_code_commit = e15640c with a note that eadb10c is docs-only, files with sha256, requirements R1-R8, tests with real commands/exit codes/counts, review block, cleanup block, compatibility, limitations, root_followups, remote_status).",
+      "status_at_initial_review": "open"
+    }
+  ],
+  "no_p1_note": "No P1 findings: no product defect masked, no fabricated success, no backdoor/cross-repo write, no data fabrication. F1/F2 are handoff-evidence accuracy issues (the assertion defects themselves were already fixed in code; the receipts narrative had not caught up).",
+  "overall": "APPROVE_WITH_FIXES. The implementation (case_selection/case_registry/w20_case_specs/w20_fault_cases, oracle selection audit, proxy boundary faults, runtime cleanup hardening, generic --cases) satisfies R1-R8 with real tests, receipts consistent with the on-disk evidence, zero product-code change and complete cleanup. Approval is conditional on fixing F1-F9 (core: F1/F2 receipt corrections and F9 handoff.json), followed by re-review by another independent agent; OPEN must be empty before ROOT handoff.",
+  "reviewer_note": "All findings were open at initial review. Their closure is attested by review/final.md (subsequent independent re-review) and is outside the scope of this transcription."
+}

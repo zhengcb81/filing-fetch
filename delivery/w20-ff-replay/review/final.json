@@ -1,0 +1,46 @@
+{
+  "schema_version": "w20-final-review/1",
+  "verdict": "APPROVE",
+  "open_findings": [
+    {
+      "id": "OF1",
+      "severity": "P3",
+      "location": "docs/plans/w20-ff-replay-2026-10-28/receipts/run-receipts.json single_case_green_map.w20_call_et_truncated",
+      "issue": "Fix commit e07b424 appended '; also 465ac1a/d163ba8' to this line, but both attempts FAILed w20_call_et_truncated (diagnostic 'a rejected ET result must leave nothing durable'; then-unfixed et-fault assertion defect). The pre-fix line pointing at 17a4c68 alone was correct. Primary pointer remains correct, so the 9/9 at-least-one-full-PASS claim still holds.",
+      "required_fix": "Drop '; also 465ac1a/d163ba8' (or substitute the correct additional greens 90ecdbd/3bb0a6bc)."
+    },
+    {
+      "id": "OF2",
+      "severity": "P3",
+      "location": "delivery/w20-ff-replay/review/initial.json",
+      "issue": "Missing. The card's fixed handoff interface requires review/initial.md AND initial.json as a pair, and handoff.md section 7 already references initial.json. F9's fix produced handoff.json but not the initial.json twin.",
+      "required_fix": "Author generates the machine-readable twin of initial.md (verdict + F1-F9 findings list)."
+    },
+    {
+      "id": "OF3",
+      "severity": "P3",
+      "location": "git remote / delivery/w20-ff-replay/handoff.json remote_status",
+      "issue": "origin/codex/w20-ff-replay-20261028 exists at e07b424 (the tested/reviewed tree IS pushed), but the final handoff.json commit 038eac5 is ahead of origin by 1 and unpushed; remote_status says 'pushed: origin/...' without a commit qualifier, which is ambiguous at current state.",
+      "required_fix": "Push the final handoff/review commit (including OF1/OF2 fixes) and qualify remote_status with the pushed commit."
+    }
+  ],
+  "checked": [
+    "F1 fixed and byte-verified: green map points to attempt-465ac1a/d163ba8; 465ac1a report shows w20_call_kill_before_durable result=PASS, killed=[true,false,false], et_fixture_requests=[1,1,0], durable_at_kill=false",
+    "F2 fixed: hash_lie green map now 465ac1a/d163ba8/3bb0a6b, all three verified PASS in report bytes; b9d326 FAIL matches history",
+    "F3 fixed: handoff.md says b9d326 was 5 PASS + 2 FAIL, matches receipt and per-case dump",
+    "F4 fixed: byte-level claim reworded to 'semantics/compat unchanged; full report gains additive supplemental_cases key'; cli_main.py:577 confirms unconditional add",
+    "F5 fixed: README exit_nonzero row now names real-subprocess provider_result_oversized with seam provider_tool_failed; it is the only tools/tests change in e15640c..HEAD",
+    "F6 fixed: dependency-record ET paths=13 items incl. retrieval_worker.py, files_total removed, files_compared=13, internally consistent",
+    "F7 fixed: handoff.md section 1 explicitly discloses in-group 2 concurrent FF subprocesses as the injected fault itself, --workers still <=2",
+    "F8 partially fixed (residual OF3): branch pushed through e07b424; tip 038eac5 (handoff.json) unpushed, remote_status unqualified",
+    "F9 mostly fixed (residual OF2): handoff.json present with every card-required field and 20/20 files[].sha256 verified against actual bytes; review/initial.json still missing",
+    "Implementation untouched by fixes: git diff e15640c..HEAD -- tools/ tests/ is exactly the one README line; scripts/ diff vs baseline 5396bd6 is empty",
+    "Offline tests reproduced: 183 passed (selection+faults+case_authority), 22 passed (handoff.json tests[0] exact command), 232 passed (tests[1] exact command), ruff clean",
+    "Counts unchanged: base 41 / supplemental 9 / union 50 / zero id overlap; AUTHORITY_VERSION w20-supplemental/1; oracle required_cases_shrunk guard present; selection report carries full 41-id required_cases and certifies selected-only",
+    "Receipts authentic: 14/14 run-receipts report_sha256 match _w20-runs/out report bytes; cleanup verified on disk (.w20-deps absent, _w20-runs/owned absent, retained evidence exactly 4,685,224 bytes, 17 attempt dirs)",
+    "handoff.json requirements[] evidence paths all exist; tests[0]/tests[1] reproduced exactly; tests[2] (full suite 1462/13) not rerun within fast offline scope - 13-failure list matches baseline attribution receipt and source state unchanged since initial review",
+    "No env backdoor: no environ/getenv in new modules/tests; W06_MATRIX_STATE remains baseline harness-subprocess boundary var; run.py constants untouched",
+    "No fake-success wording: load PARTIALs, era assertion FAILs and 13 baseline failures all honestly named; 'all green' claims limited to the 232 suite and ruff, both reproduced true"
+  ],
+  "date": "2026-10-28"
+}

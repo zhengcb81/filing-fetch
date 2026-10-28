@@ -1,0 +1,54 @@
+[
+  {
+    "path": "tools/offline_contract_matrix/case_selection.py",
+    "sha256": "9b12cc21ec6e94630cd3ffa7737f9b0b7d36291fe15c8527206f64be37cb237e"
+  },
+  {
+    "path": "tools/offline_contract_matrix/case_registry.py",
+    "sha256": "d80c706cf4f070314650e9e360ec0b15864b5abbb1379e0fcf2d208d017043f7"
+  },
+  {
+    "path": "tools/offline_contract_matrix/w20_case_specs.py",
+    "sha256": "776f0cbaf865d8139900dee49ba65b5330b438ab5993a8cd2fce11f34731a0fe"
+  },
+  {
+    "path": "tools/offline_contract_matrix/w20_fault_cases.py",
+    "sha256": "add5c17681523b166a1157aac1f862540ff4290c0729537a040d421db400c8dc"
+  },
+  {
+    "path": "tools/offline_contract_matrix/cli_main.py",
+    "sha256": "12c6be7446f3ad967731d4f9a7dffdf2f5d18b8903bcbc15ce8dc9e90330a9f7"
+  },
+  {
+    "path": "tools/offline_contract_matrix/oracle.py",
+    "sha256": "2795167935295adf3982bc4ae7f65559a71860d1427384a442c42aa0308b661b"
+  },
+  {
+    "path": "tools/offline_contract_matrix/et_transcript_proxy.py",
+    "sha256": "3f0d63b0a15b8125e48e37408cc85c11965a367a2c98d8cde0b1b8d048a18d19"
+  },
+  {
+    "path": "tools/offline_contract_matrix/runtime.py",
+    "sha256": "a419ccedfb3435a553f49f1175abe3211754aa15c24787220e3dff271e8d538b"
+  },
+  {
+    "path": "tools/offline_contract_matrix/matrix_cases.py",
+    "sha256": "083cfb46394e62715227f2e8b0b977f770d3f67b25ca7dd550e47fc1e8c42bd0"
+  },
+  {
+    "path": "tools/offline_contract_matrix/case_scheduling.py",
+    "sha256": "2dc91ac6318ecaa064fb1df89a5fa7eaa157f9b1ed0e2d886030e4e6855cee39"
+  },
+  {
+    "path": "tools/offline_contract_matrix/README.md",
+    "sha256": "59ef20388656b7622e1c79454b7805b68368241444e99b4d7798e3907808f957"
+  },
+  {
+    "path": "tests/test_w20_replay_selection.py",
+    "sha256": "4769479b277d54b7086dc0a501b2fcf1dffa73639e64e240f44c751ee42bb88f"
+  },
+  {
+    "path": "tests/test_w20_replay_faults.py",
+    "sha256": "cf81441e0b795b6fbebbc18a3bcd8446742a4b81d9693c9e4deea18244149dfc"
+  }
+]

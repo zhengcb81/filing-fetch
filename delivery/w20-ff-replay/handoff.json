@@ -100,6 +100,18 @@
     {
       "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/branch-failures.txt",
       "sha256": "9e9dea37ce280cd3e324004ac0b32a18e4a103969889b50151db38c98763744b"
+    },
+    {
+      "path": "delivery/w20-ff-replay/review/initial.json",
+      "sha256": "7c9684a496adc498f9bb7785c963c95129e70797c91c2251c4b173ab65f8bdff"
+    },
+    {
+      "path": "delivery/w20-ff-replay/review/final.md",
+      "sha256": "a063bb86cd4360768f010da33a7561d4f97f1182712d78d307b97533c19a20ef"
+    },
+    {
+      "path": "delivery/w20-ff-replay/review/final.json",
+      "sha256": "5628cceae01b82dbcde08da381f601cc9f4b1d56187df3341d78a23bcd037b3c"
     }
   ],
   "requirements": [
@@ -189,8 +201,9 @@
     }
   ],
   "review": {
-    "agent_id": "independent-reviewer-initial (general-purpose agent, 2026-10-28); final re-review agent id recorded in review/final.json",
-    "report": "review/initial.md",
+    "agent_id": "independent-reviewer-final (general-purpose agent, 2026-10-28); initial reviewer report at review/initial.md|json",
+    "report": "review/final.md",
+    "verdict": "APPROVE",
     "open_findings": []
   },
   "cleanup": {
@@ -212,5 +225,5 @@
     "ET真实子进程非零退出归类于共享传输失败reason provider_result_oversized(ChildFailed⊂TransportError); 行为诚实(具名/保留calls/无重试)但reason语义宽泛, 可由ET/FF owner考虑单列",
     "全量41的当日复跑受宿主负载影响(2-4x, W07已知), 沿用DU10安静窗口惯例"
   ],
-  "remote_status": "pushed: origin/codex/w20-ff-replay-20261028 (https://github.com/zhengcb81/filing-fetch.git)"
+  "remote_status": "implementation tree e07b424 and all handoff/review documents are pushed to origin/codex/w20-ff-replay-20261028 (https://github.com/zhengcb81/filing-fetch.git); the branch head on origin is the final handoff commit containing this file"
 }
