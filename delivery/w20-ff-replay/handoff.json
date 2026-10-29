@@ -103,7 +103,7 @@
     },
     {
       "path": "delivery/w20-ff-replay/handoff.md",
-      "sha256": "bf35b485cd89e9a4bcea9f8faf1a66878bdcbf9bb50747154dc1a338f65d8301"
+      "sha256": "3289d6c3b4d548d53a01bc664befe0e07b9176016f38c79dc9c25568ffef1bd5"
     },
     {
       "path": "delivery/w20-ff-replay/review/initial.md",
@@ -243,7 +243,7 @@
   },
   "compatibility": [
     "无--cases完整命令/报告schema/oracle全量路径/DU6 replay语义不变; required_cases恒41",
-    "全量报告新增顶层附加键supplemental_cases(恒9个补充id, 只增不改既有键) — 语义/兼容不变, 字节非严格不变",
+    "全量报告新增顶层附加键supplemental_cases(恒为全部注册的补充 id（当前 11 个）, 只增不改既有键) — 语义/兼容不变, 字节非严格不变",
     "seed_plan_for/static_cost改经union解析spec, 41侧行为不变(232回归验证)"
   ],
   "limitations": [
@@ -254,5 +254,5 @@
     "ET真实子进程非零退出归类于共享传输失败reason provider_result_oversized(ChildFailed⊂TransportError); 行为诚实(具名/保留calls/无重试)但reason语义宽泛, 可由ET/FF owner考虑单列",
     "全量41的当日复跑受宿主负载影响(2-4x, W07已知), 沿用DU10安静窗口惯例"
   ],
-  "remote_status": "implementation tree e07b424 and all handoff/review documents are pushed to origin/codex/w20-ff-replay-20261028 (https://github.com/zhengcb81/filing-fetch.git); the branch head on origin is the final handoff commit containing this file"
+  "remote_status": "all return-R2 commits including this handoff refresh are pushed to origin/codex/w20-ff-replay-20261028 (https://github.com/zhengcb81/filing-fetch.git); the origin branch head equals the local HEAD at push time"
 }

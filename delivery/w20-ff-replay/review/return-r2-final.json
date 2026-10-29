@@ -1,0 +1,37 @@
+{
+  "schema_version": "w20-return-r2-review/1",
+  "verdict": "REJECT",
+  "open_findings": [
+    "OPEN-1 (P3, docs-only machine fields): ROOT R2 closeout item 'fix old-9/new-10 counts' only partially executed while handoff.md R2 section claims 'handoff 计数同步（supplemental 11、union 52）' done. Stale '9' references remain in current-state machine/doc artifacts: (a) handoff.json requirements[1].evidence 'w20_case_specs.py 9 case' (actual 11); (b) handoff.json compatibility[1] 'supplemental_cases(恒9个补充id, 只增不改既有键)' — the '恒9' invariant is false for the current tree (attempt-dd7884e1 report supplemental_cases carries 11 ids; the additive-only property itself holds); (c) handoff.md §1 '恒为 9 个补充 id' and 'W20 补充故障套件（9 case…）' plus §3 '9 个补充 case…' unstale-marked; (d) handoff.json remote_status claims origin branch head is the final handoff commit while 5 R2 commits (28f4664..56b3db0) are unpushed (origin at a693e10). Fix: refresh these strings to 11/52 and actual push state (or explicit per-round history annotation in handoff.md); no code/test/report change, no test re-run needed."
+  ],
+  "date": "2026-10-29",
+  "reviewer": "independent return-R2 reviewer (unrelated to author and prior reviewers)",
+  "workdir": "C:\\Users\\郑曾波\\Projects\\filing-fetch-w20-replay",
+  "branch": "codex/w20-ff-replay-20261028",
+  "reviewed_head": "56b3db0",
+  "implementation_commit": "aa49836",
+  "baseline": "5396bd688e5b775e746fe3290852f0532d4548f8",
+  "report": "delivery/w20-ff-replay/review/return-r2-final.md",
+  "scope": {
+    "ff_r2_1": "PASS - new w20_call_lost_reply_after_durable case: solo attempt-dd7884e1 PASS, oracle independently re-run 0 findings; run0 killed=False/downloaded/1 GET/reply_intercepted=True with source_ref; verified_at_reply_loss matches run0 Ref on all five keys (976a43b9…, 512B, application/json); run1 first recovery 0 GETs (et_fixture=0, fixture=0, provider_calls=0) unknown_publication/reused_existing same Ref; run2 0 GETs same Ref; probe_state=confirmed. Assertion authority directly exercised with in-memory dicts: ROOT counterexample (delivered run0 + empty kill) rejected with 5 errors; forger case-level interception mark with unmarked run0 still rejected (per-run mark enforced); Ref drift, proof drift, and recovery re-download all rejected; well-formed report accepted and the real report case re-evaluates to []. RED-first confirmed (28f4664 adds only the 7-test file; w20_case_specs at that commit has zero lost_reply references). Old kill_after_durable honestly retained as CONTROL ONLY (attempt-248e9d19 PASS, probe confirmed, oracle 0 findings). Artifact SHAs 9/9 match.",
+    "ff_r2_2": "PASS - probe_catalog is one bounded subprocess per call (subprocess.run capture_output, 30s bound); parent sys.stdin/stdout never touched; no module-level last_error (old _CWP_PROBE_LAST_ERROR removed in aa2ff69); explicit three states confirmed/not_found/probe_error with rc!=0, unknown state and exceptions all collapsing to probe_error (never a not-durable negative); child uses the provider-scoped lookup envelope (company-wiki-transcript-import-lookup-request/1, same schema as product reuse path) plus SourceVersionReader.open_version byte-level verification. tests/test_w20_replay_return_r2.py 7/7 green incl. two-company/two-wiki-root concurrency, parent stdio untouched, catalog-unavailable and missing-wiki probe_error distinction. Handoff troubleshooting record matches the actual 48362b7 diff (plain query -> provider-scoped envelope + synthetic child env).",
+    "red_lines": "PASS - 183 passed (selection+faults+case_authority); full 267-suite regression 267 passed; base 41 / supplemental 11 / union 52; required_cases constant 41; git log 5396bd6..HEAD -- scripts/ empty; handoff.json files[] 26/26 SHAs match; oracle.audit re-run on both attempts 0 findings; working tree clean, no debug residue.",
+    "honesty": "PASS on substance - envelope-loss root-cause story matches the diff; cleanup-receipt boolean meanings disambiguated (return_r1 *_meaning fields) and return_r2 block matches disk state; run-receipts return_r2_runs match artifacts; no fake success statements. FAILS only on OPEN-1: the count-sync closeout item the handoff claims complete is half-done (stale '9' machine fields + stale remote_status)."
+  },
+  "non_blocking_observations": [
+    "cleanup-receipt.json return_r2 'view_rebuilt_and_deleted': false follows the 'True = absent at write time' semantics but the field name reads as a compound action claim; the R2 block lacks the *_meaning annotation the R1 block received — suggest adding one line with OPEN-1",
+    "reviewer re-run caveat: .w20-deps was already cleaned, so the 7 R2 tests resolved company_wiki from the host site-packages (live CWP main) rather than the frozen 618df92 view; conclusions unaffected (probe only uses public query CLI + reader interfaces) and the author's real-chain evidence has code_binding verified=true against the frozen view",
+    "probe child swaps its own (child-local) sys.stdin with finally-restore — allowed; parent untouched, double-verified (test + code read)"
+  ],
+  "commands_run": [
+    "python -B -m pytest -q tests/test_w20_replay_return_r2.py -> 7 passed",
+    "python -B -m pytest -q tests/test_w20_replay_selection.py tests/test_w20_replay_faults.py tests/test_w06_case_authority.py -> 183 passed",
+    "python -B -m pytest -q tests/test_w20_replay_selection.py tests/test_w20_replay_faults.py tests/test_w20_replay_return_r1.py tests/test_w20_replay_return_r2.py tests/test_w06_contract_matrix.py tests/test_w06_matrix_runtime.py tests/test_w06_case_authority.py tests/test_du8_matrix_scheduling.py tests/test_du8_matrix_deadline_recovery.py -> 267 passed",
+    "in-memory dict constructions against w20_case_specs.w20_assertion_errors lost-reply branch -> 6 constructions: all proxies/drifts rejected, well-formed accepted; real report case re-evaluates to []",
+    "oracle.audit() on attempt-dd7884e1 and attempt-248e9d19 report.json -> 0 findings each",
+    "handoff.json files[] sha256 recomputation -> 26/26 match",
+    "attempt artifact sha256 spot-checks (3 runs x request/response/fixture) -> 9/9 match",
+    "git log/diff 5396bd6..HEAD -- scripts/ -> empty; git rev-list origin..HEAD -> 5 (OPEN-1 item d)",
+    "authority counts: case_specs 41 / w20_case_specs 11 / union_entries 52; report required_cases 41"
+  ]
+}

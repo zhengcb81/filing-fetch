@@ -10,8 +10,8 @@
 
 在**不改动 41 例必需 case 权威与无参数完整命令语义**的前提下，为 FF↔ET↔CWP 离线联调矩阵加入六类中断/恢复行为反证：
 
-1. **通用显式 case 选择（`--cases`）**：`case_selection.py`（纯解析/校验/汇总）+ `case_registry.py`（41 必需 + 补充套件的并集解析）。选择运行自标 supplemental：报告带 `scope.selection`（selected/completed/skipped/selected_not_executed/certifies），未选 case 全部具名 `NOT_RUN`（"not selected" 诊断），`required_cases` 恒为完整 41（缩小被 oracle 以 `required_cases_shrunk` 拒绝），退出码 0 只对所选 case 负责。oracle 新增 selection 一致性审计（行缺失/重复/标签错置），并对 harness 真正杀掉的 run 豁免"当时不存在的 ET 回执"（GET 计数与请求/响应字节绑定照常审计）。无 `--cases` 路径语义/兼容不变（既有 232 项矩阵套件全绿验证）；全量报告现无条件新增顶层附加键 `supplemental_cases`（恒为 9 个补充 id，只增不改既有键），字节因此非严格不变。
-2. **W20 补充故障套件（9 case，schema `w20-supplemental/1`）**：`w20_case_specs.py`（冻结定义+断言权威）+ `w20_fault_cases.py`（handler）。覆盖：
+1. **通用显式 case 选择（`--cases`）**：`case_selection.py`（纯解析/校验/汇总）+ `case_registry.py`（41 必需 + 补充套件的并集解析）。选择运行自标 supplemental：报告带 `scope.selection`（selected/completed/skipped/selected_not_executed/certifies），未选 case 全部具名 `NOT_RUN`（"not selected" 诊断），`required_cases` 恒为完整 41；补充套件现为 11 个（R1/R2 各增 1）；（缩小被 oracle 以 `required_cases_shrunk` 拒绝），退出码 0 只对所选 case 负责。oracle 新增 selection 一致性审计（行缺失/重复/标签错置），并对 harness 真正杀掉的 run 豁免"当时不存在的 ET 回执"（GET 计数与请求/响应字节绑定照常审计）。无 `--cases` 路径语义/兼容不变（既有 232 项矩阵套件全绿验证）；全量报告现无条件新增顶层附加键 `supplemental_cases`（恒为 9 个补充 id，只增不改既有键），字节因此非严格不变。
+2. **W20 补充故障套件（现 11 case，schema `w20-supplemental/1`；R1/R2 各增 1）**：`w20_case_specs.py`（冻结定义+断言权威）+ `w20_fault_cases.py`（handler）。覆盖：
    - `w20_call_kill_before_durable`：GET 在途时杀 FF 进程树（复用 FF 自有 `ff_process_tree` 语义）→ 无假成功、无持久残留、恢复恰好 1 次下载、最终复用 0 请求；
    - `w20_call_kill_after_import`：规范原件落盘瞬间杀树 → durable-at-kill 分支由恢复运行事后判定（reused=已持久 / downloaded=未持久），最终复用 0 请求；
    - `w20_call_et_truncated` / `w20_call_et_exit_nonzero`：ET 结果流截断 / 完整结果后非零退出 → 具名 `provider_result_invalid` / `provider_result_oversized`（真实子进程路径；seam 路径为 `provider_tool_failed`），无持久、无盲重放、恢复 1 次下载；
