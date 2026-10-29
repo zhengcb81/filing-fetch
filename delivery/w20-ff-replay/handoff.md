@@ -66,3 +66,24 @@
 ## 7. 独立审查
 
 见 `review/initial.md|json`（初审）与 `review/final.md|json`（修复后复审）。初审发现的本范围问题已全部修复；复审最终 OPEN 必须为空。跨仓事项（见 root_followups）如实单列，不计入本范围完成度。
+
+---
+
+## 返工轮 R1（2026-10-29，ROOT RETURN_FF 三项全部处理）
+
+ROOT 验收结论 CHANGES_REQUESTED（ff-review.md：FF-R1/P2 durable 后分支未证、FF-R2/P2 触发器被旧 sidecar 误触发、FF-R3/P3 两处机器字段失真）。本轮在原分支续改（RED→修复→真链复验→独立复审）：
+
+**FF-R1（durable 后中断独立确定性证明）**：新增 `w20_call_kill_after_durable`（schema `w20-supplemental/1`，补充套件 9→10）。确定性设计（CWP 写入经异步 worker，"sidecar 出现"≠durable，故不再猜杀点）：
+1. run0 正常完整采集（1 GET）建立 durable；
+2. **公开接口实读确认**：`cwp_public_readback` 经与 FF 复用链相同的 provider-scoped transcript-lookup envelope（`source_query_cli` in-process）+ `SourceVersionReader.open_version` 实读，逐字节 SHA 比对 **run0 响应中的本请求 Ref**（f1778c54…），有界重试窗口确认后才继续；
+3. run1 发起同请求、在其返回送达前杀树（0 GET、无 envelope——durable 后回执/返回中断）；
+4. run2 恢复复用：**0 额外 GET**、Ref/SHA 与实读证明相同；再次复用 0 GET。
+断言拒绝 not_durable 代签（恢复若再下载/1 GET 即 FAIL；RED 测试 `test_durable_assertions_reject_a_not_durable_recovery_proxy` 固化 ROOT 反例）。真链：单跑 attempt-2ebbf3d7 **PASS/oracle 0 findings**；前序窗口 attempt-2a273f32 **PASS**。未 durable 路径单列：原 `w20_call_kill_after_import` 保留 id，scope/expected 改为 `interruption_phase: "mid_import_observed"`，触发器改为本请求 ET receipt 文件（ET 完成、导入未始的确定窗口），并加 `durable_at_kill_public_readback` 公开实读观察（必须 False）；单跑 attempt-8a972aa6 **PASS**。三 kill case 相位谱：pre-GET（before_durable）/ post-ET-pre-import（mid_import）/ post-durable（after_durable）。
+
+**FF-R2（触发器绑定本请求）**：新增纯函数 `new_original_matching_sha`（只认"新增且字节 SHA 等于本 case 内容"的 original；旧期次 sidecar/original 永不触发——RED 测试固化 ROOT 探针反例）；durable case 的触发器=公开实读确认 + handler 内预置 unrelated-period original 作内置控制反例（文件存在但 DB 无记录，永不能触发）；mid-import 触发器=本请求 receipt tag。阶段一致性：before_durable 与 mid_import 单跑 PASS（afb227f2/8a972aa6），前序窗口下 run0/run1 阶段观察一致（attempt-36e764e9：killed[0]=True 于本请求触发、恢复恰好 1 次下载；仅第三段复用被 30s 界截断，该段由单跑 PASS 证明——按 R8 不追跑）。
+
+**FF-R3（机器字段）**：run-receipts.json SHA 刷新；全仓 pytest 行 exit_code 改 `null`+解释（真实退出码未在运行时记录，不重建；pytest 有失败必非 0，13 项基线失败归因保留，全仓并非绿）；受审 13+2 文件 SHA 全部重算匹配。
+
+**诚实修正**：原 4 份 kill_after_import PASS 的真实含义=not_durable 分支（ROOT 判定），历史报告保留不改写；"R3 已完成"声明收缩为两阶段分别证明。probe 走的 provider-scoped envelope 与 FF 复用链相同（unknown_publication 资格 source 也在公开查询可见范围），实读=open_version 字节级校验。
+
+本轮新增：`tests/test_w20_replay_return_r1.py`（6 测，RED 先行）；修复提交 b7a649c→3747e4a；260 项矩阵/单元套件回归全绿；清理：本轮重建的 .w20-deps 视图与 owned scratch 已再删除（cleanup-receipt.json 更新）。

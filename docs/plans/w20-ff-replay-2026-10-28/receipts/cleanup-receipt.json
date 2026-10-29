@@ -17,5 +17,12 @@
     "bytes": 4685224,
     "attempts": 17,
     "note": "per-case request/response/fixture JSON artifacts + reports; no page copies or large responses"
+  },
+  "return_r1": {
+    "date": "2026-10-29",
+    "note": "view rebuilt from the same frozen commits for re-verification, then deleted again",
+    "w20_deps_view_deleted": false,
+    "owned_scratch_removed": false,
+    "retained_evidence_bytes": 7657936
   }
 }
