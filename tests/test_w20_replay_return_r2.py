@@ -17,6 +17,7 @@ assertions BEFORE the fix:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,18 @@ for path in (str(MATRIX), str(TESTS)):
 
 import case_specs  # noqa: E402
 import w20_case_specs  # noqa: E402
+
+
+def _scan(wiki_root: Path) -> None:
+    """Index the seeded originals into the real catalog (one CLI scan)."""
+    import subprocess as sp
+    proc = sp.run(
+        [sys.executable, "-m", "company_wiki.source_catalog.cli",
+         "--config", str(wiki_root / "config/source_catalog.yaml"), "scan"],
+        capture_output=True, cwd=wiki_root,
+        env={**os.environ, "PYTHONPATH": str(ROOT / ".w20-deps" / "cwp" / "src"),
+             "PYTHONUTF8": "1"}, timeout=120)
+    assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")[-300:]
 
 
 def _ref(sha: str, size: int = 512, mime: str = "application/json") -> dict[str, Any]:
@@ -94,6 +107,7 @@ def test_lost_reply_accepts_only_intercepted_same_acquisition() -> None:
     good = {
         "id": "w20_call_lost_reply_after_durable",
         "actual": {
+            "reply_intercepted": True,
             "verified_at_reply_loss": _ref(SHA),
             "runs": [
                 # The SAME acquisition completed server-side; its success
@@ -134,7 +148,10 @@ def test_probe_reports_three_explicit_states_not_none(tmp_path: Path) -> None:
         "language": None, "provider": "fmp", "provider_document_id": None,
         "mode": "exact", "allow_download": False, "schema_version": "1.0",
     }, content_sha="0" * 64, cwp_src=str(ROOT / ".w20-deps" / "cwp" / "src"))
-    assert result["state"] == "not_found", result
+    # A wiki without a catalog is a probe ERROR (the public query service is
+    # unavailable), never a fake "not durable" negative.
+    assert result["state"] == "probe_error", result
+    assert "catalog_unavailable" in (result.get("error") or "")
 
 
 def test_probe_error_is_never_confirmed_nor_not_found(tmp_path: Path) -> None:
@@ -180,6 +197,7 @@ def test_concurrent_probes_for_two_companies_do_not_cross(tmp_path: Path) -> Non
                           fiscal_year=2036, fiscal_period="Q1", form_type=None,
                           published_date="2026-01-05", content=content,
                           mime_type="text/plain", filename_hint=f"probe_{market}")
+        _scan(env.wiki)
         roots[market] = (env, ident, hashlib.sha256(content).hexdigest())
 
     def run_probe(market: str):

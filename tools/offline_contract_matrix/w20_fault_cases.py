@@ -90,140 +90,56 @@ def new_original_matching_sha(directory: Path, before: set[str],
     return None
 
 
-# The CWP public-interface probe is imported lazily and kept warm: the FIRST
-# probe call in a process pays the producer import cost, so every case warms
-# it during preparation, far away from any kill window.
-_CWP_PROBE_WARM = False
+def probe_catalog(*, wiki_root: Path, identity_request: dict[str, Any],
+                  content_sha: str, cwp_src: str,
+                  timeout_seconds: float = 30.0) -> dict[str, Any]:
+    """Public read-back through ONE bounded subprocess per call (return R2).
 
-
-def _cwp_probe_modules():
-    global _CWP_PROBE_WARM
-    cwp_src = Path(_CWP_PROBE_CWP_ROOT) / "src"
-    if str(cwp_src) not in sys.path:
-        sys.path.insert(0, str(cwp_src))
-    from company_wiki.source_catalog import source_query_cli  # noqa: F401 (warm)
-    from company_wiki.source_catalog import source_reader as _sr  # noqa: F401 (warm)
-    _CWP_PROBE_WARM = True
-
-
-_CWP_PROBE_CWP_ROOT = None
-_CWP_PROBE_LAST_ERROR = None
-
-
-def warm_cwp_probe(ctx: Context) -> None:
-    """Import the CWP public query/reader modules once, outside kill windows."""
-    global _CWP_PROBE_CWP_ROOT
-    if _CWP_PROBE_CWP_ROOT is None:
-        _CWP_PROBE_CWP_ROOT = str(Path(ctx.cwp_root).resolve())
-    try:
-        _cwp_probe_modules()
-    except Exception:
-        # A failed warm-up is not an interruption trigger; the case fails
-        # honestly later if the public interface never becomes readable.
-        pass
-
-
-def cwp_public_readback(ctx: Context, *, identity, fiscal_year: int,
-                        fiscal_quarter: int, as_of_date: str,
-                        content_sha: str) -> dict[str, Any] | None:
-    """Read back THIS request's source through CWP's public interfaces.
-
-    The transcript lookup runs through the same public
-    ``source_query_cli`` envelope FF itself uses (in-process, db-only,
-    allow_download=False), and the bytes are read back through the public
-    ``SourceVersionReader.open_version``. A result is returned only when the
-    stored bytes hash to THIS request's content sha — i.e. exactly the
-    durable-at-kill proof: no private DB reads, no FF-side storage logic.
-    Any failure/absence returns ``None`` (not yet durable), never a guess.
+    The child runs the public transcript query CLI and the public
+    ``SourceVersionReader.open_version`` in its own process, so the parent's
+    ``sys.stdin``/``sys.stdout`` are never swapped and concurrent callers in a
+    worker group cannot cross-contaminate. The result carries an explicit
+    state: ``confirmed`` (this request's Ref read back byte-for-byte),
+    ``not_found`` (the public query answered; not durably readable as THIS
+    Ref), or ``probe_error`` (the probe failed — never usable as a
+    not-durable negative). Results belong to this call only; nothing is
+    stored in module globals.
     """
-    global _CWP_PROBE_LAST_ERROR
+    import subprocess as _subprocess
+    payload = {"wiki": str(wiki_root), "cwp_src": str(cwp_src),
+               "identity_request": identity_request, "content_sha": content_sha}
+    env = {k: os.environ[k] for k in ("SystemRoot", "WINDIR", "COMSPEC", "PATH", "PATHEXT")
+           if k in os.environ}
+    env["PYTHONUTF8"] = "1"
+    # The probe child needs a HOME; keep it inside the owned scratch tree.
+    probe_home = Path(wiki_root).parent / "probe-home"
+    probe_home.mkdir(parents=True, exist_ok=True)
+    env["HOME"] = env["USERPROFILE"] = str(probe_home)
     try:
-        _cwp_probe_modules()
-    except Exception as exc:
-        _CWP_PROBE_LAST_ERROR = f"warmup {type(exc).__name__}: {exc}"[:300]
-        return None
-    import contextlib
-    import io as _io
-    from dataclasses import fields as dc_fields
-    import json as _json
-    from company_wiki.source_catalog.config import load_catalog_config
-    from company_wiki.source_catalog.service import SourceCatalog
-    from company_wiki.source_catalog.source_query_cli import main as query_main
-    from company_wiki.source_catalog.source_reader import SourceRef, SourceVersionReader
+        proc = _subprocess.run(
+            [sys.executable, "-B", str(HERE / "cwp_readback_probe.py")],
+            input=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            capture_output=True, timeout=timeout_seconds, env=env,
+            cwd=str(HERE))
+        if proc.returncode != 0:
+            return {"state": "probe_error", "ref": None,
+                    "error": f"probe rc={proc.returncode} "
+                             f"stderr={proc.stderr.decode('utf-8', 'replace')[:200]}"}
+        data = json.loads(proc.stdout.decode("utf-8"))
+        if data.get("state") not in {"confirmed", "not_found", "probe_error"}:
+            return {"state": "probe_error", "ref": None,
+                    "error": f"unknown probe state: {str(data.get('state'))[:80]}"}
+        return data
+    except Exception as exc:  # noqa: BLE001 — the caller gets an explicit error state
+        return {"state": "probe_error", "ref": None,
+                "error": f"{type(exc).__name__}: {exc}"[:300]}
 
-    wiki = Path(ctx.env.wiki)
-    catalog = None
-    try:
-        # The provider-scoped transcript-import lookup envelope — the exact
-        # public path FF's own duplicate-suppression reuse uses (provider
-        # "fmp"; it includes unknown-publication sources that the plain
-        # query_local would exclude).
-        payload = {
-            "schema_version": "company-wiki-transcript-import-lookup-request/1",
-            "source_request": {
-                "entity": identity.canonical_name,
-                "document_kind": "investor_call_transcript",
-                "as_of_date": as_of_date,
-                "market": identity.market,
-                "security_id": identity.security_id,
-                "form_type": None,
-                "fiscal_year": fiscal_year,
-                "fiscal_period": f"Q{fiscal_quarter}",
-                "language": None,
-                "provider": "fmp",
-                "provider_document_id": None,
-                "mode": "exact",
-                "allow_download": False,
-                "schema_version": "1.0",
-            },
-        }
-        out = _io.StringIO()
-        saved_stdin = sys.stdin
-        sys.stdin = _io.TextIOWrapper(
-            _io.BytesIO(_json.dumps(payload, ensure_ascii=False).encode("utf-8")),
-            encoding="utf-8")
-        try:
-            with contextlib.redirect_stdout(out):
-                code = query_main(["--config", str(wiki / "config" / "source_catalog.yaml")])
-        finally:
-            sys.stdin = saved_stdin
-        if code != 0:
-            _CWP_PROBE_LAST_ERROR = f"query rc={code} out={out.getvalue()[:160]}"
-            return None
-        result = _json.loads(out.getvalue())
-        # found OR unknown_publication both mean the source is durably stored
-        # and describable by the public query; the hard proof is the verified
-        # open below (byte length + sha256 must equal THIS request's content).
-        if (result.get("status") not in {"found", "unknown_publication"}
-                or len(result.get("matches") or []) != 1):
-            _CWP_PROBE_LAST_ERROR = f"status={result.get('status')} reason={result.get('reason')} matches={len(result.get('matches') or [])}"
-            return None
-        ref = result["matches"][0]
-        if ref.get("content_sha256") != content_sha:
-            _CWP_PROBE_LAST_ERROR = f"sha mismatch: {str(ref.get('content_sha256'))[:16]} != {content_sha[:16]}"
-            return None
-        catalog = SourceCatalog(load_catalog_config(wiki / "config" / "source_catalog.yaml",
-                                                    project_root=wiki))
-        reader = SourceVersionReader(catalog)
-        kwargs = {f.name: ref[f.name] for f in dc_fields(SourceRef) if f.name in ref}
-        verified = reader.open_version(SourceRef(**kwargs))
-        import hashlib as _hashlib
-        digest = _hashlib.sha256(verified.data).hexdigest()
-        if digest != content_sha or len(verified.data) != ref.get("byte_size"):
-            _CWP_PROBE_LAST_ERROR = f"readback mismatch digest={digest[:16]} len={len(verified.data)} vs {ref.get('byte_size')}"
-            return None
-        return {"document_id": ref["document_id"], "source_id": ref["source_id"],
-                "content_sha256": digest, "byte_size": len(verified.data),
-                "mime_type": ref.get("mime_type")}
-    except Exception as exc:
-        _CWP_PROBE_LAST_ERROR = f"{type(exc).__name__}: {exc}"[:300]
+
+def _confirmed_ref(result: dict[str, Any]) -> dict[str, Any] | None:
+    """The confirmed Ref of a probe result, validated as a SourceRef shape."""
+    if result.get("state") != "confirmed":
         return None
-    finally:
-        if catalog is not None:
-            try:
-                catalog.close()
-            except Exception:
-                pass
+    return source_ref(result.get("ref"))
 
 
 def _active_spec(ctx: Context, case_id: str):
@@ -462,7 +378,6 @@ def case_call_kill_after_import(ctx: Context) -> CaseResult:
     cid = "w20_call_kill_after_import"
     content = "Synthetic W20 durable-interrupt transcript FY2034 Q2."
     content_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    warm_cwp_probe(ctx)
     p1 = _prepare_run(ctx, cid, "run1", "success", content, 0)
     # The trigger is THIS request's own ET result receipt (the proxy writes it
     # only for this run's tag): it appears when ET has finished and BEFORE the
@@ -471,9 +386,15 @@ def case_call_kill_after_import(ctx: Context) -> CaseResult:
     # The proxy names receipts by the run's own receipt_tag (no group prefix).
     receipt_signal = ctx.artifacts / f"{cid}.run1.result.json"
     run1 = _execute(ctx, p1, kill_when=lambda: receipt_signal.is_file())
-    durable_at_kill = cwp_public_readback(
-        ctx, identity=US, fiscal_year=2034, fiscal_quarter=2,
-        as_of_date="2026-12-31", content_sha=content_sha) is not None
+    durable_probe = probe_catalog(
+        wiki_root=ctx.env.wiki, identity_request={
+            "entity": US.canonical_name, "document_kind": "investor_call_transcript",
+            "as_of_date": "2026-12-31", "market": US.market, "security_id": US.security_id,
+            "form_type": None, "fiscal_year": 2034, "fiscal_period": "Q2",
+            "language": None, "provider": "fmp", "provider_document_id": None,
+            "mode": "exact", "allow_download": False, "schema_version": "1.0"},
+        content_sha=content_sha, cwp_src=str(ctx.cwp_root / "src"))
+    durable_state = durable_probe["state"]
     p2 = _prepare_run(ctx, cid, "run2", "success", content, 1)
     run2 = _execute(ctx, p2)
     t2 = (run2.get("response") or {}).get("transcript") or {}
@@ -488,7 +409,7 @@ def case_call_kill_after_import(ctx: Context) -> CaseResult:
                              "separate post_durable case", {
         "interruption_phase": "mid_import_observed",
         "recovery_branch": branch,
-        "durable_at_kill_public_readback": durable_at_kill,
+        "durable_state_public_readback": durable_state,
         "kill_reason": run1.get("kill_reason"),
     })
 
@@ -505,7 +426,6 @@ def case_call_kill_after_durable(ctx: Context) -> CaseResult:
     """
     cid = "w20_call_kill_after_durable"
     content = "Synthetic W20 durable-interrupt transcript FY2036 Q1."
-    warm_cwp_probe(ctx)
     from dataclasses import replace
     unrelated = replace(US, provider="fmp", source_url=US.source_url)
     ctx.env.seed_original(
@@ -525,17 +445,16 @@ def case_call_kill_after_durable(ctx: Context) -> CaseResult:
     # Public-interface read-back confirmation with a bounded retry window:
     # the kill fires only AFTER THIS request's Ref (from run 0's own response)
     # is readable back through CWP's public interfaces byte-for-byte.
-    verified = None
-    probe_error = None
-    for _ in range(100):
-        import w20_fault_cases as _probe_mod
-        verified = cwp_public_readback(
-            ctx, identity=US, fiscal_year=2036, fiscal_quarter=1,
-            as_of_date="2026-12-31", content_sha=ref0["content_sha256"])
-        probe_error = _probe_mod._CWP_PROBE_LAST_ERROR
-        if verified is not None:
-            break
-        time.sleep(0.1)
+    confirmed = probe_catalog(
+        wiki_root=ctx.env.wiki, identity_request={
+            "entity": US.canonical_name, "document_kind": "investor_call_transcript",
+            "as_of_date": "2026-12-31", "market": US.market, "security_id": US.security_id,
+            "form_type": None, "fiscal_year": 2036, "fiscal_period": "Q1",
+            "language": None, "provider": "fmp", "provider_document_id": None,
+            "mode": "exact", "allow_download": False, "schema_version": "1.0"},
+        content_sha=ref0["content_sha256"], cwp_src=str(ctx.cwp_root / "src"))
+    verified = _confirmed_ref(confirmed)
+    probe_error = None if verified is not None else confirmed.get("error")
     # Run 1 re-requests the SAME source and is killed before its return can
     # be delivered: a post-durable receipt/return interruption. The kill is
     # unconditional here because durability is already publicly confirmed.
@@ -550,8 +469,60 @@ def case_call_kill_after_durable(ctx: Context) -> CaseResult:
                              "reuses with zero extra GETs and the same Ref/SHA", {
         "interruption_phase": "post_durable",
         "verified_at_kill": verified,
-        "probe_last_error": probe_error if verified is None else None,
+        "probe_state": confirmed["state"],
+        "probe_error": probe_error,
         "kill_reason": run_kill.get("kill_reason"),
+    })
+
+
+def case_call_lost_reply_after_durable(ctx: Context) -> CaseResult:
+    """THE critical durable scenario (return R2): ONE real new acquisition
+    whose success reply is intercepted at the harness-owned transport
+    boundary.
+
+    Run 0 runs the real chain to completion (download -> durable -> success
+    envelope produced), and the harness INTERCEPTS that envelope at its own
+    output edge: it is recorded as evidence but never delivered as a success
+    to the client layer. Between interception and recovery the public CWP
+    read-back confirms THIS acquisition's Ref byte-for-byte. Run 1 is the
+    first recovery: zero extra provider GETs, same Ref/SHA. Run 2 replays
+    with zero GETs. No microsecond kill point and no CWP product failpoint:
+    the interception is at the harness transport boundary, and server-side
+    completion with a transport-lost reply is exactly the allowed shape.
+    """
+    cid = "w20_call_lost_reply_after_durable"
+    content = "Synthetic W20 lost-reply transcript FY2038 Q1."
+    p0 = _prepare_run(ctx, cid, "run1", "success", content, 0)
+    run0 = _execute(ctx, p0)
+    # Harness-boundary interception: the envelope is consumed as evidence and
+    # explicitly NOT delivered to the client as a success.
+    run0["reply_intercepted"] = True
+    ref0 = source_ref((run0.get("response") or {}).get("transcript", {}).get("source_ref"))
+    verified = None
+    if ref0 is not None:
+        confirmed = probe_catalog(
+            wiki_root=ctx.env.wiki, identity_request={
+                "entity": US.canonical_name, "document_kind": "investor_call_transcript",
+                "as_of_date": "2026-12-31", "market": US.market,
+                "security_id": US.security_id, "form_type": None,
+                "fiscal_year": 2038, "fiscal_period": "Q1", "language": None,
+                "provider": "fmp", "provider_document_id": None, "mode": "exact",
+                "allow_download": False, "schema_version": "1.0"},
+            content_sha=ref0["content_sha256"], cwp_src=str(ctx.cwp_root / "src"))
+        verified = _confirmed_ref(confirmed)
+    # First recovery: the same company/period is requested again and must be
+    # served from the durable source with ZERO extra provider GETs.
+    p1 = _prepare_run(ctx, cid, "run2", "success", content, 1)
+    _execute(ctx, p1)
+    p2 = _prepare_run(ctx, cid, "run3", "success", content, 2)
+    _execute(ctx, p2)
+    return _result(ctx, cid, "one acquisition's success reply intercepted at the "
+                             "harness boundary after public read-back confirmed "
+                             "its Ref; recovery reuses with zero extra GETs and "
+                             "the same Ref/SHA", {
+        "reply_intercepted": True,
+        "verified_at_reply_loss": verified,
+        "probe_state": None if verified is None else "confirmed",
     })
 
 

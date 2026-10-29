@@ -103,6 +103,12 @@ def _build():
             2036, 1, "success",
             "Synthetic W20 durable-interrupt transcript FY2036 Q1.",
         ),
+        _three_run_fault(
+            "w20_call_lost_reply_after_durable",
+            "w20_fault_cases:case_call_lost_reply_after_durable",
+            2038, 1, "success",
+            "Synthetic W20 lost-reply transcript FY2038 Q1.",
+        ),
         _two_run_fault(
             "w20_call_et_truncated",
             "w20_fault_cases:case_et_fault",
@@ -201,15 +207,28 @@ W20_METADATA = {
     },
     "w20_call_kill_after_durable": {
         "declared_layer": "ff+et",
-        "scope": "real FF+ET chain; deterministic post-durable interruption: "
-                 "the kill fires only after THIS request's source is readable "
-                 "back through CWP's public interfaces (public transcript "
-                 "query + verified open) and hashes to this request's "
-                 "content; an unrelated-period original is pre-placed on disk "
-                 "as a control and can never fire the trigger. Recovery must "
-                 "reuse with ZERO extra provider GETs and the same Ref/SHA; "
-                 "the final replay reuses with zero GETs",
+        "scope": "CONTROL ONLY (return R2): after a prior acquisition was "
+                 "already delivered, a later re-request is killed after the "
+                 "durable source is confirmed through CWP's public read-back. "
+                 "This proves the duplicate-suppression path survives a killed "
+                 "re-request; it is NOT the critical lost-reply proof, which "
+                 "is w20_call_lost_reply_after_durable",
         "expected": {"interruption_phase": "post_durable",
+                     "recovery_zero_requests": True},
+    },
+    "w20_call_lost_reply_after_durable": {
+        "declared_layer": "ff+et",
+        "scope": "THE critical durable scenario (return R2): ONE real new "
+                 "acquisition runs to completion server-side, its success "
+                 "reply is intercepted at the harness-owned transport "
+                 "boundary and NEVER delivered to the client, and the public "
+                 "query+reader read-back confirms THIS acquisition's Ref/SHA "
+                 "in between. The first recovery then reuses with ZERO extra "
+                 "provider GETs and the same Ref/SHA; the replay reuses with "
+                 "zero GETs. Server-side completion with a transport-lost "
+                 "reply is explicitly allowed; no microsecond kill point, no "
+                 "CWP product failpoint, no exactly-once promise",
+        "expected": {"reply_intercepted": True,
                      "recovery_zero_requests": True},
     },
     "w20_call_et_truncated": {
@@ -398,6 +417,42 @@ def w20_assertion_errors(spec, case):
                     for k in ("document_id", "source_id", "content_sha256",
                               "byte_size", "mime_type")),
                 "recovery must return the same Ref/SHA as the pre-kill read-back")
+    elif cid == "w20_call_lost_reply_after_durable":
+        actual = case.get("actual") or {}
+        require(actual.get("reply_intercepted") is True,
+                "the case must declare that the acquisition's success reply was "
+                "intercepted at the harness boundary, never delivered")
+        verified = actual.get("verified_at_reply_loss") or {}
+        require(source_ref(verified) is not None,
+                "a public read-back proof must exist between the lost reply "
+                "and the recovery")
+        # Run 0: the SAME acquisition completed server-side and was intercepted.
+        require(runs[0].get("killed") is False and gets[0] == 1
+                and _t(runs[0]).get("status") == "downloaded"
+                and runs[0].get("reply_intercepted") is True,
+                "run 0 must be the intercepted acquisition itself (downloaded, "
+                "reply never delivered), not an already-delivered earlier run")
+        ref0 = source_ref(_t(runs[0]).get("source_ref"))
+        require(ref0 is not None and all(
+                    ref0.get(k) == verified.get(k)
+                    for k in ("document_id", "source_id", "content_sha256",
+                              "byte_size", "mime_type")),
+                "the read-back proof must be run 0's own Ref (one acquisition "
+                "identity across download, durability and the lost reply)")
+        # Run 1 is the FIRST recovery: zero extra GETs, same Ref/SHA.
+        require(_t(runs[1]).get("status") in {"reused", "unknown_publication"}
+                and gets[1] == 0,
+                "the first recovery after the lost reply must reuse with ZERO "
+                f"extra GETs (observed {_t(runs[1]).get('status')}, {gets[1]} GETs)")
+        require(refs[1] is not None and all(
+                    refs[1].get(k) == verified.get(k)
+                    for k in ("document_id", "source_id", "content_sha256",
+                              "byte_size", "mime_type")),
+                "the recovery must return the same Ref/SHA as the intercepted "
+                "acquisition")
+        require(_t(runs[2]).get("status") in {"reused", "unknown_publication"}
+                and refs[2] == refs[1] and gets[2] == 0,
+                "the replay must reuse the same source with zero requests")
     elif cid in {"w20_call_et_truncated", "w20_call_et_exit_nonzero"}:
         reason = spec.expected()["failure_reason"]
         t0 = _t(runs[0])

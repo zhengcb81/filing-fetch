@@ -84,10 +84,10 @@ def test_base_authority_is_unchanged_and_supplemental_is_disjoint() -> None:
     assert len(base) == 41
     assert case_specs.AUTHORITY_VERSION == "w06-cases/1"
     supplemental = w20_case_specs.w20_case_specs()
-    # Return R1 added the deterministic post-durable case (9 -> 10).
-    assert len(supplemental) == 10
+    # Return R1 added the post-durable case, return R2 the lost-reply case.
+    assert len(supplemental) == 11
     assert not ({s.id for s in base} & {s.id for s in supplemental})
-    assert len(case_registry.union_entries()) == 51
+    assert len(case_registry.union_entries()) == 52
 
 
 def test_cross_company_run_vectors_never_mix_identities() -> None:
