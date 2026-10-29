@@ -369,13 +369,12 @@ def w20_assertion_errors(spec, case):
                 "this case must declare its observed mid-import phase, never a durable pass")
         require(runs[0].get("killed") is True, "interruption did not happen")
         require(gets[0] == 1, f"interrupted run expected 1 GET, got {gets[0]}")
-        durable_at_kill = (case.get("actual") or {}).get("durable_at_kill_public_readback")
-        require(isinstance(durable_at_kill, bool),
-                "durable state at kill must be observed through the public CWP interface")
-        # The trigger (this request's own ET result receipt) fires BEFORE the
-        # CWP import starts, so the kill is deterministically pre-durable.
-        require(durable_at_kill is False,
-                "the mid-import kill must be observed as NOT durable (import not started)")
+        durable_state = (case.get("actual") or {}).get("durable_state_public_readback")
+        # Only an explicit successful query with no durable source is negative
+        # evidence; probe_error, missing and legacy booleans stay unknown.
+        require(durable_state == "not_found",
+                "the mid-import kill requires public read-back state not_found "
+                f"(observed {durable_state!r})")
         require(_t(runs[1]).get("status") == "downloaded" and gets[1] == 1,
                 "recovery after a pre-durable interruption must download exactly once "
                 f"(observed {_t(runs[1]).get('status')}, {gets[1]} GETs)")
