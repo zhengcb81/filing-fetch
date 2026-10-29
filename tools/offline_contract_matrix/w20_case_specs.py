@@ -97,6 +97,12 @@ def _build():
             2034, 2, "success",
             "Synthetic W20 durable-interrupt transcript FY2034 Q2.",
         ),
+        _three_run_fault(
+            "w20_call_kill_after_durable",
+            "w20_fault_cases:case_call_kill_after_durable",
+            2036, 1, "success",
+            "Synthetic W20 durable-interrupt transcript FY2036 Q1.",
+        ),
         _two_run_fault(
             "w20_call_et_truncated",
             "w20_fault_cases:case_et_fault",
@@ -183,13 +189,28 @@ W20_METADATA = {
     },
     "w20_call_kill_after_import": {
         "declared_layer": "ff+et",
-        "scope": "real FF+ET chain; FF child tree killed at the moment the "
-                 "canonical transcript original appears; the durable-at-kill "
-                 "branch is observed from the recovery run (reused = durable, "
-                 "downloaded = not yet durable) and the final run must reuse "
-                 "with zero requests",
-        "expected": {"interruption": "at_import_kill", "recovery_branch_observed": True,
-                     "final_reuse_zero_requests": True},
+        "scope": "real FF+ET chain; mid-import interruption observed: the FF "
+                 "child tree is killed when THIS request's canonical original "
+                 "bytes appear (request-bound trigger), the durable-or-not "
+                 "state at kill is observed through the public CWP interface "
+                 "and cross-checked against the recovery branch. This case is "
+                 "explicitly NOT a durable-pass proxy; the strict post-durable "
+                 "proof is w20_call_kill_after_durable",
+        "expected": {"interruption_phase": "mid_import_observed",
+                     "recovery_branch_observed": True},
+    },
+    "w20_call_kill_after_durable": {
+        "declared_layer": "ff+et",
+        "scope": "real FF+ET chain; deterministic post-durable interruption: "
+                 "the kill fires only after THIS request's source is readable "
+                 "back through CWP's public interfaces (public transcript "
+                 "query + verified open) and hashes to this request's "
+                 "content; an unrelated-period original is pre-placed on disk "
+                 "as a control and can never fire the trigger. Recovery must "
+                 "reuse with ZERO extra provider GETs and the same Ref/SHA; "
+                 "the final replay reuses with zero GETs",
+        "expected": {"interruption_phase": "post_durable",
+                     "recovery_zero_requests": True},
     },
     "w20_call_et_truncated": {
         "declared_layer": "ff+et",
@@ -325,12 +346,17 @@ def w20_assertion_errors(spec, case):
         require(sum(get for get in gets if isinstance(get, int)) == 2,
                 "exactly one interrupted GET plus one successful GET is allowed")
     elif cid == "w20_call_kill_after_import":
+        require((case.get("actual") or {}).get("interruption_phase") == "mid_import_observed",
+                "this case must declare its observed mid-import phase, never a durable pass")
         require(runs[0].get("killed") is True, "interruption did not happen")
         require(gets[0] == 1, f"interrupted run expected 1 GET, got {gets[0]}")
+        durable_at_kill = (case.get("actual") or {}).get("durable_at_kill_public_readback")
+        require(isinstance(durable_at_kill, bool),
+                "durable state at kill must be observed through the public CWP interface")
         branch = (case.get("actual") or {}).get("recovery_branch")
         if _t(runs[1]).get("status") in {"reused", "unknown_publication"} and gets[1] == 0:
-            require(branch == "durable_at_kill",
-                    "zero-request recovery implies the import was durable at kill time")
+            require(branch == "durable_at_kill" and durable_at_kill is True,
+                    "zero-request recovery must agree with the public read-back observation")
         elif _t(runs[1]).get("status") == "downloaded" and gets[1] == 1:
             require(branch == "not_durable_at_kill",
                     "one-GET recovery implies the import was not yet durable at kill time")
@@ -340,9 +366,33 @@ def w20_assertion_errors(spec, case):
                            f"{_t(runs[1]).get('status')}, {gets[1]} GETs)")
         require(_t(runs[2]).get("status") in {"reused", "unknown_publication"}
                 and refs[2] == refs[1] and gets[2] == 0,
-                "final run must reuse the durable source with zero requests")
+                "final run must reuse the recovered source with zero requests")
         require(sum(get for get in gets if isinstance(get, int)) <= 2,
                 "at most one interrupted GET plus one recovery GET is allowed")
+    elif cid == "w20_call_kill_after_durable":
+        actual = case.get("actual") or {}
+        require(actual.get("interruption_phase") == "post_durable",
+                "the durable case must declare the post_durable phase")
+        verified = actual.get("verified_at_kill") or {}
+        require(source_ref(verified) is not None,
+                "a public-interface read-back proof must exist for the killed run")
+        require(verified.get("content_sha256") == runs[0].get("expected_original_content_sha256"),
+                "the read-back proof must be THIS request's content, not another period's")
+        require(runs[0].get("killed") is True, "post-durable interruption did not happen")
+        require(gets[0] == 1, f"interrupted run expected exactly 1 GET, got {gets[0]}")
+        t0 = _t(runs[0])
+        require(t0.get("status") not in {"downloaded", "reused", "unknown_publication"}
+                and source_ref(t0.get("source_ref")) is None,
+                "the killed run must not carry a success envelope or a source")
+        require(_t(runs[1]).get("status") in {"reused", "unknown_publication"}
+                and gets[1] == 0,
+                "recovery after a durable interruption must reuse with ZERO extra GETs "
+                f"(observed {_t(runs[1]).get('status')}, {gets[1]} GETs)")
+        require(refs[1] is not None and refs[1] == verified,
+                "recovery must return the same Ref/SHA as the pre-kill read-back")
+        require(_t(runs[2]).get("status") in {"reused", "unknown_publication"}
+                and refs[2] == refs[1] and gets[2] == 0,
+                "the final replay must reuse the same source with zero requests")
     elif cid in {"w20_call_et_truncated", "w20_call_et_exit_nonzero"}:
         reason = spec.expected()["failure_reason"]
         t0 = _t(runs[0])
