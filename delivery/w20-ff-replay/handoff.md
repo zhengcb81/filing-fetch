@@ -87,3 +87,17 @@ ROOT 验收结论 CHANGES_REQUESTED（ff-review.md：FF-R1/P2 durable 后分支�
 **诚实修正**：原 4 份 kill_after_import PASS 的真实含义=not_durable 分支（ROOT 判定），历史报告保留不改写；"R3 已完成"声明收缩为两阶段分别证明。probe 走的 provider-scoped envelope 与 FF 复用链相同（unknown_publication 资格 source 也在公开查询可见范围），实读=open_version 字节级校验。
 
 本轮新增：`tests/test_w20_replay_return_r1.py`（6 测，RED 先行）；修复提交 b7a649c→3747e4a；260 项矩阵/单元套件回归全绿；清理：本轮重建的 .w20-deps 视图与 owned scratch 已再删除（cleanup-receipt.json 更新）。
+
+---
+
+## 返工轮 R2（2026-10-29，定点补完）
+
+ROOT 第二轮（w20-reception-r2）：FF-R2-1/P2 关键场景须为"同一次采集的成功返回被截留"而非"已有原文后杀新重试"；FF-R2-2/P2 公开读回探针线程隔离与三态区分。
+
+**FF-R2-1（关键场景重做）**：新增 `w20_call_lost_reply_after_durable`。**同一次真实新增采集**贯穿全程：run0 走完真实链（下载→durable→成功 envelope 产出），harness 在**自有 transport 输出边界截留该 envelope**（trace 标 `reply_intercepted=True`——作为证据消费、绝不作为成功交付客户端），其间公开 query+reader 实读确认**同一 Ref/SHA**（`verified_at_reply_loss`，provider-scoped lookup envelope + `open_version` 字节级比对）；run1 首次恢复 **0 额外 GET**、Ref/SHA 相同；run2 复用 0 GET。不变量断言拒绝 ROOT 反例代签：run0 已成功交付（无截留标记）+ 后续空杀 → FAIL（RED 测试固化）；Ref 漂移 → FAIL。服务端已处理完、响应传输层丢失的形态被明确允许；无微秒级杀点、无 CWP failpoint、不承诺 exactly-once。真链：attempt-dd7884e1 **PASS/oracle 0 findings**。旧 `w20_call_kill_after_durable` 保留为**对照**（scope 明示 CONTROL ONLY，prior-delivery + re-request-kill），probe 修复后复跑 attempt-248e9d19 **PASS**。
+
+**FF-R2-2（探针隔离）**：`cwp_public_readback` 整体重做为 `probe_catalog`——**每次调用一个有界子进程**（`cwp_readback_probe.py`），父进程 `sys.stdin/stdout` 零触碰、无模块级 last_error、结果/错误归本调用；结果三态显式：`confirmed`（本请求 Ref 字节级实读确认）/ `not_found`（公开查询正常应答但非本 Ref）/ `probe_error`（探针自身失败——**永不可当"公开确认未 durable"的负证据**）。有限测试覆盖：两公司/两资料根并发不串（真 catalog、ThreadPoolExecutor）、catalog 不可用=probe_error（非 not_found）、父进程 stdio 不变、丢失 wiki/非0 返回=probe_error。真链代表运行全部通过。
+
+**排障记录（诚实留痕）**：子进程版 probe 曾 `no_local_match`——根因是实现时丢失了 R1 的 envelope 包装（plain query 的 as-of 资格排除会隐藏未来期次的已存储原件）；恢复 provider-scoped lookup envelope 并让 probe 使用矩阵合成子进程环境（与其它 CWP 子进程一致）后，lost-reply 与对照 case 均 PASS。诊断用一次性 scratch 拷贝 wrapper（不入 git），已连诊断副本一并删除。
+
+**收尾项**：handoff 计数同步（supplemental 11、union 52）；cleanup-receipt 的布尔字段歧义改为显式含义说明。本轮新增 `tests/test_w20_replay_return_r2.py`（7 测，RED 先行）；267 项套件回归全绿。

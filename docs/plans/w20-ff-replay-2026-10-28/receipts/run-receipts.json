@@ -328,5 +328,10 @@
       "after_prior_cases": "attempt-36e764e91ee94b53a23f15ee6915a4f9 (PARTIAL: same correct phase observation; final reuse cut by the case deadline under load)"
     },
     "w20_call_et_truncated_after_prior_cases": "attempt-2a273f32a8034e4382ab43198f5d07d7 (PASS)"
+  },
+  "return_r2_runs": {
+    "w20_call_lost_reply_after_durable": "attempt-dd7884e11bd74adcb3d911736c893ca2 (PASS, oracle 0 findings): run0 downloaded+intercepted (1 GET), public read-back confirmed the SAME Ref, recovery 0 GETs same Ref/SHA, replay 0 GETs",
+    "w20_call_kill_after_durable_control": "attempt-248e9d19be5b42d98cef08fa50401300 (PASS, oracle 0 findings; probe_state=confirmed) — kept as the honest prior-delivery control",
+    "note": "supplemental suite now 11 cases (union 52); probe is a per-call bounded subprocess with explicit confirmed/not_found/probe_error states"
   }
 }

@@ -22,10 +22,19 @@
     "b7a649c",
     "cac3ee6",
     "f458e67",
-    "3747e4a"
+    "3747e4a",
+    "2802e73",
+    "b22cf4a",
+    "ecc5a57",
+    "f8b86f3",
+    "a693e10",
+    "28f4664",
+    "aa2ff69",
+    "48362b7",
+    "aa49836"
   ],
-  "tested_code_commit": "3747e4a",
-  "reviewed_code_commit": "3747e4a",
+  "tested_code_commit": "aa49836",
+  "reviewed_code_commit": "aa49836",
   "commit_note": "tested==reviewed==HEAD at handoff refresh; return-R1 fixes included",
   "files": [
     {
@@ -38,11 +47,15 @@
     },
     {
       "path": "tools/offline_contract_matrix/w20_case_specs.py",
-      "sha256": "f8724a4a970161e62dc0a7a99642ef1282588b35c42922c6db85ae93dd5944a1"
+      "sha256": "ed0aa677d30d010b2c88e8cd61142a3a6f1c86ae49706fe2124c844cd25f5c01"
     },
     {
       "path": "tools/offline_contract_matrix/w20_fault_cases.py",
-      "sha256": "9690571d3d634c72205308680320b18faac967971fe2625e660b588242e1307f"
+      "sha256": "7dd8af5524cd38033f4adbc9a4f356151e4580a30f1188d9e769452ece30618f"
+    },
+    {
+      "path": "tools/offline_contract_matrix/cwp_readback_probe.py",
+      "sha256": "f9071e5b278262779585f768100fc264a83b829a7b7f9daf8faea843b7ab9a7e"
     },
     {
       "path": "tools/offline_contract_matrix/cli_main.py",
@@ -74,7 +87,7 @@
     },
     {
       "path": "tests/test_w20_replay_selection.py",
-      "sha256": "c893ccde590787a18484aa251cb4f6cad38876a1d6baa7011afd8a7deeaf9218"
+      "sha256": "3d909940f03e70938426f734844d0c89b72a5dc69f79205ec46e6525ddfd4022"
     },
     {
       "path": "tests/test_w20_replay_faults.py",
@@ -85,6 +98,14 @@
       "sha256": "7d86bb3364fb4a1024e26a4a19017f1d89e7cea6da6c69a956aac086964b715b"
     },
     {
+      "path": "tests/test_w20_replay_return_r2.py",
+      "sha256": "3d2f0c4fea4215077fd9f63c72465a228587c1a488cf7db0db22173089d50de5"
+    },
+    {
+      "path": "delivery/w20-ff-replay/handoff.md",
+      "sha256": "bf35b485cd89e9a4bcea9f8faf1a66878bdcbf9bb50747154dc1a338f65d8301"
+    },
+    {
       "path": "delivery/w20-ff-replay/review/initial.md",
       "sha256": "f00c7c8bfe218a9be51c108c5286355713dd106b04cc9f3e29b19bb6123b1808"
     },
@@ -93,8 +114,24 @@
       "sha256": "7c9684a496adc498f9bb7785c963c95129e70797c91c2251c4b173ab65f8bdff"
     },
     {
+      "path": "delivery/w20-ff-replay/review/final.md",
+      "sha256": "a063bb86cd4360768f010da33a7561d4f97f1182712d78d307b97533c19a20ef"
+    },
+    {
+      "path": "delivery/w20-ff-replay/review/final.json",
+      "sha256": "5628cceae01b82dbcde08da381f601cc9f4b1d56187df3341d78a23bcd037b3c"
+    },
+    {
+      "path": "delivery/w20-ff-replay/review/return-r1-final.md",
+      "sha256": "39408199402b4f819616ccfd6e49fd88582307ed75cbbd8bf75fc4a8b1c1e8ea"
+    },
+    {
+      "path": "delivery/w20-ff-replay/review/return-r1-final.json",
+      "sha256": "f97c1ad383c8f66905be274d7529925cc31fbf7695dc231349532ee8e8c05310"
+    },
+    {
       "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/run-receipts.json",
-      "sha256": "36d741d629ccfcd52eca58406486f50e8744f75a4df26d604b063a285dfc79a6"
+      "sha256": "74c56df6d5acf9754440321eb32d97b9b0d3081b8d2465202422bb2982ae9a29"
     },
     {
       "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/dependency-record.json",
@@ -102,7 +139,7 @@
     },
     {
       "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/cleanup-receipt.json",
-      "sha256": "30baacdcf8097b8d0fa3bd93d49c015a71144d5fed710243a0ce20700d21247b"
+      "sha256": "634935867a28279a5ac542ff5f412954f3ce87316a22ecbbbe4e66df54dd4a71"
     }
   ],
   "requirements": [
