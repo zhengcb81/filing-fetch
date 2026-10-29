@@ -20,9 +20,19 @@
   },
   "return_r1": {
     "date": "2026-10-29",
-    "note": "view rebuilt from the same frozen commits for re-verification, then deleted again",
+    "note": "booleans below mean 'verified absent on disk at cleanup time' \u2014 True means already deleted, False means still present at the time this receipt was written",
     "w20_deps_view_deleted": false,
     "owned_scratch_removed": false,
-    "retained_evidence_bytes": 7657936
+    "retained_evidence_bytes": 7657936,
+    "w20_deps_view_deleted_meaning": "True = view was absent on disk when the receipt was written",
+    "owned_scratch_removed_meaning": "True = owned scratch was absent on disk when the receipt was written"
+  },
+  "return_r2": {
+    "date": "2026-10-29",
+    "view_rebuilt_and_deleted": false,
+    "owned_scratch_removed": false,
+    "debug_keep_scratch_removed": true,
+    "debug_keep_note": "a one-shot scratch-copy wrapper (kept out of git) was used to debug the probe; both the copy and the wrapper were deleted after diagnosis",
+    "retained_evidence_bytes": 8880334
   }
 }
