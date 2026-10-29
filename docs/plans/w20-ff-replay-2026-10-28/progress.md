@@ -19,3 +19,8 @@
 - 排障记录：probe三层修正（redirect_stdin不存在→provider=None被lookup拒→unknown_publication资格排除→绑定Ref而非文本SHA）；mid-import触发器组前缀误加。CWP写入经异步worker，"文件出现"≠durable——kill点设计据此改为durable确认后杀新请求。
 - 独立复审（第三个独立agent）：APPROVE，OPEN空；6条非阻塞观察已处理（调试脚本删除等）。
 - 最终HEAD f8b86f3 已推送 origin。STOP，等ROOT复验。
+
+## 返工轮R2收尾（作者，2026-10-29）
+- FF-R2-1：新增 w20_call_lost_reply_after_durable——同一次真实采集贯穿（run0 downloaded→harness边界截留 reply_intercepted=True→公开实读确认同Ref→run1恢复0GET同Ref→run2复用0GET）；断言拒绝ROOT反例（已交付run0+空杀）与Ref漂移；真链 attempt-dd7884e1 PASS/0 findings。旧kill_after_durable保留为对照（CONTROL ONLY）attempt-248e9d19 PASS。
+- FF-R2-2：probe重写为每调用一个有界子进程（cwp_readback_probe.py），父stdio零触碰、无共享last_error、三态confirmed/not_found/probe_error显式（probe_error永不作not-durable负证据）；7测含两公司并发/stdio恢复/catalog不可用=probe_error。排障：子进程版曾no_local_match——实现时丢了R1的transcript-lookup envelope包装（plain query的as-of资格排除隐藏未来期次原件），恢复envelope+合成子进程env后全通；一次性scratch拷贝wrapper已删。
+- 独立复审：实质全过；REJECT仅一条P3文书（旧计数残留+push落后）→已清零（grep=0）并推送。最终HEAD ae525b6，origin同步，工作区clean。STOP等ROOT。
