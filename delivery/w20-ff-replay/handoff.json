@@ -15,11 +15,18 @@
     "3e8d1be",
     "e15640c",
     "eadb10c",
-    "e07b424"
+    "e07b424",
+    "038eac5",
+    "e81953d",
+    "316842d",
+    "b7a649c",
+    "cac3ee6",
+    "f458e67",
+    "3747e4a"
   ],
-  "tested_code_commit": "e07b424",
-  "reviewed_code_commit": "e07b424",
-  "commit_note": "tested==reviewed==final tree (e07b424). e15640c was the last Python-source commit; e15640c..e07b424 touches only README one-line precision fix (initial-review F5) plus docs/receipts — no Python source change between them.",
+  "tested_code_commit": "3747e4a",
+  "reviewed_code_commit": "3747e4a",
+  "commit_note": "tested==reviewed==HEAD at handoff refresh; return-R1 fixes included",
   "files": [
     {
       "path": "tools/offline_contract_matrix/case_selection.py",
@@ -31,11 +38,11 @@
     },
     {
       "path": "tools/offline_contract_matrix/w20_case_specs.py",
-      "sha256": "776f0cbaf865d8139900dee49ba65b5330b438ab5993a8cd2fce11f34731a0fe"
+      "sha256": "f8724a4a970161e62dc0a7a99642ef1282588b35c42922c6db85ae93dd5944a1"
     },
     {
       "path": "tools/offline_contract_matrix/w20_fault_cases.py",
-      "sha256": "add5c17681523b166a1157aac1f862540ff4290c0729537a040d421db400c8dc"
+      "sha256": "9690571d3d634c72205308680320b18faac967971fe2625e660b588242e1307f"
     },
     {
       "path": "tools/offline_contract_matrix/cli_main.py",
@@ -67,51 +74,35 @@
     },
     {
       "path": "tests/test_w20_replay_selection.py",
-      "sha256": "4769479b277d54b7086dc0a501b2fcf1dffa73639e64e240f44c751ee42bb88f"
+      "sha256": "c893ccde590787a18484aa251cb4f6cad38876a1d6baa7011afd8a7deeaf9218"
     },
     {
       "path": "tests/test_w20_replay_faults.py",
       "sha256": "cf81441e0b795b6fbebbc18a3bcd8446742a4b81d9693c9e4deea18244149dfc"
     },
     {
-      "path": "delivery/w20-ff-replay/handoff.md",
-      "sha256": "4241c3442545bb88347b128dea64162eee7d84033441a5b3f2f7c93382b127db"
+      "path": "tests/test_w20_replay_return_r1.py",
+      "sha256": "7d86bb3364fb4a1024e26a4a19017f1d89e7cea6da6c69a956aac086964b715b"
     },
     {
       "path": "delivery/w20-ff-replay/review/initial.md",
       "sha256": "f00c7c8bfe218a9be51c108c5286355713dd106b04cc9f3e29b19bb6123b1808"
     },
     {
-      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/dependency-record.json",
-      "sha256": "21c96f1856df1f2a4c71362d63268de134b765743123e1ed05e0749ddc048146"
-    },
-    {
-      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/run-receipts.json",
-      "sha256": "a863cc936fd9c632ded2baaf30612a08a930665ef90cab1a709f2ba40367bb2d"
-    },
-    {
-      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/cleanup-receipt.json",
-      "sha256": "c782cfa2465fdc1c81cdee8828172972c5e49a511d05496ab24749828e50e975"
-    },
-    {
-      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/baseline-preexisting-failures.txt",
-      "sha256": "b57fb7a2ba91bac9cefdb940a96e6991f7d9c289ca2045278b454b9e47ac3cd9"
-    },
-    {
-      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/branch-failures.txt",
-      "sha256": "9e9dea37ce280cd3e324004ac0b32a18e4a103969889b50151db38c98763744b"
-    },
-    {
       "path": "delivery/w20-ff-replay/review/initial.json",
       "sha256": "7c9684a496adc498f9bb7785c963c95129e70797c91c2251c4b173ab65f8bdff"
     },
     {
-      "path": "delivery/w20-ff-replay/review/final.md",
-      "sha256": "a063bb86cd4360768f010da33a7561d4f97f1182712d78d307b97533c19a20ef"
+      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/run-receipts.json",
+      "sha256": "36d741d629ccfcd52eca58406486f50e8744f75a4df26d604b063a285dfc79a6"
     },
     {
-      "path": "delivery/w20-ff-replay/review/final.json",
-      "sha256": "5628cceae01b82dbcde08da381f601cc9f4b1d56187df3341d78a23bcd037b3c"
+      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/dependency-record.json",
+      "sha256": "21c96f1856df1f2a4c71362d63268de134b765743123e1ed05e0749ddc048146"
+    },
+    {
+      "path": "docs/plans/w20-ff-replay-2026-10-28/receipts/cleanup-receipt.json",
+      "sha256": "c782cfa2465fdc1c81cdee8828172972c5e49a511d05496ab24749828e50e975"
     }
   ],
   "requirements": [
@@ -185,11 +176,12 @@
     },
     {
       "command": "python -B -m pytest -q tests/ --ignore=tests/e2e",
-      "exit_code": 0,
+      "exit_code": null,
       "passed": 1462,
       "failed": 13,
       "seconds": 404.6,
-      "scope": "全仓套件; 13项失败经冻结基线worktree同命令复判全部为基线既有(receipts/baseline-preexisting-failures.txt), 与W20改动零关联"
+      "scope": "全仓套件; 13项失败经冻结基线worktree同命令复判全部为基线既有(receipts/baseline-preexisting-failures.txt), 与W20改动零关联",
+      "exit_code_note": "the true process exit code of that full-suite run was not recorded at run time and is NOT reconstructed; pytest exits nonzero when any test fails, and 13 pre-existing baseline failures are disclosed, so 0 would be false. Set to null per the return-R1 instruction rather than fabricating a value; the full suite is NOT green."
     },
     {
       "command": "python -B tools/offline_contract_matrix/run.py --cwp-project .w20-deps/cwp --et-project .w20-deps/et --owned-root ... --out-root ... --cases <selection>",

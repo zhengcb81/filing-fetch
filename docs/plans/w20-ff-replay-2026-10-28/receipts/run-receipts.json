@@ -311,5 +311,22 @@
     "w20_call_concurrent_same": "attempt-465ac1a5b06444f98e261e705fc065a2 and attempt-d163ba822e (PASS)",
     "w20_filing_kill_recovery": "attempt-e734dc75b5 (PASS, paired batch); also 465ac1a/d163ba8",
     "w20_filing_concurrent_cross_company": "attempt-465ac1a5b06444f98e261e705fc065a2 and attempt-d163ba822e (PASS)"
+  },
+  "return_r1_runs": {
+    "note": "return-R1 (2026-10-29) real-chain evidence; view rebuilt from the same frozen commits",
+    "w20_call_kill_after_durable": {
+      "solo": "attempt-2ebbf3d7be284304877137c80cf18226 (PASS, oracle 0 findings)",
+      "after_prior_cases": "attempt-2a273f32a8034e4382ab43198f5d07d7 (PASS in the 4-case sequential batch)",
+      "shape": "run0 normal acquisition (1 GET) -> public read-back proof of THIS request's Ref -> re-request killed before its return (0 GETs, no envelope) -> recovery reuse 0 GETs same Ref/SHA"
+    },
+    "w20_call_kill_after_import": {
+      "solo": "attempt-8a972aa642c545918d37df3b3cabfe4a (PASS, oracle 0 findings; durable_at_kill_public_readback=false observed)",
+      "after_prior_cases": "attempt-36e764e91ee94b53a23f15ee6915a4f9 (PARTIAL: run0 killed on THIS request's receipt, recovery downloaded once — correct phase observation; only the final reuse run was cut by the fixed 30s case bound under host load; the reuse segment itself is proven by the solo PASS)"
+    },
+    "w20_call_kill_before_durable": {
+      "solo": "attempt-afb227f21b334f31a14e127d189d4f44 (PASS, oracle 0 findings)",
+      "after_prior_cases": "attempt-36e764e91ee94b53a23f15ee6915a4f9 (PARTIAL: same correct phase observation; final reuse cut by the case deadline under load)"
+    },
+    "w20_call_et_truncated_after_prior_cases": "attempt-2a273f32a8034e4382ab43198f5d07d7 (PASS)"
   }
 }
