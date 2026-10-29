@@ -75,18 +75,21 @@ def test_durable_assertions_reject_a_not_durable_recovery_proxy() -> None:
         "id": "w20_call_kill_after_durable",
         "actual": {
             "interruption_phase": "post_durable",
+            "verified_at_kill": _ref(CONTENT_SHA),
             "runs": [
-                _run({}, killed=True, gets=1, content_sha=CONTENT_SHA),
-                # Recovery re-downloads: the proxy for "not durable at kill".
                 _run({"transcript": {"status": "downloaded", "source_ref": _ref(CONTENT_SHA)}},
                      killed=False, gets=1, content_sha=CONTENT_SHA),
+                # The "recovery" RE-DOWNLOADS: the proxy for "not durable at
+                # kill" that the original case wrongly accepted.
+                _run({"transcript": {"status": "downloaded", "source_ref": _ref(CONTENT_SHA)}},
+                     killed=True, gets=1, content_sha=CONTENT_SHA),
                 _run({"transcript": {"status": "reused", "source_ref": _ref(CONTENT_SHA)}},
                      killed=False, gets=0, content_sha=CONTENT_SHA),
             ],
         },
     }
     errors = spec.assertion_errors(not_durable_report)
-    assert errors, "a 1-GET recovery must be rejected as not-durable, not passed"
+    assert errors, "a re-downloading recovery must be rejected as not-durable, not passed"
 
 
 def test_durable_assertions_accept_only_zero_get_recovery_with_readback_proof() -> None:
@@ -98,11 +101,12 @@ def test_durable_assertions_accept_only_zero_get_recovery_with_readback_proof() 
             "interruption_phase": "post_durable",
             "verified_at_kill": verified,
             "runs": [
-                # No success envelope: the tree was killed after the public
-                # read-back succeeded.
-                _run({}, killed=True, gets=1, content_sha=CONTENT_SHA),
-                _run({"transcript": {"status": "reused", "source_ref": verified}},
-                     killed=False, gets=0, content_sha=CONTENT_SHA),
+                # Run 0 completes normally and establishes the durable source.
+                _run({"transcript": {"status": "downloaded", "source_ref": verified}},
+                     killed=False, gets=1, content_sha=CONTENT_SHA),
+                # The re-request is killed before its return: 0 GETs, no envelope.
+                _run({}, killed=True, gets=0, content_sha=CONTENT_SHA),
+                # Recovery reuses with zero extra GETs and the same Ref.
                 _run({"transcript": {"status": "reused", "source_ref": verified}},
                      killed=False, gets=0, content_sha=CONTENT_SHA),
             ],

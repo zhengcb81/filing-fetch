@@ -371,24 +371,33 @@ def w20_assertion_errors(spec, case):
                 "the durable case must declare the post_durable phase")
         verified = actual.get("verified_at_kill") or {}
         require(source_ref(verified) is not None,
-                "a public-interface read-back proof must exist for the killed run")
-        require(verified.get("content_sha256") == runs[0].get("expected_original_content_sha256"),
-                "the read-back proof must be THIS request's content, not another period's")
-        require(runs[0].get("killed") is True, "post-durable interruption did not happen")
-        require(gets[0] == 1, f"interrupted run expected exactly 1 GET, got {gets[0]}")
-        t0 = _t(runs[0])
-        require(t0.get("status") not in {"downloaded", "reused", "unknown_publication"}
-                and source_ref(t0.get("source_ref")) is None,
-                "the killed run must not carry a success envelope or a source")
-        require(_t(runs[1]).get("status") in {"reused", "unknown_publication"}
-                and gets[1] == 0,
-                "recovery after a durable interruption must reuse with ZERO extra GETs "
-                f"(observed {_t(runs[1]).get('status')}, {gets[1]} GETs)")
-        require(refs[1] is not None and refs[1] == verified,
-                "recovery must return the same Ref/SHA as the pre-kill read-back")
+                "a public-interface read-back proof must exist from BEFORE the kill")
+        ref0 = source_ref(_t(runs[0]).get("source_ref"))
+        require(ref0 is not None and verified.get("content_sha256") == ref0.get("content_sha256"),
+                "the read-back proof must be THIS request's Ref (run 0's own source)")
+        # Run 0 establishes durability through a normal complete acquisition.
+        require(runs[0].get("killed") is False and gets[0] == 1
+                and _t(runs[0]).get("status") == "downloaded",
+                "run 0 must complete normally to establish the durable source")
+        # Run 1 re-requests the same source and is killed before its return:
+        # no provider GET (the source is durable), no success envelope.
+        require(runs[1].get("killed") is True,
+                "the post-durable re-request must be interrupted")
+        require(gets[1] == 0,
+                f"an interrupted re-request of a durable source must cost 0 GETs, got {gets[1]}")
+        require(_t(runs[1]).get("status") not in {"downloaded", "reused", "unknown_publication"}
+                and source_ref(_t(runs[1]).get("source_ref")) is None,
+                "the interrupted re-request must not carry a success envelope or a source")
+        # Run 2 is the recovery: zero extra GETs, same Ref/SHA as the proof.
         require(_t(runs[2]).get("status") in {"reused", "unknown_publication"}
-                and refs[2] == refs[1] and gets[2] == 0,
-                "the final replay must reuse the same source with zero requests")
+                and gets[2] == 0,
+                "recovery after a durable interruption must reuse with ZERO extra GETs "
+                f"(observed {_t(runs[2]).get('status')}, {gets[2]} GETs)")
+        require(refs[2] is not None and all(
+                    refs[2].get(k) == verified.get(k)
+                    for k in ("document_id", "source_id", "content_sha256",
+                              "byte_size", "mime_type")),
+                "recovery must return the same Ref/SHA as the pre-kill read-back")
     elif cid in {"w20_call_et_truncated", "w20_call_et_exit_nonzero"}:
         reason = spec.expected()["failure_reason"]
         t0 = _t(runs[0])

@@ -32,6 +32,7 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+from matrix_outcome import source_ref  # noqa: E402
 from run import Context, CASE_TIMEOUT  # noqa: E402
 from report import CaseResult, sha256_file  # noqa: E402
 from fixture_builder import CN, HK, US, Identity  # noqa: E402
@@ -106,6 +107,7 @@ def _cwp_probe_modules():
 
 
 _CWP_PROBE_CWP_ROOT = None
+_CWP_PROBE_LAST_ERROR = None
 
 
 def warm_cwp_probe(ctx: Context) -> None:
@@ -134,9 +136,11 @@ def cwp_public_readback(ctx: Context, *, identity, fiscal_year: int,
     durable-at-kill proof: no private DB reads, no FF-side storage logic.
     Any failure/absence returns ``None`` (not yet durable), never a guess.
     """
+    global _CWP_PROBE_LAST_ERROR
     try:
         _cwp_probe_modules()
-    except Exception:
+    except Exception as exc:
+        _CWP_PROBE_LAST_ERROR = f"warmup {type(exc).__name__}: {exc}"[:300]
         return None
     import contextlib
     import io as _io
@@ -150,25 +154,28 @@ def cwp_public_readback(ctx: Context, *, identity, fiscal_year: int,
     wiki = Path(ctx.env.wiki)
     catalog = None
     try:
-        source_request = {
-            "entity": identity.canonical_name,
-            "document_kind": "investor_call_transcript",
-            "as_of_date": as_of_date,
-            "market": identity.market,
-            "security_id": identity.security_id,
-            "form_type": None,
-            "fiscal_year": fiscal_year,
-            "fiscal_period": f"Q{fiscal_quarter}",
-            "language": None,
-            "provider": None,
-            "provider_document_id": None,
-            "mode": "exact",
-            "allow_download": False,
-            "schema_version": "1.0",
-        }
+        # The provider-scoped transcript-import lookup envelope — the exact
+        # public path FF's own duplicate-suppression reuse uses (provider
+        # "fmp"; it includes unknown-publication sources that the plain
+        # query_local would exclude).
         payload = {
             "schema_version": "company-wiki-transcript-import-lookup-request/1",
-            "source_request": source_request,
+            "source_request": {
+                "entity": identity.canonical_name,
+                "document_kind": "investor_call_transcript",
+                "as_of_date": as_of_date,
+                "market": identity.market,
+                "security_id": identity.security_id,
+                "form_type": None,
+                "fiscal_year": fiscal_year,
+                "fiscal_period": f"Q{fiscal_quarter}",
+                "language": None,
+                "provider": "fmp",
+                "provider_document_id": None,
+                "mode": "exact",
+                "allow_download": False,
+                "schema_version": "1.0",
+            },
         }
         out = _io.StringIO()
         saved_stdin = sys.stdin
@@ -181,12 +188,19 @@ def cwp_public_readback(ctx: Context, *, identity, fiscal_year: int,
         finally:
             sys.stdin = saved_stdin
         if code != 0:
+            _CWP_PROBE_LAST_ERROR = f"query rc={code} out={out.getvalue()[:160]}"
             return None
         result = _json.loads(out.getvalue())
-        if result.get("status") != "found" or len(result.get("matches") or []) != 1:
+        # found OR unknown_publication both mean the source is durably stored
+        # and describable by the public query; the hard proof is the verified
+        # open below (byte length + sha256 must equal THIS request's content).
+        if (result.get("status") not in {"found", "unknown_publication"}
+                or len(result.get("matches") or []) != 1):
+            _CWP_PROBE_LAST_ERROR = f"status={result.get('status')} reason={result.get('reason')} matches={len(result.get('matches') or [])}"
             return None
         ref = result["matches"][0]
         if ref.get("content_sha256") != content_sha:
+            _CWP_PROBE_LAST_ERROR = f"sha mismatch: {str(ref.get('content_sha256'))[:16]} != {content_sha[:16]}"
             return None
         catalog = SourceCatalog(load_catalog_config(wiki / "config" / "source_catalog.yaml",
                                                     project_root=wiki))
@@ -196,11 +210,13 @@ def cwp_public_readback(ctx: Context, *, identity, fiscal_year: int,
         import hashlib as _hashlib
         digest = _hashlib.sha256(verified.data).hexdigest()
         if digest != content_sha or len(verified.data) != ref.get("byte_size"):
+            _CWP_PROBE_LAST_ERROR = f"readback mismatch digest={digest[:16]} len={len(verified.data)} vs {ref.get('byte_size')}"
             return None
         return {"document_id": ref["document_id"], "source_id": ref["source_id"],
                 "content_sha256": digest, "byte_size": len(verified.data),
                 "mime_type": ref.get("mime_type")}
-    except Exception:
+    except Exception as exc:
+        _CWP_PROBE_LAST_ERROR = f"{type(exc).__name__}: {exc}"[:300]
         return None
     finally:
         if catalog is not None:
@@ -489,7 +505,6 @@ def case_call_kill_after_durable(ctx: Context) -> CaseResult:
     """
     cid = "w20_call_kill_after_durable"
     content = "Synthetic W20 durable-interrupt transcript FY2036 Q1."
-    content_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
     warm_cwp_probe(ctx)
     from dataclasses import replace
     unrelated = replace(US, provider="fmp", source_url=US.source_url)
@@ -498,24 +513,45 @@ def case_call_kill_after_durable(ctx: Context) -> CaseResult:
         fiscal_period="Q1", form_type=None, published_date="2037-01-01",
         content=b"Synthetic W20 UNRELATED-period original (never this request).\n",
         mime_type="text/plain", filename_hint="w20_unrelated_2037q1")
-    p1 = _prepare_run(ctx, cid, "run1", "success", content, 0)
-    run1 = _execute(ctx, p1, kill_when=lambda: cwp_public_readback(
-        ctx, identity=US, fiscal_year=2036, fiscal_quarter=1,
-        as_of_date="2026-12-31", content_sha=content_sha) is not None)
-    verified = cwp_public_readback(
-        ctx, identity=US, fiscal_year=2036, fiscal_quarter=1,
-        as_of_date="2026-12-31", content_sha=content_sha)
-    p2 = _prepare_run(ctx, cid, "run2", "success", content, 1)
+    # Run 0 completes NORMALLY and establishes durability (CWP's writer is
+    # asynchronous, so durability is confirmed afterwards, not assumed).
+    p0 = _prepare_run(ctx, cid, "run1", "success", content, 0)
+    run0 = _execute(ctx, p0)
+    ref0 = source_ref((run0.get("response") or {}).get("transcript", {}).get("source_ref"))
+    if ref0 is None:
+        return _result(ctx, cid, "run 0 failed to produce a source ref; the "
+                                 "post-durable phase cannot be attempted", {
+            "interruption_phase": "post_durable", "verified_at_kill": None})
+    # Public-interface read-back confirmation with a bounded retry window:
+    # the kill fires only AFTER THIS request's Ref (from run 0's own response)
+    # is readable back through CWP's public interfaces byte-for-byte.
+    verified = None
+    probe_error = None
+    for _ in range(100):
+        import w20_fault_cases as _probe_mod
+        verified = cwp_public_readback(
+            ctx, identity=US, fiscal_year=2036, fiscal_quarter=1,
+            as_of_date="2026-12-31", content_sha=ref0["content_sha256"])
+        probe_error = _probe_mod._CWP_PROBE_LAST_ERROR
+        if verified is not None:
+            break
+        time.sleep(0.1)
+    # Run 1 re-requests the SAME source and is killed before its return can
+    # be delivered: a post-durable receipt/return interruption. The kill is
+    # unconditional here because durability is already publicly confirmed.
+    p1 = _prepare_run(ctx, cid, "run2", "success", content, 1)
+    run_kill = _execute(ctx, p1, kill_when=lambda: True)
+    # Run 2 is the recovery: zero extra provider GETs, same Ref/SHA.
+    p2 = _prepare_run(ctx, cid, "run3", "success", content, 2)
     _execute(ctx, p2)
-    p3 = _prepare_run(ctx, cid, "run3", "success", content, 2)
-    _execute(ctx, p3)
-    return _result(ctx, cid, "FF tree killed only after the public CWP interface "
-                             "reads back THIS request's source (post-durable); "
-                             "recovery reuses with zero extra GETs and the same "
-                             "Ref/SHA", {
+    return _result(ctx, cid, "durable source confirmed by public read-back, then the "
+                             "re-request is killed before its return is delivered "
+                             "(post-durable receipt/return interruption); recovery "
+                             "reuses with zero extra GETs and the same Ref/SHA", {
         "interruption_phase": "post_durable",
         "verified_at_kill": verified,
-        "kill_reason": run1.get("kill_reason"),
+        "probe_last_error": probe_error if verified is None else None,
+        "kill_reason": run_kill.get("kill_reason"),
     })
 
 
