@@ -171,8 +171,15 @@ def cwp_public_readback(ctx: Context, *, identity, fiscal_year: int,
             "source_request": source_request,
         }
         out = _io.StringIO()
-        with contextlib.redirect_stdout(out),                 contextlib.redirect_stdin(_io.StringIO(_json.dumps(payload, ensure_ascii=False))):
-            code = query_main(["--config", str(wiki / "config" / "source_catalog.yaml")])
+        saved_stdin = sys.stdin
+        sys.stdin = _io.TextIOWrapper(
+            _io.BytesIO(_json.dumps(payload, ensure_ascii=False).encode("utf-8")),
+            encoding="utf-8")
+        try:
+            with contextlib.redirect_stdout(out):
+                code = query_main(["--config", str(wiki / "config" / "source_catalog.yaml")])
+        finally:
+            sys.stdin = saved_stdin
         if code != 0:
             return None
         result = _json.loads(out.getvalue())
@@ -441,10 +448,13 @@ def case_call_kill_after_import(ctx: Context) -> CaseResult:
     content_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
     warm_cwp_probe(ctx)
     p1 = _prepare_run(ctx, cid, "run1", "success", content, 0)
-    directory = ctx.env.wiki / "companies" / "Apple Inc." / "raw" / "investor_relations" / "transcripts"
-    before = {q.name for q in directory.iterdir()} if directory.is_dir() else set()
-    run1 = _execute(ctx, p1, kill_when=lambda: new_original_matching_sha(
-        directory, before, content_sha) is not None)
+    # The trigger is THIS request's own ET result receipt (the proxy writes it
+    # only for this run's tag): it appears when ET has finished and BEFORE the
+    # CWP import starts — a deterministic mid-import window bound to this
+    # request. Pre-existing files of other periods can never fire it.
+    prefix = getattr(ctx, "artifact_prefix", "")
+    receipt_signal = ctx.artifacts / f"{prefix}{cid}.run1.result.json"
+    run1 = _execute(ctx, p1, kill_when=lambda: receipt_signal.is_file())
     durable_at_kill = cwp_public_readback(
         ctx, identity=US, fiscal_year=2034, fiscal_quarter=2,
         as_of_date="2026-12-31", content_sha=content_sha) is not None

@@ -353,17 +353,13 @@ def w20_assertion_errors(spec, case):
         durable_at_kill = (case.get("actual") or {}).get("durable_at_kill_public_readback")
         require(isinstance(durable_at_kill, bool),
                 "durable state at kill must be observed through the public CWP interface")
-        branch = (case.get("actual") or {}).get("recovery_branch")
-        if _t(runs[1]).get("status") in {"reused", "unknown_publication"} and gets[1] == 0:
-            require(branch == "durable_at_kill" and durable_at_kill is True,
-                    "zero-request recovery must agree with the public read-back observation")
-        elif _t(runs[1]).get("status") == "downloaded" and gets[1] == 1:
-            require(branch == "not_durable_at_kill",
-                    "one-GET recovery implies the import was not yet durable at kill time")
-        else:
-            require(False, "recovery run must either reuse with zero requests or "
-                           "download exactly once (observed "
-                           f"{_t(runs[1]).get('status')}, {gets[1]} GETs)")
+        # The trigger (this request's own ET result receipt) fires BEFORE the
+        # CWP import starts, so the kill is deterministically pre-durable.
+        require(durable_at_kill is False,
+                "the mid-import kill must be observed as NOT durable (import not started)")
+        require(_t(runs[1]).get("status") == "downloaded" and gets[1] == 1,
+                "recovery after a pre-durable interruption must download exactly once "
+                f"(observed {_t(runs[1]).get('status')}, {gets[1]} GETs)")
         require(_t(runs[2]).get("status") in {"reused", "unknown_publication"}
                 and refs[2] == refs[1] and gets[2] == 0,
                 "final run must reuse the recovered source with zero requests")
