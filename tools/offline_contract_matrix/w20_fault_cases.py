@@ -91,7 +91,7 @@ def new_original_matching_sha(directory: Path, before: set[str],
 
 
 def probe_catalog(*, wiki_root: Path, identity_request: dict[str, Any],
-                  content_sha: str, cwp_src: str,
+                  content_sha: str, cwp_src: str, env: dict[str, str] | None = None,
                   timeout_seconds: float = 30.0) -> dict[str, Any]:
     """Public read-back through ONE bounded subprocess per call (return R2).
 
@@ -108,13 +108,15 @@ def probe_catalog(*, wiki_root: Path, identity_request: dict[str, Any],
     import subprocess as _subprocess
     payload = {"wiki": str(wiki_root), "cwp_src": str(cwp_src),
                "identity_request": identity_request, "content_sha": content_sha}
-    env = {k: os.environ[k] for k in ("SystemRoot", "WINDIR", "COMSPEC", "PATH", "PATHEXT")
-           if k in os.environ}
-    env["PYTHONUTF8"] = "1"
-    # The probe child needs a HOME; keep it inside the owned scratch tree.
-    probe_home = Path(wiki_root).parent / "probe-home"
-    probe_home.mkdir(parents=True, exist_ok=True)
-    env["HOME"] = env["USERPROFILE"] = str(probe_home)
+    if env is None:
+        env = {k: os.environ[k] for k in ("SystemRoot", "WINDIR", "COMSPEC", "PATH", "PATHEXT")
+               if k in os.environ}
+        env["PYTHONUTF8"] = "1"
+        # A standalone caller gets an owned HOME inside its own tree.
+        probe_home = Path(wiki_root).parent / "probe-home"
+        probe_home.mkdir(parents=True, exist_ok=True)
+        env["HOME"] = env["USERPROFILE"] = str(probe_home)
+    env = dict(env)
     try:
         proc = _subprocess.run(
             [sys.executable, "-B", str(HERE / "cwp_readback_probe.py")],
@@ -393,7 +395,8 @@ def case_call_kill_after_import(ctx: Context) -> CaseResult:
             "form_type": None, "fiscal_year": 2034, "fiscal_period": "Q2",
             "language": None, "provider": "fmp", "provider_document_id": None,
             "mode": "exact", "allow_download": False, "schema_version": "1.0"},
-        content_sha=content_sha, cwp_src=str(ctx.cwp_root / "src"))
+        content_sha=content_sha, cwp_src=str(ctx.cwp_root / "src"),
+        env=ctx.child_env())
     durable_state = durable_probe["state"]
     p2 = _prepare_run(ctx, cid, "run2", "success", content, 1)
     run2 = _execute(ctx, p2)
@@ -452,7 +455,8 @@ def case_call_kill_after_durable(ctx: Context) -> CaseResult:
             "form_type": None, "fiscal_year": 2036, "fiscal_period": "Q1",
             "language": None, "provider": "fmp", "provider_document_id": None,
             "mode": "exact", "allow_download": False, "schema_version": "1.0"},
-        content_sha=ref0["content_sha256"], cwp_src=str(ctx.cwp_root / "src"))
+        content_sha=ref0["content_sha256"], cwp_src=str(ctx.cwp_root / "src"),
+        env=ctx.child_env())
     verified = _confirmed_ref(confirmed)
     probe_error = None if verified is not None else confirmed.get("error")
     # Run 1 re-requests the SAME source and is killed before its return can
@@ -498,7 +502,7 @@ def case_call_lost_reply_after_durable(ctx: Context) -> CaseResult:
     # explicitly NOT delivered to the client as a success.
     run0["reply_intercepted"] = True
     ref0 = source_ref((run0.get("response") or {}).get("transcript", {}).get("source_ref"))
-    verified = None
+    verified, probe_state, probe_error = None, None, None
     if ref0 is not None:
         confirmed = probe_catalog(
             wiki_root=ctx.env.wiki, identity_request={
@@ -508,8 +512,10 @@ def case_call_lost_reply_after_durable(ctx: Context) -> CaseResult:
                 "fiscal_year": 2038, "fiscal_period": "Q1", "language": None,
                 "provider": "fmp", "provider_document_id": None, "mode": "exact",
                 "allow_download": False, "schema_version": "1.0"},
-            content_sha=ref0["content_sha256"], cwp_src=str(ctx.cwp_root / "src"))
+            content_sha=ref0["content_sha256"], cwp_src=str(ctx.cwp_root / "src"),
+            env=ctx.child_env())
         verified = _confirmed_ref(confirmed)
+        probe_state, probe_error = confirmed["state"], confirmed.get("error")
     # First recovery: the same company/period is requested again and must be
     # served from the durable source with ZERO extra provider GETs.
     p1 = _prepare_run(ctx, cid, "run2", "success", content, 1)
@@ -522,7 +528,8 @@ def case_call_lost_reply_after_durable(ctx: Context) -> CaseResult:
                              "the same Ref/SHA", {
         "reply_intercepted": True,
         "verified_at_reply_loss": verified,
-        "probe_state": None if verified is None else "confirmed",
+        "probe_state": probe_state,
+        "probe_error": probe_error,
     })
 
 

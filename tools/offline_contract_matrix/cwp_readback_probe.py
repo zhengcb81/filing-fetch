@@ -39,10 +39,19 @@ def main() -> int:
         from company_wiki.source_catalog.source_query_cli import main as query_main
         from company_wiki.source_catalog.source_reader import SourceRef, SourceVersionReader
 
+        # The provider-scoped transcript-import lookup envelope — the same
+        # public path FF's duplicate-suppression reuse uses. It includes
+        # unknown-publication sources and is not subject to the plain
+        # query's as-of eligibility exclusion (a stored future-period
+        # original must still be readable back).
+        lookup = {
+            "schema_version": "company-wiki-transcript-import-lookup-request/1",
+            "source_request": identity_request,
+        }
         out = io.StringIO()
         saved_stdin = sys.stdin
         sys.stdin = io.TextIOWrapper(
-            io.BytesIO(json.dumps(identity_request, ensure_ascii=False).encode("utf-8")),
+            io.BytesIO(json.dumps(lookup, ensure_ascii=False).encode("utf-8")),
             encoding="utf-8")
         try:
             with contextlib.redirect_stdout(out):
