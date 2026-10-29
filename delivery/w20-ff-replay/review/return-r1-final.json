@@ -1,0 +1,36 @@
+{
+  "schema_version": "w20-return-r1-review/1",
+  "verdict": "APPROVE",
+  "open_findings": [],
+  "date": "2026-10-29",
+  "reviewer": "independent return-R1 reviewer (unrelated to author and prior reviewers)",
+  "workdir": "C:\\Users\\郑曾波\\Projects\\filing-fetch-w20-replay",
+  "branch": "codex/w20-ff-replay-20261028",
+  "reviewed_head": "ecc5a57",
+  "implementation_commit": "3747e4a",
+  "baseline": "5396bd688e5b775e746fe3290852f0532d4548f8",
+  "report": "delivery/w20-ff-replay/review/return-r1-final.md",
+  "scope": {
+    "ff_r1": "PASS - new w20_call_kill_after_durable case: solo attempt-2ebbf3d7 PASS/oracle-0, prior-cases window attempt-2a273f32 PASS; run0 1-GET downloaded, run1 killed 0-GET no source_ref, run2 0-GET reuse same Ref/SHA; verified_at_kill matches run0 Ref on all five fields; post_durable assertion branch independently verified to reject both ROOT proxy signatures (missing read-back proof; recovery 1 GET) plus four more constructions; RED-first confirmed (case absent at 316842d)",
+    "ff_r2": "PASS - triggers bind to this request (public read-back of run0's own Ref for the durable case; this-request ET receipt tag for mid-import); return_r1 suite 6/6 green incl. old-sidecar and sidecar-only control counterexamples; attempt-8a972aa6 mid-import PASS with durable_at_kill_public_readback=false; window phase consistency shown (afb227f2/36e764e9), window trigger bug honestly failed-then-fixed (3747e4a) and re-proven",
+    "ff_r3": "PASS - handoff.json files[] 19/19 SHAs recomputed and matching (incl. refreshed run-receipts.json); tests[2].exit_code null with truthful explanation; 13 baseline failure attribution preserved (baseline-preexisting-failures.txt + branch-failures.txt)",
+    "non_breakage": "PASS - 183 passed (selection+faults+case_authority), 260 passed full unit regression, AUTHORITY_VERSION w06-cases/1 and 41-count unchanged, w20-supplemental/1 9->10 with selection tests updated, git log 5396bd6..HEAD -- scripts/ empty",
+    "red_lines": "PASS - required_cases constant 41 in reports; no product failpoint (scripts/ zero diff, faults only at harness-owned boundaries); probe uses only public source_query_cli envelope (same schema as product transcript_tool_transport.py) plus SourceVersionReader.open_version byte verification, no DB reads, no storage logic duplication; sys.stdin replacement restored in finally (w20_fault_cases.py:180-189); no cross-repo writes (.w20-deps view rebuilt then deleted, disk verified absent)"
+  },
+  "non_blocking_observations": [
+    "cleanup-receipt.json return_r1 block booleans (w20_deps_view_deleted=false, owned_scratch_removed=false) read literally contradict the block note and the disk-verified clean state; intended as a transient re-verification-window snapshot",
+    "handoff.json requirements[1] ('9 case') and compatibility[1] ('constant 9 supplemental ids') not updated after the suite grew 9->10; handoff.md return-R1 section and code/tests record the delta truthfully",
+    "handoff.json files[] no longer lists handoff.md/final.md/final.json/baseline/branch-failures hashes that the prior final review listed; traceability for those docs now rests on git history",
+    "handoff.json tests[] does not record the two return-R1 command results (6-test suite, 260 regression); recorded in handoff.md",
+    "untracked debug script _debug_probe.py left at repo root (owned-temp only, not committed)",
+    "new_original_matching_sha is currently referenced only by tests as the codified FF-R2 contract anchor; the live triggers (receipt tag, public read-back) satisfy the requirement directly"
+  ],
+  "commands_run": [
+    "python -B -m pytest -q tests/test_w20_replay_return_r1.py  -> 6 passed",
+    "python -B -m pytest -q tests/test_w20_replay_selection.py tests/test_w20_replay_faults.py tests/test_w06_case_authority.py  -> 183 passed",
+    "python -B -m pytest -q tests/test_w06_contract_matrix.py tests/test_w06_matrix_runtime.py tests/test_w06_case_authority.py tests/test_du8_matrix_scheduling.py tests/test_du8_matrix_deadline_recovery.py tests/test_w20_replay_selection.py tests/test_w20_replay_faults.py tests/test_w20_replay_return_r1.py  -> 260 passed",
+    "handoff.json files[] sha256 recomputation script -> 19/19 match",
+    "in-memory dict constructions against w20_case_specs.w20_assertion_errors post_durable branch -> 6/6 proxy reports rejected, well-formed report accepted",
+    "attempt artifact sha256 spot-checks (request/response) -> all match"
+  ]
+}
