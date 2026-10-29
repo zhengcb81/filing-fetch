@@ -468,8 +468,8 @@ def case_call_kill_after_import(ctx: Context) -> CaseResult:
     # only for this run's tag): it appears when ET has finished and BEFORE the
     # CWP import starts — a deterministic mid-import window bound to this
     # request. Pre-existing files of other periods can never fire it.
-    prefix = getattr(ctx, "artifact_prefix", "")
-    receipt_signal = ctx.artifacts / f"{prefix}{cid}.run1.result.json"
+    # The proxy names receipts by the run's own receipt_tag (no group prefix).
+    receipt_signal = ctx.artifacts / f"{cid}.run1.result.json"
     run1 = _execute(ctx, p1, kill_when=lambda: receipt_signal.is_file())
     durable_at_kill = cwp_public_readback(
         ctx, identity=US, fiscal_year=2034, fiscal_quarter=2,
