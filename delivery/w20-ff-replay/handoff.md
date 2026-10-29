@@ -10,7 +10,7 @@
 
 在**不改动 41 例必需 case 权威与无参数完整命令语义**的前提下，为 FF↔ET↔CWP 离线联调矩阵加入六类中断/恢复行为反证：
 
-1. **通用显式 case 选择（`--cases`）**：`case_selection.py`（纯解析/校验/汇总）+ `case_registry.py`（41 必需 + 补充套件的并集解析）。选择运行自标 supplemental：报告带 `scope.selection`（selected/completed/skipped/selected_not_executed/certifies），未选 case 全部具名 `NOT_RUN`（"not selected" 诊断），`required_cases` 恒为完整 41；补充套件现为 11 个（R1/R2 各增 1）；（缩小被 oracle 以 `required_cases_shrunk` 拒绝），退出码 0 只对所选 case 负责。oracle 新增 selection 一致性审计（行缺失/重复/标签错置），并对 harness 真正杀掉的 run 豁免"当时不存在的 ET 回执"（GET 计数与请求/响应字节绑定照常审计）。无 `--cases` 路径语义/兼容不变（既有 232 项矩阵套件全绿验证）；全量报告现无条件新增顶层附加键 `supplemental_cases`（恒为 9 个补充 id，只增不改既有键），字节因此非严格不变。
+1. **通用显式 case 选择（`--cases`）**：`case_selection.py`（纯解析/校验/汇总）+ `case_registry.py`（41 必需 + 补充套件的并集解析）。选择运行自标 supplemental：报告带 `scope.selection`（selected/completed/skipped/selected_not_executed/certifies），未选 case 全部具名 `NOT_RUN`（"not selected" 诊断），`required_cases` 恒为完整 41；补充套件现为 11 个（R1/R2 各增 1）；（缩小被 oracle 以 `required_cases_shrunk` 拒绝），退出码 0 只对所选 case 负责。oracle 新增 selection 一致性审计（行缺失/重复/标签错置），并对 harness 真正杀掉的 run 豁免"当时不存在的 ET 回执"（GET 计数与请求/响应字节绑定照常审计）。无 `--cases` 路径语义/兼容不变（既有 232 项矩阵套件全绿验证）；全量报告现无条件新增顶层附加键 `supplemental_cases`（恒为全部注册的补充 id，现 11 个，只增不改既有键），字节因此非严格不变。
 2. **W20 补充故障套件（现 11 case，schema `w20-supplemental/1`；R1/R2 各增 1）**：`w20_case_specs.py`（冻结定义+断言权威）+ `w20_fault_cases.py`（handler）。覆盖：
    - `w20_call_kill_before_durable`：GET 在途时杀 FF 进程树（复用 FF 自有 `ff_process_tree` 语义）→ 无假成功、无持久残留、恢复恰好 1 次下载、最终复用 0 请求；
    - `w20_call_kill_after_import`：规范原件落盘瞬间杀树 → durable-at-kill 分支由恢复运行事后判定（reused=已持久 / downloaded=未持久），最终复用 0 请求；
@@ -47,7 +47,7 @@
   - 全 9 选择批：attempt-465ac1a/d163ba8 各 7 PASS（其余为当时未修断言/负载）；最终批 attempt-3bb0a6bc 5 PASS + 4 PARTIAL（全部"absolute case deadline exceeded"具名）；
   - base 兼容批（chainA_download_reuse,fin_cn_annual_hit,call_wrong_quarter）：attempt-81af81 选择机制验证，2 PASS + chainA 负载 PARTIAL（其 41/41 PASS 有 DU10 保留证据）。
 
-**宿主负载诚实声明（R6/R8）**：本机全天 2–4× 负载波动（W07 已知共因）。3-run 补充 case 与 base chainA 在**后期**整批窗口间歇撞固定 30s/case 界 → 按设计诚实 PARTIAL（具名原因，绝不假 PASS）。9 个补充 case 每个都有至少一次真实链整链 PASS（单例绿地图见 `receipts/run-receipts.json` single_case_green_map）。按卡 R8 未为追绿重跑超时整批。**部分运行从未冒充 41 例完整通过**。
+**宿主负载诚实声明（R6/R8）**：本机全天 2–4× 负载波动（W07 已知共因）。3-run 补充 case 与 base chainA 在**后期**整批窗口间歇撞固定 30s/case 界 → 按设计诚实 PARTIAL（具名原因，绝不假 PASS）。补充套件每个 case 都有至少一次真实链整链 PASS（绿地图见 run-receipts.json；R1/R2 新增两例各以其自身 attempt 为证）（单例绿地图见 `receipts/run-receipts.json` single_case_green_map）。按卡 R8 未为追绿重跑超时整批。**部分运行从未冒充 41 例完整通过**。
 
 ## 4. 清理
 

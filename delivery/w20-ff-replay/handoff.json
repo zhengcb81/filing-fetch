@@ -103,7 +103,7 @@
     },
     {
       "path": "delivery/w20-ff-replay/handoff.md",
-      "sha256": "3289d6c3b4d548d53a01bc664befe0e07b9176016f38c79dc9c25568ffef1bd5"
+      "sha256": "6d0a455362bd42d4595e447d017db9c31989191149248180b6038600c8660547"
     },
     {
       "path": "delivery/w20-ff-replay/review/initial.md",
@@ -150,7 +150,7 @@
     },
     {
       "id": "R2 六类故障覆盖",
-      "evidence": "w20_case_specs.py 9 case ↔ 卡六向量映射(README W20表); 真实链PASS证据 run-receipts.json single_case_green_map",
+      "evidence": "w20_case_specs.py 11 case ↔ 卡六向量映射(README W20表); 真实链PASS证据 run-receipts.json single_case_green_map",
       "status": "PASS"
     },
     {
