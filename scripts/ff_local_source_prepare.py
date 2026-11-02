@@ -3,9 +3,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import json
-import os
-from pathlib import Path
-import sys
 import time
 from typing import Any
 
@@ -14,6 +11,7 @@ from ff_provider_cause import condition_cause, source_condition
 from ff_source_ref import validate_source_ref
 from ff_local_preparation_observation import local_preparation_observation
 from filing_contracts import FilingFetchError
+from ff_company_wiki_connection import WikiEndpoint, command_for, connection_cwd, connection_environment
 
 _RESULT_FIELDS = frozenset({
     "schema_version", "status", "reason", "source_ref", "blocks_download",
@@ -52,7 +50,7 @@ def _validated(payload: Any, physical_fields: Callable[[object], bool], *, limit
 
 
 def prepare_existing_local_source(
-    *, root: Path, source_request: dict[str, Any], deadline: float,
+    *, root: WikiEndpoint, source_request: dict[str, Any], deadline: float,
     stats: dict[str, int], transport: Callable[..., tuple[bytes, bytes, int]],
     physical_fields: Callable[[object], bool],
 ) -> None:
@@ -67,16 +65,14 @@ def prepare_existing_local_source(
         "limits": {"max_candidates": 64, "max_bytes": 128 * 1024 * 1024,
                    "timeout_seconds": min(remaining, 600)},
     }
-    command = [sys.executable, "-m", "company_wiki.source_catalog.local_prepare_cli",
-               "--config", str(root / "config" / "source_catalog.yaml"), "--request", "-"]
-    environment = dict(os.environ)
-    environment["PYTHONUTF8"] = "1"
+    command = [*command_for(root, "local_prepare"), "--request", "-"]
+    environment = connection_environment(root)
     stats["calls"] += 1
     try:
         stdout, _, returncode = transport(
             command, timeout_seconds=remaining,
             input_bytes=json.dumps(request, ensure_ascii=False).encode("utf-8"),
-            cwd=str(root), env=environment,
+            cwd=str(connection_cwd(root)), env=environment,
         )
     except ff_process_transport.ChildFailed as exc:
         stdout, returncode = exc.stdout, exc.returncode

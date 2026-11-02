@@ -16,6 +16,7 @@ from typing import Any
 
 from et_v2_contract import ET_NOT_FOUND_DIAGNOSTICS
 from ff_configuration import expand_config_path, read_json_object
+from ff_company_wiki_connection import WikiEndpoint, command_for, connection_cwd, connection_environment
 from filing_contracts import FilingFetchError, _validate_date
 from ff_source_ref import validate_source_ref
 from transcript_reuse_selection import (
@@ -146,13 +147,13 @@ class EarningsTranscriptsTransport:
     def __init__(
         self,
         *,
-        wiki_root: Path,
+        wiki_root: WikiEndpoint,
         transcript_tool: Path | None = None,
         config_path: Path | None = None,
         fmp_api_key_file: Path | None = None,
         deadline: float,
     ) -> None:
-        self.wiki_root = wiki_root.resolve(strict=True)
+        self.wiki_root = wiki_root
         configured = transcript_tool or (
             Path(os.environ["EARNINGS_TRANSCRIPTS_TOOL"])
             if os.environ.get("EARNINGS_TRANSCRIPTS_TOOL")
@@ -218,13 +219,9 @@ class EarningsTranscriptsTransport:
         }
 
     def _wiki_env(self) -> dict[str, str]:
-        env = dict(os.environ)
+        env = connection_environment(self.wiki_root)
         env.pop("FMP_API_KEY", None)
         env.pop("FMP_API_KEY_FILE", None)
-        env["PYTHONUTF8"] = "1"
-        src = str(self.wiki_root / "src")
-        existing = env.get("PYTHONPATH")
-        env["PYTHONPATH"] = src if not existing else src + os.pathsep + existing
         return env
 
     def _selected_launch_config(self) -> dict[str, Any]:
@@ -329,6 +326,7 @@ class EarningsTranscriptsTransport:
             cwd=str(cwd),
             env=env,
             stdout_cap_bytes=maximum,
+            allow_nonzero_exit=True,
         )
         try:
             result = json.loads(stdout.decode("utf-8", errors="strict"))
@@ -342,17 +340,11 @@ class EarningsTranscriptsTransport:
 
     def _run_source_query(self, payload: dict[str, Any]) -> dict[str, Any]:
         """One bounded call to the public local source-query CLI."""
-        command = [
-            sys.executable,
-            "-m",
-            "company_wiki.source_catalog.source_query_cli",
-            "--config",
-            str(self.wiki_root / "config" / "source_catalog.yaml"),
-        ]
+        command = command_for(self.wiki_root, "query")
         result, code = self._run_json(
             command,
             payload,
-            cwd=self.wiki_root,
+            cwd=connection_cwd(self.wiki_root),
             env=self._wiki_env(),
         )
         if result.get("schema_version") != "2.0":
@@ -390,11 +382,7 @@ class EarningsTranscriptsTransport:
     def _verified_open(self, ref: dict[str, Any]) -> dict[str, Any]:
         """Read verified bytes; return the public receipt that names their source."""
         command = [
-            sys.executable,
-            "-m",
-            "company_wiki.source_catalog.source_reader_cli",
-            "--config",
-            str(self.wiki_root / "config" / "source_catalog.yaml"),
+            *command_for(self.wiki_root, "open"),
             "--document-id",
             ref["document_id"],
             "--source-id",
@@ -414,7 +402,7 @@ class EarningsTranscriptsTransport:
             # receipts scale independently; no generic fixed-size veto applies.
             stdout_cap_bytes=ref["byte_size"],
             stderr_cap_bytes=None,
-            cwd=str(self.wiki_root),
+            cwd=str(connection_cwd(self.wiki_root)),
             env=self._wiki_env(),
         )
         if code != 0 or len(stdout) != ref["byte_size"]:
@@ -747,6 +735,7 @@ class EarningsTranscriptsTransport:
                 # through JSON escaping (6x) and base64. Derive the allocation
                 # from the actual operation quota, not the generic32MiB default.
                 stdout_cap_bytes=18 * limits["max_bytes"] + 2 * 1024 * 1024,
+                allow_nonzero_exit=True,
                 cwd=str(self.transcript_tool.parent),
                 env=et_env,
             )
@@ -980,7 +969,7 @@ class EarningsTranscriptsTransport:
                 **self._last_provider_usage,
             }
         try:
-            result = self._import_fetched(fetched, request, identity, kwargs)
+            result = self._import_fetched(fetched, request, identity, {**kwargs, "import_max_original_bytes": limits["max_bytes"]})
         except (TransportError, ValueError, OSError, subprocess.TimeoutExpired):
             result = {
                 "status": "upstream_error",
@@ -1004,18 +993,15 @@ class EarningsTranscriptsTransport:
             "candidate": candidate,
             "transcript_result": fetched,
         }
-        command = [
-            sys.executable,
-            "-m",
-            "company_wiki.source_catalog.transcript_import_cli",
-            "--wiki-root",
-            str(self.wiki_root),
-        ]
+        command = [*command_for(self.wiki_root, "transcript_import"),
+            "--max-original-bytes", str(kwargs.get("import_max_original_bytes", 16 * 1024 * 1024)),
+            "--max-envelope-bytes", str(18 * kwargs.get("import_max_original_bytes", 16 * 1024 * 1024) + 2 * 1024 * 1024)]
         imported, code = self._run_json(
             command,
             envelope,
-            cwd=self.wiki_root,
+            cwd=connection_cwd(self.wiki_root),
             env=self._wiki_env(),
+            maximum=18 * kwargs.get("import_max_original_bytes", 16 * 1024 * 1024) + 2 * 1024 * 1024,
         )
         if code != 0 or imported.get("schema_version") != _IMPORT_RESPONSE_SCHEMA:
             return {

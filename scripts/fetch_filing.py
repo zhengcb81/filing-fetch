@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 from pathlib import Path
 import random
 import re
@@ -61,6 +60,7 @@ import ff_provider_cause
 from ff_source_failure import decode_failure, invalid_result, source_request_id, validate_query_failure
 
 from ff_configuration import load_connection_root, validate_company_wiki_root
+from ff_company_wiki_connection import WikiConnection, WikiEndpoint, command_for, connection_cwd, connection_environment, acquisition_arguments
 from ff_source_candidate import (
     COMPANY_IDENTITY_FIELDS as _COMPANY_IDENTITY_FIELDS,
     SOURCE_CANDIDATE_FIELDS as _SOURCE_CANDIDATE_FIELDS,
@@ -111,7 +111,7 @@ def _validate_company_wiki_root(root: Path) -> Path:
     return validate_company_wiki_root(root)
 
 
-def load_company_wiki_root(*, config_path: Path | None = None) -> Path:
+def load_company_wiki_root(*, config_path: Path | None = None) -> WikiEndpoint:
     """Load the persistent connection using the shared bounded config parser."""
     if config_path is not None and not isinstance(config_path, Path):
         raise TypeError("config_path must be pathlib.Path or None")
@@ -194,7 +194,7 @@ def _identity_arguments(request: dict[str, Any]) -> list[str]:
 def _run_company_wiki_json(
     *,
     command: list[str],
-    root: Path,
+    root: WikiEndpoint,
     timeout_seconds: float,
     action: str,
     stats: dict[str, int] | None = None,
@@ -208,8 +208,7 @@ def _run_company_wiki_json(
     shared deadline — the layer never renews it. The layer reaps exactly the
     process tree this call created (no other processes are touched).
     """
-    environment = dict(os.environ)
-    environment["PYTHONUTF8"] = "1"
+    environment = connection_environment(root)
     if stats is not None:
         stats["calls"] += 1
     try:
@@ -217,7 +216,7 @@ def _run_company_wiki_json(
             command,
             timeout_seconds=timeout_seconds,
             input_bytes=None,
-            cwd=str(root),
+            cwd=str(connection_cwd(root)),
             env=environment,
         )
     except _ProcessChildTimeout as exc:
@@ -337,7 +336,7 @@ def _classify_wiki_error(stderr_text: str) -> str:
 def _run_company_wiki_json_retry(
     *,
     command: list[str],
-    root: Path,
+    root: WikiEndpoint,
     action: str,
     deadline: float,
     stats: dict[str, int] | None = None,
@@ -516,7 +515,7 @@ def _candidate_company_identity(identity: dict[str, Any]) -> dict[str, Any]:
 
 def _run_source_query(
     *,
-    root: Path,
+    root: WikiEndpoint,
     normalized_request: dict[str, Any],
     deadline: float,
     stats: dict[str, int],
@@ -539,22 +538,15 @@ def _run_source_query(
     }
     query["schema_version"] = "1.0"
     query["allow_download"] = False
-    command = [
-        sys.executable,
-        "-m",
-        "company_wiki.source_catalog.source_query_cli",
-        "--config",
-        str(root / "config" / "source_catalog.yaml"),
-    ]
-    environment = dict(os.environ)
-    environment["PYTHONUTF8"] = "1"
+    command = command_for(root, "query")
+    environment = connection_environment(root)
     stats["calls"] += 1
     try:
         stdout, stderr, returncode = _run_bounded_json(
             command,
             timeout_seconds=remaining,
             input_bytes=json.dumps(query, ensure_ascii=False).encode("utf-8"),
-            cwd=str(root),
+            cwd=str(connection_cwd(root)),
             env=environment,
         )
     except _ProcessChildTimeout as exc:
@@ -648,7 +640,7 @@ def _run_source_query(
 
 def _source_query_candidate(
     *,
-    root: Path,
+    root: WikiEndpoint,
     normalized_request: dict[str, Any],
     request: dict[str, Any],
     company_identity: dict[str, Any],
@@ -986,7 +978,7 @@ def _pathless_operation_handle(
 def _resolve_source_ref_v2(
     *,
     source_query_route: bool,
-    root: Path,
+    root: WikiEndpoint,
     command_prefix: list[str],
     normalized_request: dict[str, Any],
     request: dict[str, Any],
@@ -1015,13 +1007,7 @@ def _resolve_source_ref_v2(
     if allow_download:
         if not normalized_request.get("market") or not normalized_request.get("security_id"):
             raise FilingFetchError("explicit download requires market and security_id")
-        command.extend(
-            (
-                "--allow-download",
-                "--acquisition-config",
-                str(root / "config" / "source_acquisition.yaml"),
-            )
-        )
+        command.extend(acquisition_arguments(root))
     payload = _run_company_wiki_json_retry(
         command=command,
         root=root,
@@ -1052,7 +1038,7 @@ def _resolve_source_ref_v2(
 
 def _run_legacy_filing_command(
     *, action: str, command_prefix: list[str], normalized_request: dict[str, Any],
-    root: Path, deadline: float, allow_download: bool, stats: dict[str, int],
+    root: WikiEndpoint, deadline: float, allow_download: bool, stats: dict[str, int],
 ) -> dict[str, Any]:
     """Send one legacy request; old authorization only narrows target/caps."""
     scope = normalized_request.get("authorization") if allow_download else None
@@ -1069,8 +1055,7 @@ def _run_legacy_filing_command(
     if allow_download:
         if not normalized_request.get("market") or not normalized_request.get("security_id"):
             raise FilingFetchError("explicit download requires market and security_id")
-        command.extend(("--allow-download", "--acquisition-config",
-                        str(root / "config" / "source_acquisition.yaml")))
+        command.extend(acquisition_arguments(root))
     scope_path = None
     try:
         if scope is not None:
@@ -1146,7 +1131,7 @@ def _shared_deadline(
 def resolve_filing(
     *,
     request: dict[str, Any],
-    company_wiki_root: Path | None = None,
+    company_wiki_root: WikiEndpoint | None = None,
     config_path: Path | None = None,
     allow_download: bool | None = None,
     timeout_seconds: float = 900.0,
@@ -1209,17 +1194,12 @@ def resolve_filing(
         )
     deadline = _shared_deadline(request, deadline=deadline, timeout_seconds=timeout_seconds)
     root = (
-        _validate_company_wiki_root(company_wiki_root)
+        (company_wiki_root if isinstance(company_wiki_root, WikiConnection)
+         else _validate_company_wiki_root(company_wiki_root))
         if company_wiki_root is not None
         else load_company_wiki_root(config_path=config_path)
     )
-    command_prefix = [
-        sys.executable,
-        "-m",
-        "company_wiki.source_catalog.cli",
-        "--config",
-        str(root / "config" / "source_catalog.yaml"),
-    ]
+    command_prefix = command_for(root, "catalog")
     # Every request passes through verified/active identity before source
     # resolution; validate_request guarantees company_query is present.
     identity_payload = _run_company_wiki_json_retry(
@@ -1359,7 +1339,7 @@ def _resolution_trace(resolution: dict | None) -> dict[str, Any] | None:
 def _handle_from_resolution(
     resolution: dict,
     request: dict,
-    root: Path,
+    root: WikiEndpoint,
     *,
     envelope: dict | None = None,
     source_ref_v2: bool = False,
@@ -1402,7 +1382,7 @@ def _handle_from_resolution(
             validate_handle(
                 handle,
                 request,
-                root,
+                connection_cwd(root),
                 policy_snapshot=policy_snapshot,
                 expected_policy_hash=expected_policy_hash,
             )

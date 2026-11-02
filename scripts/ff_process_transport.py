@@ -54,10 +54,12 @@ class ChildFailed(TransportError):
     """Nonzero exit / incomplete input; caller owns structured error classification."""
 
     def __init__(
-        self, message: str, *, returncode: int, stdout: bytes = b"", stderr: bytes = b""
+        self, message: str, *, returncode: int, stdout: bytes = b"", stderr: bytes = b"",
+        input_incomplete: bool = False
     ) -> None:
         super().__init__(message)
         self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+        self.input_incomplete = input_incomplete
 
 
 def _assign_windows_job(proc: subprocess.Popen) -> WindowsJob:
@@ -261,6 +263,7 @@ def _result(proc, state: _IOState) -> dict[str, object]:
             returncode=proc.returncode,
             stdout=stdout,
             stderr=stderr,
+            input_incomplete=bool(state.write_error),
         )
     return dict(
         stdout=stdout,
@@ -309,17 +312,25 @@ def run_bounded_json(
     env: dict[str, str] | None = None,
     stdout_cap_bytes: int = _DEFAULT_STDOUT_CAP,
     stderr_cap_bytes: int | None = _DEFAULT_STDERR_CAP,
+    allow_nonzero_exit: bool = False,
 ) -> tuple[bytes, bytes, int]:
     """Success bytes are strict UTF-8. ChildFailed retains caller-owned error bytes."""
-    result = run_bounded(
-        command,
-        timeout_seconds=timeout_seconds,
-        input_bytes=input_bytes,
-        cwd=cwd,
-        env=env,
-        stdout_cap_bytes=stdout_cap_bytes,
-        stderr_cap_bytes=stderr_cap_bytes,
-    )
+    try:
+        result = run_bounded(
+            command,
+            timeout_seconds=timeout_seconds,
+            input_bytes=input_bytes,
+            cwd=cwd,
+            env=env,
+            stdout_cap_bytes=stdout_cap_bytes,
+            stderr_cap_bytes=stderr_cap_bytes,
+        )
+    except ChildFailed as exc:
+        # Protocol owners classify named nonzero business envelopes; actual
+        # write failures and absent exits remain transport failures.
+        if not allow_nonzero_exit or exc.input_incomplete or exc.returncode in (None, 0):
+            raise
+        result = {"stdout": exc.stdout, "stderr": exc.stderr, "returncode": exc.returncode}
     stdout, stderr = cast(bytes, result["stdout"]), cast(bytes, result["stderr"])
     try:
         stdout.decode("utf-8", errors="strict")

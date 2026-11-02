@@ -9,8 +9,7 @@ owns only the request/response contract for
 from __future__ import annotations
 
 import json
-import os
-import sys
+from ff_company_wiki_connection import WikiEndpoint, command_for, connection_cwd, connection_environment
 from pathlib import Path
 from typing import Any
 
@@ -131,8 +130,8 @@ def validate_request(payload: Any) -> dict[str, Any]:
     return payload
 
 
-def build_cwp_command(root: Path) -> list[str]:
-    return [sys.executable, "-m", CWP_MODULE, "--wiki-root", str(root)]
+def build_cwp_command(root: WikiEndpoint) -> list[str]:
+    return command_for(root, "financial_statements")
 
 
 def _valid_error_envelope(stdout: bytes) -> dict[str, Any] | None:
@@ -163,14 +162,13 @@ def fetch_statements(
         config_path = skill_root / "config" / "company_wiki.json"
     root = load_connection_root(Path(config_path), skill_root=skill_root)
     command = build_cwp_command(root)
-    environment = dict(os.environ)
-    environment["PYTHONUTF8"] = "1"
+    environment = connection_environment(root)
     try:
         stdout, stderr, returncode = _run_bounded_json(
             command,
             timeout_seconds=timeout_seconds,
             input_bytes=json.dumps(request, ensure_ascii=False).encode("utf-8"),
-            cwd=str(root),
+            cwd=str(connection_cwd(root)),
             env=environment,
             stdout_cap_bytes=MAX_STDOUT_BYTES,
         )

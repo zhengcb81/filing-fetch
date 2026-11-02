@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from filing_contracts import COMPANY_WIKI_CONFIG_SCHEMA_VERSION, FilingFetchError
+from ff_company_wiki_connection import WikiConnection, WikiEndpoint
 
 _TOKEN = re.compile(r"\$\{([^}]+)\}")
 
@@ -89,15 +90,33 @@ def validate_company_wiki_root(root: Path) -> Path:
         raise FilingFetchError(
             "configured company_wiki_root must be a directory", code="config_error"
         )
-    if not (resolved / "config" / "source_catalog.yaml").is_file():
-        raise FilingFetchError(
-            "configured company_wiki_root lacks config/source_catalog.yaml", code="config_error"
-        )
     return resolved
 
 
-def load_connection_root(config_path: Path, *, skill_root: Path) -> Path:
+def load_connection_root(config_path: Path, *, skill_root: Path) -> WikiEndpoint:
     payload = read_json_object(config_path)
+    for field in {"fmp_api_key_file", "earnings_transcripts_tool"} & set(payload):
+        value = payload[field]
+        if not isinstance(value, str) or not value.strip() or value != value.strip():
+            raise FilingFetchError(
+                f"company-wiki config {field} must be non-empty trimmed text", code="config_error"
+            )
+    if "connection" in payload:
+        allowed = {"schema_version", "connection", "fmp_api_key_file", "earnings_transcripts_tool"}
+        if set(payload) - allowed or payload.get("schema_version") != COMPANY_WIKI_CONFIG_SCHEMA_VERSION:
+            raise FilingFetchError("invalid connection configuration", code="config_error")
+        connection = payload["connection"]
+        if not isinstance(connection, dict) or set(connection) - {"cwd", "commands", "acquisition_config"}:
+            raise FilingFetchError("invalid connection fields", code="config_error")
+        cwd = expand_config_path(connection.get("cwd", str(config_path.resolve().parent)),
+            field="connection cwd", skill_root=skill_root, config_path=config_path)
+        acquisition = connection.get("acquisition_config")
+        try:
+            return WikiConnection(cwd, connection.get("commands", {}),
+                expand_config_path(acquisition, field="acquisition config", skill_root=skill_root,
+                    config_path=config_path) if acquisition is not None else None)
+        except (TypeError, ValueError, OSError) as exc:
+            raise FilingFetchError("invalid configured connection", code="config_error") from exc
     required = {"schema_version", "company_wiki_root"}
     optional = {"fmp_api_key_file", "earnings_transcripts_tool"}
     if not required <= set(payload) or not set(payload) <= required | optional:
@@ -111,12 +130,6 @@ def load_connection_root(config_path: Path, *, skill_root: Path) -> Path:
             f"company-wiki config schema_version must be {COMPANY_WIKI_CONFIG_SCHEMA_VERSION}",
             code="config_error",
         )
-    for field in optional & set(payload):
-        value = payload[field]
-        if not isinstance(value, str) or not value.strip() or value != value.strip():
-            raise FilingFetchError(
-                f"company-wiki config {field} must be non-empty trimmed text", code="config_error"
-            )
     return validate_company_wiki_root(
         expand_config_path(
             payload["company_wiki_root"],

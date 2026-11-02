@@ -20,7 +20,6 @@ CI_TESTS = (
     "tests/test_s3_install_surface.py",
     "tests/test_selective_installation.py",
     "tests/test_install_runtime_diagnostics.py",
-    "e2e/test_source_ref_v2_cli.py",
     "tests/test_ff_v2_contract.py",
     "tests/test_provider_cause_contract.py",
     "tests/test_r1_source_business_failure.py",
@@ -29,6 +28,8 @@ CI_TESTS = (
     "tests/test_source_ref_v2.py",
     "tests/test_source_ref_v2_db_query.py",
     "tests/test_local_source_prepare.py",
+    "tests/test_decoupled_connection.py",
+    "tests/test_process_business_exit.py",
     "tests/test_local_preparation_observation.py",
     "tests/test_transcript_companion.py",
     "tests/test_transcript_companion_transport.py",
@@ -136,7 +137,7 @@ def _run_tests(tests, *, scratch_prefix: str, timeout_seconds: int, resolve_wiki
 
 def run_tests() -> int:
     """The unchanged full40-file CI mode, with its existing900s deadline."""
-    return _run_tests(CI_TESTS, scratch_prefix="ff-ci-", timeout_seconds=900, resolve_wiki=True)
+    return _run_tests(CI_TESTS, scratch_prefix="ff-ci-", timeout_seconds=900, resolve_wiki=False)
 
 
 def run_local_smoke() -> int:

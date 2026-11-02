@@ -165,33 +165,16 @@ def test_local_gate_runs_shared_ci_tests_once_and_propagates_failure(monkeypatch
     assert calls == [1]
 
 
-def test_runner_resolves_absent_ci_override_with_public_config_loader(monkeypatch, tmp_path):
-    runner = _load("ff_ci_config_runtime", "tools/ci_tests.py")
-    project, wiki, config = _configured_runtime(tmp_path)
-    source = wiki / "src"
-    cli = source / "company_wiki" / "source_catalog" / "cli.py"
-    cli.parent.mkdir(parents=True)
-    cli.write_text("pass\n", encoding="utf-8")
+def test_consumer_ci_does_not_load_producer_configuration(monkeypatch, tmp_path):
+    runner = _load("ff_ci_opaque_runtime", "tools/ci_tests.py")
     monkeypatch.delenv("FILING_FETCH_V2_WIKI_SRC", raising=False)
-    monkeypatch.setattr(runner, "PROJECT_ROOT", project)
-    original = fetch_filing.load_company_wiki_root
-    loaded = []
-
-    def public_loader(**kwargs):
-        loaded.append(kwargs["config_path"])
-        return original(**kwargs)
-
-    monkeypatch.setattr(fetch_filing, "load_company_wiki_root", public_loader)
-    child = []
-
-    def successful_child(command, **kwargs):
-        child.append(kwargs["env"])
-        return subprocess.CompletedProcess(command, 0, "", "")
-
-    monkeypatch.setattr(runner.subprocess, "run", successful_child)
+    monkeypatch.setattr(fetch_filing, "load_company_wiki_root",
+        lambda **kwargs: pytest.fail("consumer CI must not load upstream configuration"))
+    seen = []
+    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **kw:
+        seen.append(kw["env"]) or subprocess.CompletedProcess([],0,"",""))
     assert runner.run_tests() == 0
-    assert loaded == [config]
-    assert child[0]["FILING_FETCH_V2_WIKI_SRC"] == str(source.resolve())
+    assert len(seen) == 1 and "FILING_FETCH_V2_WIKI_SRC" not in seen[0]
 
 
 def test_explicit_ci_runtime_keeps_priority_over_owner_config(monkeypatch, wiki_source):
@@ -209,34 +192,16 @@ def test_explicit_ci_runtime_keeps_priority_over_owner_config(monkeypatch, wiki_
     assert child[0]["FILING_FETCH_V2_WIKI_SRC"] == str(wiki_source.resolve())
 
 
-def test_missing_configured_runtime_is_failure_before_pytest(monkeypatch, tmp_path, capsys):
-    runner = _load("ff_ci_missing_runtime", "tools/ci_tests.py")
-    project, _wiki, _config = _configured_runtime(tmp_path)
+def test_missing_producer_does_not_prevent_consumer_tests(monkeypatch, tmp_path):
+    runner = _load("ff_ci_without_runtime", "tools/ci_tests.py")
     monkeypatch.delenv("FILING_FETCH_V2_WIKI_SRC", raising=False)
-    monkeypatch.setattr(runner, "PROJECT_ROOT", project)
-    child = []
-    monkeypatch.setattr(runner.subprocess, "run",
-                        lambda *args, **kwargs: child.append(1) or subprocess.CompletedProcess([], 0))
-    assert runner.run_tests() == 2
-    assert child == []
-    assert "company-wiki runtime" in capsys.readouterr().err.lower()
+    monkeypatch.setattr(runner, "PROJECT_ROOT", tmp_path)
+    seen = []
+    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **kw:
+        seen.append(a) or subprocess.CompletedProcess([],0,"",""))
+    assert runner.run_tests() == 0
+    assert len(seen) == 1
 
-
-def test_v2_e2e_uses_public_loader_without_an_opt_in_environment(monkeypatch, tmp_path):
-    e2e = _load("ff_v2_public_root", "e2e/test_source_ref_v2_cli.py")
-    _project, wiki, _config = _configured_runtime(tmp_path)
-    cli = wiki / "src" / "company_wiki" / "source_catalog" / "cli.py"
-    cli.parent.mkdir(parents=True)
-    cli.write_text("pass\n", encoding="utf-8")
-    monkeypatch.delenv("FILING_FETCH_V2_WIKI_SRC", raising=False)
-    loaded = []
-    monkeypatch.setattr(fetch_filing, "load_company_wiki_root", lambda: loaded.append(1) or wiki)
-    try:
-        environment = e2e._environment()
-    except pytest.skip.Exception:
-        pytest.fail("configured offline v2 E2E was silently skipped")
-    assert loaded == [1]
-    assert environment["PYTHONPATH"] == str((wiki / "src").resolve())
 
 
 def test_daily_gate_only_runs_ruff_and_fixed_smoke(monkeypatch):

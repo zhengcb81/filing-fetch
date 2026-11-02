@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 import subprocess
 from unittest.mock import patch
@@ -268,70 +267,6 @@ def test_candidate_without_explicit_title_does_not_guess_from_filename(
     assert handle["title"] is None
 
 
-def test_real_db_only_reuse_accepts_configured_root_with_legacy_labels_false(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
-) -> None:
-    cwp_root_text = os.environ.get("CWP_V2_CODE_ROOT")
-    if not cwp_root_text:
-        pytest.skip("set CWP_V2_CODE_ROOT to the isolated CWP checkout")
-    cwp_root = Path(cwp_root_text).resolve(strict=True)
-    cwp_src = cwp_root / "src"
-    monkeypatch.syspath_prepend(str(cwp_src))
-    monkeypatch.setenv(
-        "PYTHONPATH", str(cwp_src) + os.pathsep + os.environ.get("PYTHONPATH", ""),
-    )
-    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
-
-    from e2e_support import isolated_wiki
-    from company_wiki.source_catalog import SourceCatalog
-    from company_wiki.source_catalog.config import load_catalog_config
-    from company_wiki.source_catalog.policy_2x import export_policy_2x
-    from company_wiki.source_catalog.prompt_injection import record_prompt_injection_review
-
-    monkeypatch.setattr(isolated_wiki, "PRODUCTION_WIKI", cwp_root)
-    wiki = isolated_wiki.IsolatedWiki(tmp_path / "wiki")
-    text = wiki.config_path.read_text(encoding="utf-8")
-    assert "    priority: 10\n" in text
-    wiki.config_path.write_text(
-        text.replace(
-            "    priority: 10\n",
-            "    priority: 10\n    reusable_for_filing: false\n",
-        ) + "reusable_root_kinds: [directory]\n", encoding="utf-8",
-    )
-    source = wiki.seed_market("US")
-    body = source.read_bytes()
-    digest = hashlib.sha256(body).hexdigest()
-    wiki.scan()
-    catalog = SourceCatalog(load_catalog_config(wiki.config_path))
-    try:
-        row = catalog.store.fetchone(
-            "SELECT d.document_id FROM documents d JOIN sources s "
-            "ON s.source_id=d.primary_source_id WHERE s.content_sha256=?",
-            (digest,),
-        )
-        assert row is not None
-        policy_hash, _ = export_policy_2x(catalog.config)
-        with catalog.store.transaction() as connection:
-            record_prompt_injection_review(
-                connection, str(row["document_id"]), status="not_detected",
-                reviewer="ff-v2-e2e", evidence_sha256=digest,
-                source_sha256=digest, policy_hash=policy_hash,
-                evidence_payload=body, now="2026-09-27T00:00:00Z",
-            )
-    finally:
-        catalog.close()
-    rc, stdout, stderr = wiki.run_fetch({
-        "schema_version": "1.1", "company_query": "Apple Inc.",
-        "market": "US", "document_kind": "annual_report",
-        "fiscal_year": 2025, "as_of_date": "2026-09-27",
-    }, extra_args=["--source-ref-v2"])
-    assert rc == 0, stderr + stdout
-    response = json.loads(stdout)
-    assert response["status"] == "capture_ready"
-    assert response["handle"]["source_ref"]["content_sha256"] == digest
-    assert response["handle"]["download_events"] == response["downloads"] == 0
-    assert response["handle"]["prompt_injection_status"] == "not_detected"
-    assert wiki.journal_outcomes() == []
 
 def _operation_v2(
     *,

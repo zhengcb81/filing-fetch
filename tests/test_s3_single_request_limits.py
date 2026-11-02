@@ -27,6 +27,7 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 import fetch_filing  # noqa: E402
 import ff_process_transport  # noqa: E402
 from filing_contracts import FilingFetchError  # noqa: E402
+from ff_company_wiki_connection import WikiConnection  # noqa: E402
 
 FIXTURE_CLI = Path(__file__).parent / "fixtures" / "s3_fake_cwp" / "fake_source_catalog_cli.py"
 GOLDEN_DIR = Path(__file__).parent / "golden"
@@ -55,28 +56,22 @@ def _v2_request(**overrides) -> dict:
 
 def _wiki_root(tmp: Path) -> Path:
     root = tmp / "company-wiki"
-    (root / "config").mkdir(parents=True)
-    (root / "config" / "source_catalog.yaml").write_text(
-        "schema_version: '1.0'\n", encoding="utf-8"
-    )
+    root.mkdir(parents=True)
     return root
 
 
 def _fake_package(tmp: Path) -> Path:
-    package = tmp / "fake_pkgs" / "company_wiki" / "source_catalog"
-    package.mkdir(parents=True)
-    (package.parent / "__init__.py").write_text("", encoding="utf-8")
-    (package / "__init__.py").write_text("", encoding="utf-8")
-    shutil.copy2(FIXTURE_CLI, package / "cli.py")
-    return package.parents[1]
+    command = tmp / "fake-producer.py"
+    shutil.copy2(FIXTURE_CLI, command)
+    return command
+
 
 
 def _fake_overrides(
     fake_root: Path, capture: Path, mode: str, **extra: str
 ) -> dict[str, str]:
-    existing = os.environ.get("PYTHONPATH")
     values = {
-        "PYTHONPATH": str(fake_root) + ((os.pathsep + existing) if existing else ""),
+        "S3_FAKE_TOOL": str(fake_root),
         "S3_FAKE_CAPTURE": str(capture),
         "S3_FAKE_MODE": mode,
     }
@@ -113,7 +108,10 @@ def _flag(argv: list[str], name: str) -> str:
 def _ff_config(tmp: Path, wiki_root: Path) -> Path:
     config = tmp / "ff_company_wiki.json"
     config.write_text(
-        json.dumps({"schema_version": "1.0", "company_wiki_root": str(wiki_root)}),
+        json.dumps({"schema_version": "1.0", "connection": {
+            "cwd": str(wiki_root),
+            "commands": {"catalog": [sys.executable, str(_fake_package(tmp))]},
+        }}),
         encoding="utf-8",
     )
     return config
@@ -164,7 +162,9 @@ def _run_library(
     kwargs.setdefault("source_ref_v2", True)
     kwargs.setdefault("pause_worker", False)
     return fetch_filing.resolve_filing(
-        request=request, company_wiki_root=wiki_root, **kwargs
+        request=request, company_wiki_root=WikiConnection(wiki_root, {
+            "catalog": (sys.executable, overrides["S3_FAKE_TOOL"]),
+        }), **kwargs
     )
 
 

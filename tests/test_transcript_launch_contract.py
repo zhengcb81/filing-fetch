@@ -190,42 +190,6 @@ def test_usage_started_survives_companion_and_public_v2_serializer(started):
     assert envelope["filing"]["source_ref"] == filing["source_ref"]
 
 
-@pytest.mark.parametrize("exchange,reason", [("HKEX", "unsupported_market"),
-    ("NASDAQ", "provider_credentials_missing"), ("TOKYO", "unsupported_exchange")])
-def test_ff_real_et_cli_preserves_filing_and_measured_pre_http_zero(tmp_path, exchange, reason):
-    from transcript_companion import resolve_companion_transcript
-    from ff_v2_envelope import success_envelope
-    from test_transcript_companion_transport import _request as companion_request, _filing
-    configured = transport_module.os.environ.get("W07_ET_TOOL")
-    if not configured:
-        pytest.skip("W07 real ET checkout integration requires an explicit test tool path")
-    tool = Path(configured)
-    assert tool.is_file()
-    transport = transport_module.EarningsTranscriptsTransport(wiki_root=tmp_path,
-        transcript_tool=tool, deadline=time.monotonic() + 30)
-    def empty_cwp_lookup(**kwargs):
-        transport._pending = {"request_id": "w07", "kwargs": kwargs,
-            "source_request": transport._source_request(identity=kwargs["identity"],
-                fiscal_year=kwargs["fiscal_year"], fiscal_quarter=kwargs["fiscal_quarter"],
-                as_of_date=kwargs["as_of_date"], allow_download=False)}
-        return None
-    transport.lookup_exact = empty_cwp_lookup
-    filing = _filing()
-    filing["company_identity"]["exchange"] = exchange
-    if exchange == "HKEX":
-        filing["company_identity"].update(market="HK", security_id="00700", ticker="00700")
-    result = resolve_companion_transcript(request=companion_request(), filing_handle=filing, transport=transport)
-    assert result["status"] == "provider_unavailable", result.get("reason")
-    assert result["reason"] == reason
-    assert result["provider_calls"] == 0
-    assert result["provider_requests"] == 0
-    assert result["provider_response_bytes"] == 0
-    assert result["provider_usage_complete"] is True
-    assert result["provider_started"] is False
-    envelope = success_envelope(companion_request(), filing, result, {"calls": 0, "downloads": 0})
-    assert envelope["status"] == "source_candidate"
-    assert envelope["filing"]["source_ref"] == filing["source_ref"]
-    assert envelope["transcript"]["provider_started"] is False
 
 
 def test_real_ff_config_loader_accepts_only_additive_credential_source_path(tmp_path):

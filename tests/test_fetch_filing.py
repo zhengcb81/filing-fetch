@@ -1193,7 +1193,7 @@ class FilingFetchTests(unittest.TestCase):
             with self.assertRaisesRegex(FilingFetchError, "must be a directory"):
                 load_company_wiki_root(config_path=config)
 
-    def test_config_missing_catalog_yaml_is_rejected(self) -> None:
+    def test_connection_does_not_inspect_producer_catalog_layout(self) -> None:
         with TemporaryDirectory() as temporary:
             tmp = Path(temporary)
             (tmp / "empty").mkdir()
@@ -1202,8 +1202,7 @@ class FilingFetchTests(unittest.TestCase):
                 json.dumps({"schema_version": "1.0", "company_wiki_root": str(tmp / "empty")}),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(FilingFetchError, "source_catalog.yaml"):
-                load_company_wiki_root(config_path=config)
+            self.assertEqual(load_company_wiki_root(config_path=config), tmp / "empty")
 
     def test_config_empty_root_is_rejected(self) -> None:
         with TemporaryDirectory() as temporary:
@@ -2047,7 +2046,7 @@ class FilingFetchTests(unittest.TestCase):
                 json.dumps({"schema_version": "1.0", "company_wiki_root": str(empty)}),
                 encoding="utf-8",
             )
-            cases.append((no_catalog, "source_catalog.yaml"))
+            self.assertEqual(load_company_wiki_root(config_path=no_catalog), empty)
             not_dir = tmp / "not-a-dir"
             not_dir.write_text("x", encoding="utf-8")
             not_dir_cfg = tmp / "not-dir.json"
