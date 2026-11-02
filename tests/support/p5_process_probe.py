@@ -67,9 +67,15 @@ def alive(pid):
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    # Linux zombies are already terminated; only a living process is a leak.
-    stat = Path(f"/proc/{pid}/stat")
-    return not stat.exists() or stat.read_text().split(") ", 1)[1][0] != "Z"
+    if not sys.platform.startswith("linux"):
+        return True
+    # A process may be reaped between kill(0) and the independent observation.
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_bytes().rsplit(b")", 1)[-1].split()
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+    return bool(fields) and fields[0] not in {b"Z", b"X", b"x"}
+
 
 
 original_spawn = fpt._spawn
