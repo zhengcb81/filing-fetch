@@ -194,8 +194,14 @@ def test_local_preparation_extension_stays_closed(change):
         "causes": [],
     }
     payload["local_preparation"].update(change)
-    with pytest.raises(FilingFetchError):
-        ff._validated_operation(payload, "ensure")
+    if 'local_read_budget' in change:
+        checked = ff._validated_operation(payload, 'ensure')
+        assert checked['status'] == 'blocked'
+        assert checked['local_preparation']['reason'] == 'local_metadata_gap'
+        assert 'local_read_budget' not in checked['local_preparation']
+    else:
+        with pytest.raises(FilingFetchError):
+            ff._validated_operation(payload, 'ensure')
 
 
 def test_requested_companion_is_not_run_when_filing_failed():

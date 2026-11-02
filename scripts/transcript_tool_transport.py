@@ -108,11 +108,11 @@ def _usage_counters(usage: object) -> tuple[int, int] | None:
 def _provider_usage(raw: bytes, request_id: str, credential: str | None = None) -> dict[str, Any]:
     """Read one final supervisor receipt; absent/partial usage stays unknown."""
     unknown = {"provider_requests": None, "provider_response_bytes": None, "provider_usage_complete": False}
-    if len(raw) > 8192 or _stream_credential_exposed(raw, credential):
+    if _stream_credential_exposed(raw, credential):
         return unknown
     try:
         receipt = json.loads(raw.decode("utf-8", errors="strict"))
-    except (UnicodeError, json.JSONDecodeError):
+    except (UnicodeError, ValueError, RecursionError):
         return unknown
     if not isinstance(receipt, dict) or set(receipt) != {"schema_version", "request_id", "usage_complete", "usage"} or receipt.get("schema_version") != "earnings-retrieval-usage/1":
         return unknown

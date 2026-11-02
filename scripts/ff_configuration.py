@@ -15,26 +15,21 @@ from typing import Any
 
 from filing_contracts import COMPANY_WIKI_CONFIG_SCHEMA_VERSION, FilingFetchError
 
-MAX_CONFIG_BYTES = 64 * 1024
 _TOKEN = re.compile(r"\$\{([^}]+)\}")
 
 
 def read_json_object(path: Path, *, label: str = "company-wiki config") -> dict[str, Any]:
-    """Read at most limit + 1 bytes; invalid text never escapes as decoder errors."""
+    """Read the explicit local configuration completely; preserve decoding errors."""
     try:
         selected = path.expanduser().resolve(strict=True)
         if not selected.is_file():
             raise FilingFetchError(f"{label} must be a file", code="config_error")
         with selected.open("rb") as stream:
-            raw = stream.read(MAX_CONFIG_BYTES + 1)
+            raw = stream.read()
     except (OSError, ValueError) as exc:
         raise FilingFetchError(
             f"{label} does not exist or is unreadable: {path}", code="config_error"
         ) from exc
-    if len(raw) > MAX_CONFIG_BYTES:
-        raise FilingFetchError(
-            f"{label} exceeds the {MAX_CONFIG_BYTES} byte limit", code="config_error"
-        )
     try:
         payload = json.loads(raw.decode("utf-8", errors="strict"))
     except (UnicodeError, ValueError) as exc:

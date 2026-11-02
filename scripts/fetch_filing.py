@@ -775,14 +775,18 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
         or not isinstance(local.get("status"), str)
         or local["status"] not in {"blocked", "unavailable", "ambiguous"}
         or local.get("status") != payload.get("status") or local.get("blocks_download") is not True
-        or not isinstance(local.get("causes"), list) or len(local["causes"]) > 64
+        or not isinstance(local.get("causes"), list)
         or not all(isinstance(x, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", x)
                    for x in [local.get("reason"), *local.get("causes", [])])
     ):
         raise invalid_result(operation)
     if isinstance(local, dict) and "local_read_budget" in local:
         if _local_preparation_observation_from_operation(local) is None:
-            raise invalid_result(operation)
+            # Optional counters are not authority over the actual blocked outcome.
+            # Copy the public core so bad diagnostics cannot leak or mutate input.
+            payload = {**payload, "local_preparation": {
+                key: value for key, value in local.items() if key != "local_read_budget"
+            }}
     if _contains_physical_field({
         key: value for key, value in payload.items() if key != "acquisition_failure"
     }):

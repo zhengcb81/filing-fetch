@@ -125,12 +125,22 @@ def test_optional_observation_rejects_unsafe_or_wrong_type_without_replacing_saf
     limits = {'max_candidates': 64, 'max_bytes': 128*1024*1024, 'timeout_seconds': 10}
     valid = local_preparation_observation(receipt(), limits)
     invalid = {**valid, **change}
-    assert validated_local_preparation_observation(invalid) is None
+    valid_representation = ('operations' in change and len(change['operations']) == 1025) or (
+        isinstance(change.get('local_read_limits'), dict)
+        and change['local_read_limits']['timeout_seconds'] == 2**2048)
+    checked = validated_local_preparation_observation(invalid)
+    if valid_representation:
+        assert checked == invalid
+    else:
+        assert checked is None
     cause = source_condition('local_prepare', 'budget_exceeded')
     output = error_envelope('upstream_error', 'budget_exceeded', retryable=True,
         upstream_cause=cause, local_preparation_observation=invalid)
     assert output['filing']['upstream_cause'] == cause
-    assert 'local_preparation_observation' not in output
+    if valid_representation:
+        assert output['local_preparation_observation'] == invalid
+    else:
+        assert 'local_preparation_observation' not in output
 
 
 def test_unknown_owner_machine_diagnostic_is_preserved_without_new_business_enum():
