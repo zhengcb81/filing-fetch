@@ -395,7 +395,7 @@ def test_unknown_publication_lookup_suppresses_second_provider_call(tmp_path, mo
     assert "source_reader_cli" in " ".join(calls[1])
 
 
-def test_et_request_timeout_is_capped_to_its_cli_contract(tmp_path, monkeypatch) -> None:
+def test_et_request_timeout_keeps_the_explicit_owner_allocation(tmp_path, monkeypatch) -> None:
     tool = tmp_path / "transcript_tool.py"
     tool.write_text("# fixture path; process is injected", encoding="utf-8")
     seen: list[tuple[dict[str, Any], float]] = []
@@ -428,8 +428,8 @@ def test_et_request_timeout_is_capped_to_its_cli_contract(tmp_path, monkeypatch)
         limits={"timeout_seconds": 90, "max_bytes": 1_000_000, "max_cost_usd": "1.00"},
     )
 
-    assert seen[0][0]["timeout_seconds"] == 60
-    assert seen[0][1] == 63.0
+    assert seen[0][0]["timeout_seconds"] == 90
+    assert seen[0][1] == 93.0
 
 def test_creationflags_handles_a_missing_windows_constant(monkeypatch) -> None:
     monkeypatch.setattr(transcript_tool_transport, "os", SimpleNamespace(name="nt"))
