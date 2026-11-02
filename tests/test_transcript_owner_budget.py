@@ -93,12 +93,18 @@ def test_verified_source_open_allocates_exact_bytes_and_full_receipt(tmp_path,mo
 
 
 @pytest.mark.parametrize('channel',['stdout','stderr'])
-def test_explicit_process_channel_quota_still_stops_real_read(channel):
+def test_explicit_process_channel_quota_still_bounds_real_read(channel):
     import sys
     import ff_process_transport as process
     command=[sys.executable,'-B','-c',"import sys;sys."+channel+".write('x'*1025)"]
     kwargs={'stdout_cap_bytes':1024,'stderr_cap_bytes':None}
     if channel=='stderr':
         kwargs['stderr_cap_bytes']=1024
+        # Diagnostics: the explicit quota bounds retained bytes, not the result.
+        stdout,stderr,code=process.run_bounded_json(command,timeout_seconds=10,**kwargs)
+        assert code==0
+        assert stdout==b''
+        assert len(stderr)<=1024
+        return
     with pytest.raises(process.OutputLimitExceeded):
         process.run_bounded_json(command,timeout_seconds=10,**kwargs)

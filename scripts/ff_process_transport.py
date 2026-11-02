@@ -1,4 +1,12 @@
-"""One bounded lifetime for JSON children: bytes, deadline, exit and owned-tree cleanup."""
+"""One bounded lifetime for JSON children: payload, diagnostics, deadline, exit, tree.
+
+stdout is the caller-owned business payload and keeps a hard byte cap. stderr is
+optional diagnostics: it is drained concurrently (so the child never blocks on a
+full pipe), only the newest bounded window is retained (an explicit ``None`` cap
+keeps the whole stream), and exceeding that diagnostic budget never rewrites a
+complete stdout result into a transport failure. Each stream has its own
+allowance; neither spends the other's.
+"""
 
 from __future__ import annotations
 
@@ -56,11 +64,12 @@ class ChildFailed(TransportError):
 
     def __init__(
         self, message: str, *, returncode: int, stdout: bytes = b"", stderr: bytes = b"",
-        input_incomplete: bool = False
+        input_incomplete: bool = False, stderr_truncated: bool = False
     ) -> None:
         super().__init__(message)
         self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
         self.input_incomplete = input_incomplete
+        self.stderr_truncated = stderr_truncated
 
 
 def _assign_windows_job(proc: subprocess.Popen) -> WindowsJob:
@@ -115,17 +124,38 @@ def _spawn(command, input_bytes, cwd, env):
     return proc, job
 
 
+def _trim_partial_utf8_head(data: bytes) -> bytes:
+    """Start a retained window at a whole code point whenever one exists."""
+    for cut in range(4):
+        candidate = data[cut:]
+        try:
+            candidate.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        return candidate
+    # Both ends may be cut; still drop a leading fragment of a code point.
+    while data and 0x80 <= data[0] <= 0xBF:
+        data = data[1:]
+    return data
+
+
 class _IOState:
-    """Only reader threads own their streams; controller owns the lifecycle."""
+    """Only reader threads own their streams; controller owns the lifecycle.
+
+    ``counts`` are bytes read from the pipe. ``retained`` is what is still held:
+    stdout is capped hard, stderr keeps a bounded newest-bytes window.
+    """
 
     def __init__(self) -> None:
         self.wake = threading.Event()
         self.lock = threading.Lock()
         self.chunks: dict[str, list[bytes]] = {"stdout": [], "stderr": []}
         self.counts = {"stdout": 0, "stderr": 0}
+        self.retained = {"stdout": 0, "stderr": 0}
         self.finished: set[str] = set()
         self.error: TransportError | None = None
         self.write_error = False
+        self.stderr_truncated = False
         self.threads: list[threading.Thread] = []
 
     def finish(self, kind: str, error: TransportError | None = None) -> None:
@@ -139,20 +169,58 @@ class _IOState:
         error: TransportError | None = None
         try:
             while True:
-                # At cap still read ONE probe byte: EOF is valid; cap+1 is not.
-                piece = stream.read(65536 if cap is None else min(65536, cap - self.counts[kind] + 1))
+                # At the stdout cap still read ONE probe byte: EOF is valid; cap+1 is not.
+                piece = stream.read(self._read_size(kind, cap))
                 if not piece:
                     break
-                self.chunks[kind].append(piece)
                 self.counts[kind] += len(piece)
-                if cap is not None and self.counts[kind] > cap:
-                    error = OutputLimitExceeded(f"{kind} exceeded its byte cap")
-                    break
+                if kind == "stdout":
+                    self.chunks[kind].append(piece)
+                    self.retained[kind] += len(piece)
+                    if cap is not None and self.retained[kind] > cap:
+                        error = OutputLimitExceeded("stdout exceeded its byte cap")
+                        break
+                else:
+                    self._retain_diagnostic(piece, cap)
         except (OSError, ValueError):
-            error = TransportError(f"could not read child {kind}")
+            if kind == "stdout":
+                error = TransportError("could not read child stdout")
+            else:
+                # Lost diagnostics are a bounded log gap, not a payload failure.
+                self.stderr_truncated = True
         finally:
             stream.close()
             self.finish(kind, error)
+
+    def _read_size(self, kind: str, cap: int | None) -> int:
+        if kind == "stdout" and cap is not None:
+            return min(65536, cap - self.retained["stdout"] + 1)
+        return 65536
+
+    def _retain_diagnostic(self, piece: bytes, cap: int | None) -> None:
+        """Drain every diagnostic byte; retain only the newest bounded window."""
+        chunks = self.chunks["stderr"]
+        chunks.append(piece)
+        self.retained["stderr"] += len(piece)
+        if cap is None or self.retained["stderr"] <= cap:
+            return
+        self.stderr_truncated = True
+        while self.retained["stderr"] > cap:
+            head = chunks[0]
+            overflow = self.retained["stderr"] - cap
+            if overflow >= len(head):
+                chunks.pop(0)
+                self.retained["stderr"] -= len(head)
+            else:
+                chunks[0] = head[overflow:]
+                self.retained["stderr"] -= overflow
+
+    def stderr_window(self) -> bytes:
+        """Return the newest retained diagnostics, at a whole-code-point start."""
+        data = b"".join(self.chunks["stderr"])
+        if not self.stderr_truncated:
+            return data
+        return _trim_partial_utf8_head(data)
 
     def write(self, stream: BinaryIO, data: bytes) -> None:
         try:
@@ -260,7 +328,7 @@ def _cleanup(proc, job, state: _IOState) -> None:
 
 
 def _result(proc, state: _IOState) -> dict[str, object]:
-    stdout, stderr = b"".join(state.chunks["stdout"]), b"".join(state.chunks["stderr"])
+    stdout, stderr = b"".join(state.chunks["stdout"]), state.stderr_window()
     if proc.returncode != 0 or state.write_error:
         raise ChildFailed(
             "child closed stdin early" if state.write_error else f"child exited {proc.returncode}",
@@ -268,12 +336,14 @@ def _result(proc, state: _IOState) -> dict[str, object]:
             stdout=stdout,
             stderr=stderr,
             input_incomplete=bool(state.write_error),
+            stderr_truncated=state.stderr_truncated,
         )
     return dict(
         stdout=stdout,
         stderr=stderr,
         stdout_bytes_read=state.counts["stdout"],
         stderr_bytes_read=state.counts["stderr"],
+        stderr_truncated=state.stderr_truncated,
         returncode=0,
     )
 
@@ -288,10 +358,16 @@ def run_bounded(
     stdout_cap_bytes: int = _DEFAULT_STDOUT_CAP,
     stderr_cap_bytes: int | None = _DEFAULT_STDERR_CAP,
 ) -> dict[str, object]:
-    """Bound stdin, both output pipes and process exit by one absolute deadline.
+    """Bound stdin, the stdout payload, diagnostics and exit by one absolute deadline.
 
-    Success returns bytes/counts/returncode; nonzero exit raises ChildFailed with
-    captured bytes. Cleanup has one separate 2.5s maximum, never a renewed request.
+    stdout over ``stdout_cap_bytes`` raises ``OutputLimitExceeded``. stderr is
+    optional diagnostics: only the newest ``stderr_cap_bytes`` are retained,
+    ``stderr_bytes_read`` reports what the child actually wrote, and overflow,
+    a lost diagnostic read or non-UTF-8 log bytes never fail a delivered
+    payload. ``stderr_cap_bytes=None`` keeps the whole diagnostic stream for an
+    explicit caller-owned receipt. Success returns bytes/counts/returncode;
+    nonzero exit raises ChildFailed with the retained bytes. Cleanup has one
+    separate 2.5s maximum, never a renewed request.
     """
     _validate(timeout_seconds, stdout_cap_bytes, stderr_cap_bytes, command, input_bytes)
     deadline = time.monotonic() + timeout_seconds
@@ -318,7 +394,11 @@ def run_bounded_json(
     stderr_cap_bytes: int | None = _DEFAULT_STDERR_CAP,
     allow_nonzero_exit: bool = False,
 ) -> tuple[bytes, bytes, int]:
-    """Success bytes are strict UTF-8. ChildFailed retains caller-owned error bytes."""
+    """Success stdout is strict UTF-8; stderr stays opaque bounded diagnostics.
+
+    ChildFailed retains caller-owned error bytes. A diagnostic stream that is
+    not valid UTF-8 is returned verbatim; it cannot veto a valid payload.
+    """
     try:
         result = run_bounded(
             command,
@@ -338,7 +418,6 @@ def run_bounded_json(
     stdout, stderr = cast(bytes, result["stdout"]), cast(bytes, result["stderr"])
     try:
         stdout.decode("utf-8", errors="strict")
-        stderr.decode("utf-8", errors="strict")
     except UnicodeError as error:
-        raise TransportError("child output was not valid UTF-8") from error
+        raise TransportError("child stdout was not valid UTF-8") from error
     return stdout, stderr, cast(int, result["returncode"])

@@ -55,20 +55,23 @@ class BoundedTransportUnitTests(unittest.TestCase):
         _ = ctx.exception
 
     def test_stderr_concurrently_bounded(self):
+        # A diagnostic overflow is drained so the child never blocks on a full
+        # pipe, but only a bounded newest-bytes window is retained in memory.
         child = (
-            "import sys,time\n"
-            "for _ in range(200000):\n"
-            "    sys.stderr.write('b'*4096)\n"
-            "sys.stderr.flush(); time.sleep(30)\n"
+            "import sys\n"
+            "sys.stderr.write('b'*(2*1024*1024))\n"
+            "sys.stderr.flush()\n"
         )
         start = time.monotonic()
-        with self.assertRaises(fpt.OutputLimitExceeded):
-            fpt.run_bounded(
-                [sys.executable, "-S", "-c", child],
-                stderr_cap_bytes=256 * 1024,
-                timeout_seconds=20,
-            )
+        result = fpt.run_bounded(
+            [sys.executable, "-S", "-c", child],
+            stderr_cap_bytes=256 * 1024,
+            timeout_seconds=20,
+        )
         self.assertLess(time.monotonic() - start, 15)
+        self.assertTrue(result["stderr_truncated"])
+        self.assertLessEqual(len(result["stderr"]), 256 * 1024)
+        self.assertEqual(result["stderr_bytes_read"], 2 * 1024 * 1024)
 
     def test_success_returns_bounded_bytes_and_exit(self):
         child = "import sys; sys.stdout.write('ok'); print('!')"
@@ -162,20 +165,21 @@ class TranscriptRunnerReusesLayerTests(unittest.TestCase):
         self.assertIs(ttt._run_bounded_json, fpt.run_bounded_json)
 
     def test_verified_open_stderr_cap_is_real(self):
-        # Child writes far beyond the stderr cap; must fail during read.
+        # The explicit diagnostic budget bounds retained memory; it cannot
+        # veto a payload the child already delivered.
         child = (
-            "import sys,time\n"
+            "import sys\n"
             "sys.stderr.write('c'*(2*1024*1024)); sys.stderr.flush()\n"
-            "time.sleep(30)\n"
         )
         start = time.monotonic()
-        with self.assertRaises((fpt.OutputLimitExceeded, ValueError)):
-            fpt.run_bounded(
-                [sys.executable, "-S", "-c", child],
-                stderr_cap_bytes=64 * 1024,
-                timeout_seconds=20,
-            )
+        result = fpt.run_bounded(
+            [sys.executable, "-S", "-c", child],
+            stderr_cap_bytes=64 * 1024,
+            timeout_seconds=20,
+        )
         self.assertLess(time.monotonic() - start, 15)
+        self.assertTrue(result["stderr_truncated"])
+        self.assertLessEqual(len(result["stderr"]), 64 * 1024)
 
 
 if __name__ == "__main__":

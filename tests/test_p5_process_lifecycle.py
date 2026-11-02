@@ -21,9 +21,15 @@ def test_exact_output_byte_cap_allows_eof_at_the_boundary(stream, size):
     descriptor = 1 if stream == "stdout" else 2
     command = [sys.executable, "-S", "-c", f"import os;os.write({descriptor},b'x'*{size})"]
     limits = {f"{stream}_cap_bytes": 10}
-    if size > 10:
+    if size > 10 and stream == "stdout":
         with pytest.raises(fpt.OutputLimitExceeded):
             fpt.run_bounded(command, timeout_seconds=3, **limits)
+    elif size > 10:
+        # stderr is diagnostics: the cap bounds retention, never the payload.
+        result = fpt.run_bounded(command, timeout_seconds=3, **limits)
+        assert result["stderr_truncated"] is True
+        assert len(result["stderr"]) <= 10
+        assert result["stderr_bytes_read"] == size
     else:
         result = fpt.run_bounded(command, timeout_seconds=3, **limits)
         assert result[stream] == b"x" * size
