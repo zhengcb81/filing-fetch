@@ -288,6 +288,41 @@ def test_partial_utf8_trim_handles_both_cut_ends():
     assert trimmed.startswith(char)
 
 
+def test_truncated_et_usage_stays_unknown_not_zero():
+    """ET usage/cost stays honest: complete receipt unchanged, lost receipt null."""
+    from transcript_tool_transport import _provider_usage
+
+    receipt = {
+        "schema_version": "earnings-retrieval-usage/1",
+        "request_id": "req-1",
+        "usage_complete": True,
+        "usage": {"requests_used": 3, "response_bytes_used": 4096},
+    }
+    encoded = json.dumps(receipt).encode()
+    complete = transport.run_bounded(
+        _command(f"import sys;sys.stderr.buffer.write({encoded!r})"), timeout_seconds=30
+    )
+    assert _provider_usage(complete["stderr"], "req-1") == {
+        "provider_requests": 3,
+        "provider_response_bytes": 4096,
+        "provider_usage_complete": True,
+    }
+    flooded = transport.run_bounded(
+        _command(
+            f"import sys;sys.stderr.buffer.write({encoded!r})\n"
+            f"sys.stderr.buffer.write({LOG_LINE!r} * {FLOOD_LINES})\n"
+            "sys.stderr.buffer.flush()"
+        ),
+        timeout_seconds=30,
+    )
+    assert flooded["stderr_truncated"] is True
+    assert _provider_usage(flooded["stderr"], "req-1") == {
+        "provider_requests": None,
+        "provider_response_bytes": None,
+        "provider_usage_complete": False,
+    }
+
+
 def test_truncated_stderr_window_remains_strict_utf8():
     source = (
         "import sys\n"
