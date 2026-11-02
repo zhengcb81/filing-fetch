@@ -1,12 +1,12 @@
 # FF仓内活动计划：最终入库预算闭合
 
-状态：PLANNED / ROOT owns，非独立外包。PLAN_ID=import-budget-closure-20261102；PWF_PLAN_ROOT=docs/plans。
+状态：ROOT_DECOUPLING_SUBTASK / 属于集中解耦，不独立派发。PLAN_ID=import-budget-closure-20261102；PWF_PLAN_ROOT=docs/plans。
 仓库C:/Users/郑曾波/Projects/filing-fetch；基线b3f0b9cceb87338c64dc8ddd698707f01ac6691a。
 总控C:/Users/郑曾波/Projects/company-wiki/docs/plans/du11-source-closure-2026-10-18/review/architecture-reassessment-20261102/COORDINATION.md。
 
 ## Next Step
 
-与CWP同一ROOT先固化FF→ET→CWP import→verified-open的离线失败案例；不重做ET已完成预算修复。
+先按 C:/Users/郑曾波/Projects/company-wiki/docs/plans/du11-source-closure-2026-10-18/review/architecture-reassessment-20261102/DECOUPLING_FIRST.md 的D1固化公共端口/隔离测试；本文件仅细化其中采集预算子项，FF其他连接适配与测试解耦以总计划为准。不先按旧独立分工开工，不重做ET已完成预算修复。
 
 ## 已证问题
 
