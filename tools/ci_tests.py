@@ -1,4 +1,4 @@
-"""Run the same focused offline behavior suite for CI and the push hook."""
+"""Full CI inventory and a separate fixed local smoke share isolated execution."""
 
 from __future__ import annotations
 
@@ -54,6 +54,21 @@ CI_TESTS = (
     "tests/test_w07_matrix_efficiency.py",
     "tests/test_root_w07_matrix_boundaries.py",
 )
+# Explicit existing pure-unit nodes; additions to a file cannot widen daily work.
+LOCAL_SMOKE_TESTS = (
+    "tests/test_architecture_quality.py::test_valid_leap_day_is_accepted",
+    "tests/test_architecture_quality.py::test_invalid_utf8_config_is_a_named_error",
+    "tests/test_ff_v2_contract.py::test_v2_no_companion_is_pathless_and_calls_no_transcript",
+    "tests/test_ff_v2_contract.py::test_companion_failure_does_not_rollback_filing",
+    "tests/test_ff_v2_contract.py::test_v2_fetch_intent_requires_byte_time_and_cost_caps",
+    "tests/test_source_ref_v2.py::test_v2_reuse_keeps_partial_capture_as_diagnostic_only",
+    "tests/test_transcript_companion.py::test_no_companion_does_not_touch_transport",
+    "tests/test_transcript_companion.py::test_existing_exact_transcript_is_reused_without_fetch",
+    "tests/test_transcript_companion.py::test_direct_companion_fetch_without_caps_makes_zero_transport_calls",
+    "tests/test_latest_mode.py::test_latest_as_of_mode_valid",
+    "tests/test_ci_tests.py::test_shared_ci_table_covers_pure_local_reuse_and_current_reader_regressions",
+)
+
 GIT_REPOSITORY_CONTEXT = (
     "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
     "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
@@ -81,22 +96,27 @@ def _wiki_source_directory() -> Path:
     return directory
 
 
-def run_tests() -> int:
-    """Keep scratch owned, child Git relative to its cwd, and failures visible."""
+def subprocess_environment() -> dict[str, str]:
+    """Child Git resolves its own cwd; host plugins cannot write checkout state."""
     environment = os.environ.copy()
-    try:
-        environment["FILING_FETCH_V2_WIKI_SRC"] = str(_wiki_source_directory())
-    except (OSError, RuntimeError) as exc:
-        print(f"company-wiki runtime unavailable for CI behavior tests: {exc}", file=sys.stderr)
-        return 2
     for key in GIT_REPOSITORY_CONTEXT:
         environment.pop(key, None)
-    # CI installs plain pytest; unrelated host plugins can write checkout state.
     environment.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1",
                        PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
-    with tempfile.TemporaryDirectory(prefix="ff-ci-") as scratch:
+    return environment
+
+
+def _run_tests(tests, *, scratch_prefix: str, timeout_seconds: int, resolve_wiki: bool) -> int:
+    environment = subprocess_environment()
+    if resolve_wiki:
+        try:
+            environment["FILING_FETCH_V2_WIKI_SRC"] = str(_wiki_source_directory())
+        except (OSError, RuntimeError) as exc:
+            print(f"company-wiki runtime unavailable for CI behavior tests: {exc}", file=sys.stderr)
+            return 2
+    with tempfile.TemporaryDirectory(prefix=scratch_prefix) as scratch:
         result = subprocess.run(
-            [sys.executable, "-B", "-m", "pytest", *CI_TESTS,
+            [sys.executable, "-B", "-m", "pytest", *tests,
              "-q", "-rs", "--tb=short", "-p", "no:cacheprovider", "--basetemp", scratch],
             cwd=PROJECT_ROOT,
             env=environment,
@@ -104,7 +124,7 @@ def run_tests() -> int:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=900,
+            timeout=timeout_seconds,
         )
         # Preserve every failed node, including the first one in a long report.
         if result.stdout:
@@ -112,6 +132,16 @@ def run_tests() -> int:
         if result.stderr:
             print(result.stderr, end="", file=sys.stderr)
         return result.returncode
+
+
+def run_tests() -> int:
+    """The unchanged full40-file CI mode, with its existing900s deadline."""
+    return _run_tests(CI_TESTS, scratch_prefix="ff-ci-", timeout_seconds=900, resolve_wiki=True)
+
+
+def run_local_smoke() -> int:
+    """One fixed pure-unit child; no production/sibling configuration lookup."""
+    return _run_tests(LOCAL_SMOKE_TESTS, scratch_prefix="ff-local-", timeout_seconds=180, resolve_wiki=False)
 
 
 def main() -> int:

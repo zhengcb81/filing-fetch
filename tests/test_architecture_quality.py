@@ -142,42 +142,44 @@ def test_candidate_projection_discards_unknown_metadata_consistently(tmp_path, r
     assert "fixture-only" not in json.dumps(handle)
 
 
-def test_oversized_valid_config_is_rejected_before_root_use(tmp_path):
+def test_large_valid_config_is_read_completely_before_root_use(tmp_path):
     root = _wiki(tmp_path)
     config = tmp_path / "connection.json"
     data = json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}).encode()
-    config.write_bytes(data + b" " * 70000)
+    complete = data + b" " * 70000
+    config.write_bytes(complete)
+    assert fetch_filing.load_company_wiki_root(config_path=config) == root
+    assert config.read_bytes() == complete
+    config.write_bytes(complete + b"\xff")
     with pytest.raises(FilingFetchError) as caught:
         fetch_filing.load_company_wiki_root(config_path=config)
     assert caught.value.code == "config_error"
-    assert "byte limit" in str(caught.value)
 
 
-def test_config_is_bounded_while_reading_not_after_full_read(tmp_path, monkeypatch):
+def test_complete_config_tail_is_not_rejected_by_an_implicit_read_limit(tmp_path, monkeypatch):
     from io import BytesIO
     from pathlib import Path
 
     root = _wiki(tmp_path)
     config = tmp_path / "connection.json"
-    data = json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}).encode()
+    data = b" " * 70000 + json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}).encode()
     config.write_bytes(data)
     reads = []
     original_open = Path.open
 
-    class LimitedStream(BytesIO):
+    class CompleteStream(BytesIO):
         def read(self, size=-1):
             reads.append(size)
-            assert 0 < size <= 65537, "configuration read must have an actual byte bound"
             return super().read(size)
 
     def open_path(self, *args, **kwargs):
         if self == config:
-            return LimitedStream(data)
+            return CompleteStream(data)
         return original_open(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "open", open_path)
     assert fetch_filing.load_company_wiki_root(config_path=config) == root
-    assert len(reads) == 1
+    assert reads  # Full JSON value lies beyond the retired64KiB boundary.
 
 
 def test_doctor_uses_runtime_rejection_for_invalid_utf8_and_literals(tmp_path):

@@ -1,4 +1,4 @@
-"""The push hook and CI share an isolated behavior runner and real failures."""
+"""Daily/CI inventories share isolation while preserving their actual scope."""
 
 from __future__ import annotations
 
@@ -48,14 +48,15 @@ def _configured_runtime(tmp_path):
     return project, wiki, config
 
 
-def test_hook_and_ci_use_the_same_behavior_runner():
+def test_hook_uses_fixed_local_smoke_and_ci_retains_complete_inventory():
     workflow = yaml.safe_load((ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8"))
     steps = workflow["jobs"]["verify"]["steps"]
     behavior = next(step["run"] for step in steps
                     if step.get("name") == "Run focused regression suite once")
     assert behavior.strip() == "python tools/ci_tests.py"
     hook = (ROOT / ".githooks/pre-push").read_text(encoding="utf-8")
-    assert '--ci-tests' in hook
+    assert '--push-checks' in hook
+    assert '--ci-tests' not in hook
     runner = _load("ff_ci_list", "tools/ci_tests.py")
     assert len(runner.CI_TESTS) == len(set(runner.CI_TESTS))
     for name in ("tests/test_provider_cause_contract.py", "tests/test_acquisition_failure_consumer.py",
@@ -236,3 +237,81 @@ def test_v2_e2e_uses_public_loader_without_an_opt_in_environment(monkeypatch, tm
         pytest.fail("configured offline v2 E2E was silently skipped")
     assert loaded == [1]
     assert environment["PYTHONPATH"] == str((wiki / "src").resolve())
+
+
+def test_daily_gate_only_runs_ruff_and_fixed_smoke(monkeypatch):
+    gate = _load("ff_gate_daily", "tools/pre_push_gate.py")
+    calls = []
+    monkeypatch.setattr(gate, "_run", lambda command, label, **kwargs:
+                        calls.append((command, kwargs)) or 0)
+    for name in ("_unique_test_symbols", "_no_bom_check", "_config_doctor_gate", "_install_check"):
+        monkeypatch.setattr(gate, name, lambda: pytest.fail("daily push repeated a CI/manual phase"))
+    smoke = []
+    monkeypatch.setitem(sys.modules, "ci_tests", SimpleNamespace(run_local_smoke=lambda: smoke.append(1) or 0))
+    assert gate.main(["--push-checks"]) == 0
+    assert len(calls) == 1 and calls[0][0][1:4] == ["-m", "ruff", "check"]
+    assert calls[0][1]["timeout"] == 180
+    assert smoke == [1]
+
+
+@pytest.mark.parametrize("ruff_code,smoke_code,expected", [(7,0,7),(0,9,9)])
+def test_daily_gate_propagates_real_failed_phase_once(monkeypatch, ruff_code, smoke_code, expected):
+    gate = _load("ff_gate_daily_failure", "tools/pre_push_gate.py")
+    monkeypatch.setattr(gate, "_run", lambda *args, **kwargs: ruff_code)
+    calls = []
+    monkeypatch.setitem(sys.modules, "ci_tests", SimpleNamespace(
+        run_local_smoke=lambda: calls.append(1) or smoke_code))
+    assert gate.main(["--push-checks"]) == expected
+    assert calls == ([] if ruff_code else [1])
+
+
+def test_local_smoke_has_fixed_nodes_no_runtime_config_or_parent_git(monkeypatch, tmp_path):
+    runner = _load("ff_local_smoke_schedule", "tools/ci_tests.py")
+    assert 0 < len(runner.LOCAL_SMOKE_TESTS) <= 12
+    assert len(runner.LOCAL_SMOKE_TESTS) == len(set(runner.LOCAL_SMOKE_TESTS))
+    assert all("::test_" in node and node.split("::")[0] in runner.CI_TESTS
+               for node in runner.LOCAL_SMOKE_TESTS)
+    monkeypatch.setattr(runner, "_wiki_source_directory", lambda: pytest.fail("local smoke loaded another repo"))
+    calls, scratch = [], []
+    for key in runner.GIT_REPOSITORY_CONTEXT:
+        monkeypatch.setenv(key, "parent-hook-context")
+    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "keep-this-context")
+    def child(command, **kwargs):
+        calls.append(command)
+        owned = Path(command[command.index("--basetemp")+1])
+        scratch.append(owned)
+        (owned/"child.txt").write_text("owned", encoding="utf-8")
+        assert kwargs["timeout"] == 180
+        assert not any(key in kwargs["env"] for key in runner.GIT_REPOSITORY_CONTEXT)
+        assert kwargs["env"]["GIT_CONFIG_PARAMETERS"] == "keep-this-context"
+        assert [x for x in command if x in runner.LOCAL_SMOKE_TESTS] == list(runner.LOCAL_SMOKE_TESTS)
+        return subprocess.CompletedProcess(command, 0, "", "")
+    monkeypatch.setattr(runner.subprocess,"run",child)
+    assert runner.run_local_smoke() == 0
+    assert len(calls) == 1 and all(not p.exists() for p in scratch)
+
+
+def test_real_local_smoke_failure_keeps_node_exit_and_cleans_scratch(monkeypatch, tmp_path, capsys):
+    runner = _load("ff_local_smoke_failure", "tools/ci_tests.py")
+    monkeypatch.setattr(runner,"PROJECT_ROOT",tmp_path)
+    monkeypatch.setattr(runner,"LOCAL_SMOKE_TESTS",("test_local_red.py::test_actual_local_failure",))
+    (tmp_path/"test_local_red.py").write_text(
+        "def test_actual_local_failure():\n    assert False, 'actual-local-node'\n",encoding="utf-8")
+    before = set(tmp_path.iterdir())
+    assert runner.run_local_smoke() == 1
+    assert "test_actual_local_failure" in capsys.readouterr().out
+    assert set(tmp_path.iterdir()) == before
+
+
+def test_local_smoke_timeout_cleans_scratch_without_hiding_failure(monkeypatch):
+    runner = _load("ff_local_smoke_timeout", "tools/ci_tests.py")
+    scratch = []
+    def timeout(command, **kwargs):
+        owned = Path(command[command.index("--basetemp")+1])
+        scratch.append(owned)
+        (owned/"partial.txt").write_text("pending",encoding="utf-8")
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+    monkeypatch.setattr(runner.subprocess,"run",timeout)
+    with pytest.raises(subprocess.TimeoutExpired):
+        runner.run_local_smoke()
+    assert scratch and all(not p.exists() for p in scratch)

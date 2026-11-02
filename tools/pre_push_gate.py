@@ -1,35 +1,9 @@
-"""Pre-push gate: CI-equivalent fast checks BEFORE pushing (root-cause fix).
+"""Daily pushes run Ruff once and one fixed local smoke; CI stays explicit.
 
-Recurring failure pattern (2026-09-01..09-08): filing-fetch pushes went
-straight to GitHub with no local surface that mirrored the CI ``quality``
-workflow, so CI discovered the problems instead of the developer.  CI run #42
-was the last instance: the doctor step went red on
-``/home/runner/Projects/filing-fetch`` — a path the runner never created.
-
-This gate mirrors the CI fast surface locally:
-
-  1. ruff check scripts tests tools e2e          (CI WU-1.2 scope)
-  2. compileall scripts tests tools e2e
-  3. import smoke (scripts/fetch_filing, scripts/filing_contracts)
-  4. mypy on the FC-1204-c contract set          (mirrors CI exactly)
-  5. unique test symbols                          (CI WU-1.1 inline gate)
-  6. shared focused CI suite (``--ci-tests``), or manual full ``--run-tests``
-  7. tools/config_doctor.py three-repo doctor     (CI FC-1202)
-  8. installed-skill drift report (FF-S3): the copies under ~/.agents,
-     ~/.claude, ~/.codex are COMPARED with this repo and any drift is
-     printed.  The gate never writes them - installing is an explicit
-     `python tools/sync_installs_b3.py --install` run by the owner.  CI
-     cannot cover this either (runners have no install roots, so its check
-     is trivially green).
-  9. tools/verify_plan_claims.py                  (CI WU-8.3)
- 10. UTF-8 BOM scan                               (CA-304/final_ratchet class)
-
-Exit non-zero on the first red check. The pre-push hook and CI use the same
-focused regression runner. Run the full suite manually for broad
-changes or provider-contract migrations.
-
-Usage: python tools/pre_push_gate.py [--ci-tests | --run-tests] [--skip-mypy]
-       [--skip-install-sync]
+``--push-checks`` never repeats commit type checks, the full40-file CI list,
+three-repository doctors, plan/BOM scans or global install checks. The existing
+manual ``--ci-tests``/``--run-tests`` modes retain their complete checks.
+A local_fast_pass is only the fixed smoke, not complete CI acceptance.
 """
 
 from __future__ import annotations
@@ -42,6 +16,8 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PY_DIRS = ("scripts", "tests", "tools", "e2e")
+# The same engineering owner supplies child isolation to static and pytest runs.
+sys.path.insert(0, str(PROJECT_ROOT / "tools"))
 
 
 def _safe_console() -> None:
@@ -61,15 +37,25 @@ def _run(
     cmd: list[str], label: str, timeout: int = 900, *, blocking: bool = True
 ) -> int:
     print(f"\n=== {label} ===")
-    proc = subprocess.run(
-        cmd,
-        cwd=str(PROJECT_ROOT),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-    )
+    import ci_tests
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=ci_tests.subprocess_environment(),
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"FAILED: {label} (timeout after {timeout}s)")
+        return 124
+    except OSError as exc:
+        print(f"FAILED: {label} ({type(exc).__name__})")
+        return 1
     tail = (proc.stdout or "")[-2000:] + (proc.stderr or "")[-1000:]
     if proc.returncode != 0:
         print(tail)
@@ -179,6 +165,8 @@ def _install_check() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     behavior = parser.add_mutually_exclusive_group()
+    behavior.add_argument("--push-checks", action="store_true",
+                          help="run only Ruff and the fixed local pure-unit smoke")
     behavior.add_argument("--run-tests", action="store_true")
     behavior.add_argument("--ci-tests", action="store_true",
                           help="run the shared focused offline CI behavior suite")
@@ -186,6 +174,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-install-sync", action="store_true")
     args = parser.parse_args(argv)
     _safe_console()
+    if args.push_checks:
+        rc = _run([sys.executable, "-m", "ruff", "check", *PY_DIRS],
+                  "daily Ruff", timeout=180)
+        if rc:
+            return rc
+        import ci_tests
+        try:
+            rc = ci_tests.run_local_smoke()
+        except subprocess.TimeoutExpired:
+            print("FAILED: daily local smoke (timeout after180s)")
+            return 124
+        except OSError as exc:
+            print(f"FAILED: daily local smoke ({type(exc).__name__})")
+            return 1
+        if rc == 0:
+            print("local_fast_pass: fixed smoke GREEN; complete CI validation remains pending.")
+        return rc
 
     gates: list[tuple[list[str], str]] = [
         (
