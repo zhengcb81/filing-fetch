@@ -41,10 +41,8 @@ from ff_process_transport import (  # noqa: E402
 # FF must leave time for ET to terminate/reap that worker and remove its result
 # directory before the outer subprocess timeout expires.
 _ET_CLEANUP_GRACE_SECONDS = 3.0
-_ET_MAX_TIMEOUT_SECONDS = 60
-# Public ET earnings-transcript-request/1 canonical UTF-8 body ceiling.
-# The operation raw-response budget is separate and may legitimately be wider.
-_ET_MAX_BODY_BYTES = 10 * 1024 * 1024
+# ET owns actual raw-response/body accounting. Forward the explicit FF
+# allocation; no separate protocol-size or timeout permission is imposed here.
 _KNOWN_ET_ERRORS = frozenset({
     "provider_credentials_missing", "provider_credentials_rejected",
     "provider_credentials_file_unavailable", "provider_credentials_file_empty",
@@ -412,6 +410,10 @@ class EarningsTranscriptsTransport:
             command,
             timeout_seconds=self._remaining(),
             input_bytes=None,
+            # The source reference already names its exact bytes. Metadata
+            # receipts scale independently; no generic fixed-size veto applies.
+            stdout_cap_bytes=ref["byte_size"],
+            stderr_cap_bytes=None,
             cwd=str(self.wiki_root),
             env=self._wiki_env(),
         )
@@ -689,7 +691,6 @@ class EarningsTranscriptsTransport:
         provider_budget = min(
             float(limits["timeout_seconds"]),
             remaining - _ET_CLEANUP_GRACE_SECONDS,
-            float(_ET_MAX_TIMEOUT_SECONDS),
         )
         timeout_seconds = int(math.floor(provider_budget))
         if timeout_seconds < 1:
@@ -716,7 +717,7 @@ class EarningsTranscriptsTransport:
             "provider": "fmp",
             "download_authorized": True,
             "timeout_seconds": timeout_seconds,
-            "max_body_bytes": min(limits["max_bytes"], _ET_MAX_BODY_BYTES),
+            "max_body_bytes": limits["max_bytes"],
             "max_response_bytes": limits["max_bytes"],
             "max_cost_usd": limits["max_cost_usd"],
         }
@@ -742,6 +743,10 @@ class EarningsTranscriptsTransport:
                 input_bytes=json.dumps(
                     et_request, ensure_ascii=False, separators=(",", ":")
                 ).encode("utf-8"),
+                # Exact source payload plus extracted text/title can expand
+                # through JSON escaping (6x) and base64. Derive the allocation
+                # from the actual operation quota, not the generic32MiB default.
+                stdout_cap_bytes=18 * limits["max_bytes"] + 2 * 1024 * 1024,
                 cwd=str(self.transcript_tool.parent),
                 env=et_env,
             )

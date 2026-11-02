@@ -132,17 +132,17 @@ class _IOState:
                 self.error = error
         self.wake.set()
 
-    def read(self, stream: BinaryIO, kind: str, cap: int) -> None:
+    def read(self, stream: BinaryIO, kind: str, cap: int | None) -> None:
         error: TransportError | None = None
         try:
             while True:
                 # At cap still read ONE probe byte: EOF is valid; cap+1 is not.
-                piece = stream.read(min(65536, cap - self.counts[kind] + 1))
+                piece = stream.read(65536 if cap is None else min(65536, cap - self.counts[kind] + 1))
                 if not piece:
                     break
                 self.chunks[kind].append(piece)
                 self.counts[kind] += len(piece)
-                if self.counts[kind] > cap:
+                if cap is not None and self.counts[kind] > cap:
                     error = OutputLimitExceeded(f"{kind} exceeded its byte cap")
                     break
         except (OSError, ValueError):
@@ -166,7 +166,7 @@ class _IOState:
             self.finish("stdin")
 
     def start(
-        self, proc: subprocess.Popen, payload: bytes | None, stdout_cap: int, stderr_cap: int
+        self, proc: subprocess.Popen, payload: bytes | None, stdout_cap: int, stderr_cap: int | None
     ) -> None:
         for kind, stream, cap in (
             ("stdout", proc.stdout, stdout_cap),
@@ -213,7 +213,9 @@ def _validate_input(command, input_bytes) -> None:
 
 def _validate(timeout_seconds, stdout_cap, stderr_cap, command, input_bytes) -> None:
     _validate_timeout(timeout_seconds)
-    _validate_caps(stdout_cap, stderr_cap)
+    _validate_caps(stdout_cap)
+    if stderr_cap is not None:
+        _validate_caps(stderr_cap)
     _validate_input(command, input_bytes)
 
 
@@ -277,7 +279,7 @@ def run_bounded(
     cwd: str | None = None,
     env: dict[str, str] | None = None,
     stdout_cap_bytes: int = _DEFAULT_STDOUT_CAP,
-    stderr_cap_bytes: int = _DEFAULT_STDERR_CAP,
+    stderr_cap_bytes: int | None = _DEFAULT_STDERR_CAP,
 ) -> dict[str, object]:
     """Bound stdin, both output pipes and process exit by one absolute deadline.
 
@@ -306,7 +308,7 @@ def run_bounded_json(
     cwd: str | None = None,
     env: dict[str, str] | None = None,
     stdout_cap_bytes: int = _DEFAULT_STDOUT_CAP,
-    stderr_cap_bytes: int = _DEFAULT_STDERR_CAP,
+    stderr_cap_bytes: int | None = _DEFAULT_STDERR_CAP,
 ) -> tuple[bytes, bytes, int]:
     """Success bytes are strict UTF-8. ChildFailed retains caller-owned error bytes."""
     result = run_bounded(

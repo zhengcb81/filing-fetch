@@ -9,7 +9,7 @@ import pytest
 import transcript_tool_transport as module
 
 
-@pytest.mark.parametrize("raw_limit,body_limit", [(1024, 1024), (128 * 1024 * 1024, 10 * 1024 * 1024)])
+@pytest.mark.parametrize("raw_limit,body_limit", [(1024, 1024), (128 * 1024 * 1024, 128 * 1024 * 1024)])
 def test_actual_et_input_keeps_raw_quota_and_body_contract_separate(tmp_path, monkeypatch, raw_limit, body_limit):
     tool = tmp_path / "transcript_tool.py"
     tool.write_text("# no network; bounded subprocess injected", encoding="utf-8")
