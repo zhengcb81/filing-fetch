@@ -138,5 +138,7 @@ def test_pre_push_only_runs_the_read_only_install_check(
 
 def test_git_pre_push_hook_uses_fast_checks_without_the_full_suite() -> None:
     hook = (SKILL_ROOT / ".githooks" / "pre-push").read_text(encoding="utf-8")
-    assert "--skip-install-sync" in hook
+    assert "--push-checks" in hook
+    assert "--ci-tests" not in hook
     assert "--run-tests" not in hook
+    assert "--install" not in hook
