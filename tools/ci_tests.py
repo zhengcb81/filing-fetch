@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -77,26 +78,6 @@ GIT_REPOSITORY_CONTEXT = (
 )
 
 
-def _wiki_source_directory() -> Path:
-    """Honor CI's pin override, otherwise use the public FF project locator."""
-    source = os.environ.get("FILING_FETCH_V2_WIKI_SRC")
-    if source:
-        directory = Path(source)
-    else:
-        scripts = str(PROJECT_ROOT / "scripts")
-        if scripts not in sys.path:
-            sys.path.insert(0, scripts)
-        from fetch_filing import load_company_wiki_root
-
-        directory = load_company_wiki_root(
-            config_path=PROJECT_ROOT / "config" / "company_wiki.json",
-        ) / "src"
-    directory = directory.resolve(strict=True)
-    if not (directory / "company_wiki" / "source_catalog" / "cli.py").is_file():
-        raise FileNotFoundError(f"company-wiki runtime lacks source_catalog CLI: {directory}")
-    return directory
-
-
 def subprocess_environment() -> dict[str, str]:
     """Child Git resolves its own cwd; host plugins cannot write checkout state."""
     environment = os.environ.copy()
@@ -107,18 +88,31 @@ def subprocess_environment() -> dict[str, str]:
     return environment
 
 
-def _run_tests(tests, *, scratch_prefix: str, timeout_seconds: int, resolve_wiki: bool) -> int:
+def _annotate_failures(report: Path) -> None:
+    """Expose node names in GitHub Checks; missing diagnostics never alter exit."""
+    try:
+        suite = ET.parse(report).getroot()
+    except (OSError, ET.ParseError):
+        return
+    for case in suite.iter("testcase"):
+        if case.find("failure") is None and case.find("error") is None:
+            continue
+        node = "::".join(filter(None, (case.get("classname"), case.get("name"))))
+        node = node.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print("::error title=pytest failure::" + node)
+
+
+def _run_tests(tests, *, scratch_prefix: str, timeout_seconds: int) -> int:
     environment = subprocess_environment()
-    if resolve_wiki:
-        try:
-            environment["FILING_FETCH_V2_WIKI_SRC"] = str(_wiki_source_directory())
-        except (OSError, RuntimeError) as exc:
-            print(f"company-wiki runtime unavailable for CI behavior tests: {exc}", file=sys.stderr)
-            return 2
     with tempfile.TemporaryDirectory(prefix=scratch_prefix) as scratch:
+        command = [sys.executable, "-B", "-m", "pytest", *tests,
+                   "-q", "-rs", "--tb=short", "-p", "no:cacheprovider", "--basetemp", scratch]
+        report = Path(scratch) / "junit.xml"
+        annotated = environment.get("GITHUB_ACTIONS") == "true"
+        if annotated:
+            command.extend(("--junitxml", str(report)))
         result = subprocess.run(
-            [sys.executable, "-B", "-m", "pytest", *tests,
-             "-q", "-rs", "--tb=short", "-p", "no:cacheprovider", "--basetemp", scratch],
+            command,
             cwd=PROJECT_ROOT,
             env=environment,
             capture_output=True,
@@ -132,17 +126,19 @@ def _run_tests(tests, *, scratch_prefix: str, timeout_seconds: int, resolve_wiki
             print(result.stdout, end="")
         if result.stderr:
             print(result.stderr, end="", file=sys.stderr)
+        if annotated and result.returncode:
+            _annotate_failures(report)
         return result.returncode
 
 
 def run_tests() -> int:
-    """The unchanged full40-file CI mode, with its existing900s deadline."""
-    return _run_tests(CI_TESTS, scratch_prefix="ff-ci-", timeout_seconds=900, resolve_wiki=False)
+    """Run the consumer suite; ROOT owns producer integration."""
+    return _run_tests(CI_TESTS, scratch_prefix="ff-ci-", timeout_seconds=900)
 
 
 def run_local_smoke() -> int:
     """One fixed pure-unit child; no production/sibling configuration lookup."""
-    return _run_tests(LOCAL_SMOKE_TESTS, scratch_prefix="ff-local-", timeout_seconds=180, resolve_wiki=False)
+    return _run_tests(LOCAL_SMOKE_TESTS, scratch_prefix="ff-local-", timeout_seconds=180)
 
 
 def main() -> int:

@@ -8,6 +8,8 @@ import os
 import signal
 import subprocess
 import sys
+import time
+from pathlib import Path
 from ctypes import wintypes
 
 
@@ -115,6 +117,41 @@ def kill_owned_group(group_id: int) -> None:
     except OSError as error:
         if error.errno != errno.ESRCH:
             raise
+
+
+def _linux_group_has_live_members(group_id: int) -> bool:
+    """A killed orphan may remain visible as a zombie until init reaps it."""
+    expected = str(group_id).encode("ascii")
+    try:
+        processes = Path("/proc").iterdir()
+        for process in processes:
+            if not process.name.isdecimal():
+                continue
+            try:
+                # comm can contain spaces and parentheses, and is not UTF-8.
+                fields = (process / "stat").read_bytes().rsplit(b")", 1)[-1].split()
+            except (FileNotFoundError, ProcessLookupError, PermissionError):
+                continue
+            if len(fields) > 2 and fields[2] == expected and fields[0] not in {b"Z", b"X", b"x"}:
+                return True
+    except OSError:
+        return True  # No procfs observation; the group probe remains authoritative.
+    return False
+
+
+def wait_owned_group_stopped(group_id: int, deadline: float) -> bool:
+    """Wait within the existing cleanup grace; sending SIGKILL is asynchronous."""
+    while True:
+        try:
+            os.killpg(group_id, 0)  # type: ignore[attr-defined] # POSIX only; observe, do not signal.
+        except ProcessLookupError:
+            return True
+        if sys.platform.startswith("linux") and not _linux_group_has_live_members(group_id):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.01, remaining))
 
 
 def pid_is_alive(pid: int) -> bool:

@@ -108,10 +108,13 @@ class FilingFetchTests(unittest.TestCase):
         }
 
     def test_default_config_resolves_an_existing_company_wiki_root(self) -> None:
-        root = load_company_wiki_root()
+        # Exercise the shipped token expansion without relying on the host lake.
+        with TemporaryDirectory() as temporary:
+            expected = Path(temporary).resolve() / "Projects" / "company-wiki"
+            expected.mkdir(parents=True)
+            with patch.dict(os.environ, {"USERPROFILE": temporary}):
+                self.assertEqual(load_company_wiki_root(), expected)
 
-        self.assertTrue(root.is_dir())
-        self.assertTrue((root / "config" / "source_catalog.yaml").is_file())
 
     def test_editing_config_moves_root_without_code_changes(self) -> None:
         with TemporaryDirectory() as temporary:

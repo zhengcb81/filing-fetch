@@ -14,6 +14,7 @@ from ff_process_tree import (
     WindowsJob,
     assign_windows_job,
     kill_owned_group,
+    wait_owned_group_stopped,
     pid_is_alive as pid_is_alive,
 )
 
@@ -248,11 +249,14 @@ def _cleanup(proc, job, state: _IOState) -> None:
         if job is not None:
             job.close()  # Also kills descendants if explicit termination failed.
     proc.wait(timeout=max(0.001, deadline - time.monotonic()))
+    group_stopped = job is not None or wait_owned_group_stopped(proc.pid, deadline)
     for thread in state.threads:
         thread.join(timeout=max(0.0, deadline - time.monotonic()))
     if any(thread.is_alive() for thread in state.threads):
         raise TransportError("owned process cleanup exceeded its grace period")
     _close_pipes(proc)
+    if not group_stopped:
+        raise TransportError("owned process group did not stop within cleanup grace")
 
 
 def _result(proc, state: _IOState) -> dict[str, object]:

@@ -114,6 +114,7 @@ def test_failure_keeps_full_node_output_exit_code_and_cleans_scratch(
 def test_real_pytest_failure_reports_node_and_restores_owned_temp(
     monkeypatch, tmp_path, capsys, wiki_source,
 ):
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
     runner = _load("ff_ci_real_failure", "tools/ci_tests.py")
     monkeypatch.setattr(runner, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(runner, "CI_TESTS", ("test_owned_failure.py",))
@@ -133,6 +134,7 @@ def test_real_pytest_failure_reports_node_and_restores_owned_temp(
     output = capsys.readouterr()
     assert "test_specific_ci_failure" in output.out
     assert "specific-ci-failure" in output.out
+    assert "::error title=pytest failure::test_owned_failure::test_specific_ci_failure" in output.out
     assert allocated and all(not path.exists() for path in allocated)
     assert set(tmp_path.iterdir()) == before
 
@@ -236,7 +238,8 @@ def test_local_smoke_has_fixed_nodes_no_runtime_config_or_parent_git(monkeypatch
     assert len(runner.LOCAL_SMOKE_TESTS) == len(set(runner.LOCAL_SMOKE_TESTS))
     assert all("::test_" in node and node.split("::")[0] in runner.CI_TESTS
                for node in runner.LOCAL_SMOKE_TESTS)
-    monkeypatch.setattr(runner, "_wiki_source_directory", lambda: pytest.fail("local smoke loaded another repo"))
+    monkeypatch.setattr(fetch_filing, "load_company_wiki_root",
+                        lambda **kwargs: pytest.fail("local smoke loaded another repo"))
     calls, scratch = [], []
     for key in runner.GIT_REPOSITORY_CONTEXT:
         monkeypatch.setenv(key, "parent-hook-context")

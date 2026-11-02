@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 from support import bounded_side_effect
 
-from test_fetch_filing import FilingFetchTests
+import test_fetch_filing as filing_fixtures
 
 from fetch_filing import FilingFetchError, resolve_filing  # noqa: E402
 from filing_contracts import validate_request  # noqa: E402
@@ -351,7 +351,7 @@ class Fc802GapTests(unittest.TestCase):
         ]
         with patch("fetch_filing._run_bounded_json", side_effect=bounded_side_effect(completed)):
             with self.assertRaisesRegex(FilingFetchError, "not reusable"):
-                resolve_filing(request=FilingFetchTests._request(), company_wiki_root=root)
+                resolve_filing(request=filing_fixtures.FilingFetchTests._request(), company_wiki_root=root)
 
     def test_invalid_authorization_block_is_request_error(self) -> None:
         """An authorization block missing required fields is a request
