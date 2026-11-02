@@ -83,7 +83,7 @@ def test_protocol_option_keeps_real_transport_failures(monkeypatch, failure):
 
 
 def test_complete_stdout_survives_a_stderr_flood():
-    """A 65,537-byte diagnostic log must not become OutputLimitExceeded."""
+    """A diagnostic log beyond the 64KiB window must not become OutputLimitExceeded."""
     stdout, stderr, code = transport.run_bounded_json(
         _command(_flood_after_stdout(PAYLOAD)), timeout_seconds=30
     )
