@@ -186,6 +186,8 @@ def _identity_arguments(request: dict[str, Any]) -> list[str]:
     arguments = ["--query", query]
     for name, flag in (("market", "--market"), ("exchange", "--exchange")):
         value = request.get(name)
+        if name == "market" and value is None:
+            value = request.get("source_market")
         if value is not None:
             arguments.extend((flag, _required_text(value, name)))
     return arguments
@@ -435,7 +437,9 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
             code="identity_error",
             candidates=candidates,
         )
-    if payload.get("schema_version") != COMPANY_WIKI_IDENTITY_SCHEMA_VERSION:
+    if payload.get("schema_version") not in SUPPORTED_COMPANY_WIKI_CONTRACTS[
+        "supported_identity_schema_versions"
+    ]:
         raise FilingFetchError(
             "company identity schema_version is unsupported",
             code="identity_error",
@@ -461,6 +465,12 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
                 f"company_identity.{name} must be non-empty trimmed text",
                 code="identity_error",
             )
+    issuer_link_id = resolved.get("issuer_link_id")
+    if issuer_link_id is not None and (
+        not isinstance(issuer_link_id, str)
+        or re.fullmatch(r"issuer-link-v1:[0-9a-f]{64}", issuer_link_id) is None
+    ):
+        raise FilingFetchError("company_identity.issuer_link_id is invalid", code="identity_error")
     if resolved.get("verified") is not True or resolved.get("active") is not True:
         raise FilingFetchError(
             "company identity must be verified and active before source resolution",
@@ -469,6 +479,21 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
     if resolved["market"] not in {"CN", "HK", "US"}:
         raise FilingFetchError("company identity market is unsupported", code="identity_error")
     return dict(resolved)
+
+
+def _same_issuer_identity(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    """Require the owner-provided cross-market link when listings differ.
+
+    Names and tickers are display/discovery fields; normalization cannot prove
+    that two market-specific securities belong to one issuer.
+    """
+    left_link = left.get("issuer_link_id")
+    right_link = right.get("issuer_link_id")
+    return (
+        isinstance(left_link, str)
+        and isinstance(right_link, str)
+        and left_link == right_link
+    )
 
 
 def _normalize_stats(stats: dict[str, int] | None) -> dict[str, int]:
@@ -644,6 +669,7 @@ def _source_query_candidate(
     normalized_request: dict[str, Any],
     request: dict[str, Any],
     company_identity: dict[str, Any],
+    source_identity: dict[str, Any],
     deadline: float,
     stats: dict[str, int],
 ) -> dict[str, Any]:
@@ -689,7 +715,8 @@ def _source_query_candidate(
         )
     handle = validate_source_candidate(
         candidates[0], matches[0], request_id=payload.get("request_id"),
-        request=request, company_identity=company_identity, context="source query",
+        request=request, company_identity=company_identity, source_identity=source_identity,
+        context="source query",
     )
     handle["resolution_outcome"] = "reused_existing"
     handle["download_events"] = 0
@@ -909,6 +936,7 @@ def _pathless_operation_handle(
     operation: str,
     request: dict[str, Any],
     company_identity: dict[str, Any],
+    source_identity: dict[str, Any] | None = None,
     stats: dict[str, int] | None,
 ) -> dict[str, Any]:
     result = _validated_operation(payload, operation)
@@ -955,7 +983,8 @@ def _pathless_operation_handle(
 
     handle = validate_source_candidate(
         result.get("candidate"), result.get("source_ref"), request_id=result["request_id"],
-        request=request, company_identity=company_identity, context="operation",
+        request=request, company_identity=company_identity, source_identity=source_identity,
+        context="operation",
     )
     handle["resolution_outcome"] = outcome
     handle["download_events"] = events
@@ -983,6 +1012,7 @@ def _resolve_source_ref_v2(
     normalized_request: dict[str, Any],
     request: dict[str, Any],
     company_identity: dict[str, Any],
+    source_identity: dict[str, Any],
     deadline: float,
     allow_download: bool,
     stats: dict[str, int],
@@ -994,6 +1024,7 @@ def _resolve_source_ref_v2(
             normalized_request=normalized_request,
             request=request,
             company_identity=company_identity,
+            source_identity=source_identity,
             deadline=deadline,
             stats=stats,
         )
@@ -1023,6 +1054,7 @@ def _resolve_source_ref_v2(
             operation="ensure",
             request=request,
             company_identity=company_identity,
+            source_identity=source_identity,
             stats=stats,
         )
 
@@ -1202,11 +1234,14 @@ def resolve_filing(
     command_prefix = command_for(root, "catalog")
     # Every request passes through verified/active identity before source
     # resolution; validate_request guarantees company_query is present.
+    identity_request = request
+    if request.get("market") is None and request.get("source_market") is not None:
+        identity_request = {**request, "market": request["source_market"]}
     identity_payload = _run_company_wiki_json_retry(
         command=[
             *command_prefix,
             "identify",
-            *_identity_arguments(request),
+            *_identity_arguments(identity_request),
         ],
         root=root,
         action="identify",
@@ -1219,16 +1254,60 @@ def resolve_filing(
         # This local validation precedes every acquiring operation.
         exc.stage = "identify"
         raise
+    selected_listing_market = identity_request.get("market")
+    if (
+        selected_listing_market is not None
+        and company_identity["market"] != selected_listing_market
+    ):
+        raise FilingFetchError(
+            "company-wiki identity market does not match the selected listing market",
+            code="identity_error", stage="identify",
+        )
+    source_market = request.get("source_market") or company_identity["market"]
+    source_identity = company_identity
+    if source_market != company_identity["market"]:
+        source_identity_request = {
+            **request, "market": source_market, "exchange": None,
+        }
+        source_identity_payload = _run_company_wiki_json_retry(
+            command=[
+                *command_prefix,
+                "identify",
+                *_identity_arguments(source_identity_request),
+            ],
+            root=root,
+            action="identify",
+            deadline=deadline,
+            stats=stats,
+        )
+        try:
+            source_identity = _resolved_company_identity(source_identity_payload)
+        except FilingFetchError as exc:
+            exc.stage = "source_identify"
+            raise
+        if source_identity["market"] != source_market:
+            raise FilingFetchError(
+                "company-wiki source identity did not resolve in source_market",
+                code="upstream_error", stage="source_identify",
+            )
+        if not _same_issuer_identity(company_identity, source_identity):
+            raise FilingFetchError(
+                "company-wiki source identity is not linked to the selected issuer",
+                code="identity_error", stage="source_identify",
+            )
     normalized_request = {
         key: value
         for key, value in request.items()
-        if key not in {"company_query", "exchange", "filing_intent", "companion_transcript"}
+        if key not in {
+            "company_query", "exchange", "filing_intent", "companion_transcript",
+            "source_market",
+        }
     }
     normalized_request.update(
         {
-            "entity": company_identity["canonical_name"],
-            "market": company_identity["market"],
-            "security_id": company_identity["security_id"],
+            "entity": source_identity["canonical_name"],
+            "market": source_market,
+            "security_id": source_identity["security_id"],
         }
     )
     # All explicit v2 requests are handled by one pathless dispatcher.
@@ -1242,6 +1321,7 @@ def resolve_filing(
             normalized_request=normalized_request,
             request=request,
             company_identity=company_identity,
+            source_identity=source_identity,
             deadline=deadline,
             allow_download=allow_download,
             stats=stats,

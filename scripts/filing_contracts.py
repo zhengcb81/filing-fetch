@@ -34,7 +34,8 @@ FILING_RESPONSE_SCHEMA_VERSION = "1.1"
 FILING_V2_REQUEST_SCHEMA_VERSION = "2.0"
 FILING_V2_RESPONSE_SCHEMA_VERSION = "2.0"
 COMPANY_WIKI_CONFIG_SCHEMA_VERSION = "1.0"
-COMPANY_WIKI_IDENTITY_SCHEMA_VERSION = "1.0"
+COMPANY_WIKI_IDENTITY_SCHEMA_VERSION = "1.1"
+SUPPORTED_COMPANY_WIKI_IDENTITY_SCHEMA_VERSIONS = frozenset({"1.0", "1.1"})
 # WU-4.1: explicit request mode. "exact" requires fiscal_year (a null year
 # used to silently mean "latest", producing AMBIGUOUS instead of a gap);
 # "latest_as_of" derives the latest period from as_of_date + document_kind
@@ -48,6 +49,7 @@ SUPPORTED_COMPANY_WIKI_CONTRACTS = {
     "resolve_schema_version": "1.0",
     "ensure_schema_version": "1.0",
     "identity_schema_version": COMPANY_WIKI_IDENTITY_SCHEMA_VERSION,
+    "supported_identity_schema_versions": SUPPORTED_COMPANY_WIKI_IDENTITY_SCHEMA_VERSIONS,
     "config_schema_version": COMPANY_WIKI_CONFIG_SCHEMA_VERSION,
 }
 
@@ -156,7 +158,7 @@ _REQUEST_SCHEMA_1_1_FIELDS = frozenset(
 # legacy authorization field (optional target scope, never a permission receipt).
 _REQUEST_SCHEMA_1_2_FIELDS = _REQUEST_SCHEMA_1_1_FIELDS | {"mode", "authorization"}
 _REQUEST_SCHEMA_2_0_FIELDS = (_REQUEST_SCHEMA_1_2_FIELDS - {"authorization"}) | {
-    "filing_intent", "companion_transcript", "acquisition_limits",
+    "filing_intent", "companion_transcript", "acquisition_limits", "source_market",
 }
 
 _AUTHORIZATION_REQUIRED_FIELDS = frozenset(
@@ -236,7 +238,17 @@ def validate_request(request: dict[str, Any]) -> None:
         raise FilingFetchError(
             f"market must be one of CN, HK, US: {market!r}", code="request_error"
         )
+    source_market = request.get("source_market")
+    if source_market is not None and source_market not in {"CN", "HK", "US"}:
+        raise FilingFetchError(
+            f"source_market must be one of CN, HK, US: {source_market!r}",
+            code="request_error",
+        )
     _required_text(request.get("document_kind"), "document_kind")
+    for name in ("form_type", "fiscal_period"):
+        value = request.get(name)
+        if value is not None:
+            _required_text(value, name)
     _required_text(request.get("as_of_date"), "as_of_date")
     _validate_date(request["as_of_date"], "as_of_date", code="request_error")
     mode = request.get("mode")

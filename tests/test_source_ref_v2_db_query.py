@@ -78,7 +78,8 @@ def _candidate() -> dict:
         "source_id": SOURCE, "title": "AMD 2025 annual report",
         "document_kind": "annual_report", "fiscal_year": 2025,
         "fiscal_period": None, "period_end": "2025-12-31",
-        "form_type": "10-K", "published_date": "2026-02-20",
+        "form_type": "10-K", "market": "US", "security_id": "AMD",
+        "published_date": "2026-02-20",
         "https_url": "https://www.sec.gov/Archives/amd/2025",
         "snapshot_sha256": SHA, "byte_size": 42,
         "mime_type": "application/pdf",
@@ -104,6 +105,20 @@ def _query(status: str = "found", candidate: dict | None = None) -> dict:
 
 def _completed(payload: dict, rc: int = 0) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess([], rc, json.dumps(payload), "")
+
+
+@pytest.mark.parametrize("version", ["1.0", "1.1"])
+def test_company_wiki_identity_contract_accepts_compatible_versions(version: str) -> None:
+    payload = _identity()
+    payload["schema_version"] = version
+    assert fetch_filing._resolved_company_identity(payload)["security_id"] == "AMD"
+
+
+def test_company_wiki_identity_contract_rejects_unsupported_version() -> None:
+    payload = _identity()
+    payload["schema_version"] = "1.2"
+    with pytest.raises(FilingFetchError, match="schema_version is unsupported"):
+        fetch_filing._resolved_company_identity(payload)
 
 
 def test_reuse_queries_db_only_without_resolve_or_source_bytes(tmp_path: Path) -> None:
@@ -136,6 +151,197 @@ def test_reuse_queries_db_only_without_resolve_or_source_bytes(tmp_path: Path) -
     assert handle["prompt_injection_status"] == "not_detected"
     assert "source_read_policy_sha256" not in handle
     assert "canonical_path" not in json.dumps(handle)
+
+
+def test_cross_market_request_keeps_listing_and_source_identity_separate(tmp_path: Path) -> None:
+    request = _v2_request(intent="reuse_only")
+    request.pop("acquisition_limits")
+    request.update({
+        "company_query": "BABA", "source_market": "HK",
+        "form_type": "20-F", "fiscal_period": "FY",
+    })
+    listing = _identity()
+    listing["resolved"].update({
+        "canonical_name": "Alibaba Group Holding Limited", "ticker": "BABA",
+        "security_id": "BABA", "matched_value": "BABA",
+        "issuer_link_id": "issuer-link-v1:" + "a" * 64,
+    })
+    source = json.loads(json.dumps(listing))
+    source["resolved"].update({
+        "market": "HK", "exchange": "HKEX", "ticker": "09988",
+        "security_id": "09988", "source_name": "HKEX",
+        "source_url": "https://www.hkexnews.hk/",
+        "source_record_id": "urn:company-wiki:security:HK:09988",
+        "matched_value": "BABA",
+    })
+    candidate = _candidate()
+    candidate.update({
+        "title": "Alibaba FY2025 annual report", "market": "HK",
+        "security_id": "09988", "form_type": "20-F", "fiscal_period": "FY",
+    })
+    with patch(
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([
+            _completed(listing), _completed(source), _completed(_query(candidate=candidate)),
+        ]),
+    ) as run:
+        handle = fetch_filing.resolve_filing(
+            request=request, company_wiki_root=_wiki(tmp_path), source_ref_v2=True,
+        )
+
+    assert len(run.call_args_list) == 3
+    identity_commands = [call.args[0] for call in run.call_args_list[:2]]
+    assert identity_commands[0][identity_commands[0].index("--market") + 1] == "US"
+    assert identity_commands[1][identity_commands[1].index("--market") + 1] == "HK"
+    source_request = json.loads(run.call_args_list[2].kwargs["input_bytes"])
+    assert source_request["market"] == "HK"
+    assert source_request["security_id"] == "09988"
+    assert source_request["form_type"] == "20-F"
+    assert source_request["fiscal_period"] == "FY"
+    assert handle["company_identity"]["market"] == "US"
+    assert handle["source_identity"]["market"] == "HK"
+    assert handle["source_identity"]["security_id"] == "09988"
+
+
+def test_initial_identity_must_match_selected_listing_market_before_source_lookup(
+    tmp_path: Path,
+) -> None:
+    request = _v2_request(intent="reuse_only")
+    request.pop("acquisition_limits")
+    request.update({"company_query": "BABA", "source_market": "HK"})
+    wrong_market_identity = _identity()
+    wrong_market_identity["resolved"].update({
+        "canonical_name": "Alibaba Group Holding Limited",
+        "market": "HK", "exchange": "HKEX", "ticker": "09988",
+        "security_id": "09988",
+    })
+
+    with patch(
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(wrong_market_identity)]),
+    ) as run:
+        with pytest.raises(FilingFetchError) as error:
+            fetch_filing.resolve_filing(
+                request=request, company_wiki_root=_wiki(tmp_path), source_ref_v2=True,
+            )
+
+    assert error.value.stage == "identify"
+    assert "selected listing market" in str(error.value)
+    assert len(run.call_args_list) == 1
+    assert "identify" in run.call_args_list[0].args[0]
+
+
+def test_cross_market_source_identity_must_link_to_selected_issuer(tmp_path: Path) -> None:
+    request = _v2_request(intent="reuse_only")
+    request.pop("acquisition_limits")
+    request.update({"company_query": "SHARED", "source_market": "HK"})
+    listing = _identity()
+    listing["resolved"].update({
+        "canonical_name": "Issuer One Holdings", "ticker": "ONE",
+        "security_id": "ONE", "matched_value": "SHARED",
+        "issuer_link_id": "issuer-link-v1:" + "a" * 64,
+    })
+    source = json.loads(json.dumps(listing))
+    source["resolved"].update({
+        "canonical_name": "Issuer Two Holdings", "market": "HK",
+        "exchange": "HKEX", "ticker": "00002", "security_id": "00002",
+        "source_name": "HKEX", "source_url": "https://www.hkexnews.hk/",
+        "source_record_id": "urn:company-wiki:security:HK:00002",
+        "issuer_link_id": "issuer-link-v1:" + "b" * 64,
+    })
+
+    with patch(
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(listing), _completed(source)]),
+    ) as run:
+        with pytest.raises(FilingFetchError) as error:
+            fetch_filing.resolve_filing(
+                request=request, company_wiki_root=_wiki(tmp_path), source_ref_v2=True,
+            )
+
+    assert error.value.stage == "source_identify"
+    assert len(run.call_args_list) == 2
+
+
+@pytest.mark.parametrize("missing_side", ["listing", "source", "both"])
+def test_cross_market_identity_without_shared_link_is_not_proven(
+    tmp_path: Path, missing_side: str,
+) -> None:
+    request = _v2_request(intent="reuse_only")
+    request.pop("acquisition_limits")
+    request.update({"company_query": "SHARED", "source_market": "HK"})
+    listing = _identity()
+    listing["resolved"].update({
+        "canonical_name": "Shared Company Limited", "ticker": "SHR",
+        "security_id": "SHR", "matched_value": "SHARED",
+        "issuer_link_id": "issuer-link-v1:" + "a" * 64,
+    })
+    source = json.loads(json.dumps(listing))
+    source["resolved"].update({
+        "market": "HK", "exchange": "HKEX", "ticker": "00001",
+        "security_id": "00001", "source_name": "HKEX",
+        "source_url": "https://www.hkexnews.hk/",
+        "source_record_id": "urn:company-wiki:security:HK:00001",
+        "matched_value": "SHARED",
+    })
+    if missing_side in {"listing", "both"}:
+        listing["resolved"].pop("issuer_link_id")
+    if missing_side in {"source", "both"}:
+        source["resolved"].pop("issuer_link_id")
+
+    with patch(
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(listing), _completed(source)]),
+    ) as run:
+        with pytest.raises(FilingFetchError) as error:
+            fetch_filing.resolve_filing(
+                request=request, company_wiki_root=_wiki(tmp_path), source_ref_v2=True,
+            )
+
+    assert error.value.stage == "source_identify"
+    assert len(run.call_args_list) == 2
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [("form_type", "10-Q"), ("fiscal_period", "Q1"), ("market", None),
+     ("security_id", "WRONG")],
+)
+def test_candidate_must_match_requested_source_market_and_period(
+    tmp_path: Path, field: str, bad_value: object,
+) -> None:
+    candidate = _candidate()
+    candidate[field] = bad_value
+    request = {**_request(), "form_type": "10-K", "fiscal_period": "FY"}
+    with patch(
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([
+            _completed(_identity()), _completed(_query(candidate=candidate)),
+        ]),
+    ):
+        with pytest.raises(FilingFetchError):
+            fetch_filing.resolve_filing(
+                request=request, company_wiki_root=_wiki(tmp_path), source_ref_v2=True,
+            )
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [("form_type", 10), ("form_type", "  "), ("fiscal_period", ["FY"]),
+     ("fiscal_period", " ")],
+)
+def test_explicit_form_and_period_constraints_require_trimmed_text(
+    tmp_path: Path, field: str, bad_value: object,
+) -> None:
+    request = _v2_request()
+    request[field] = bad_value
+    with patch("fetch_filing._run_bounded_json") as run:
+        with pytest.raises(FilingFetchError) as error:
+            fetch_filing.resolve_filing(
+                request=request, company_wiki_root=_wiki(tmp_path), source_ref_v2=True,
+            )
+    assert error.value.code == "request_error"
+    run.assert_not_called()
 
 
 @pytest.mark.parametrize(

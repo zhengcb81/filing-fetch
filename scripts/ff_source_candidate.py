@@ -52,6 +52,7 @@ COMPANY_IDENTITY_FIELDS = frozenset(
         "source_name",
         "source_url",
         "source_record_id",
+        "issuer_link_id",
         "verified",
         "active",
     }
@@ -110,6 +111,7 @@ def validate_source_candidate(
     request_id: object,
     request: dict[str, Any],
     company_identity: dict[str, Any],
+    source_identity: dict[str, Any] | None = None,
     context: str,
 ) -> dict[str, Any]:
     """Validate once, project one owned shape, and bind the known logical identity."""
@@ -146,14 +148,34 @@ def validate_source_candidate(
         raise FilingFetchError(
             f"company-wiki {context} fiscal_year mismatch", code="upstream_error"
         )
-    for field in ("market", "security_id"):
-        if field in handle and handle[field] != company_identity[field]:
+    for field in ("form_type", "fiscal_period"):
+        expected = request.get(field)
+        if expected is not None and handle.get(field) != expected:
             raise FilingFetchError(
                 f"company-wiki {context} {field} mismatch", code="upstream_error"
+            )
+    source_identity = source_identity or company_identity
+    expected_market = request.get("source_market") or source_identity.get("market")
+    expected_security_id = source_identity.get("security_id")
+    if source_identity.get("market") != expected_market:
+        raise FilingFetchError(
+            f"company-wiki {context} source identity market mismatch", code="upstream_error"
+        )
+    for field, expected in (("market", expected_market), ("security_id", expected_security_id)):
+        if expected is not None and handle.get(field) != expected:
+            raise FilingFetchError(
+                f"company-wiki {context} source {field} mismatch", code="upstream_error"
             )
     handle["company_identity"] = {
         key: value for key, value in company_identity.items() if key in COMPANY_IDENTITY_FIELDS
     }
+    if (
+        source_identity.get("market") != company_identity.get("market")
+        or source_identity.get("security_id") != company_identity.get("security_id")
+    ):
+        handle["source_identity"] = {
+            key: value for key, value in source_identity.items() if key in COMPANY_IDENTITY_FIELDS
+        }
     handle["prompt_injection_status"] = candidate.get("prompt_injection_status")
     handle["byte_verified"] = False
     return handle

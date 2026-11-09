@@ -83,7 +83,7 @@ CAUSE_KEYS = frozenset(
     }
 )
 RETRY_SCOPES = frozenset({"none", "catalog_contention", "caller_decision"})
-STAGES = OPERATIONS | {"source_query", "source_operation", "ambiguous", "not_found", "upstream_error"}
+STAGES = OPERATIONS | {"source_identify", "source_query", "source_operation", "ambiguous", "not_found", "upstream_error"}
 
 # Published acquisition-failure/1 vocabulary, shared by versioned wire contract;
 # no runtime import of company-wiki implementation internals.
