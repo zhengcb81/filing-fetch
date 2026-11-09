@@ -1474,6 +1474,23 @@ def _resolve_v2_companion(
         }
 
 
+def complete_filing_v2(
+    *,
+    request: dict[str, Any],
+    handle: dict[str, Any],
+    config_path: Path | None,
+    deadline: float,
+    stats: dict[str, int],
+) -> dict[str, Any]:
+    """Complete the public v2 result within the filing operation's deadline."""
+    from ff_v2_envelope import success_envelope
+
+    transcript = _resolve_v2_companion(
+        request=request, handle=handle, config_path=config_path, deadline=deadline, stats=stats,
+    )
+    return success_envelope(request, handle, transcript, stats)
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for on-demand filing fetch.
 
@@ -1582,19 +1599,8 @@ def main(argv: list[str] | None = None) -> int:
             deadline=deadline,
         )
         if v2_response:
-            from ff_v2_envelope import success_envelope
-
-            output = success_envelope(
-                request,
-                handle,
-                _resolve_v2_companion(
-                    request=request,
-                    handle=handle,
-                    config_path=args.config,
-                    deadline=deadline,
-                    stats=stats,
-                ),
-                stats,
+            output = complete_filing_v2(
+                request=request, handle=handle, config_path=args.config, deadline=deadline, stats=stats,
             )
         elif isinstance(handle, dict) and handle.get("status") == "gap":
             # FC-802: a structured gap passes through unwrapped — it is NOT

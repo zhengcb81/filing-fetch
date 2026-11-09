@@ -22,6 +22,8 @@ CI_TESTS = (
     "tests/test_selective_installation.py",
     "tests/test_install_runtime_diagnostics.py",
     "tests/test_ff_v2_contract.py",
+    "tests/test_ff_job_facade.py",
+    "tests/test_ff_job_cross_process.py",
     "tests/test_provider_cause_contract.py",
     "tests/test_r1_source_business_failure.py",
     "tests/test_acquisition_failure_consumer.py",
