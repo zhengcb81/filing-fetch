@@ -1106,8 +1106,8 @@ def _download_intent(request: dict[str, Any], explicit: bool | None) -> bool:
     return derived
 
 
-def _shared_deadline(
-    request: dict[str, Any], *, deadline: float | None, timeout_seconds: float
+def filing_operation_deadline(
+    request: dict[str, Any], *, timeout_seconds: float, deadline: float | None = None,
 ) -> float:
     """The single budget every subprocess of this request shares.
 
@@ -1158,7 +1158,7 @@ def resolve_filing(
     The download intent is derived once, in :func:`_download_intent`: a v2
     request declares it as ``filing_intent`` and ``allow_download`` may only
     confirm it, never contradict it; a v1 request keeps the caller's flag.
-    The deadline every subprocess shares is :func:`_shared_deadline`, the
+    The deadline every subprocess shares is :func:`filing_operation_deadline`, the
     smallest of the remaining global deadline, the configured
     ``timeout_seconds`` and the request's own ``acquisition_limits``.
 
@@ -1192,7 +1192,7 @@ def resolve_filing(
             "v2 requests require the pathless SourceRef route",
             code="request_error",
         )
-    deadline = _shared_deadline(request, deadline=deadline, timeout_seconds=timeout_seconds)
+    deadline = filing_operation_deadline(request, deadline=deadline, timeout_seconds=timeout_seconds)
     root = (
         (company_wiki_root if isinstance(company_wiki_root, WikiConnection)
          else _validate_company_wiki_root(company_wiki_root))
@@ -1213,7 +1213,12 @@ def resolve_filing(
         deadline=deadline,
         stats=stats,
     )
-    company_identity = _resolved_company_identity(identity_payload)
+    try:
+        company_identity = _resolved_company_identity(identity_payload)
+    except FilingFetchError as exc:
+        # This local validation precedes every acquiring operation.
+        exc.stage = "identify"
+        raise
     normalized_request = {
         key: value
         for key, value in request.items()
@@ -1582,7 +1587,8 @@ def main(argv: list[str] | None = None) -> int:
         if v2_response:
             validate_request(request)
         stats = {"calls": 0, "downloads": 0}
-        deadline = time.monotonic() + args.timeout_seconds
+        deadline = (filing_operation_deadline(request, timeout_seconds=args.timeout_seconds)
+                    if v2_response else time.monotonic() + args.timeout_seconds)
         # One derivation point: v2 declares the intent in the request itself
         # (the --allow-download flag only ever applies to v1 requests).
         allow_download = _download_intent(request, None if v2_response else args.allow_download)

@@ -5,15 +5,14 @@ Layout under ``--jobs-dir`` (default ``<skill_root>/.ff_jobs``):
     jobs/<owner_job_id>.json        full durable record (atomic replace + fsync)
     index/idem/<sha256(key)>.json   idempotency pointer {"owner_job_id", "request_hash"}
     index/idem/.submit.lock         OS lock for submission publication
-    locks/<owner_job_id>.lock       O_EXCL mutation lock with dead-pid takeover
+    locks/<owner_job_id>.lock       OS lock for job mutation
     logs/<owner_job_id>.log         append-only runner audit trail (JSON lines)
 
 Cross-process discipline:
 
 - Reads never block: every read is a single atomic file read.
-- Mutations hold the per-job lock. The lock records the holder's pid; a lock
-  whose pid is provably dead (or older than LOCK_STALE_SECONDS) is stolen, so
-  a crashed runner cannot wedge its job forever.
+- Mutations hold the per-job OS lock. A process exit releases its lock
+  without deleting the stable lock file or a new owner's claim.
 - Cancel is a queued-only state transition under the same lock (the engine is
   one bounded subprocess call with no interruption point); no separate flag
   protocol exists.
@@ -22,10 +21,8 @@ Cross-process discipline:
   or whose deadline plus a grace has passed flips it to ``unknown`` /
   ``status_known=false`` (G-m8-FF-04). No terminal state is ever invented.
 
-PID liveness reuses the engine's own diagnostic (``ff_process_tree.pid_is_alive``);
-pid reuse on Windows can keep a dead runner's lock looking alive — in that
-case the lock age bound still forces a takeover, and this heuristic is
-declared in the module rather than hidden.
+PID liveness diagnoses interrupted records. The file lock protects writes
+even when pid reuse or stale metadata obscures that observation.
 """
 
 from __future__ import annotations
@@ -37,10 +34,9 @@ import os
 import secrets
 import time
 import uuid
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import BinaryIO, Callable, Iterator
 
 from ff_job_contracts import (
     FFJobError,
@@ -48,23 +44,22 @@ from ff_job_contracts import (
     RECOVERY_CAPABILITY,
     RUN_STALENESS_GRACE_SECONDS,
     job_intent,
+    job_spend_intent,
     validate_owner_job_id,
 )
 from ff_process_tree import pid_is_alive
 
-LOCK_STALE_SECONDS = 24 * 3600.0
 _LOCK_POLL_SECONDS = 0.05
 _MAX_EVENTS = 50
 # Bound contention for the short owner-local submission transaction.
 _IDEM_BUSY_TIMEOUT_SECONDS = 5.0
 
 
-@contextmanager
-def _submission_lock(path: Path) -> Iterator[None]:
-    """Serialize pointer and job publication with a crash-released OS lock."""
-    deadline = time.monotonic() + _IDEM_BUSY_TIMEOUT_SECONDS
-    # Leave the file in place so every process always locks the same inode.
-    with path.open("a+b") as stream:
+def _acquire_file_lock(path: Path, timeout_seconds: float, busy: str) -> "_JobLock":
+    """Lock a stable file without unlinking an active or crashed owner's path."""
+    deadline = time.monotonic() + timeout_seconds
+    stream = path.open("a+b")
+    try:
         while True:
             try:
                 if os.name == "nt":
@@ -81,12 +76,14 @@ def _submission_lock(path: Path) -> Iterator[None]:
                     raise
                 if time.monotonic() >= deadline:
                     raise FFJobError(
-                        "job submission is busy; retry the submission", code="request_error",
+                        busy, code="request_error",
                     ) from exc
                 time.sleep(_LOCK_POLL_SECONDS)
             else:
-                break
-        yield
+                return _JobLock(stream)
+    except BaseException:
+        stream.close()
+        raise
 
 
 def now_iso() -> str:
@@ -129,20 +126,19 @@ def _read_json(path: Path) -> dict | None:
 
 
 class _JobLock:
-    """O_EXCL lock with pid-stamped content and takeover semantics."""
+    """An OS lock held for the life of its open file."""
 
-    def __init__(self, path: Path, token: str, pid: int) -> None:
-        self.path = path
-        self.token = token
-        self.pid = pid
+    def __init__(self, stream: BinaryIO) -> None:
+        self._stream = stream
 
     def release(self) -> None:
-        content = _read_json(self.path)
-        if content is not None and content.get("token") == self.token:
-            try:
-                self.path.unlink(missing_ok=True)
-            except OSError:
-                pass
+        self._stream.close()
+
+    def __enter__(self) -> "_JobLock":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.release()
 
 
 class JobStore:
@@ -186,7 +182,8 @@ class JobStore:
         request_hash = _canonical_hash({"kind": body["kind"], "request": body["request"]})
         key = body["idempotency_key"]
         pointer_path = self._idem_path(key)
-        with _submission_lock(self.idem_index / ".submit.lock"):
+        with _acquire_file_lock(self.idem_index / ".submit.lock", _IDEM_BUSY_TIMEOUT_SECONDS,
+                                "job submission is busy; retry the submission"):
             existing = self._idempotency_lookup(key, request_hash)
             if existing is not None:
                 return existing, True
@@ -318,12 +315,13 @@ class JobStore:
             "code": "run_lost",
             "message": f"the owning run process was lost ({reason}); reconcile to re-check owner state",
             "owner": "filing-fetch",
-            "retryable": True,
+            "retryable": False,
             "next_actions": ["reconcile"],
             "correlation_id": record.get("owner_job_id", ""),
         }
         updated["cost"] = None
-        updated["cost_state"] = "unknown" if updated.get("intent") != "reuse_only" else "not_applicable"
+        spend_intent = job_spend_intent(updated["kind"], updated["request"])
+        updated["cost_state"] = "unknown" if spend_intent != "reuse_only" else "not_applicable"
         updated["updated_at"] = stamp
         updated["events"] = [*record.get("events", []), {"at": stamp, "event": "run_lost",
                                                          "detail": {"reason": reason}}][-_MAX_EVENTS:]
@@ -385,37 +383,9 @@ class JobStore:
         return record
 
     def acquire_lock(self, owner_job_id: str, timeout_seconds: float) -> _JobLock:
-        lock_path = self._lock_path(owner_job_id)
-        token = secrets.token_hex(8)
-        deadline = time.monotonic() + timeout_seconds
-        while True:
-            try:
-                handle = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                if time.monotonic() >= deadline:
-                    raise FFJobError(
-                        f"job {owner_job_id} is busy in another process", code="request_error"
-                    )
-                self._maybe_steal(lock_path)
-                time.sleep(_LOCK_POLL_SECONDS)
-                continue
-            with os.fdopen(handle, "w", encoding="utf-8") as stream:
-                json.dump({"pid": os.getpid(), "token": token, "acquired_at": now_iso()}, stream)
-            return _JobLock(lock_path, token, os.getpid())
-
-    def _maybe_steal(self, lock_path: Path) -> None:
-        content = _read_json(lock_path)
-        try:
-            age = time.time() - lock_path.stat().st_mtime
-        except OSError:
-            return
-        if content is None:
-            if age > 60.0:
-                lock_path.unlink(missing_ok=True)
-            return
-        pid = content.get("pid")
-        if not isinstance(pid, int) or not pid_is_alive(pid) or age > LOCK_STALE_SECONDS:
-            lock_path.unlink(missing_ok=True)
+        return _acquire_file_lock(
+            self._lock_path(owner_job_id), timeout_seconds, f"job {owner_job_id} is busy in another process",
+        )
 
     # -- audit log ----------------------------------------------------------
 

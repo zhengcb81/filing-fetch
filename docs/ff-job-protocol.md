@@ -134,9 +134,9 @@ Owner-native `result` shapes:
   honour.
 - `succeeded` → `[]`
 - `failed` / `cancelled` → `["retry"]` only when the recorded spend evidence
-  proves a re-run cannot double-spend (the paid phase was never reached, or
-  the provider provably started nothing and committed no download); otherwise
-  `[]` and a retry attempt is a named refusal.
+  proves a re-run cannot double-spend. A queued cancellation has no
+  prior attempt. A finished attempt needs complete no-start and zero-download
+  evidence. Otherwise `[]` and a retry attempt is a named refusal.
 - `unknown` → `["reconcile"]` — exactly one action, per COMMON-02.
 
 `resume` is not offered: a single bounded short request has no pause point.
@@ -147,21 +147,27 @@ A budget ceiling is never reported as a cost.
 
 | evidence | cost | cost_state |
 |---|---|---|
-| `reuse_only` job (any state) | null | `not_applicable` |
+| all stages `reuse_only` (any state) | null | `not_applicable` |
 | queued fetch job | null | `not_applicable` (not spent, may still spend) |
 | running fetch job | null | `unknown` |
-| paid phase provably never reached | `0.00` USD | `known` (`basis: engine_zero_evidence`) |
-| provider provably started nothing (`provider_started=false`, `usage_complete=true`) | `0.00` USD | `known` (`engine_zero_evidence`) |
-| provider reported a cost (filing `acquisition_observation.cost_usd`, statements `usage.cost_usd`) | that value | `known` (`provider_reported`) |
-| provider started with no fee evidence, or usage incomplete, or run lost | null | `unknown` |
+| complete no-start evidence and no committed download | `0.00` USD | `known` (`engine_zero_evidence`) |
+| complete reported cost (filing `acquisition_observation.cost_usd`, statements `usage.cost_usd`) | that value | `known` (`provider_reported`) |
+| missing fee evidence, incomplete usage, or lost run | null | `unknown` |
+
+A companion with its own acquisition intent can spend even when the filing
+is reuse-only. The job keeps the submitted filing intent in its view. A
+companion that might have spent without a complete fee account keeps total
+cost unknown, even when the filing's cost is known. Both stages share the
+earliest effective filing deadline. The companion can impose a shorter cap.
 
 ## Unknown → reconcile (G-m8-FF-04)
 
 A run writes its owner pid and its own deadline before the engine call. Any
 reader that finds a running job whose pid is dead, or whose deadline plus a
 120 s grace has passed, flips it to `status: "unknown"`,
-`status_known: false`. No terminal state is ever invented for a run whose
-outcome nobody witnessed.
+`status_known: false`. A failed acquiring call with an incomplete
+usage receipt also lands unknown, since the process may already have
+committed data or incurred a fee.
 
 `reconcile` re-checks the owner's actual state through the **read-only reuse
 path** of the same engine: the stored request is stripped of its download
@@ -169,7 +175,7 @@ intent and its `acquisition_limits`, so the query can never acquire anything.
 The answer lands as `succeeded` (data present) or `failed` (data absent) with
 `derived_by: "reconcile_read_only"`; the interrupted run's spend stays
 `unknown` because a read-only query cannot certify it. Reconcile never
-re-sends a download.
+re-sends a download. An absent result does not authorize retry.
 
 ## Durable store layout (`--jobs-dir`, default `<skill_root>/.ff_jobs`)
 
@@ -177,12 +183,15 @@ re-sends a download.
 jobs/<owner_job_id>.json        full record, atomic replace + fsync
 index/idem/<sha256(key)>.json   idempotency pointer
 index/idem/.submit.lock        owner-local submission lock
-locks/<owner_job_id>.lock       O_EXCL lock with pid stamp + dead-pid takeover
+locks/<owner_job_id>.lock       per-job OS lock on a stable file
 logs/<owner_job_id>.log         append-only engine audit trail (JSON lines)
 ```
 
 Every state a Dashboard can observe lives in these files; the CLI keeps no
 in-memory ledger, so any process (or a restarted machine) sees the same job.
+When upgrading an existing jobs directory, let prior-version writers exit
+before starting writers with this lock protocol. Existing job IDs and index
+files are retained.
 
 ## Recovery capability declaration (COMMON-02)
 

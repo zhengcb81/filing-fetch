@@ -199,6 +199,18 @@ def job_intent(kind: str, request: dict[str, Any]) -> str:
     return request.get("intent", "fetch_if_missing")
 
 
+def companion_may_acquire(request: dict[str, Any]) -> bool:
+    option = request.get("companion_transcript")
+    return isinstance(option, dict) and option.get("intent") == "fetch_if_missing"
+
+
+def job_spend_intent(kind: str, request: dict[str, Any]) -> str:
+    """Include all acquiring phases while preserving the submitted filing intent."""
+    if kind == "filing.acquire" and companion_may_acquire(request):
+        return "fetch_if_missing"
+    return job_intent(kind, request)
+
+
 def _error_view(code: str, message: str, retryable: bool, correlation_id: str) -> dict[str, Any]:
     """Project a failure in the Dashboard ApiError shape (owner-native fill)."""
     return {
@@ -229,32 +241,28 @@ def cost_for_pending(intent: str, status: str) -> tuple[dict[str, Any] | None, s
     return None, "unknown"
 
 
+def _complete_zero_spend(evidence: dict[str, Any]) -> bool:
+    return (evidence.get("provider_started") is False
+            and evidence.get("usage_complete") is True
+            and type(evidence.get("download_events")) is int
+            and evidence["download_events"] == 0)
+
+
 def build_cost_view(intent: str, evidence: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
     """Project recorded spend evidence into the terminal (cost, cost_state).
 
-    Rules (declared, fail-closed — a budget ceiling is never reported as cost):
-    - reuse_only jobs have no cost dimension at all: not_applicable.
-    - The paid phase was provably never reached: known "0.00".
-    - The provider provably started and completed without charging (validated
-      observation provider_started=false, usage_complete=true): known "0.00".
-    - The provider started and reported cost_usd: known, that value, basis
-      provider_reported.
-    - Anything else (provider started with no fee evidence, usage incomplete,
-      run lost): unknown.
+    A complete no-start observation proves zero. A complete provider
+    observation with a reported fee proves the actual cost. Partial or
+    missing observations cannot certify an acquiring job's cost.
     """
     if intent == "reuse_only":
         return None, "not_applicable"
-    if not evidence.get("phase_reached"):
+    if _complete_zero_spend(evidence):
         return _known_cost("0.00", "engine_zero_evidence")
-    provider_started = evidence.get("provider_started")
-    usage_complete = evidence.get("usage_complete")
-    cost_usd = evidence.get("cost_usd")
-    if provider_started is False and usage_complete is True:
-        return _known_cost("0.00", "engine_zero_evidence")
-    if provider_started is True:
+    if evidence.get("provider_started") is True and evidence.get("usage_complete") is True:
+        cost_usd = evidence.get("cost_usd")
         if isinstance(cost_usd, str) and cost_usd:
             return _known_cost(cost_usd, "provider_reported")
-        return None, "unknown"
     return None, "unknown"
 
 
@@ -283,20 +291,11 @@ def _known_cost(value: str, basis: str) -> tuple[dict[str, Any], str]:
 def retry_eligible(record: dict[str, Any]) -> bool:
     """True when re-running the job cannot double-spend.
 
-    A job the engine never started (attempts == 0) is always eligible. A job
-    that ran is eligible only when its recorded spend evidence proves the
-    paid phase was never reached, or that the provider provably started
-    nothing and committed no download. Absent evidence (None) refuses —
-    fail closed.
+    A queued cancellation before an attempt can be retried. Once an attempt
+    exists, only its complete zero-spend evidence authorizes another run.
     """
-    if record.get("attempts", 0) == 0:
-        return True
-    evidence = record.get("spend_evidence") or {}
-    if evidence.get("phase_reached") is False:
-        return True
-    provider_started = evidence.get("provider_started")
-    download_events = evidence.get("download_events")
-    return provider_started is False and download_events == 0
+    return (record.get("attempts", 0) == 0
+            or _complete_zero_spend(record.get("spend_evidence") or {}))
 
 
 def allowed_actions_for(record: dict[str, Any]) -> list[str]:
@@ -357,6 +356,20 @@ def build_job_view(record: dict[str, Any], *, fresh_actions: list[str] | None = 
     cost = view.get("cost")
     if cost is not None and set(cost) != _COST_FIELDS:
         raise FFJobError("stored cost shape is invalid", code="fatal")
+    if record.get("attempts", 0) > 0:
+        evidence = record.get("spend_evidence") or {}
+        request = record.get("request")
+        legacy_zero_without_evidence = (
+            isinstance(cost, dict) and cost.get("basis") == "engine_zero_evidence"
+            and not _complete_zero_spend(evidence)
+        )
+        legacy_companion_not_counted = (
+            view["status"] in {"succeeded", "failed", "unknown"}
+            and view["cost_state"] == "not_applicable" and view["kind"] == "filing.acquire"
+            and isinstance(request, dict) and companion_may_acquire(request)
+        )
+        if legacy_zero_without_evidence or legacy_companion_not_counted:
+            view["cost"], view["cost_state"] = None, "unknown"
     error = view.get("error")
     if error is not None and set(error) != _ERROR_FIELDS:
         raise FFJobError("stored error shape is invalid", code="fatal")

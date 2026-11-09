@@ -307,7 +307,7 @@ def test_shared_deadline_is_the_minimum_of_the_three_budgets(
     request = _v2_request()
     # remaining global deadline (3600) > configured (900) > request (3)
     assert (
-        fetch_filing._shared_deadline(
+        fetch_filing.filing_operation_deadline(
             request, deadline=100.0 + 3600, timeout_seconds=900
         )
         == 103.0
@@ -316,11 +316,11 @@ def test_shared_deadline_is_the_minimum_of_the_three_budgets(
     del reuse["acquisition_limits"]
     # no request budget: the configured 900 wins over the 3600 global remainder
     assert (
-        fetch_filing._shared_deadline(reuse, deadline=100.0 + 3600, timeout_seconds=900)
+        fetch_filing.filing_operation_deadline(reuse, deadline=100.0 + 3600, timeout_seconds=900)
         == 100.0 + 900
     )
     with pytest.raises(FilingFetchError) as expired:
-        fetch_filing._shared_deadline(request, deadline=50.0, timeout_seconds=900)
+        fetch_filing.filing_operation_deadline(request, deadline=50.0, timeout_seconds=900)
     assert expired.value.code == "upstream_error"
 
 

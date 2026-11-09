@@ -3,8 +3,7 @@
 The runner owns every state transition a queued job can take. It calls the
 *existing* short-request engine (``fetch_filing.resolve_filing`` for
 filing.acquire, ``ff_financial_statements.fetch_statements`` for
-statements.acquire) through their public library entry points — the engine
-modules are imported, never modified (red line §3-1).
+statements.acquire) through their public library entry points.
 
 Declared execution semantics:
 
@@ -25,7 +24,6 @@ Declared execution semantics:
 from __future__ import annotations
 
 import os
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -34,8 +32,10 @@ from ff_job_contracts import (
     FFJobError,
     build_cost_view,
     build_result_view,
+    companion_may_acquire,
     cost_for_pending,
     error_view_from_exception,
+    job_spend_intent,
     retry_eligible,
     validate_action,
 )
@@ -44,6 +44,7 @@ from filing_contracts import FilingFetchError
 
 _MAX_ACTIONS = 50
 _MAX_EVENTS = 50
+_NO_PROVIDER = {"provider_started": False, "usage_complete": True}
 
 
 def _iso_deadline(seconds: float) -> str:
@@ -54,7 +55,7 @@ def _iso_deadline(seconds: float) -> str:
 
 def _fresh_evidence() -> dict[str, Any]:
     return {
-        "phase_reached": False,
+        "phase_reached": None,
         "provider_started": None,
         "usage_complete": None,
         "cost_usd": None,
@@ -122,7 +123,8 @@ def run_job(
         record["owner_pid"] = os.getpid()
         record["heartbeat_at"] = now_iso()
         record["provider_phase_reached"] = False
-        record["cost"], record["cost_state"] = cost_for_pending(record["intent"], "running")
+        spend_intent = job_spend_intent(record["kind"], record["request"])
+        record["cost"], record["cost_state"] = cost_for_pending(spend_intent, "running")
         record["spend_evidence"] = _fresh_evidence()
         _event(record, "run_started", {
             "pid": record["owner_pid"],
@@ -174,7 +176,8 @@ def _execute(
         return _land_terminal(store, record, stats=stats, observation=None, error=error)
     result = build_result_view(record["kind"], envelope, stats)
     return _land_terminal(
-        store, record, stats=stats, observation=_envelope_observation(record["kind"], envelope),
+        store, record, stats=stats,
+        observation=_envelope_observation(record["kind"], record["request"], envelope),
         error=None, result=result, envelope=envelope,
     )
 
@@ -187,9 +190,9 @@ def _run_filing_engine(
     stats: dict[str, int],
 ) -> tuple[dict[str, Any], dict[str, int]]:
     """One bounded v2 filing resolution through the unchanged public engine."""
-    from fetch_filing import complete_filing_v2, resolve_filing
+    from fetch_filing import complete_filing_v2, filing_operation_deadline, resolve_filing
 
-    deadline = time.monotonic() + timeout_seconds
+    deadline = filing_operation_deadline(request, timeout_seconds=timeout_seconds)
     handle = resolve_filing(
         request=request,
         config_path=config_path,
@@ -223,37 +226,53 @@ def _run_statements_engine(
     return envelope, stats
 
 
-def _envelope_observation(kind: str, envelope: dict[str, Any]) -> dict[str, Any] | None:
-    """Project the engine's own usage account into the shared evidence keys.
-
-    The two engines publish different usage evidence, and each is read from
-    where it really lives:
-
-    - filing.acquire: the validated ``acquisition_observation`` sibling.
-    - statements.acquire: the envelope's nested ``usage`` block. Its
-      ``cost_usd`` is the provider-reported cost, and ``http_requests`` says
-      whether the provider was contacted at all.
-    """
-    observation = envelope.get("acquisition_observation")
-    if isinstance(observation, dict):
-        return observation
+def _envelope_observation(
+    kind: str, request: dict[str, Any], envelope: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Use producer usage for each stage that can spend."""
     if kind == "statements.acquire":
         usage = envelope.get("usage")
         if not isinstance(usage, dict):
             return None
         requests = usage.get("http_requests")
-        if not isinstance(requests, int) or isinstance(requests, bool):
+        if type(requests) is not int:
             return None
         return {
             "provider_started": requests > 0,
             "usage_complete": True,
             "cost_usd": usage.get("cost_usd"),
         }
-    return None
+
+    filing = envelope.get("filing") or {}
+    observation = (envelope.get("acquisition_observation") or filing.get("acquisition_failure")
+                   or filing.get("upstream_cause"))
+    if request["filing_intent"] == "reuse_only":
+        observation = _NO_PROVIDER
+    if not companion_may_acquire(request):
+        return observation
+
+    transcript = envelope.get("transcript") or {}
+    if transcript.get("status") in {
+        "not_requested", "not_applicable", "not_run", "period_unresolved",
+        "reused", "unknown_publication", "contract_pending", "ambiguous",
+    } or (transcript.get("provider_started") is False
+          and transcript.get("provider_usage_complete") is True):
+        return observation
+
+    # The transcript result exposes usage but not a complete fee account.
+    # A known filing cost cannot stand in for the combined job cost.
+    started = ((observation or {}).get("provider_started") is True
+               or transcript.get("provider_started") is True)
+    return {"provider_started": True if started else None, "usage_complete": False}
 
 
 def _observation_of(exc: FilingFetchError) -> dict[str, Any] | None:
-    return exc.acquisition_observation
+    if exc.acquisition_observation is not None or exc.acquisition_failure is not None:
+        return exc.acquisition_observation or exc.acquisition_failure
+    cause = exc.upstream_cause or {}
+    if cause.get("operation", exc.stage) in {"identify", "query", "local_prepare", "resolve"}:
+        return _NO_PROVIDER
+    return exc.upstream_cause
 
 
 def terminal_cost(intent: str, evidence: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
@@ -277,21 +296,30 @@ def _land_terminal(
     an unexpected crash leaves execution_count untouched so the audit trail
     distinguishes "engine answered" from "run process died".
     """
-    observation = observation if isinstance(observation, dict) else None
+    spend_intent = job_spend_intent(record["kind"], record["request"])
     downloads = stats.get("downloads", 0)
-    phase_reached = observation is not None or downloads > 0
+    observation = _NO_PROVIDER if spend_intent == "reuse_only" else (observation or {})
+    started = observation.get("provider_started")
+    complete = observation.get("usage_complete")
+    receipt_complete = type(started) is bool and complete is True
+    phase_reached = True if started is True or downloads > 0 else (
+        False if receipt_complete else None
+    )
     evidence = {
         "phase_reached": phase_reached,
-        "provider_started": observation.get("provider_started") if observation else None,
-        "usage_complete": observation.get("usage_complete") if observation else None,
-        "cost_usd": observation.get("cost_usd") if observation else None,
-        "download_events": downloads,
+        "provider_started": started,
+        "usage_complete": complete,
+        "cost_usd": observation.get("cost_usd"),
+        "download_events": downloads if receipt_complete or downloads > 0 else None,
     }
-    cost, cost_state = terminal_cost(record["intent"], evidence)
-    record["status"] = "succeeded" if error is None else "failed"
-    record["status_known"] = True
+    cost, cost_state = terminal_cost(spend_intent, evidence)
+    unknown = error is not None and spend_intent != "reuse_only" and not receipt_complete
+    record["status"] = "unknown" if unknown else ("succeeded" if error is None else "failed")
+    record["status_known"] = not unknown
+    if error is not None and unknown:
+        error = dict(error, retryable=False, next_actions=["reconcile"])
     record["spend_evidence"] = evidence
-    record["provider_phase_reached"] = phase_reached
+    record["provider_phase_reached"] = phase_reached is True
     record["cost"] = cost
     record["cost_state"] = cost_state
     record["error"] = error
@@ -361,7 +389,10 @@ def _act_cancel(store: JobStore, record: dict, idempotency_key: str) -> dict:
         )
     record["status"] = "cancelled"
     record["status_known"] = True
-    cost, cost_state = terminal_cost(record["intent"], _fresh_evidence())
+    spend_intent = job_spend_intent(record["kind"], record["request"])
+    evidence = {**_NO_PROVIDER, "download_events": 0}
+    cost, cost_state = terminal_cost(spend_intent, evidence)
+    record["spend_evidence"] = evidence
     record["cost"] = cost
     record["cost_state"] = cost_state
     _record_action(record, "cancel", idempotency_key)
@@ -380,7 +411,7 @@ def _act_retry(store: JobStore, record: dict, idempotency_key: str) -> dict:
     if not retry_eligible(record):
         raise FFJobError(
             "retry refused: recorded spend evidence does not prove a re-run "
-            "is free of prior spend; submit a new idempotency_key instead",
+            "is free of prior spend",
             code="request_error",
         )
     record["status"] = "queued"

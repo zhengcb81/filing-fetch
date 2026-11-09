@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -221,6 +222,81 @@ raise SystemExit(ff_job.main())
             self.assertTrue(second["idempotent_replay"])
             self.assertEqual(first["owner_job_id"], second["owner_job_id"])
             self.assertEqual(len(list((Path(jobs_dir) / "jobs").glob("*.json"))), 1)
+
+    def test_live_run_cannot_lose_its_lock_to_a_second_process(self) -> None:
+        child = """
+import os
+from pathlib import Path
+import sys
+
+sys.path.insert(0, sys.argv.pop(1))
+mode = sys.argv.pop(1)
+ready = Path(sys.argv.pop(1))
+import ff_job
+from ff_job_store import JobStore
+from ff_job_contracts import FFJobError
+
+if mode == "park":
+    original = JobStore.append_log
+    def append(self, owner_job_id, entry):
+        if entry["event"] == "run_started":
+            ready.touch()
+            sys.stdin.read(1)
+            os._exit(73)
+        original(self, owner_job_id, entry)
+    JobStore.append_log = append
+else:
+    acquire = JobStore.acquire_lock
+    JobStore.acquire_lock = lambda self, job, timeout_seconds: acquire(
+        self, job, min(timeout_seconds, 0.3),
+    )
+    import ff_job_runner
+    def engine(*args, **kwargs):
+        raise FFJobError("test engine was invoked", code="upstream_error")
+    ff_job_runner._run_filing_engine = engine
+raise SystemExit(ff_job.main())
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs_dir = str(root / "jobs")
+            body = _submit_body(key="contested-run", command_id="cmd-contended")
+            code, queued, error = _run_cli("submit", jobs_dir=jobs_dir, body=body)
+            self.assertEqual(code, 0, error)
+            self.assertIsNotNone(queued)
+            job_id = queued["owner_job_id"]
+            ready = root / "ready"
+            command = [sys.executable, "-B", "-c", child, str(SKILL_ROOT / "scripts")]
+            args = [str(ready), "--jobs-dir", jobs_dir, "run", "--owner-job-id", job_id]
+            with subprocess.Popen([*command, "park", *args], stdin=subprocess.PIPE,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as first:
+                try:
+                    deadline = time.monotonic() + 5
+                    while not ready.exists() and first.poll() is None and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertTrue(ready.is_file())
+                    lock = Path(jobs_dir) / "locks" / f"{job_id}.lock"
+                    stale = time.time() - 2 * 86400
+                    os.utime(lock, (stale, stale))
+                    second = subprocess.run(
+                        [*command, "compete", *args], capture_output=True, text=True,
+                        encoding="utf-8", timeout=10, check=False,
+                    )
+                    self.assertEqual(second.returncode, 2, second.stdout)
+                    self.assertEqual(json.loads(second.stdout)["error"]["code"], "request_error")
+                finally:
+                    try:
+                        first.communicate(input=b"x", timeout=10)
+                    except subprocess.TimeoutExpired:
+                        first.kill()
+                        first.communicate(timeout=5)
+                        raise
+                self.assertEqual(first.returncode, 73)
+            recovered = subprocess.run(
+                [*command, "compete", *args], capture_output=True, text=True,
+                encoding="utf-8", timeout=10, check=False,
+            )
+            self.assertEqual(recovered.returncode, 0, recovered.stderr)
+            self.assertTrue(json.loads(recovered.stdout)["engine_executed"])
 
     def test_bad_idempotency_key_is_a_request_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

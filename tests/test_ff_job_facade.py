@@ -36,6 +36,7 @@ from ff_job_contracts import (  # noqa: E402
     validate_submit_body,
 )
 from ff_job_runner import act, reconcile, run_job  # noqa: E402
+from ff_provider_cause import condition_cause, source_condition  # noqa: E402
 from ff_job_store import JobStore  # noqa: E402
 from filing_contracts import FilingFetchError  # noqa: E402
 
@@ -111,6 +112,13 @@ def _submit(store: JobStore, *, kind: str, request: dict, key: str = "k-1",
             "request": request,
         },
         command_id=command_id,
+    )
+
+
+def _local_missing() -> FilingFetchError:
+    return FilingFetchError(
+        "company-wiki source query not_found", code="not_found",
+        upstream_cause=source_condition("query", "source_not_found"),
     )
 
 
@@ -216,8 +224,7 @@ class CostProjectionTests(unittest.TestCase):
         with patch("fetch_filing.resolve_filing") as engine, patch(
             "ff_v2_envelope.success_envelope", return_value={},
         ):
-            engine.side_effect = FilingFetchError("company-wiki source query not_found",
-                                                  code="not_found")
+            engine.side_effect = _local_missing()
             final, _ = run_job(self.store, record["owner_job_id"], config_path=None,
                                timeout_seconds=60)
         self.assertEqual(final["status"], "failed")
@@ -227,6 +234,28 @@ class CostProjectionTests(unittest.TestCase):
         self.assertEqual(final["cost_state"], "known")
         self.assertEqual(final["cost"]["value"], "0.00")
         self.assertEqual(final["result"], None)
+
+    def test_ensure_receipt_loss_never_proves_zero_spend(self) -> None:
+        for reason in ("producer_deadline_exceeded", "producer_transport_failure"):
+            with self.subTest(reason=reason):
+                record = self._enqueue(request=dict(_FETCH_REQUEST), key=reason)
+                code, cause = condition_cause("ensure", reason)
+                with patch("fetch_filing.resolve_filing", side_effect=FilingFetchError(
+                    "interrupted ensure", code=code, upstream_cause=cause,
+                )) as engine:
+                    final, _ = run_job(
+                        self.store, record["owner_job_id"], config_path=None, timeout_seconds=60,
+                    )
+                    self.assertEqual(final["status"], "unknown")
+                    self.assertIsNone(final["cost"])
+                    self.assertEqual(final["cost_state"], "unknown")
+                    self.assertEqual(allowed_actions_for(final), ["reconcile"])
+                    with self.assertRaises(FFJobError):
+                        act(self.store, record["owner_job_id"], action="retry", idempotency_key="r")
+                    with self.assertRaises(FFJobError):
+                        run_job(self.store, record["owner_job_id"],
+                                config_path=None, timeout_seconds=60)
+                    self.assertEqual(engine.call_count, 1)
 
     def test_provider_started_without_fee_evidence_is_unknown(self) -> None:
         record = self._enqueue(request=dict(_FETCH_REQUEST))
@@ -258,6 +287,26 @@ class CostProjectionTests(unittest.TestCase):
         self.assertEqual(final["cost"]["value"], "0.35")
         self.assertEqual(final["cost"]["basis"], "provider_reported")
         self.assertEqual(final["cost"]["currency"], "USD")
+
+    def test_companion_can_spend_when_filing_reuses(self) -> None:
+        for observed in ({"status": "downloaded", "provider_started": True,
+                          "provider_usage_complete": True},
+                         {"status": "upstream_error", "provider_usage_complete": False}):
+            with self.subTest(status=observed["status"]):
+                request = dict(_FILING_REQUEST, companion_transcript={
+                    "intent": "fetch_if_missing", "fiscal_year": 2025, "fiscal_quarter": 4,
+                    "acquisition_limits": _FETCH_REQUEST["acquisition_limits"],
+                })
+                record = self._enqueue(request=request, key=observed["status"])
+                with patch("fetch_filing.resolve_filing", return_value=dict(_CANDIDATE_HANDLE)), \
+                        patch("fetch_filing._resolve_v2_companion", return_value=observed):
+                    final, _ = run_job(
+                        self.store, record["owner_job_id"], config_path=None, timeout_seconds=60,
+                    )
+                self.assertEqual(final["intent"], "reuse_only")
+                self.assertEqual(final["status"], "succeeded")
+                self.assertIsNone(final["cost"])
+                self.assertEqual(final["cost_state"], "unknown")
 
     def test_statements_fetch_zero_provider_cost(self) -> None:
         record = self._enqueue(kind="statements.acquire", request=dict(
@@ -295,9 +344,9 @@ class CostProjectionTests(unittest.TestCase):
         fresh = {"phase_reached": False, "provider_started": None, "usage_complete": None,
                  "cost_usd": None, "download_events": None}
         self.assertEqual(build_cost_view("reuse_only", fresh), (None, "not_applicable"))
-        cost, state = build_cost_view("fetch_if_missing", fresh)
-        self.assertEqual((cost["value"], state), ("0.00", "known"))
-        ran_free = dict(fresh, phase_reached=True, provider_started=False, usage_complete=True)
+        self.assertEqual(build_cost_view("fetch_if_missing", fresh), (None, "unknown"))
+        ran_free = dict(fresh, phase_reached=True, provider_started=False,
+                        usage_complete=True, download_events=0)
         self.assertEqual(build_cost_view("fetch_if_missing", ran_free)[1], "known")
         charged = dict(fresh, phase_reached=True, provider_started=True, usage_complete=True,
                        cost_usd="1.25")
@@ -307,12 +356,12 @@ class CostProjectionTests(unittest.TestCase):
         self.assertEqual(build_cost_view("fetch_if_missing", uncertified), (None, "unknown"))
         # The projection is the full frozen DecimalValue contract.
         self.assertEqual(
-            set(cost if cost is not None else build_cost_view("fetch_if_missing", fresh)[0]),
+            set(cost if cost is not None else build_cost_view("fetch_if_missing", ran_free)[0]),
             {"value", "currency", "unit", "scale", "period_start", "period_end",
              "period_kind", "fiscal_year", "basis", "scenario", "actual_or_forecast",
              "analysis_subject_id"},
         )
-        zero_cost, _ = build_cost_view("fetch_if_missing", fresh)
+        zero_cost, _ = build_cost_view("fetch_if_missing", ran_free)
         self.assertEqual(zero_cost["actual_or_forecast"], "actual")
 
 
@@ -497,17 +546,26 @@ class RunTests(unittest.TestCase):
         return dict(_CANDIDATE_HANDLE)
 
 
-def test_job_uses_one_deadline_for_filing_and_companion() -> None:
+def test_job_and_v2_cli_share_one_effective_deadline(tmp_path, capsys) -> None:
+    import fetch_filing
     from ff_job_runner import _run_filing_engine
 
-    request = dict(_FILING_REQUEST, companion_transcript={"fiscal_year": 2025, "fiscal_quarter": 4})
-    with patch("fetch_filing.resolve_filing", return_value=dict(_CANDIDATE_HANDLE)) as filing:
-        with patch("fetch_filing._resolve_v2_companion",
-                   return_value={"status": "not_requested", "retryable": False}) as companion:
-            _run_filing_engine(
-                request, config_path=None, timeout_seconds=10, stats={"calls": 0, "downloads": 0},
-            )
-    assert filing.call_args.kwargs.get("deadline") == companion.call_args.kwargs["deadline"]
+    request = dict(
+        _FETCH_REQUEST, acquisition_limits=dict(_FETCH_REQUEST["acquisition_limits"], timeout_seconds=5),
+        companion_transcript={"intent": "reuse_only", "fiscal_year": 2025, "fiscal_quarter": 4},
+    )
+    payload = tmp_path / "request.json"
+    payload.write_text(json.dumps(request), encoding="utf-8")
+    with patch("fetch_filing.resolve_filing", return_value=dict(_CANDIDATE_HANDLE)) as filing, \
+            patch("fetch_filing._resolve_v2_companion",
+                  return_value={"status": "not_requested", "retryable": False}) as companion, \
+            patch("fetch_filing.time.monotonic", return_value=100.0):
+        _run_filing_engine(request, config_path=None, timeout_seconds=60,
+                           stats={"calls": 0, "downloads": 0})
+        assert fetch_filing.main(["--request-file", str(payload), "--timeout-seconds", "60"]) == 0
+    assert json.loads(capsys.readouterr().out)["schema_version"] == "2.0"
+    assert [call.kwargs["deadline"] for call in filing.call_args_list] == [105.0, 105.0]
+    assert [call.kwargs["deadline"] for call in companion.call_args_list] == [105.0, 105.0]
 
 
 class ActionTests(unittest.TestCase):
@@ -547,7 +605,7 @@ class ActionTests(unittest.TestCase):
         with patch("fetch_filing.resolve_filing") as engine, patch(
             "ff_v2_envelope.success_envelope", return_value={},
         ):
-            engine.side_effect = FilingFetchError("missing", code="not_found")
+            engine.side_effect = _local_missing()
             run_job(self.store, record["owner_job_id"], config_path=None, timeout_seconds=60)
         final, _ = act(self.store, record["owner_job_id"], action="retry",
                        idempotency_key="r-1")
@@ -680,6 +738,10 @@ class UnknownReconcileTests(unittest.TestCase):
         self.assertEqual(final["status"], "failed")
         self.assertEqual(final["error"]["code"], "not_found")
         self.assertTrue(final["status_known"])
+        self.assertEqual(final["cost_state"], "unknown")
+        self.assertEqual(allowed_actions_for(final), [])
+        with self.assertRaises(FFJobError):
+            act(self.store, record["owner_job_id"], action="retry", idempotency_key="r")
 
     def test_reconcile_refused_on_terminal(self) -> None:
         record, _ = _submit(self.store, kind="filing.acquire", request=_FILING_REQUEST)
@@ -727,6 +789,7 @@ class ProjectionUnitTests(unittest.TestCase):
         never_ran = {"attempts": 0, "spend_evidence": {"provider_started": None}}
         self.assertTrue(retry_eligible(never_ran))
         provably_free = {"attempts": 1, "spend_evidence": {"provider_started": False,
+                                                           "usage_complete": True,
                                                            "download_events": 0}}
         self.assertTrue(retry_eligible(provably_free))
         uncertified = {"attempts": 1, "spend_evidence": {"provider_started": True,
@@ -735,6 +798,21 @@ class ProjectionUnitTests(unittest.TestCase):
         absent = {"attempts": 1, "spend_evidence": {"provider_started": None,
                                                     "download_events": None}}
         self.assertFalse(retry_eligible(absent))
+        pre_run_marker = {"attempts": 1, "spend_evidence": {"phase_reached": False}}
+        self.assertFalse(retry_eligible(pre_run_marker))
+        stale_cost, _ = build_cost_view(
+            "fetch_if_missing",
+            {"provider_started": False, "usage_complete": True, "download_events": 0},
+        )
+        legacy = build_job_view(dict(pre_run_marker, status="failed",
+                                     cost=stale_cost, cost_state="known"))
+        self.assertEqual(legacy["cost_state"], "unknown")
+        self.assertIsNone(legacy["cost"])
+        self.assertEqual(legacy["allowed_actions"], [])
+        incomplete = {"attempts": 1, "spend_evidence": {"provider_started": False,
+                                                         "usage_complete": False,
+                                                         "download_events": 0}}
+        self.assertFalse(retry_eligible(incomplete))
 
     def test_result_view_drops_unknown_fields_and_rejects_nested_leak(self) -> None:
         envelope = {
