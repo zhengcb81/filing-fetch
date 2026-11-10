@@ -24,6 +24,7 @@ SOURCE_CANDIDATE_FIELDS = frozenset(
         "form_type",
         "market",
         "security_id",
+        "issuer_link_id",
         "language",
         "published_date",
         "https_url",
@@ -53,6 +54,7 @@ COMPANY_IDENTITY_FIELDS = frozenset(
         "source_url",
         "source_record_id",
         "issuer_link_id",
+        "identity_scope",
         "verified",
         "active",
     }
@@ -166,12 +168,18 @@ def validate_source_candidate(
             raise FilingFetchError(
                 f"company-wiki {context} source {field} mismatch", code="upstream_error"
             )
+    expected_link_id = source_identity.get("issuer_link_id")
+    if expected_link_id is not None and handle.get("issuer_link_id") != expected_link_id:
+        raise FilingFetchError(
+            f"company-wiki {context} source issuer_link_id mismatch", code="upstream_error"
+        )
     handle["company_identity"] = {
         key: value for key, value in company_identity.items() if key in COMPANY_IDENTITY_FIELDS
     }
     if (
         source_identity.get("market") != company_identity.get("market")
         or source_identity.get("security_id") != company_identity.get("security_id")
+        or source_identity.get("issuer_link_id") != company_identity.get("issuer_link_id")
     ):
         handle["source_identity"] = {
             key: value for key, value in source_identity.items() if key in COMPANY_IDENTITY_FIELDS

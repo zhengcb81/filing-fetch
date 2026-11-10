@@ -93,6 +93,8 @@ _QUERY_REQUEST_FIELDS = frozenset(
         "entity",
         "market",
         "security_id",
+        "identity_scope",
+        "issuer_link_id",
         "document_kind",
         "form_type",
         "fiscal_year",
@@ -158,6 +160,8 @@ def _command_arguments(request: dict[str, Any]) -> list[str]:
     options = {
         "market": "--market",
         "security_id": "--security-id",
+        "identity_scope": "--identity-scope",
+        "issuer_link_id": "--issuer-link-id",
         "form_type": "--form-type",
         "fiscal_period": "--fiscal-period",
         "language": "--language",
@@ -168,6 +172,17 @@ def _command_arguments(request: dict[str, Any]) -> list[str]:
         value = request.get(name)
         if value is not None:
             arguments.extend((flag, _required_text(value, name)))
+    identity_scope = request.get("identity_scope")
+    issuer_link_id = request.get("issuer_link_id")
+    if identity_scope is not None or issuer_link_id is not None:
+        if identity_scope not in {"listing", "issuer"} or not isinstance(issuer_link_id, str) or re.fullmatch(
+            r"issuer-link-v1:[0-9a-f]{64}", issuer_link_id
+        ) is None:
+            raise FilingFetchError("verified issuer identity scope is incomplete")
+        if identity_scope == "issuer" and request.get("security_id") is not None:
+            raise FilingFetchError("issuer identity scope cannot include security_id")
+        if identity_scope == "listing" and request.get("security_id") is None:
+            raise FilingFetchError("listing identity scope requires security_id")
     fiscal_year = request.get("fiscal_year")
     if fiscal_year is not None:
         if isinstance(fiscal_year, bool) or not isinstance(fiscal_year, int):
@@ -481,6 +496,66 @@ def _resolved_company_identity(payload: dict[str, Any]) -> dict[str, Any]:
     return dict(resolved)
 
 
+def _resolved_source_identity(
+    payload: dict[str, Any], *, market: str,
+) -> dict[str, Any]:
+    """Resolve a market-level issuer scope when several exact listings share one link.
+
+    A company filing belongs to the issuer, not to one share counter or class.
+    Collapsing an ambiguous set is safe only when every candidate is active,
+    verified, exact, in the requested source market, and carries the same
+    owner-provided issuer link. Fuzzy or unlinked ambiguity remains an error.
+    """
+    try:
+        return _resolved_company_identity(payload)
+    except FilingFetchError as original_error:
+        if payload.get("status") != "ambiguous":
+            raise
+        raw_candidates = payload.get("candidates")
+        if not isinstance(raw_candidates, list) or not raw_candidates:
+            raise original_error
+        validated: list[dict[str, Any]] = []
+        for candidate in raw_candidates:
+            try:
+                validated.append(_resolved_company_identity({
+                    "schema_version": payload.get("schema_version"),
+                    "status": "resolved",
+                    "reason": payload.get("reason"),
+                    "resolved": candidate,
+                }))
+            except FilingFetchError:
+                raise original_error
+        link_ids = {item.get("issuer_link_id") for item in validated}
+        names = {item["canonical_name"] for item in validated}
+        exact_bases = {
+            "issuer_link_exact", "ticker_exact", "official_name_exact", "alias_exact",
+        }
+        if (
+            len(link_ids) != 1
+            or None in link_ids
+            or len(names) != 1
+            or any(item["market"] != market for item in validated)
+            or any(item["match_basis"] not in exact_bases for item in validated)
+        ):
+            raise original_error
+        return {
+            "canonical_name": validated[0]["canonical_name"],
+            "market": market,
+            "match_basis": "issuer_link_exact",
+            "matched_value": validated[0]["matched_value"],
+            "issuer_link_id": next(iter(link_ids)),
+            "verified": True,
+            "active": True,
+            "identity_scope": "issuer",
+            "security_id": None,
+            "ticker": None,
+            "exchange": None,
+            "source_name": None,
+            "source_url": None,
+            "source_record_id": None,
+        }
+
+
 def _same_issuer_identity(left: dict[str, Any], right: dict[str, Any]) -> bool:
     """Require the owner-provided cross-market link when listings differ.
 
@@ -561,7 +636,7 @@ def _run_source_query(
     query = {
         key: value for key, value in normalized_request.items() if key in _QUERY_REQUEST_FIELDS
     }
-    query["schema_version"] = "1.0"
+    query["schema_version"] = "1.1" if query.get("issuer_link_id") else "1.0"
     query["allow_download"] = False
     command = command_for(root, "query")
     environment = connection_environment(root)
@@ -1004,6 +1079,19 @@ def _pathless_operation_handle(
     return handle
 
 
+def _has_acquisition_identity(request: dict[str, Any]) -> bool:
+    """Accept either one exact listing or a source-verified issuer scope."""
+    if not request.get("market"):
+        return False
+    if request.get("security_id"):
+        return True
+    return (
+        request.get("identity_scope") == "issuer"
+        and isinstance(request.get("issuer_link_id"), str)
+        and re.fullmatch(r"issuer-link-v1:[0-9a-f]{64}", request["issuer_link_id"]) is not None
+    )
+
+
 def _resolve_source_ref_v2(
     *,
     source_query_route: bool,
@@ -1036,8 +1124,10 @@ def _resolve_source_ref_v2(
         "--source-ref-v2",
     ]
     if allow_download:
-        if not normalized_request.get("market") or not normalized_request.get("security_id"):
-            raise FilingFetchError("explicit download requires market and security_id")
+        if not _has_acquisition_identity(normalized_request):
+            raise FilingFetchError(
+                "explicit download requires a market-qualified listing or verified issuer link"
+            )
         command.extend(acquisition_arguments(root))
     payload = _run_company_wiki_json_retry(
         command=command,
@@ -1085,8 +1175,10 @@ def _run_legacy_filing_command(
         })
     command = [*command_prefix, action, *_command_arguments(effective_request)]
     if allow_download:
-        if not normalized_request.get("market") or not normalized_request.get("security_id"):
-            raise FilingFetchError("explicit download requires market and security_id")
+        if not _has_acquisition_identity(normalized_request):
+            raise FilingFetchError(
+                "explicit download requires a market-qualified listing or verified issuer link"
+            )
         command.extend(acquisition_arguments(root))
     scope_path = None
     try:
@@ -1249,7 +1341,12 @@ def resolve_filing(
         stats=stats,
     )
     try:
-        company_identity = _resolved_company_identity(identity_payload)
+        if request.get("market") is None and request.get("source_market") is not None:
+            company_identity = _resolved_source_identity(
+                identity_payload, market=request["source_market"],
+            )
+        else:
+            company_identity = _resolved_company_identity(identity_payload)
     except FilingFetchError as exc:
         # This local validation precedes every acquiring operation.
         exc.stage = "identify"
@@ -1281,7 +1378,9 @@ def resolve_filing(
             stats=stats,
         )
         try:
-            source_identity = _resolved_company_identity(source_identity_payload)
+            source_identity = _resolved_source_identity(
+                source_identity_payload, market=source_market,
+            )
         except FilingFetchError as exc:
             exc.stage = "source_identify"
             raise
@@ -1303,13 +1402,23 @@ def resolve_filing(
             "source_market",
         }
     }
-    normalized_request.update(
-        {
-            "entity": source_identity["canonical_name"],
-            "market": source_market,
-            "security_id": source_identity["security_id"],
-        }
-    )
+    normalized_request.update({
+        "entity": source_identity["canonical_name"],
+        "market": source_market,
+    })
+    if source_identity.get("security_id") is not None:
+        normalized_request["security_id"] = source_identity["security_id"]
+    else:
+        normalized_request.pop("security_id", None)
+    # Recompute the cross-market scope only from company-wiki's verified identity
+    # result; request-supplied values cannot widen a listing to an issuer.
+    normalized_request.pop("identity_scope", None)
+    normalized_request.pop("issuer_link_id", None)
+    if source_identity.get("issuer_link_id") is not None:
+        normalized_request["issuer_link_id"] = source_identity["issuer_link_id"]
+        normalized_request["identity_scope"] = (
+            "listing" if source_identity.get("security_id") is not None else "issuer"
+        )
     # All explicit v2 requests are handled by one pathless dispatcher.
     mode = str(request.get("mode") or "").strip().lower()
     is_latest = mode == "latest_as_of"

@@ -178,6 +178,7 @@ def test_cross_market_request_keeps_listing_and_source_identity_separate(tmp_pat
     candidate.update({
         "title": "Alibaba FY2025 annual report", "market": "HK",
         "security_id": "09988", "form_type": "20-F", "fiscal_period": "FY",
+        "issuer_link_id": "issuer-link-v1:" + "a" * 64,
     })
     with patch(
         "fetch_filing._run_bounded_json",

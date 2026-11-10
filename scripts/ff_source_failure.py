@@ -35,7 +35,11 @@ _QUERY_FAILURE_FIELDS = {"schema_version", "status", "reason", "matches", "candi
 def source_request_id(request: dict[str, Any]) -> str:
     """The source-request/1 public canonical JSON fingerprint, without IO."""
     identity: dict[str, Any] = {key: request.get(key) for key in _REQUEST_FIELDS}
-    identity["schema_version"] = "1.0"
+    issuer_link_id = request.get("issuer_link_id")
+    identity["schema_version"] = "1.1" if issuer_link_id is not None else "1.0"
+    if issuer_link_id is not None:
+        identity["identity_scope"] = request.get("identity_scope")
+        identity["issuer_link_id"] = issuer_link_id
     for key in _REQUEST_FIELDS:
         if isinstance(identity[key], str):
             identity[key] = identity[key].strip() or None

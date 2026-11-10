@@ -73,7 +73,8 @@ def completed_payload(obs):
                           "source_ref": ref,
                           "byte_size": 8192, "mime_type": "application/pdf",
                           "document_kind": "annual_report", "fiscal_year": 2025,
-                          "fiscal_period": "FY", "published_date": "2026-03-20",
+                          "fiscal_period": "FY", "market": "US", "security_id": "FIXTURE",
+                          "published_date": "2026-03-20",
                           "title": "Fixture Annual Report"},
             "acquisition_observation": obs}
 

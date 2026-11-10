@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import unittest
 from io import StringIO
 from pathlib import Path
@@ -22,8 +23,11 @@ sys.path.insert(0, str(SKILL_ROOT / "tests"))
 from fetch_filing import (  # noqa: E402
     FilingFetchError,
     _classify_wiki_error,
+    _command_arguments,
+    _has_acquisition_identity,
     _resolution_trace,
     _run_company_wiki_json,
+    _run_source_query,
     load_company_wiki_root,
     main,
     resolve_filing,
@@ -250,6 +254,384 @@ class FilingFetchTests(unittest.TestCase):
             self.assertEqual(resolve_command[resolve_command.index("--security-id") + 1], "AMD")
             self.assertNotIn("Advanced Micro Device", resolve_command)
             self.assertEqual(handle["company_identity"]["security_id"], "AMD")
+
+    def test_cross_market_source_uses_verified_issuer_scope_and_preserves_period(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            issuer_link_id = "issuer-link-v1:" + "a" * 64
+            us = {
+                **self._identity_response()["resolved"],
+                "canonical_name": "Alibaba Group Holding Limited",
+                "market": "US", "exchange": "NYSE", "ticker": "BABA",
+                "security_id": "BABA", "source_record_id": "0001577552",
+                "issuer_link_id": issuer_link_id,
+                "identifiers": {"cik": "0001577552"},
+            }
+            hk_common = {
+                **us,
+                "market": "HK", "exchange": "HKEX", "source_name": "hkex",
+                "source_url": "https://www1.hkexnews.hk/ncms/script/eds/activestock_sehk_c.json",
+                "identifiers": {}, "match_basis": "issuer_link_exact",
+            }
+            hk_candidates = [
+                {**hk_common, "ticker": ticker, "security_id": security_id,
+                 "source_record_id": source_record_id}
+                for ticker, security_id, source_record_id in (
+                    ("09988", "09988", "7353"), ("89988", "89988", "7353-rmb"),
+                )
+            ]
+            identity_us = {
+                "schema_version": "1.1", "status": "resolved", "reason": "exact",
+                "resolved": us, "candidates": [us],
+            }
+            identity_hk = {
+                "schema_version": "1.1", "status": "ambiguous",
+                "reason": "multiple_linked_exact_market_listings",
+                "resolved": None, "candidates": hk_candidates,
+            }
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0,
+                                            stdout=json.dumps(identity_us), stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0,
+                                            stdout=json.dumps(identity_hk), stderr=""),
+            ]
+            request = {
+                "schema_version": "2.0", "company_query": "BABA", "market": "US",
+                "source_market": "HK", "document_kind": "annual_report",
+                "fiscal_year": 2025, "fiscal_period": "FY", "mode": "exact",
+                "filing_intent": "reuse_only", "as_of_date": "2026-11-10",
+            }
+
+            with patch(
+                "fetch_filing._run_bounded_json", side_effect=bounded_side_effect(completed)
+            ) as run:
+                with patch(
+                    "fetch_filing._source_query_candidate",
+                    side_effect=lambda **kwargs: kwargs["normalized_request"],
+                ) as source_query:
+                    resolved = resolve_filing(
+                        request=request, company_wiki_root=root, source_ref_v2=True,
+                    )
+
+            self.assertEqual(run.call_count, 2)
+            identify_hk = run.call_args_list[1].args[0]
+            self.assertIn("--query", identify_hk)
+            self.assertEqual(identify_hk[identify_hk.index("--query") + 1], "BABA")
+            self.assertEqual(identify_hk[identify_hk.index("--market") + 1], "HK")
+            source_request = source_query.call_args.kwargs["normalized_request"]
+            self.assertEqual(source_request["market"], "HK")
+            self.assertEqual(source_request["entity"], "Alibaba Group Holding Limited")
+            self.assertNotIn("security_id", source_request)
+            self.assertEqual(source_request["identity_scope"], "issuer")
+            self.assertEqual(source_request["issuer_link_id"], issuer_link_id)
+            self.assertEqual(source_request["fiscal_year"], 2025)
+            self.assertEqual(source_request["fiscal_period"], "FY")
+            self.assertEqual(resolved, source_request)
+
+    def test_cross_market_fetch_if_missing_uses_public_ensure_and_reuses(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            issuer_link_id = "issuer-link-v1:" + "b" * 64
+            identity_us = {
+                **self._identity_response()["resolved"],
+                "canonical_name": "Bilibili Inc.",
+                "market": "US",
+                "exchange": "NASDAQ",
+                "ticker": "BILI",
+                "security_id": "BILI",
+                "match_basis": "ticker_exact",
+                "matched_value": "BILI",
+                "source_record_id": "urn:company-wiki:security:US:BILI",
+                "issuer_link_id": issuer_link_id,
+            }
+            identity_hk = {
+                **identity_us,
+                "market": "HK",
+                "exchange": "HKEX",
+                "ticker": "09626",
+                "security_id": "09626",
+                "match_basis": "issuer_link_exact",
+                "matched_value": "09626",
+                "source_name": "hkex",
+                "source_url": "https://www1.hkexnews.hk/ncms/script/eds/activestock_sehk_c.json",
+                "source_record_id": "urn:company-wiki:security:HK:09626",
+            }
+            identity_payloads = {
+                "US": {
+                    "schema_version": "1.1", "status": "resolved", "reason": "exact_listing",
+                    "resolved": identity_us, "candidates": [identity_us],
+                },
+                "HK": {
+                    "schema_version": "1.1", "status": "resolved", "reason": "verified_issuer_link",
+                    "resolved": identity_hk, "candidates": [identity_hk],
+                },
+            }
+
+            digest = hashlib.sha256(b"offline HKEX annual report bytes").hexdigest()
+            document_id = "urn:company-wiki:document:sha256:" + digest
+            source_id = "urn:company-wiki:source:sha256:" + digest
+            source_ref = {
+                "schema_version": "2.0",
+                "document_id": document_id,
+                "source_id": source_id,
+                "content_sha256": digest,
+                "byte_size": len(b"offline HKEX annual report bytes"),
+                "mime_type": "application/pdf",
+            }
+            candidate = {
+                "source_ref": source_ref,
+                "document_id": document_id,
+                "source_id": source_id,
+                "title": "Bilibili 2022 Annual Report",
+                "document_kind": "annual_report",
+                "fiscal_year": 2022,
+                "fiscal_period": "FY",
+                "period_end": "2022-12-31",
+                "form_type": "annual_report",
+                "market": "HK",
+                "security_id": "09626",
+                "issuer_link_id": issuer_link_id,
+                "published_date": "2023-04-27",
+                "https_url": "https://www1.hkexnews.hk/example/09626-2022",
+                "snapshot_sha256": digest,
+                "byte_size": len(b"offline HKEX annual report bytes"),
+                "mime_type": "application/pdf",
+                "retrieved_at": "2026-11-10T00:00:00Z",
+                "provider": "hkex",
+                "provider_document_id": "hkex-09626-2022-annual-report",
+                "collector_name": "offline-fake-provider",
+                "collector_version": "1.0.0",
+                "capture_ready": True,
+            }
+
+            def operation(outcome: str, download_events: int, suffix: str) -> dict:
+                return {
+                    "operation_schema_version": "1.0",
+                    "operation": "ensure",
+                    "status": "completed",
+                    "request_id": "urn:company-wiki:source-request:" + suffix,
+                    "outcome": outcome,
+                    "download_events": download_events,
+                    "policy_hash": "c" * 64,
+                    "source_ref": source_ref,
+                    "candidate": candidate,
+                    "gap_plan": None,
+                }
+
+            ensure_commands: list[list[str]] = []
+            provider_fetches = 0
+
+            def fake_public_cwp(argv: list[str], **kwargs: object) -> tuple[bytes, bytes, int]:
+                nonlocal provider_fetches
+                if "identify" in argv:
+                    market = argv[argv.index("--market") + 1]
+                    return json.dumps(identity_payloads[market]).encode("utf-8"), b"", 0
+                if "ensure" in argv:
+                    ensure_commands.append(list(argv))
+                    if len(ensure_commands) == 1:
+                        provider_fetches += 1
+                        payload = operation("downloaded_new", 1, "first-import")
+                    else:
+                        payload = operation("reused_existing", 0, "idempotent-retry")
+                    return json.dumps(payload).encode("utf-8"), b"", 0
+                raise AssertionError(f"unexpected company-wiki public command: {argv!r}")
+
+            request = {
+                "schema_version": "2.0",
+                "company_query": "BILI",
+                "market": "US",
+                "source_market": "HK",
+                "document_kind": "annual_report",
+                "form_type": "annual_report",
+                "fiscal_year": 2022,
+                "fiscal_period": "FY",
+                "mode": "exact",
+                "filing_intent": "fetch_if_missing",
+                "as_of_date": "2026-11-10",
+                "acquisition_limits": {
+                    "max_bytes": 1_000_000,
+                    "timeout_seconds": 30,
+                    "max_cost_usd": "0.00",
+                },
+            }
+            first_stats = {"calls": 0, "downloads": 0}
+            second_stats = {"calls": 0, "downloads": 0}
+
+            with patch("fetch_filing._run_bounded_json", side_effect=fake_public_cwp):
+                first = resolve_filing(
+                    request=request, company_wiki_root=root, source_ref_v2=True, stats=first_stats,
+                )
+                second = resolve_filing(
+                    request=request, company_wiki_root=root, source_ref_v2=True, stats=second_stats,
+                )
+
+            self.assertEqual(len(ensure_commands), 2)
+            for command in ensure_commands:
+                self.assertIn("--source-ref-v2", command)
+                self.assertIn("--allow-download", command)
+                self.assertEqual(command[command.index("--market") + 1], "HK")
+                self.assertEqual(command[command.index("--security-id") + 1], "09626")
+                self.assertEqual(command[command.index("--identity-scope") + 1], "listing")
+                self.assertEqual(command[command.index("--issuer-link-id") + 1], issuer_link_id)
+                self.assertEqual(command[command.index("--fiscal-year") + 1], "2022")
+                self.assertEqual(command[command.index("--fiscal-period") + 1], "FY")
+                self.assertEqual(command[command.index("--form-type") + 1], "annual_report")
+
+            self.assertEqual(provider_fetches, 1)
+            self.assertEqual(first["market"], "HK")
+            self.assertEqual(first["security_id"], "09626")
+            self.assertEqual(first["fiscal_year"], 2022)
+            self.assertEqual(first["fiscal_period"], "FY")
+            self.assertEqual(first["issuer_link_id"], issuer_link_id)
+            self.assertEqual(first["operation_receipt"]["outcome"], "downloaded_new")
+            self.assertEqual(first_stats["downloads"], 1)
+            self.assertEqual(second["operation_receipt"]["outcome"], "reused_existing")
+            self.assertEqual(second_stats["downloads"], 0)
+
+    def test_cross_market_issuer_ensure_preserves_target_market_ambiguity(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            issuer_link_id = "issuer-link-v1:" + "a" * 64
+            us = {
+                **self._identity_response()["resolved"],
+                "canonical_name": "Alibaba Group Holding Limited",
+                "market": "US", "exchange": "NYSE", "ticker": "BABA",
+                "security_id": "BABA", "match_basis": "ticker_exact",
+                "matched_value": "BABA", "source_record_id": "0001577552",
+                "issuer_link_id": issuer_link_id,
+            }
+            hk_common = {
+                **us,
+                "market": "HK", "exchange": "HKEX", "source_name": "hkex",
+                "source_url": "https://www1.hkexnews.hk/ncms/script/eds/activestock_sehk_c.json",
+                "match_basis": "issuer_link_exact", "matched_value": "BABA",
+                "identifiers": {},
+            }
+            hk_candidates = [
+                {**hk_common, "ticker": ticker, "security_id": security_id,
+                 "source_record_id": record_id}
+                for ticker, security_id, record_id in (
+                    ("09988", "09988", "7353"), ("89988", "89988", "7353-rmb"),
+                )
+            ]
+            identity_payloads = [
+                {"schema_version": "1.1", "status": "resolved", "reason": "exact",
+                 "resolved": us, "candidates": [us]},
+                {"schema_version": "1.1", "status": "ambiguous",
+                 "reason": "multiple_linked_exact_market_listings",
+                 "resolved": None, "candidates": hk_candidates},
+                {"operation_schema_version": "1.0", "operation": "ensure",
+                 "status": "ambiguous", "request_id": "urn:request:ambiguous", "outcome": None,
+                 "download_events": 0, "policy_hash": None, "source_ref": None,
+                 "candidate": None, "gap_plan": None},
+            ]
+            completed = [
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=json.dumps(payload), stderr="",
+                )
+                for payload in identity_payloads
+            ]
+            request = {
+                "schema_version": "2.0", "company_query": "BABA", "market": "US",
+                "source_market": "HK", "document_kind": "annual_report",
+                "fiscal_year": 2025, "fiscal_period": "FY", "mode": "exact",
+                "filing_intent": "fetch_if_missing", "as_of_date": "2026-11-10",
+                "acquisition_limits": {
+                    "max_bytes": 1_000_000, "timeout_seconds": 30, "max_cost_usd": "0.00",
+                },
+            }
+            with patch(
+                "fetch_filing._run_bounded_json", side_effect=bounded_side_effect(completed)
+            ) as run:
+                with self.assertRaises(FilingFetchError) as ctx:
+                    resolve_filing(request=request, company_wiki_root=root, source_ref_v2=True)
+
+            self.assertEqual(ctx.exception.code, "ambiguous")
+            self.assertEqual(run.call_count, 3)
+            ensure_command = run.call_args_list[2].args[0]
+            self.assertIn("--identity-scope", ensure_command)
+            self.assertEqual(ensure_command[ensure_command.index("--identity-scope") + 1], "issuer")
+            self.assertEqual(ensure_command[ensure_command.index("--issuer-link-id") + 1], issuer_link_id)
+            self.assertEqual(ensure_command[ensure_command.index("--market") + 1], "HK")
+            self.assertNotIn("--security-id", ensure_command)
+            self.assertEqual(ensure_command[ensure_command.index("--fiscal-year") + 1], "2025")
+            self.assertEqual(ensure_command[ensure_command.index("--fiscal-period") + 1], "FY")
+
+    def test_cross_market_query_uses_versioned_issuer_scope_contract(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            link_id = "issuer-link-v1:" + "a" * 64
+            request = {
+                "entity": "Alibaba Group Holding Limited", "market": "HK",
+                "identity_scope": "issuer", "issuer_link_id": link_id,
+                "document_kind": "annual_report", "fiscal_year": 2025,
+                "fiscal_period": "FY", "as_of_date": "2026-11-10",
+            }
+            response = (b'{"schema_version":"2.0","status":"found"}', b"", 0)
+            with patch("fetch_filing._run_bounded_json", return_value=response) as run:
+                payload = _run_source_query(
+                    root=root, normalized_request=request,
+                    deadline=time.monotonic() + 30, stats={"calls": 0},
+                )
+            sent = json.loads(run.call_args.kwargs["input_bytes"].decode("utf-8"))
+            self.assertEqual(payload["status"], "found")
+            self.assertEqual(sent["schema_version"], "1.1")
+            self.assertEqual(sent["identity_scope"], "issuer")
+            self.assertEqual(sent["issuer_link_id"], link_id)
+            self.assertEqual(sent["market"], "HK")
+            self.assertEqual(sent["fiscal_year"], 2025)
+            self.assertEqual(sent["fiscal_period"], "FY")
+            self.assertFalse(sent["allow_download"])
+            argv = _command_arguments(request)
+            self.assertEqual(argv[argv.index("--identity-scope") + 1], "issuer")
+            self.assertEqual(argv[argv.index("--issuer-link-id") + 1], link_id)
+            self.assertTrue(_has_acquisition_identity(request))
+            self.assertFalse(_has_acquisition_identity({"market": "HK"}))
+
+    def test_cross_market_source_rejects_candidates_from_different_issuers(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self._wiki_root(Path(temporary), "company-wiki")
+            us = {
+                **self._identity_response()["resolved"],
+                "canonical_name": "Alibaba Group Holding Limited",
+                "ticker": "BABA", "security_id": "BABA", "issuer_link_id": "issuer-link-v1:" + "a" * 64,
+            }
+            hk = {
+                **us, "market": "HK", "exchange": "HKEX", "ticker": "09988",
+                "security_id": "09988", "source_name": "hkex", "source_record_id": "7353",
+                "source_url": "https://www1.hkexnews.hk/ncms/script/eds/activestock_sehk_c.json",
+                "identifiers": {}, "match_basis": "issuer_link_exact",
+                "issuer_link_id": "issuer-link-v1:" + "b" * 64,
+            }
+            responses = [
+                {"schema_version": "1.1", "status": "resolved", "reason": "exact",
+                 "resolved": us, "candidates": [us]},
+                {"schema_version": "1.1", "status": "ambiguous", "reason": "ambiguous",
+                 "resolved": None, "candidates": [hk]},
+            ]
+            completed = [
+                subprocess.CompletedProcess(args=[], returncode=0,
+                                            stdout=json.dumps(item), stderr="")
+                for item in responses
+            ]
+            request = {
+                "schema_version": "2.0", "company_query": "BABA", "market": "US",
+                "source_market": "HK", "document_kind": "annual_report",
+                "fiscal_year": 2025, "mode": "exact", "filing_intent": "reuse_only",
+                "as_of_date": "2026-11-10",
+            }
+            with patch(
+                "fetch_filing._run_bounded_json", side_effect=bounded_side_effect(completed)
+            ) as run:
+                with patch("fetch_filing._source_query_candidate") as source_query:
+                    with self.assertRaises(FilingFetchError) as ctx:
+                        resolve_filing(
+                            request=request, company_wiki_root=root, source_ref_v2=True,
+                        )
+            self.assertEqual(ctx.exception.code, "identity_error")
+            self.assertEqual(ctx.exception.stage, "source_identify")
+            self.assertEqual(run.call_count, 2)
+            source_query.assert_not_called()
 
     @staticmethod
     def _envelope(**overrides: object) -> dict:

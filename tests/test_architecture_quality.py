@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 import fetch_filing
+from ff_source_candidate import validate_source_candidate
 from filing_contracts import FilingFetchError, validate_handle_metadata, validate_request
 from support import bounded_side_effect
 from test_source_ref_v2_db_query import (
@@ -140,6 +141,38 @@ def test_candidate_projection_discards_unknown_metadata_consistently(tmp_path, r
         )
     assert "unowned_metadata" not in handle
     assert "fixture-only" not in json.dumps(handle)
+
+
+def test_source_candidate_must_match_verified_cross_market_link():
+    link_id = "issuer-link-v1:" + "a" * 64
+    other_link_id = "issuer-link-v1:" + "b" * 64
+    request = {
+        **_v2_request(intent="reuse_only"),
+        "source_market": "HK", "form_type": "20-F", "fiscal_period": "FY",
+    }
+    company_identity = {
+        **_identity()["resolved"], "issuer_link_id": link_id,
+    }
+    source_identity = {
+        "canonical_name": "Alibaba Group Holding Limited", "market": "HK",
+        "security_id": None, "issuer_link_id": link_id,
+    }
+    candidate = {
+        **_candidate(), "market": "HK", "security_id": "09988",
+        "issuer_link_id": link_id, "form_type": "20-F", "fiscal_period": "FY",
+    }
+    handle = validate_source_candidate(
+        candidate, candidate["source_ref"], request_id="request", request=request,
+        company_identity=company_identity, source_identity=source_identity,
+        context="source query",
+    )
+    assert handle["issuer_link_id"] == link_id
+    with pytest.raises(FilingFetchError, match="issuer_link_id mismatch"):
+        validate_source_candidate(
+            {**candidate, "issuer_link_id": other_link_id}, candidate["source_ref"],
+            request_id="request", request=request, company_identity=company_identity,
+            source_identity=source_identity, context="source query",
+        )
 
 
 def test_large_valid_config_is_read_completely_before_root_use(tmp_path):
