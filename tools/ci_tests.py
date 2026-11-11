@@ -30,6 +30,7 @@ CI_TESTS = (
     "tests/test_ff_golden.py",
     "tests/test_source_ref_v2.py",
     "tests/test_source_ref_v2_db_query.py",
+    "tests/b34/test_unknown_publication_candidate.py",
     "tests/test_local_source_prepare.py",
     "tests/test_decoupled_connection.py",
     "tests/test_process_business_exit.py",

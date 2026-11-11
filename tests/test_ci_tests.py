@@ -61,7 +61,8 @@ def test_hook_uses_fixed_local_smoke_and_ci_retains_complete_inventory():
     assert len(runner.CI_TESTS) == len(set(runner.CI_TESTS))
     for name in ("tests/test_provider_cause_contract.py", "tests/test_acquisition_failure_consumer.py",
                  "tests/test_transcript_companion_transport.py", "tests/test_transcript_launch_contract.py",
-                 "tests/test_ci_tests.py", "tests/test_local_preparation_observation.py"):
+                 "tests/test_ci_tests.py", "tests/test_local_preparation_observation.py",
+                 "tests/b34/test_unknown_publication_candidate.py"):
         assert name in runner.CI_TESTS
     assert all((ROOT / relative).is_file() for relative in runner.CI_TESTS)
 
