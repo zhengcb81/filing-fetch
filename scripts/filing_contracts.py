@@ -576,6 +576,8 @@ _HANDLE_REQUIRED_FIELDS = frozenset(
 def validate_handle_metadata(
     handle: dict[str, Any],
     request: dict[str, Any],
+    *,
+    allow_unknown_publication_date: bool = False,
 ) -> None:
     """Validate the identity needed for a pathless source candidate.
 
@@ -583,6 +585,9 @@ def validate_handle_metadata(
     therefore does not interpret root policy or claim that bytes were read.
     Collector, URL, and ``capture_ready`` fields are diagnostic metadata; they
     do not decide whether the consumer may open a locally verified SourceRef.
+    A logical SourceRef candidate may explicitly preserve a null publication
+    date for the consumer's verified-open availability check. Missing and
+    malformed dates remain errors; all other callers retain strict defaults.
     """
     required = _HANDLE_REQUIRED_FIELDS - {
         "canonical_path", "https_url", "retrieved_at", "provider",
@@ -612,6 +617,8 @@ def validate_handle_metadata(
     if isinstance(size, bool) or not isinstance(size, int) or size < 0:
         raise FilingFetchError("handle byte_size is invalid", code="upstream_error")
     published = handle.get("published_date")
+    if published is None and allow_unknown_publication_date is True:
+        return
     published = _validate_date(published, "handle published_date", code="upstream_error")
     as_of = request.get("as_of_date")
     if isinstance(as_of, str) and as_of and published > as_of:

@@ -127,7 +127,9 @@ def validate_source_candidate(
     handle = {key: value for key, value in candidate.items() if key in SOURCE_CANDIDATE_FIELDS}
     handle["source_ref"] = ref
     handle["request_id"] = request_id
-    validate_handle_metadata(handle, request)
+    # Unknown publication is metadata, not availability authority. Keep it
+    # explicit for the consumer's verified-open; never invent it from retrieval.
+    validate_handle_metadata(handle, request, allow_unknown_publication_date=True)
     bindings = {
         "document_id": "document_id",
         "source_id": "source_id",
