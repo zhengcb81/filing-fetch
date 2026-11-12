@@ -1,0 +1,17 @@
+{
+  "schema_version": "local-source-prepare/1",
+  "status": "ready",
+  "reason": "verified_local_original",
+  "source_ref": {
+    "schema_version": "2.0",
+    "document_id": "urn:company-wiki:document:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+    "source_id": "urn:company-wiki:source:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+    "content_sha256": "8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+    "byte_size": 42,
+    "mime_type": "application/pdf"
+  },
+  "blocks_download": false,
+  "operations": [],
+  "diagnostics": [],
+  "download_events": 0
+}

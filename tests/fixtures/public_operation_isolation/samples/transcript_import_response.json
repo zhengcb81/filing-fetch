@@ -1,0 +1,16 @@
+{
+  "schema_version": "company-wiki-transcript-import-response/3",
+  "status": "imported",
+  "canonical_status": "imported_new",
+  "source_id": "urn:company-wiki:source:sha256:93c89a8219dc527a58386cf3c4f75e6caa11cb2347a18c7382828e308ee161f9",
+  "content_sha256": "93c89a8219dc527a58386cf3c4f75e6caa11cb2347a18c7382828e308ee161f9",
+  "provider_payload_sha256": "93c89a8219dc527a58386cf3c4f75e6caa11cb2347a18c7382828e308ee161f9",
+  "source_ref": {
+    "schema_version": "2.0",
+    "document_id": "urn:company-wiki:document:sha256:93c89a8219dc527a58386cf3c4f75e6caa11cb2347a18c7382828e308ee161f9",
+    "source_id": "urn:company-wiki:source:sha256:93c89a8219dc527a58386cf3c4f75e6caa11cb2347a18c7382828e308ee161f9",
+    "content_sha256": "93c89a8219dc527a58386cf3c4f75e6caa11cb2347a18c7382828e308ee161f9",
+    "byte_size": 78,
+    "mime_type": "application/json"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0",
+  "status": "not_found",
+  "request_period": {
+    "mode": "exact",
+    "fiscal_year": 2025,
+    "fiscal_period": null,
+    "as_of_date": "2026-07-18"
+  },
+  "filing": {
+    "status": "not_found",
+    "reason": "company-wiki source query not_found",
+    "retryable": false
+  },
+  "transcript": {
+    "status": "not_requested",
+    "retryable": false
+  },
+  "calls": 4,
+  "downloads": 0
+}

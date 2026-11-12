@@ -36,11 +36,11 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 
 | 行为 | 初始结果 | 根因 / 处理 | 证据 |
 |---|---|---|---|
-| 六 operation 各自只走自己的 command；query hit 不启动 provider/ensure；miss→prepare→query 最多一次；单次 ensure；job reuse 不重下 | GREEN（无需改） | 现有 `WikiConnection.command_for` + `_run_bounded_json` 已满足；`NO_CHANGE_PROVEN` | `a1-tests.log` 18 passed；`a2/a3-tests.log` |
-| statements 只走 `financial_statements`；complete/partial/not_found/unavailable/request_error/bad-version 语义；16KB 诊断不遮 stdout | GREEN（无需改） | `ff_financial_statements` 只调公开 command；`_valid_error_envelope` 透传；`ff_process_transport` 有界 stderr | `a3-tests.log` |
-| ET 独立 command/interpreter/cwd；legacy `.py` 路径兼容；import 失败保留已知 usage；unknown 不当零；坏 stdout 不触发 import | GREEN（无需改） | `transcript_tool_transport` 用 `sys.executable + tool path`，cwd=tool.parent；`_last_provider_usage` 在失败投影中保留 | `a3-tests.log` |
-| 业务请求不能携带任意命令字段 | GREEN（无需改） | `filing_contracts.validate_request` / `ff_financial_statements.validate_request` / `ff_job_contracts.validate_submit_body` 白名单拒绝 | `a3-tests.log` |
-| CLI 一次请求只解析一次 deployment config（job 见 F5） | **RED**：CLI 带 companion 时 `load_connection_root` 被调用 2 次（filing 一次、companion 一次） | 新增纯值 `RequestContext`；`fetch_filing.resolve_filing` 解析一次并通过 `context_out` 交给 composition root，`main` 把同一 context 注入 `complete_filing_v2`。默认参数保留旧 library 行为 | `a1-tests.log` 失败断言 `config loaded 2 times`；`a9-tests.log` 24 passed（含同一 connection 对象断言） |
+| 六 operation 各自只走自己的 command；query hit 不启动 provider/ensure；miss→prepare→query 最多一次；单次 ensure；job reuse 不重下 | GREEN（无需改） | 现有 `WikiConnection.command_for` + `_run_bounded_json` 已满足；`NO_CHANGE_PROVEN`；含 prepare 后仍 miss 不再 ensure 的负例 | `a11-tests.log` 26 passed；`a12-tests.log` |
+| statements 只走 `financial_statements`；complete/partial/not_found/unavailable/request_error/bad-version 语义；16KB 诊断不遮 stdout | GREEN（无需改） | `ff_financial_statements` 只调公开 command；`_valid_error_envelope` 透传；`ff_process_transport` 有界 stderr | `a11-tests.log` |
+| ET 独立 command/interpreter/cwd；legacy `.py` 路径兼容；import 失败保留已知 usage；unknown 不当零；坏 stdout 不触发 import | GREEN（无需改） | `transcript_tool_transport` 用 `sys.executable + tool path`，cwd=tool.parent；`_last_provider_usage` 在失败投影中保留 | `a11-tests.log` |
+| 业务请求不能携带任意命令字段 | GREEN（无需改） | `filing_contracts.validate_request` / `ff_financial_statements.validate_request` / `ff_job_contracts.validate_submit_body` 白名单拒绝 | `a11-tests.log` |
+| CLI 一次请求只解析一次 deployment config（job 见 F5） | **RED**：CLI 带 companion 时 `load_connection_root` 被调用 2 次（filing 一次、companion 一次） | 新增纯值 `RequestContext`；`fetch_filing.resolve_filing` 解析一次并通过 `context_out` 交给 composition root，`main` 把同一 context 注入 `complete_filing_v2`。默认参数保留旧 library 行为 | `a1-tests.log` 失败断言 `config loaded 2 times`；`a11-tests.log` 26 passed（含同一 connection 对象断言） |
 
 代码改动（最终）：
 
@@ -48,7 +48,9 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 - `scripts/fetch_filing.py`：`resolve_filing` 增加可选 `request_context` / `context_out`；解析连接时生成一个 `RequestContext` 并通过 `context_out` 交给 composition root；`complete_filing_v2` / `_resolve_v2_companion` 增加可选 `request_context`，有则复用同一 connection（context 优先于同时传入的 `config_path`），无则保持旧加载路径。`main` 用 `context_out` 把同一 context 传给 companion，不提前读配置（保留 FC-802 patched-resolve 行为）。
 - `tools/ci_tests.py`：登记新增隔离测试与 statements 三个测试（均在卡片测试入口中点名）。
 
-新增覆盖（审查后补）：job+companion 端到端、job engine 两次加载得到相等连接（非不同连接）、显式 `request_context` 不重载、poison `company_wiki` import 证明；`test_one_request...` 同时断言 companion transport 收到同一 connection 对象，并校验 `fetch_filing.__file__` 与运行时 `SCRIPTS` 一致。
+新增覆盖（审查后补）：job+companion 端到端、job engine 两次加载得到相等连接（非不同连接）、显式 `request_context` 不重载、poison `company_wiki` import 证明、prepare 后仍 miss 不再 ensure、公开样例字段校验；`test_one_request...` 同时断言 companion transport 收到同一 connection 对象，并校验 `fetch_filing.__file__` 与运行时 `SCRIPTS` 一致。
+
+公开小样例：`tests/fixtures/public_operation_isolation/samples/`（source_ref/candidate、query found/not_found、local_prepare、operation completed/gap、transcript import/usage known/unknown、error envelope），由同一 fixture 常量生成并有字段校验，供 ROOT 组合。测试/恢复索引：`evidence/INDEX.md`。
 
 公开 CLI/wire 未变：未新增/删除参数，未改 request/response schema，未改六 operation 名称，未新增业务请求字段。`context_out` 只在内存中传递，不进入任何 envelope。
 

@@ -23,7 +23,8 @@
 
 | 要求 | 结果 | 根因 / 证明 |
 |---|---|---|
-| FF-01 六 operation 与 job/三表隔离；query hit 不启动 provider；miss→prepare→query 最多一次；单次 ensure；job reuse 不重下 | PASS（NO_CHANGE_PROVEN） | 现有 `WikiConnection.command_for` + `_run_bounded_json` 已满足；真实 CLI 子进程、空 cwd、无邻仓 PYTHONPATH、显式 fixture command 下验证。见 `evidence/a9-tests.log`、`a10-tests.log` |
+| FF-01 六 operation 与 job/三表隔离；query hit 不启动 provider；miss→prepare→query 最多一次；单次 ensure；job reuse 不重下 | PASS（NO_CHANGE_PROVEN） | 现有 `WikiConnection.command_for` + `_run_bounded_json` 已满足；真实 CLI 子进程、空 cwd、无邻仓 PYTHONPATH、显式 fixture command 下验证；含 prepare 后仍 miss 不再 ensure 的负例。见 `evidence/a11-tests.log`、`a12-tests.log` |
+| job reconcile 不重做下载 | PASS（NO_CHANGE_PROVEN，映射既有测试） | `tests/test_ff_job_facade.py` 的 unknown→reconcile / spend evidence 用例在本卡受影响集与完整 CI 中运行；本卡新增 job 用例覆盖 reuse/idempotent 不重下。见 `evidence/a12-tests.log`、`ci-full-r5.log` |
 | FF-02 command/config 组装；一次请求配置归属 | PASS（CLI）；job 见范围外 | CLI 带 companion 时原为 2 次 `load_connection_root`（RED，`a1-tests.log`），新增 `RequestContext` 后为 1 次，并断言 companion transport 收到同一 connection 对象（`a9-tests.log`） |
 | ET 独立 command/interpreter/cwd；legacy `.py` 路径兼容；import 失败保留已知 usage；unknown 不当零；坏 stdout 不触发 import | PASS（NO_CHANGE_PROVEN） | `transcript_tool_transport` 以 `sys.executable + tool path` 启动，cwd=tool.parent；`_last_provider_usage` 在失败投影中保留。见 `a9-tests.log` |
 | statements 只调 CWP 公开三表；complete/partial/not_found/unavailable/request_error/错误版本；大诊断不遮 stdout | PASS（NO_CHANGE_PROVEN） | `ff_financial_statements` 只走 `financial_statements` command；`_valid_error_envelope` 透传；有界 stderr。见 `a9-tests.log` |
@@ -36,7 +37,8 @@
 - 默认 none：CLI 参数、request/response schema、六 operation 名称、旧配置字段、错误/usage 语义均未变。
 - 新增可选 keyword-only：`resolve_filing(..., request_context=None, context_out=None)`、`complete_filing_v2(..., request_context=None)`。默认 `None` 保持旧 library 行为；`context_out` 只在内存传递，不进入任何 envelope。
 - `complete_filing_v2` 同时收到 `config_path` 与 `request_context` 时，context 优先。
-- 供 ROOT 组合的 fixture：`tests/fixtures/public_operation_isolation/independent_service.py`（六 operation 的公开 wire 替身）与 `transcript_tool.py`（ET 公开 wire 替身）。运行命令见第 4 节。
+- 供 ROOT 组合的公开小样例：`tests/fixtures/public_operation_isolation/samples/`，含 `source_ref.json`、`source_candidate.json`、`query_found/not_found.json`、`local_prepare_ready.json`、`operation_completed/gap.json`、`transcript_import_response.json`、`transcript_usage_known/unknown.json`、`error_envelope.json`；均为公开 wire、无物理路径。样例由同一 fixture 常量生成，并有字段校验用例防止漂移。
+- fixture 命令替身：`independent_service.py`（六 operation）与 `transcript_tool.py`（ET）；运行命令见第 4 节。测试/恢复证据索引见 `evidence/INDEX.md`。
 
 ## 4. 实际测试
 
@@ -45,13 +47,15 @@
 | 命令 | 结果 | 耗时 | 日志 |
 |---|---|---|---|
 | 卡片指定 9 文件（基线，改动前） | 164 passed + 6 subtests，exit 0 | 19.79s | `evidence/baseline-tests.log` |
-| `python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovider` | 24 passed，exit 0 | 31.61s | `evidence/a9-tests.log` |
-| 基线 9 文件 + 新测试 + `test_fc802_gap_orchestration.py` | 195 passed + 6 subtests，exit 0 | 48.60s | `evidence/a10-tests.log` |
-| `python tools/ci_tests.py`（完整 CI） | 1010 passed / 2 skipped / 44 subtests，exit 0 | 154.09s | `evidence/ci-full-r4.log` |
+| `python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovider` | 26 passed，exit 0 | 42.33s | `evidence/a11-tests.log` |
+| 基线 9 文件 + 新测试 + `test_fc802_gap_orchestration.py` | 197 passed + 6 subtests，exit 0 | 47.23s | `evidence/a12-tests.log` |
+| `python tools/ci_tests.py`（完整 CI） | 1012 passed / 2 skipped / 44 subtests，exit 0 | 150.64s | `evidence/ci-full-r5.log` |
 | `ruff check scripts tests/... tools/ci_tests.py` | All checks passed | — | 本次交接命令 |
 | `mypy scripts/fetch_filing.py scripts/ff_request_context.py` | Success | — | 本次交接命令 |
-| canonical installer `--install` / `--check --dest <scratch>/skills` | 30 files，exit 0 / exit 0 | — | `evidence/install4*.json` |
-| 安装根内运行同一 suite（`ROOT`=安装根，poison config，空 cwd） | 24 passed，exit 0 | 32.23s | `evidence/c-runtime4-tests.log` |
+| canonical installer `--install` / `--check --dest <scratch>/skills` | 30 files，exit 0 / exit 0 | — | `evidence/install5*.json` |
+| 安装根内运行同一 suite（`ROOT`=安装根，poison config，空 cwd） | 26 passed，exit 0 | 32.46s | `evidence/c-runtime5-tests.log` |
+
+测试/恢复证据索引：`evidence/INDEX.md`（含关键日志 SHA256、A0 归档索引、中间轮说明、恢复状态）。
 
 未执行：真实网络/下载/收费 provider、生产配置迁移、全局 skill 部署、跨仓 E01–E09 组合（ROOT 负责）。2 个 skip 是既有条件：production security-master 缺失、Windows symlink 不支持。
 
@@ -64,10 +68,10 @@
 
 ## 6. 隔离与恢复
 
-- 测试目录：`C:/Users/郑曾波/Projects/mb11-ff-scratch/**`（仓外，本 lane 所有；可安全删除）。仓内工作树最终 clean。
+- 测试目录初始状态：开工前无 `mb11-ff` 工区、无 `mb11-ff-scratch`；结束状态：仓内工作树 clean，`C:/Users/郑曾波/Projects/mb11-ff-scratch/**` 为仓外 lane 私有测试根（可删除，重建命令见 §8.3）。
 - 未修改：生产 `config/company_wiki.json`、`config/FMP_API_KEY.txt`、`.ff_jobs/**`、`.mimosa/**`、`.workbuddy-ai/**`、CWP/ET/SID/Dayu 源码、全局 skill。
-- 未读取/复制密钥；未执行真实下载、网络或收费调用。`network_calls: 0`，`model_calls: 0`（独立审查是 harness agent，不是 FF 产品调用）。
-- A0 归档为只读复制；未删除/重置任何旧工区、分支或未提交文件；回收清单见 `inputs/a0-archive/RECYCLE_LIST.md`。
+- 未读取/复制密钥；未执行真实下载、网络或收费调用。`network_calls: 0`，`model_calls: 0`（独立审查是 harness agent，不是 FF 产品调用）；费用：无付费调用，费用 unknown 不适用（未把未知写成 0）。
+- A0 归档为只读复制；未删除/重置任何旧工区、分支或未提交文件；回收清单见 `inputs/a0-archive/RECYCLE_LIST.md`。归档只作出处，不用旧 16-case 完成声明覆盖 ROOT 后续 41-case 证据；main 已跟踪的 W07 收据索引见 `inputs/a0-archive/w07/main-evidence-index.json`。
 
 ## 7. 安装/CI/合并状态与 ROOT 下一步
 
@@ -87,6 +91,6 @@ python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovi
 1. `ff_job_runner.py` 不在写集合，未改；中间提交 `c00cfef` 曾接线 job engine，复审指出写集合后由 `16f3ceb` 回退，最终树无该文件 diff。job+companion 仍按 library fallback 每阶段加载一次同一 config，两次得到相等的 `WikiConnection`（不是不同连接）；已由 `test_job_engine_reloads_equivalent_connection_not_a_different_one` 证明。ROOT 如批准 3 行接线，可进一步收敛为一次加载。
 2. 仓库内生产 `config/company_wiki.json` 仍是 legacy `company_wiki_root` 形态；本卡只证明 `connection.commands` 部署形态，未迁移生产配置，也不声称生产已隔离。
 3. C 阶段精确做法：canonical installer 安装到 scratch；把同一测试文件+fixtures 复制进安装根 `tests/`；`config/company_wiki.json` 换成无 commands 的 poison；空 cwd、显式 config、`pythonpath=<install>/scripts` 运行。
-4. 中间证据 `a2/a3/a5/a6/a7/a8/r3/runtime3` 仅迭代记录，最终只引 `a9/a10/c-runtime4/ci-full-r4`。
+4. 中间证据 `a1/a2/a3/a5/a6/a7/a8/a9/a10/r2/r3/r4/runtime*/install*` 仅迭代记录，最终只引 `a11/a12/c-runtime5/ci-full-r5/install5`；`a1` 的失败断言与 `a6` 的断言错误保留原文，不裁失败段。
 5. `context_out` 不落 wire；`complete_filing_v2` 同时收 `config_path`+`request_context` 时 context 优先。
-6. 分支已推送；handoff/review 为文档提交。scratch 目录归本 lane，可删除。
+6. 分支已推送；handoff/review 为文档提交。scratch 目录归本 lane，可删除；测试/恢复索引见 `evidence/INDEX.md`。

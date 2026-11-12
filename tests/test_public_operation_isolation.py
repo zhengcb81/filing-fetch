@@ -290,6 +290,17 @@ def test_filing_query_miss_prepares_local_once_then_queries_again(tmp_path):
     assert "ensure" not in json.dumps(calls)
 
 
+def test_query_miss_prepare_then_still_missing_does_not_ensure(tmp_path):
+    harness = Harness(tmp_path, query_sequence="not_found,not_found")
+    completed = harness.run("fetch_filing.py", harness.filing_arguments(_v2_request()))
+    assert completed.returncode == 2, completed.stderr.decode("utf-8", "replace")
+    payload = json.loads(completed.stdout.decode("utf-8"))
+    assert payload["status"] == "not_found"
+    assert payload["calls"] == 4
+    assert harness.operations() == ["catalog", "query", "local_prepare", "query"]
+    assert "ensure" not in json.dumps(harness.calls())
+
+
 def test_filing_ensure_is_one_bounded_operation_and_gap_stays_gap(tmp_path):
     harness = Harness(tmp_path)
     request = _v2_request(intent="fetch_if_missing")
@@ -711,6 +722,59 @@ def test_one_request_resolves_one_connection_snapshot(tmp_path, monkeypatch):
     assert len(loads) == 1, f"config loaded {len(loads)} times: {loads}"
     assert seen["wiki_root"] is loaded_connections[0]
     assert json.loads(output.getvalue())["transcript"]["status"] == "downloaded"
+
+
+def test_public_samples_expose_required_public_fields():
+    samples = FIXTURES / "samples"
+    expected = {
+        "source_ref.json": {
+            "schema_version", "document_id", "source_id", "content_sha256",
+            "byte_size", "mime_type",
+        },
+        "source_candidate.json": {
+            "source_ref", "document_id", "source_id", "title", "market",
+            "security_id", "capture_ready",
+        },
+        "query_found.json": {
+            "schema_version", "status", "request_id", "matches", "candidates",
+        },
+        "query_not_found.json": {
+            "schema_version", "status", "request_id", "matches", "candidates",
+        },
+        "local_prepare_ready.json": {
+            "schema_version", "status", "reason", "source_ref",
+            "blocks_download", "download_events",
+        },
+        "operation_completed.json": {
+            "operation_schema_version", "operation", "status", "request_id",
+            "outcome", "download_events", "source_ref", "candidate",
+        },
+        "operation_gap.json": {
+            "operation_schema_version", "operation", "status", "request_id",
+            "outcome", "download_events", "gap_plan",
+        },
+        "transcript_import_response.json": {
+            "schema_version", "status", "source_ref", "content_sha256",
+        },
+        "transcript_usage_known.json": {
+            "schema_version", "request_id", "usage_complete", "usage",
+        },
+        "transcript_usage_unknown.json": {
+            "schema_version", "request_id", "usage_complete", "usage",
+        },
+        "error_envelope.json": {
+            "schema_version", "status", "filing", "transcript", "calls",
+            "downloads",
+        },
+    }
+    for name, keys in expected.items():
+        payload = json.loads((samples / name).read_text(encoding="utf-8"))
+        assert keys <= set(payload), name
+    unknown = json.loads(
+        (samples / "transcript_usage_unknown.json").read_text(encoding="utf-8")
+    )
+    assert unknown["usage"] is None
+    assert unknown["usage_complete"] is False
 
 
 def test_scripts_never_import_a_sibling_implementation():

@@ -16,6 +16,7 @@
     "tests/fixtures/public_operation_isolation/README.md",
     "tests/fixtures/public_operation_isolation/independent_service.py",
     "tests/fixtures/public_operation_isolation/transcript_tool.py",
+    "tests/fixtures/public_operation_isolation/samples/",
     "tools/ci_tests.py",
     "docs/plans/mb11-ff-2026-11-11/"
   ],
@@ -23,38 +24,38 @@
     {
       "id": "FF-01",
       "result": "PASS",
-      "red_evidence": "NO_CHANGE_PROVEN: 现有 WikiConnection.command_for + bounded transport 已满足；真实 CLI 子进程、空 cwd、无邻仓 PYTHONPATH、显式 fixture command 下六 operation/query hit/miss/ensure/job reuse 全部通过。",
-      "green_evidence": "tests/test_public_operation_isolation.py 24 passed; evidence/a9-tests.log; evidence/a10-tests.log"
+      "red_evidence": "NO_CHANGE_PROVEN: 现有 WikiConnection.command_for + bounded transport 已满足；真实 CLI 子进程、空 cwd、无邻仓 PYTHONPATH、显式 fixture command 下六 operation/query hit/miss/ensure/job reuse 全部通过；含 prepare 后仍 miss 不再 ensure 的负例。",
+      "green_evidence": "tests/test_public_operation_isolation.py 26 passed; evidence/a11-tests.log; evidence/a12-tests.log"
     },
     {
       "id": "FF-02",
       "result": "PASS",
       "red_evidence": "CLI v2 带 companion 时 load_connection_root 被调用 2 次；evidence/a1-tests.log 失败断言 'config loaded 2 times'。",
-      "green_evidence": "RequestContext 注入后 1 次加载，且 companion transport 收到同一 connection 对象；evidence/a9-tests.log"
+      "green_evidence": "RequestContext 注入后 1 次加载，且 companion transport 收到同一 connection 对象；evidence/a11-tests.log"
     },
     {
       "id": "FF-03",
       "result": "PASS",
       "red_evidence": "NO_CHANGE_PROVEN: transcript_tool_transport 以 sys.executable + tool path 启动，cwd=tool.parent；usage 在 import/坏 stdout 失败投影中保留，unknown 不为零。",
-      "green_evidence": "tests/test_public_operation_isolation.py ET/usage 用例; evidence/a9-tests.log"
+      "green_evidence": "tests/test_public_operation_isolation.py ET/usage 用例; evidence/a11-tests.log"
     },
     {
       "id": "FF-04",
       "result": "PASS",
       "red_evidence": "NO_CHANGE_PROVEN: ff_financial_statements 只走 financial_statements command；request 白名单无命令字段；错误版本/请求拒绝保持既有语义。",
-      "green_evidence": "statements 用例 + evidence/a9-tests.log; tests/financial_statements/* 全绿"
+      "green_evidence": "statements 用例 + evidence/a11-tests.log; tests/financial_statements/* 全绿"
     },
     {
       "id": "FF-05",
       "result": "PASS",
       "red_evidence": "NO_CHANGE_PROVEN: 三个公开 validator 白名单拒绝 command/cwd 等未知字段。",
-      "green_evidence": "test_business_requests_cannot_carry_command_fields; evidence/a9-tests.log"
+      "green_evidence": "test_business_requests_cannot_carry_command_fields; evidence/a11-tests.log"
     },
     {
       "id": "FF-06",
       "result": "PASS",
       "red_evidence": "真实交付 runtime 需在无邻仓/无生产 config 下运行。",
-      "green_evidence": "canonical installer runtime4 + poison config + 空 cwd: 24 passed; evidence/c-runtime4-tests.log"
+      "green_evidence": "canonical installer runtime5 + poison config + 空 cwd: 26 passed; evidence/c-runtime5-tests.log"
     }
   ],
   "public_contract_changes": [],
@@ -71,29 +72,29 @@
     {
       "command": "python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovider",
       "exit_code": 0,
-      "passed": 24,
+      "passed": 26,
       "failed": 0,
       "skipped": 0,
-      "seconds": 31.61,
-      "log": "docs/plans/mb11-ff-2026-11-11/evidence/a9-tests.log"
+      "seconds": 42.33,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/a11-tests.log"
     },
     {
       "command": "python -B -m pytest <baseline 9 files> tests/test_public_operation_isolation.py tests/test_fc802_gap_orchestration.py -q -p no:cacheprovider",
       "exit_code": 0,
-      "passed": 195,
+      "passed": 197,
       "failed": 0,
       "skipped": 0,
-      "seconds": 48.6,
-      "log": "docs/plans/mb11-ff-2026-11-11/evidence/a10-tests.log"
+      "seconds": 47.23,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/a12-tests.log"
     },
     {
       "command": "python tools/ci_tests.py",
       "exit_code": 0,
-      "passed": 1010,
+      "passed": 1012,
       "failed": 0,
       "skipped": 2,
-      "seconds": 154.09,
-      "log": "docs/plans/mb11-ff-2026-11-11/evidence/ci-full-r4.log"
+      "seconds": 150.64,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/ci-full-r5.log"
     },
     {
       "command": "python tools/sync_installs_b3.py --install/--check --dest <scratch>/skills --json",
@@ -102,16 +103,16 @@
       "failed": 0,
       "skipped": 0,
       "seconds": 0.0,
-      "log": "docs/plans/mb11-ff-2026-11-11/evidence/install4.json; install4-check.json"
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/install5.json; install5-check.json"
     },
     {
       "command": "python -B -m pytest <installed-root>/tests/test_public_operation_isolation.py -c <scratch>/pytest-runtime.ini -q -p no:cacheprovider",
       "exit_code": 0,
-      "passed": 24,
+      "passed": 26,
       "failed": 0,
       "skipped": 0,
-      "seconds": 32.23,
-      "log": "docs/plans/mb11-ff-2026-11-11/evidence/c-runtime4-tests.log"
+      "seconds": 32.46,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/c-runtime5-tests.log"
     }
   ],
   "independent_review": {
@@ -127,9 +128,9 @@
     "scripts/ff_job_runner.py 不在本卡写集合，未改；job+companion 仍每阶段加载一次同一 config，两次得到相等的 WikiConnection（非不同连接），已有用例证明；ROOT 如批准 3 行接线可进一步收敛。",
     "仓库内生产 config/company_wiki.json 仍是 legacy company_wiki_root 形态；本卡只证明 connection.commands 部署形态，未迁移生产配置。",
     "中间提交 c00cfef 曾接线 job engine，复审指出写集合后由 16f3ceb 回退；最终树无 ff_job_runner.py diff。",
-    "runtime4 精确做法：canonical installer 安装到 scratch，测试+fixtures 复制进安装根 tests/，config/company_wiki.json 换成无 commands 的 poison，空 cwd、显式 config、pythonpath=<install>/scripts 运行。",
-    "中间证据 a2/a3/a5/a6/a7/a8/r3/runtime3 仅迭代记录，最终只引 a9/a10/c-runtime4/ci-full-r4。",
-    "scratch 目录 C:/Users/郑曾波/Projects/mb11-ff-scratch/** 为仓外 lane 私有，可安全删除。",
+    "runtime5 精确做法：canonical installer 安装到 scratch，测试+fixtures（含 samples）复制进安装根 tests/，config/company_wiki.json 换成无 commands 的 poison，空 cwd、显式 config、pythonpath=<install>/scripts 运行。",
+    "中间证据 a1/a2/a3/a5/a6/a7/a8/a9/a10/r2/r3/r4/runtime*/install* 仅迭代记录，最终只引 a11/a12/c-runtime5/ci-full-r5/install5；a1 的失败断言与 a6 的断言错误保留原文。",
+    "scratch 目录 C:/Users/郑曾波/Projects/mb11-ff-scratch/** 为仓外 lane 私有，可安全删除；测试/恢复索引见 docs/plans/mb11-ff-2026-11-11/evidence/INDEX.md。",
     "远端 GitHub Actions 未核验；作者未合并 main、未修改 ROOT 总 PWF。"
   ],
   "next_root_action": "在集成后的 FF 树运行 python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovider，并按 handoff.md 核对最终 SHA/测试/状态。"

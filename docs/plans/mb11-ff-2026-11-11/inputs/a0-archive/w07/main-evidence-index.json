@@ -1,0 +1,36 @@
+{
+  "source": "C:/Users/郑曾波/Projects/filing-fetch/docs/handoffs/w07-ff-matrix-efficiency/evidence",
+  "scope": "ROOT-tracked W07 first-failure/final/timing receipts; referenced, not copied because already in main",
+  "files": [
+    {
+      "path": "C:/Users/郑曾波/Projects/filing-fetch/docs/handoffs/w07-ff-matrix-efficiency/evidence/first-run-failure-report.json",
+      "sha256": "4f6ca33c41250253601cb1213cc61a8040812502a14348bf63b13223e057092a",
+      "bytes": 460263
+    },
+    {
+      "path": "C:/Users/郑曾波/Projects/filing-fetch/docs/handoffs/w07-ff-matrix-efficiency/evidence/final-41-report.json",
+      "sha256": "7c5906237d03260e0598bca37e02036fa0202f05e7516696a3c488c583d17ddf",
+      "bytes": 550556
+    },
+    {
+      "path": "C:/Users/郑曾波/Projects/filing-fetch/docs/handoffs/w07-ff-matrix-efficiency/evidence/final-41-restore.json",
+      "sha256": "62f57c443dabeb8d7fcc315d4dab4e39d41e7ceb701c1e9a34e90ae0755e63ec",
+      "bytes": 466
+    },
+    {
+      "path": "C:/Users/郑曾波/Projects/filing-fetch/docs/handoffs/w07-ff-matrix-efficiency/evidence/final-41-proofs-g1.json",
+      "sha256": "9cabd5821a0f9d07d20b499f37dbb773bdc692a000512622137b110419c8f544",
+      "bytes": 134634
+    },
+    {
+      "path": "C:/Users/郑曾波/Projects/filing-fetch/docs/handoffs/w07-ff-matrix-efficiency/evidence/final-41-proofs-g2.json",
+      "sha256": "3b3242f509ac1c64549a4138a8d668f8ad06f81ef08164cc00e42a6eb41ea432",
+      "bytes": 112184
+    },
+    {
+      "path": "C:/Users/郑曾波/Projects/filing-fetch/docs/handoffs/w07-ff-matrix-efficiency/evidence/timing-before-after.json",
+      "sha256": "7cb9b33e63881881112ddd0cd5a52a88ebe0ce1d19727c4d3dfee40a864dff3f",
+      "bytes": 2008
+    }
+  ]
+}

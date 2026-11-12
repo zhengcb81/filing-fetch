@@ -1,0 +1,50 @@
+{
+  "operation_schema_version": "1.0",
+  "operation": "ensure",
+  "status": "completed",
+  "request_id": "urn:company-wiki:source-request:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "outcome": "reused_existing",
+  "download_events": 0,
+  "policy_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "source_ref": {
+    "schema_version": "2.0",
+    "document_id": "urn:company-wiki:document:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+    "source_id": "urn:company-wiki:source:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+    "content_sha256": "8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+    "byte_size": 42,
+    "mime_type": "application/pdf"
+  },
+  "candidate": {
+    "source_ref": {
+      "schema_version": "2.0",
+      "document_id": "urn:company-wiki:document:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+      "source_id": "urn:company-wiki:source:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+      "content_sha256": "8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+      "byte_size": 42,
+      "mime_type": "application/pdf"
+    },
+    "document_id": "urn:company-wiki:document:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+    "source_id": "urn:company-wiki:source:sha256:8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+    "title": "AMD 2025 annual report",
+    "document_kind": "annual_report",
+    "fiscal_year": 2025,
+    "fiscal_period": null,
+    "period_end": "2025-12-31",
+    "form_type": "10-K",
+    "market": "US",
+    "security_id": "AMD",
+    "published_date": "2026-02-20",
+    "https_url": "https://www.sec.gov/Archives/amd/2025",
+    "snapshot_sha256": "8373faed968684e6568203cc7a1c43b3819f840437eb3f2d770cbc32d35572f3",
+    "byte_size": 42,
+    "mime_type": "application/pdf",
+    "retrieved_at": "2026-02-21T00:00:00Z",
+    "collector_name": "filesystem-catalog-company_raw",
+    "collector_version": "1.0.0",
+    "provider": "sec",
+    "provider_document_id": "amd-2025-10k",
+    "capture_ready": true,
+    "capture_provenance": "indexed_location_manifest",
+    "prompt_injection_status": "not_detected"
+  }
+}

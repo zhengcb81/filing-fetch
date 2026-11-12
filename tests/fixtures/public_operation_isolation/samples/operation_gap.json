@@ -1,0 +1,13 @@
+{
+  "operation_schema_version": "1.0",
+  "operation": "ensure",
+  "status": "gap",
+  "request_id": "urn:company-wiki:source-request:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "outcome": "gap",
+  "download_events": 0,
+  "gap_plan": {
+    "schema_version": "1.0",
+    "gap_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "request_id": "urn:company-wiki:source-request:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}
