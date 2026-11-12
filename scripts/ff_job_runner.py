@@ -193,9 +193,11 @@ def _run_filing_engine(
     from fetch_filing import complete_filing_v2, filing_operation_deadline, resolve_filing
 
     deadline = filing_operation_deadline(request, timeout_seconds=timeout_seconds)
+    resolved_context: dict = {}
     handle = resolve_filing(
         request=request,
         config_path=config_path,
+        context_out=resolved_context,
         timeout_seconds=timeout_seconds,
         stats=stats,
         source_ref_v2=True,
@@ -203,6 +205,7 @@ def _run_filing_engine(
     )
     envelope = complete_filing_v2(
         request=request, handle=handle, config_path=config_path, deadline=deadline, stats=stats,
+        request_context=resolved_context.get("context"),
     )
     stats["downloads"] = envelope.get("downloads", stats["downloads"])
     return envelope, stats
