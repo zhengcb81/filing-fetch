@@ -45,4 +45,4 @@
 
 ## Status
 
-CLOSED（2026-11-12）。代码 tip `16f3ceb`；文档提交随 `codex/mb11-ff` 分支推送。
+CLOSED（2026-11-12）。代码/测试 tip `e1c4be2`；文档提交随 `codex/mb11-ff` 分支推送。

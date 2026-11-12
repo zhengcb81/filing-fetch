@@ -4,20 +4,21 @@
 
 - 工区：`C:/Users/郑曾波/Projects/mb11-ff`；分支 `codex/mb11-ff`；目标主线 FF `main`。
 - 实际代码基线：`ac798a250b2310e0c2714053b08246ad94fffd0c`（原仓 main）。
-- 最终代码提交：`16f3ceb2120ce45a222d89eaff38f294f79af8a0`。分支已推 `origin/codex/mb11-ff`（`pushed: true`）。
-- 本文档与 handoff.json/review.md 所在文档提交随分支一起推送；不追自引用 hash，`documentation_commit` 记 null。代码 tip 为 `16f3ceb`，分支 tip 以远端 `origin/codex/mb11-ff` 为准（推送后即包含本文档）。
+- 最终代码提交：`e1c4be21a263d727ff30a1416f7c7bd96898e230`（含 26 个隔离用例与公开样例；产品源码仍为 `16f3ceb` 的最终版本）。分支已推 `origin/codex/mb11-ff`（`pushed: true`）。
+- 本文档与 handoff.json/review.md 所在文档提交随分支一起推送；不追自引用 hash，`documentation_commit` 记 null。代码 tip 为 `e1c4be2`，分支 tip 以远端 `origin/codex/mb11-ff` 为准（推送后即包含本文档）。
 - 最终代码 diff（相对基线，仅允许写集合）：
 
 | 文件 | 变化 |
 |---|---|
 | `scripts/fetch_filing.py` | +39/−10：`resolve_filing` 新增 `request_context`/`context_out`；`complete_filing_v2`/`_resolve_v2_companion` 复用 context；`main` 注入 |
 | `scripts/ff_request_context.py` | 新增 25 行纯值 `RequestContext` |
-| `tests/test_public_operation_isolation.py` | 新增 741 行、24 个用例 |
+| `tests/test_public_operation_isolation.py` | 新增 805 行、26 个用例 |
 | `tests/fixtures/public_operation_isolation/{README.md,independent_service.py,transcript_tool.py}` | 新增公开 wire 替身 |
+| `tests/fixtures/public_operation_isolation/samples/**` | 11 个 source/ref/usage/error 公开小样例 + README |
 | `tools/ci_tests.py` | +4：登记新测试与 statements 三个测试 |
 | `docs/plans/mb11-ff-2026-11-11/**` | 本卡 PWF、A0 归档、证据 |
 
-`git diff ac798a2..16f3ceb -- scripts/ff_job_runner.py` 为空。中间提交 `c00cfef` 曾接线 job engine，复审指出该文件不在写集合后，由 `16f3ceb` 回退；最终树无该文件 diff。
+`git diff ac798a2..e1c4be2 -- scripts/ff_job_runner.py` 为空。中间提交 `c00cfef` 曾接线 job engine，复审指出该文件不在写集合后，由 `16f3ceb` 回退；最终树无该文件 diff。
 
 ## 2. 卡要求逐项
 
@@ -25,19 +26,19 @@
 |---|---|---|
 | FF-01 六 operation 与 job/三表隔离；query hit 不启动 provider；miss→prepare→query 最多一次；单次 ensure；job reuse 不重下 | PASS（NO_CHANGE_PROVEN） | 现有 `WikiConnection.command_for` + `_run_bounded_json` 已满足；真实 CLI 子进程、空 cwd、无邻仓 PYTHONPATH、显式 fixture command 下验证；含 prepare 后仍 miss 不再 ensure 的负例。见 `evidence/a11-tests.log`、`a12-tests.log` |
 | job reconcile 不重做下载 | PASS（NO_CHANGE_PROVEN，映射既有测试） | `tests/test_ff_job_facade.py` 的 unknown→reconcile / spend evidence 用例在本卡受影响集与完整 CI 中运行；本卡新增 job 用例覆盖 reuse/idempotent 不重下。见 `evidence/a12-tests.log`、`ci-full-r5.log` |
-| FF-02 command/config 组装；一次请求配置归属 | PASS（CLI）；job 见范围外 | CLI 带 companion 时原为 2 次 `load_connection_root`（RED，`a1-tests.log`），新增 `RequestContext` 后为 1 次，并断言 companion transport 收到同一 connection 对象（`a9-tests.log`） |
-| ET 独立 command/interpreter/cwd；legacy `.py` 路径兼容；import 失败保留已知 usage；unknown 不当零；坏 stdout 不触发 import | PASS（NO_CHANGE_PROVEN） | `transcript_tool_transport` 以 `sys.executable + tool path` 启动，cwd=tool.parent；`_last_provider_usage` 在失败投影中保留。见 `a9-tests.log` |
-| statements 只调 CWP 公开三表；complete/partial/not_found/unavailable/request_error/错误版本；大诊断不遮 stdout | PASS（NO_CHANGE_PROVEN） | `ff_financial_statements` 只走 `financial_statements` command；`_valid_error_envelope` 透传；有界 stderr。见 `a9-tests.log` |
-| 业务请求不得新增任意命令执行字段 | PASS（NO_CHANGE_PROVEN） | 三个公开 validator 的白名单拒绝；`a9-tests.log` |
-| 无邻仓代码可见也能工作 | PASS | 隔离测试移除 `PYTHONPATH`，并用 poison `company_wiki` 包证明未 import；`a9-tests.log` |
-| 真实交付 runtime 可运行 | PASS | canonical installer 安装根 + 空 cwd + 显式 config + poison 生产 config；`c-runtime4-tests.log` 24 passed |
+| FF-02 command/config 组装；一次请求配置归属 | PASS（CLI）；job 见范围外 | CLI 带 companion 时原为 2 次 `load_connection_root`（RED，`a1-tests.log`），新增 `RequestContext` 后为 1 次，并断言 companion transport 收到同一 connection 对象（`a11-tests.log`） |
+| ET 独立 command/interpreter/cwd；legacy `.py` 路径兼容；import 失败保留已知 usage；unknown 不当零；坏 stdout 不触发 import | PASS（NO_CHANGE_PROVEN） | `transcript_tool_transport` 以 `sys.executable + tool path` 启动，cwd=tool.parent；`_last_provider_usage` 在失败投影中保留。见 `a11-tests.log` |
+| statements 只调 CWP 公开三表；complete/partial/not_found/unavailable/request_error/错误版本；大诊断不遮 stdout | PASS（NO_CHANGE_PROVEN） | `ff_financial_statements` 只走 `financial_statements` command；`_valid_error_envelope` 透传；有界 stderr。见 `a11-tests.log` |
+| 业务请求不得新增任意命令执行字段 | PASS（NO_CHANGE_PROVEN） | 三个公开 validator 的白名单拒绝；`a11-tests.log` |
+| 无邻仓代码可见也能工作 | PASS | 隔离测试移除 `PYTHONPATH`，并用 poison `company_wiki` 包证明未 import；`a11-tests.log` |
+| 真实交付 runtime 可运行 | PASS | canonical installer 安装根 + 空 cwd + 显式 config + poison 生产 config；`c-runtime5-tests.log` 26 passed |
 
 ## 3. 公开接口变化
 
 - 默认 none：CLI 参数、request/response schema、六 operation 名称、旧配置字段、错误/usage 语义均未变。
 - 新增可选 keyword-only：`resolve_filing(..., request_context=None, context_out=None)`、`complete_filing_v2(..., request_context=None)`。默认 `None` 保持旧 library 行为；`context_out` 只在内存传递，不进入任何 envelope。
 - `complete_filing_v2` 同时收到 `config_path` 与 `request_context` 时，context 优先。
-- 供 ROOT 组合的公开小样例：`tests/fixtures/public_operation_isolation/samples/`，含 `source_ref.json`、`source_candidate.json`、`query_found/not_found.json`、`local_prepare_ready.json`、`operation_completed/gap.json`、`transcript_import_response.json`、`transcript_usage_known/unknown.json`、`error_envelope.json`；均为公开 wire、无物理路径。样例由同一 fixture 常量生成，并有字段校验用例防止漂移。
+- 供 ROOT 组合的公开小样例：`tests/fixtures/public_operation_isolation/samples/`，含 `source_ref.json`、`source_candidate.json`、`query_found/not_found.json`、`local_prepare_ready.json`、`operation_completed/gap.json`、`transcript_import_response.json`、`transcript_usage_known/unknown.json`、`error_envelope.json`；均为公开 wire、无物理路径。样例为人工对齐快照，字段级校验防缺字段；fixture 常量变化时需同 commit 更新（仓库不存生成脚本）。
 - fixture 命令替身：`independent_service.py`（六 operation）与 `transcript_tool.py`（ET）；运行命令见第 4 节。测试/恢复证据索引见 `evidence/INDEX.md`。
 
 ## 4. 实际测试
@@ -64,7 +65,8 @@
 - 审查 agent：`agent-d9d86973-09d1-4483-87dd-c8a15732311c`，三轮只读审查。
 - 第一轮（`652478f`）：PASS_WITH_FINDINGS；指出 job+companion 双载、C 阶段 import 可能来自 checkout、缺 identity/poison/显式 context 用例、文档数字过期。
 - 第二轮（`c00cfef`）：确认行为修复，但指出 `ff_job_runner.py` 不在写集合；要求回退或 ROOT 扩权。
-- 第三轮（`16f3ceb`）：PASS_WITH_FINDINGS，无代码阻断；要求修正两处文档措辞（`findings.md` 的“一次请求”范围与 ACQ-S2 描述）。已在文档提交中修正。详见 `review.md`。
+- 第三轮（`16f3ceb`）：PASS_WITH_FINDINGS，无代码阻断；要求修正两处文档措辞（`findings.md` 的“一次请求”范围与 ACQ-S2 描述）。已在文档提交中修正。
+- 第四轮（`e1c4be2`）：对照卡与 handoff_contract 审计，AUDIT_WITH_FINDINGS；指出 handoff 过期引用、样例防漂移表述、diff 行数；本轮已修（样例改为“人工对齐快照 + 字段级守卫”）。详见 `review.md`。
 
 ## 6. 隔离与恢复
 

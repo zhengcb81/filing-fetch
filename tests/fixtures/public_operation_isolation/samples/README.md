@@ -14,6 +14,8 @@ documents**, not a second CWP/ET implementation and not production data.
 | `transcript_usage_known.json` / `transcript_usage_unknown.json` | ET → FF | `earnings-retrieval-usage/1`; unknown is not zero |
 | `error_envelope.json` | FF → caller | v2 business failure envelope example |
 
-These samples are generated from the same constants the isolation fixture
-answers with; `tests/test_public_operation_isolation.py` checks their required
-public fields so they cannot silently rot.
+These are manually aligned snapshots of the same public wires the isolation
+fixture answers with. `tests/test_public_operation_isolation.py` checks their
+required public fields, so missing keys fail fast. There is no generator in
+the repository: if a fixture constant changes, update the affected sample in
+the same commit. The field-level guard does not compare every value.

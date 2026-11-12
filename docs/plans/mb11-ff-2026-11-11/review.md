@@ -47,8 +47,21 @@
 
 文档修正已在最终文档提交中完成；未再改变代码，故不触发代码复审。
 
+## R4 — 对照卡与 handoff_contract 审计（tip `e1c4be2`）
+
+结论：**AUDIT_WITH_FINDINGS**。
+
+| 级别 | 发现 | 处理 |
+|---|---|---|
+| 交付前必须修 | handoff/progress/task_plan 称已推送，但 `e1c4be2` 相对远端 `d82a64b` ahead 1 | 本轮修正文档后推送 `e1c4be2`，`pushed: true` 随后成立 |
+| 交付前必须修 | `handoff.md` diff 表仍写 741 行/24 用例，漏 samples；正文仍引 a9/c-runtime4/r4 | 改为 805 行/26 用例、补 samples 行、统一 a11/c-runtime5/r5 |
+| 交付前必须修 | samples 声称“由同一常量生成、不能漂移”，但仓库无生成脚本，测试只校验必填键 | 改为“人工对齐快照 + 字段级守卫”，明确常量变化需同 commit 更新；不声称全值相等 |
+| handoff 写明即可 | review 只记三轮，未记本轮审计 | 本节补 R4 |
+
+已核对：新 suite 26 passed；a12 197+6；c-runtime5 26；ci-full-r5 1012/2 skipped/44 subtests；W07 main 收据索引 6/6 SHA 匹配；A0 41-case 不覆盖、job reconcile 映射、PWF CLOSED 均已写入；`handoff.json` test_runs 数字正确。修正后仅剩推送动作。
+
 ## 最终结论
 
 - 代码/测试/证据：**PASS**（无本卡可行动代码问题）。
-- 交付前文档修正：已完成（见上 R3 两项）。
+- 交付前文档修正：R3 两项 + R4 三项已完成；推送后 `pushed: true` 成立。
 - 开放项：无本卡 in-scope finding；out-of-scope 见 `handoff.md` §8 与 `handoff.json.out_of_scope_findings`。

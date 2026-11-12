@@ -50,7 +50,7 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 
 新增覆盖（审查后补）：job+companion 端到端、job engine 两次加载得到相等连接（非不同连接）、显式 `request_context` 不重载、poison `company_wiki` import 证明、prepare 后仍 miss 不再 ensure、公开样例字段校验；`test_one_request...` 同时断言 companion transport 收到同一 connection 对象，并校验 `fetch_filing.__file__` 与运行时 `SCRIPTS` 一致。
 
-公开小样例：`tests/fixtures/public_operation_isolation/samples/`（source_ref/candidate、query found/not_found、local_prepare、operation completed/gap、transcript import/usage known/unknown、error envelope），由同一 fixture 常量生成并有字段校验，供 ROOT 组合。测试/恢复索引：`evidence/INDEX.md`。
+公开小样例：`tests/fixtures/public_operation_isolation/samples/`（source_ref/candidate、query found/not_found、local_prepare、operation completed/gap、transcript import/usage known/unknown、error envelope），为人工对齐快照 + 字段级校验，供 ROOT 组合；fixture 常量变化需同 commit 更新。测试/恢复索引：`evidence/INDEX.md`。
 
 公开 CLI/wire 未变：未新增/删除参数，未改 request/response schema，未改六 operation 名称，未新增业务请求字段。`context_out` 只在内存中传递，不进入任何 envelope。
 
