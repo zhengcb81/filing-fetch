@@ -1,0 +1,21 @@
+{
+  "schema_version": "w06-input-manifest/1",
+  "lane": "W06-FF-MATRIX",
+  "files": [
+    {
+      "path": "construction_card.md",
+      "sha256": "27e66f0b7d3b3a5e9a12b2f5ff898d97accf58176c6f8607faebbafa4a394e0d",
+      "bytes": 7102
+    },
+    {
+      "path": "handoff_contract.md",
+      "sha256": "593f1b15464db6dc5de382570c11196921c1997251c36ac4c452afd275d86173",
+      "bytes": 3345
+    },
+    {
+      "path": "inputs.json",
+      "sha256": "9ab29e07ca0ff74e45cf5a72961408371cb3c12966a474caaf1e9101feb3cc7f",
+      "bytes": 11682
+    }
+  ]
+}

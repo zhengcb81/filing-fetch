@@ -1,0 +1,28 @@
+diff --git a/docs/ff-job-protocol.md b/docs/ff-job-protocol.md
+index e1d0e05..852ed41 100644
+--- a/docs/ff-job-protocol.md
++++ b/docs/ff-job-protocol.md
+@@ -92,11 +92,10 @@ One `idempotency_key` binds to exactly one job:
+ - same key + different request → `request_error` (named conflict, never a
+   silent second acquisition);
+ - running an already-terminal job is a no-op (`engine_executed: false`);
+-- the binding is crash-safe: the key is claimed by an O_EXCL pointer first
+-  and the job record lands second, so a crash in between leaves a dangling
+-  pointer that readers repair after a short grace window instead of wedging
+-  the key forever. Two concurrent submitters serialize on the pointer
+-  claim; the loser replays the winner's job.
++- a short owner-local OS lock serializes pointer and job publication. The
++  lock releases when a submitter exits. A retry repairs a dangling or
++  partial legacy pointer and replays a matching job already on disk.
++  Submitters keep one binding even when a live writer is temporarily slow.
+ 
+ Actions carry their own `(action, idempotency_key)` receipts with the same
+ replay guarantee.
+@@ -177,6 +176,7 @@ re-sends a download.
+ ```
+ jobs/<owner_job_id>.json        full record, atomic replace + fsync
+ index/idem/<sha256(key)>.json   idempotency pointer
++index/idem/.submit.lock        owner-local submission lock
+ locks/<owner_job_id>.lock       O_EXCL lock with pid stamp + dead-pid takeover
+ logs/<owner_job_id>.log         append-only engine audit trail (JSON lines)
+ ```

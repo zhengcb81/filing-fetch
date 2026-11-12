@@ -1,0 +1,61 @@
+{
+  "path": "tools/offline_contract_matrix/matrix_cases.py",
+  "functions": [
+    {
+      "name": "_et_receipt_ok",
+      "ast_sha256": "a6c100e52238e7670028be1c067eb7dd3282fa0d93f415639864fe01fee438d0"
+    },
+    {
+      "name": "_transcript",
+      "ast_sha256": "6cf07f5cd908ddfaebb768ab9756a7b42e20d37b39842a41a3cf2d5e331c20c1"
+    },
+    {
+      "name": "_filing",
+      "ast_sha256": "1ba3772dd4484ed56d3991c6528f7bed137df3069169013ec92318fd700a1437"
+    },
+    {
+      "name": "case_chain_a",
+      "ast_sha256": "dc1cc03f073008ab1ef81337be4e367afd1d5c3c52daa0e7466aecacc7487e6a"
+    },
+    {
+      "name": "case_fin_local_hit",
+      "ast_sha256": "d42d8083f1898e38ce2e186165279f5cb598692eef42c032cbf3d4bbb1317a46"
+    },
+    {
+      "name": "case_fin_fetch",
+      "ast_sha256": "c5c0958be8deeb294611185fc5694f05aad549caaedf9c445422ffdf12ec8955"
+    },
+    {
+      "name": "case_nonperiod",
+      "ast_sha256": "d75db20db25af1ec52dad761ffd3795a04b13571c949a7831e3c700e55ecfaf6"
+    },
+    {
+      "name": "case_call_fy_only",
+      "ast_sha256": "9c9d64785f7c2c8b89f6c88c89f89db40abdfa18dc510df4e55a219b5004edbf"
+    },
+    {
+      "name": "case_call_past_cutoff",
+      "ast_sha256": "f27e6d90b25452648b3269134d87184d2c823df572e265c07ccf77dc1e424210"
+    },
+    {
+      "name": "case_call_wrong_quarter",
+      "ast_sha256": "ab3f5cc81bd19a5ece2ab7b66a3cbf218cbcf507f161b214fb71c3935fcba9c7"
+    },
+    {
+      "name": "case_err_request",
+      "ast_sha256": "ec2b304464b7428ba5de45c6d5e26d8c65b4298809d857a9c3900294f2677225"
+    },
+    {
+      "name": "case_err_402",
+      "ast_sha256": "aef11443c151dfaf45ffe305e2ca1d594872e2479bfe82b9391b2d18b6fb3f08"
+    },
+    {
+      "name": "case_err_missing_creds",
+      "ast_sha256": "f9d51caa6c4b4d81503747091ec27c0efafb9cd8b9cdfdd5bca9d7b2ccb7b978"
+    },
+    {
+      "name": "case_err_unknown_usage",
+      "ast_sha256": "fa3d029d8cb85d0f7c656fab9694192dd4d8942687346f00cb329986ee7f97ce"
+    }
+  ]
+}

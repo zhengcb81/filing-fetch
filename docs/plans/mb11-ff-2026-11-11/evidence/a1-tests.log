@@ -1,0 +1,95 @@
+............F.....F.                                                     [100%]
+================================== FAILURES ===================================
+_____ test_job_reuse_runs_through_the_same_connection_without_redownload ______
+
+tmp_path = WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_job_reuse_runs_through_th0')
+
+    def test_job_reuse_runs_through_the_same_connection_without_redownload(tmp_path):
+        harness = Harness(tmp_path)
+        body = {
+            "schema_version": "ff-job/1",
+            "command_id": "mbff-cmd-1",
+            "kind": "filing.acquire",
+            "idempotency_key": "mbff-idem-1",
+            "request": _v2_request(),
+        }
+        submitted = harness.run_json(
+            "ff_job.py",
+            ["--jobs-dir", str(harness.jobs_dir), "submit", "--request-file",
+             harness.request_path(body, "job.json")],
+        )
+        assert submitted["status"] == "ok"
+        owner_job_id = submitted["owner_job_id"]
+        assert owner_job_id.startswith("ffjob-")
+    
+        ran = harness.run_json(
+            "ff_job.py",
+            ["--jobs-dir", str(harness.jobs_dir), "run", "--owner-job-id", owner_job_id,
+             "--config", str(harness.config), "--timeout-seconds", "30"],
+        )
+        assert ran["job"]["status"] == "succeeded"
+        calls_after_run = harness.calls()
+        _assert_no_sibling_environment(calls_after_run, harness.empty_cwd)
+        assert harness.operations() == ["catalog", "query"]
+        assert "ensure" not in json.dumps(calls_after_run)
+        assert ran["job"]["result"]["download_events"] == 0
+    
+        again = harness.run_json(
+            "ff_job.py",
+            ["--jobs-dir", str(harness.jobs_dir), "run", "--owner-job-id", owner_job_id,
+             "--config", str(harness.config), "--timeout-seconds", "30"],
+        )
+        assert again["job"]["status"] == "succeeded"
+        assert len(harness.calls()) == len(calls_after_run), "idempotent run reacquired"
+    
+        status = harness.run_json(
+            "ff_job.py",
+            ["--jobs-dir", str(harness.jobs_dir), "get_status", "--owner-job-id", owner_job_id],
+        )
+        assert status["job"]["status"] == "succeeded"
+        listed = harness.run_json(
+            "ff_job.py", ["--jobs-dir", str(harness.jobs_dir), "list_jobs"]
+        )
+>       assert listed["jobs"]["total"] == 1
+               ^^^^^^^^^^^^^^
+E       KeyError: 'jobs'
+
+tests\test_public_operation_isolation.py:486: KeyError
+______________ test_one_request_resolves_one_connection_snapshot ______________
+
+tmp_path = WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001B09CD95CD0>
+
+    def test_one_request_resolves_one_connection_snapshot(tmp_path, monkeypatch):
+        """The CLI composition root must not load the same config twice."""
+        harness = Harness(tmp_path)
+        request = _v2_request(companion=_companion())
+        request_file = harness.request_path(request)
+    
+        import fetch_filing
+    
+        original = fetch_filing.load_connection_root
+        loads: list[Path] = []
+    
+        def counting(config_path, *, skill_root):
+            loads.append(Path(config_path))
+            return original(config_path, skill_root=skill_root)
+    
+        monkeypatch.setattr(fetch_filing, "load_connection_root", counting)
+        monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            exit_code = fetch_filing.main(
+                ["--config", str(harness.config), "--request-file", request_file]
+            )
+        assert exit_code == 0, output.getvalue()
+>       assert len(loads) == 1, f"config loaded {len(loads)} times: {loads}"
+E       AssertionError: config loaded 2 times: [WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki.json'), WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki.json')]
+E       assert 2 == 1
+E        +  where 2 = len([WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki....wsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki.json')])
+
+tests\test_public_operation_isolation.py:602: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_public_operation_isolation.py::test_job_reuse_runs_through_the_same_connection_without_redownload
+FAILED tests/test_public_operation_isolation.py::test_one_request_resolves_one_connection_snapshot
+2 failed, 18 passed in 26.69s

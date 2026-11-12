@@ -1,0 +1,96 @@
+{
+  "source": "C:\\Users\\郑曾波\\Projects\\_harness_worktrees\\w07\\ff-matrix-efficiency\\.tmp",
+  "scope": "unique first-failure / final / timing attempt receipts only",
+  "files": [
+    {
+      "path": "w07-b1/attempt-519825b9fb2c45d0b3b07fdb963c7d98/guard-events.json",
+      "sha256": "5af92d5fff695f847873759d129c1531b935630f7d14d344b8197cd6427a19a4",
+      "bytes": 11275
+    },
+    {
+      "path": "w07-b1/attempt-519825b9fb2c45d0b3b07fdb963c7d98/report.json",
+      "sha256": "c04c1b4ec44d2c5ac1dbd1581e1622644fd9722a3b4a23d2aa647d1f604f6c42",
+      "bytes": 470254
+    },
+    {
+      "path": "w07-b1/attempt-519825b9fb2c45d0b3b07fdb963c7d98/restore.json",
+      "sha256": "06b2f967fb2aaf691887b68c69c16cb1105af8ce36c336dc77bcfcfb94647d79",
+      "bytes": 476
+    },
+    {
+      "path": "w07-b2/attempt-728597e3b1fe4629912c0ba34cf3cd66/guard-events.json",
+      "sha256": "4b1183912150692111066f482f5549404fe449d5f29c267a5e0f06c11e4a260e",
+      "bytes": 13753
+    },
+    {
+      "path": "w07-b2/attempt-728597e3b1fe4629912c0ba34cf3cd66/report.json",
+      "sha256": "d3c4619c1c8503450f4b396048322bbb6d3dde6c7d2d55f3c945aa2fb6970e05",
+      "bytes": 513309
+    },
+    {
+      "path": "w07-b2/attempt-728597e3b1fe4629912c0ba34cf3cd66/restore.json",
+      "sha256": "b7636121d9e162896bf70a64acccdc393d2736f78533085582c64c4e9450db8a",
+      "bytes": 476
+    },
+    {
+      "path": "w07-b3/attempt-8e204870b1c94a1dafd490ef35c05ae4/guard-events.json",
+      "sha256": "8087ad43eb8b7ff33b70b0319bf5682b4e99205583e768132b4810655729ccc1",
+      "bytes": 8904
+    },
+    {
+      "path": "w07-b3/attempt-8e204870b1c94a1dafd490ef35c05ae4/report.json",
+      "sha256": "d4190ae3511a50f6c199a1f02a147c6d3a7e4d43728e28e8c7ea10011dededbe",
+      "bytes": 439574
+    },
+    {
+      "path": "w07-b3/attempt-8e204870b1c94a1dafd490ef35c05ae4/restore.json",
+      "sha256": "47b1c7965d35cb4bfd9b96440e418477cfb7f8ac4df7bd2320be15aac4ecca18",
+      "bytes": 476
+    },
+    {
+      "path": "w07-b4/attempt-ccd4ce92fb604da6a6a18df722681f0a/guard-events.json",
+      "sha256": "4531c3841dd45ec57c1dbbbe2c1ad8a796e1e37718291d16d3ab1a355fde29f4",
+      "bytes": 10632
+    },
+    {
+      "path": "w07-b4/attempt-ccd4ce92fb604da6a6a18df722681f0a/report.json",
+      "sha256": "5676944401602d1af8b181f78afb90714a656c32b940ac5b7b3272184b263b84",
+      "bytes": 466885
+    },
+    {
+      "path": "w07-b4/attempt-ccd4ce92fb604da6a6a18df722681f0a/restore.json",
+      "sha256": "44911b1240e3ef17ed96b403919fefdadc1ffaaa36e8f943ababe9759e5f62fa",
+      "bytes": 476
+    },
+    {
+      "path": "w07-b5/attempt-f3ba8546ed26431c954def86662e2ac2/guard-events.json",
+      "sha256": "262cdf2314f24c3002db91b9004a45e909b6da78079aaa2d4282fa1cb593f459",
+      "bytes": 14998
+    },
+    {
+      "path": "w07-b5/attempt-f3ba8546ed26431c954def86662e2ac2/report.json",
+      "sha256": "2ed6b92cb5cb774515936c9bc71df52a74f2295573f6df1c631ab532f59974f0",
+      "bytes": 559715
+    },
+    {
+      "path": "w07-b5/attempt-f3ba8546ed26431c954def86662e2ac2/restore.json",
+      "sha256": "75d15cf51aa789afbd89b145b43d974ebe087f2bf4f1914b968a5d10916d43bb",
+      "bytes": 476
+    },
+    {
+      "path": "w07-b6/attempt-b316b130a9fc43e8a1ec2a5c0c51e2ac/guard-events.json",
+      "sha256": "777b229221093c3bf7d9440c63a3b35329395bcdd67101128a65d50b8a382b5a",
+      "bytes": 14998
+    },
+    {
+      "path": "w07-b6/attempt-b316b130a9fc43e8a1ec2a5c0c51e2ac/report.json",
+      "sha256": "596fe279883729a8d107566d78a98541dacce354c5f565c575ddae78d373f2bc",
+      "bytes": 562495
+    },
+    {
+      "path": "w07-b6/attempt-b316b130a9fc43e8a1ec2a5c0c51e2ac/restore.json",
+      "sha256": "f4e6387caf34a9c010b45f30eb117f008a48e766412a80ac596bcb8acfc5b0da",
+      "bytes": 476
+    }
+  ]
+}

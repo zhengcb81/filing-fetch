@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="20" time="26.692" timestamp="2026-11-12T19:56:26.012592+00:00" hostname="DESKTOP-156V213"><testcase classname="tests.test_public_operation_isolation" name="test_filing_query_hit_is_provider_free_and_uses_only_query_command" time="1.200" /><testcase classname="tests.test_public_operation_isolation" name="test_filing_query_miss_prepares_local_once_then_queries_again" time="1.510" /><testcase classname="tests.test_public_operation_isolation" name="test_filing_ensure_is_one_bounded_operation_and_gap_stays_gap" time="1.909" /><testcase classname="tests.test_public_operation_isolation" name="test_transcript_companion_uses_query_open_import_and_independent_et_command" time="2.923" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_uses_only_public_three_table_operation" time="0.767" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_preserves_business_status[complete]" time="0.743" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_preserves_business_status[partial]" time="0.689" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_preserves_business_status[not_found]" time="0.646" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_preserves_business_status[unavailable]" time="0.699" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_structured_refusal_is_a_business_answer_not_upstream" time="0.627" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_rejects_unknown_response_version" time="0.720" /><testcase classname="tests.test_public_operation_isolation" name="test_optional_large_diagnostic_does_not_mask_business_stdout" time="0.678" /><testcase classname="tests.test_public_operation_isolation" name="test_job_reuse_runs_through_the_same_connection_without_redownload" time="2.357"><failure message="KeyError: 'jobs'">tmp_path = WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_job_reuse_runs_through_th0')
+
+    def test_job_reuse_runs_through_the_same_connection_without_redownload(tmp_path):
+        harness = Harness(tmp_path)
+        body = {
+            "schema_version": "ff-job/1",
+            "command_id": "mbff-cmd-1",
+            "kind": "filing.acquire",
+            "idempotency_key": "mbff-idem-1",
+            "request": _v2_request(),
+        }
+        submitted = harness.run_json(
+            "ff_job.py",
+            ["--jobs-dir", str(harness.jobs_dir), "submit", "--request-file",
+             harness.request_path(body, "job.json")],
+        )
+        assert submitted["status"] == "ok"
+        owner_job_id = submitted["owner_job_id"]
+        assert owner_job_id.startswith("ffjob-")
+    
+        ran = harness.run_json(
+            "ff_job.py",
+            ["--jobs-dir", str(harness.jobs_dir), "run", "--owner-job-id", owner_job_id,
+             "--config", str(harness.config), "--timeout-seconds", "30"],
+        )
+        assert ran["job"]["status"] == "succeeded"
+        calls_after_run = harness.calls()
+        _assert_no_sibling_environment(calls_after_run, harness.empty_cwd)
+        assert harness.operations() == ["catalog", "query"]
+        assert "ensure" not in json.dumps(calls_after_run)
+        assert ran["job"]["result"]["download_events"] == 0
+    
+        again = harness.run_json(
+            "ff_job.py",
+            ["--jobs-dir", str(harness.jobs_dir), "run", "--owner-job-id", owner_job_id,
+             "--config", str(harness.config), "--timeout-seconds", "30"],
+        )
+        assert again["job"]["status"] == "succeeded"
+        assert len(harness.calls()) == len(calls_after_run), "idempotent run reacquired"
+    
+        status = harness.run_json(
+            "ff_job.py",
+            ["--jobs-dir", str(harness.jobs_dir), "get_status", "--owner-job-id", owner_job_id],
+        )
+        assert status["job"]["status"] == "succeeded"
+        listed = harness.run_json(
+            "ff_job.py", ["--jobs-dir", str(harness.jobs_dir), "list_jobs"]
+        )
+&gt;       assert listed["jobs"]["total"] == 1
+               ^^^^^^^^^^^^^^
+E       KeyError: 'jobs'
+
+tests\test_public_operation_isolation.py:486: KeyError</failure></testcase><testcase classname="tests.test_public_operation_isolation" name="test_import_failure_keeps_known_provider_usage" time="2.252" /><testcase classname="tests.test_public_operation_isolation" name="test_unknown_provider_usage_stays_unknown_not_zero" time="2.359" /><testcase classname="tests.test_public_operation_isolation" name="test_invalid_et_stdout_keeps_usage_and_never_invokes_import" time="1.909" /><testcase classname="tests.test_public_operation_isolation" name="test_business_requests_cannot_carry_command_fields" time="1.091" /><testcase classname="tests.test_public_operation_isolation" name="test_unconfigured_operation_is_named_and_never_guessed" time="0.338" /><testcase classname="tests.test_public_operation_isolation" name="test_one_request_resolves_one_connection_snapshot" time="2.724"><failure message="AssertionError: config loaded 2 times: [WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki.json'), WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki.json')]&#10;assert 2 == 1&#10; +  where 2 = len([WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki....wsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki.json')])">tmp_path = WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001B09CD95CD0&gt;
+
+    def test_one_request_resolves_one_connection_snapshot(tmp_path, monkeypatch):
+        """The CLI composition root must not load the same config twice."""
+        harness = Harness(tmp_path)
+        request = _v2_request(companion=_companion())
+        request_file = harness.request_path(request)
+    
+        import fetch_filing
+    
+        original = fetch_filing.load_connection_root
+        loads: list[Path] = []
+    
+        def counting(config_path, *, skill_root):
+            loads.append(Path(config_path))
+            return original(config_path, skill_root=skill_root)
+    
+        monkeypatch.setattr(fetch_filing, "load_connection_root", counting)
+        monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            exit_code = fetch_filing.main(
+                ["--config", str(harness.config), "--request-file", request_file]
+            )
+        assert exit_code == 0, output.getvalue()
+&gt;       assert len(loads) == 1, f"config loaded {len(loads)} times: {loads}"
+E       AssertionError: config loaded 2 times: [WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki.json'), WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki.json')]
+E       assert 2 == 1
+E        +  where 2 = len([WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki....wsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a1/test_one_request_resolves_one_0/deployment/company_wiki.json')])
+
+tests\test_public_operation_isolation.py:602: AssertionError</failure></testcase><testcase classname="tests.test_public_operation_isolation" name="test_scripts_never_import_a_sibling_implementation" time="0.197" /></testsuite></testsuites>

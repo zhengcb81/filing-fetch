@@ -61,6 +61,7 @@ from ff_source_failure import decode_failure, invalid_result, source_request_id,
 
 from ff_configuration import load_connection_root, validate_company_wiki_root
 from ff_company_wiki_connection import WikiConnection, WikiEndpoint, command_for, connection_cwd, connection_environment, acquisition_arguments
+from ff_request_context import RequestContext
 from ff_source_candidate import (
     COMPANY_IDENTITY_FIELDS as _COMPANY_IDENTITY_FIELDS,
     SOURCE_CANDIDATE_FIELDS as _SOURCE_CANDIDATE_FIELDS,
@@ -1269,6 +1270,8 @@ def resolve_filing(
     stats: dict[str, int] | None = None,
     source_ref_v2: bool = False,
     deadline: float | None = None,
+    request_context: RequestContext | None = None,
+    context_out: dict[str, RequestContext] | None = None,
 ) -> dict[str, Any]:
     """Identify an optional company query, then resolve or explicitly ensure a filing.
 
@@ -1297,11 +1300,18 @@ def resolve_filing(
     from the final resolution envelope (0 unless a download actually
     committed).  Final success and failure both preserve these counts in the
     response envelope (READ-09/READ-10).
+
+    ``request_context`` / ``context_out`` let a composition root resolve the
+    deployment config once and hand the same connection to the companion
+    stage.  Passing neither keeps the historical per-stage loading behaviour;
+    ``context_out["context"]`` receives the snapshot actually used.
     """
     stats = _normalize_stats(stats)
 
     if company_wiki_root is not None and config_path is not None:
         raise ValueError("company_wiki_root cannot be combined with config_path")
+    if request_context is not None and (company_wiki_root is not None or config_path is not None):
+        raise ValueError("request_context cannot be combined with company_wiki_root/config_path")
     if not isinstance(request, dict):
         raise TypeError("request must be a dict")
     if allow_download is not None and not isinstance(allow_download, bool):
@@ -1317,12 +1327,20 @@ def resolve_filing(
             code="request_error",
         )
     deadline = filing_operation_deadline(request, deadline=deadline, timeout_seconds=timeout_seconds)
-    root = (
-        (company_wiki_root if isinstance(company_wiki_root, WikiConnection)
-         else _validate_company_wiki_root(company_wiki_root))
-        if company_wiki_root is not None
-        else load_company_wiki_root(config_path=config_path)
-    )
+    if request_context is not None:
+        root = request_context.connection
+    else:
+        root = (
+            (company_wiki_root if isinstance(company_wiki_root, WikiConnection)
+             else _validate_company_wiki_root(company_wiki_root))
+            if company_wiki_root is not None
+            else load_company_wiki_root(config_path=config_path)
+        )
+        request_context = RequestContext(
+            config_path or DEFAULT_COMPANY_WIKI_CONFIG, root
+        )
+    if context_out is not None:
+        context_out["context"] = request_context
     command_prefix = command_for(root, "catalog")
     # Every request passes through verified/active identity before source
     # resolution; validate_request guarantees company_query is present.
@@ -1626,6 +1644,7 @@ def _resolve_v2_companion(
     config_path: Path | None,
     deadline: float,
     stats: dict[str, int],
+    request_context: RequestContext | None = None,
 ) -> dict[str, Any]:
     """Resolve one exact-period companion without changing filing success."""
     if handle.get("status") == "gap":
@@ -1644,13 +1663,18 @@ def _resolve_v2_companion(
     ):
         return {"status": "period_unresolved", "reason": "exact_fy_q_required", "retryable": False}
     try:
-        wiki_root = load_company_wiki_root(config_path=config_path)
+        if request_context is not None:
+            wiki_root = request_context.connection
+            launch_config = request_context.config_path
+        else:
+            wiki_root = load_company_wiki_root(config_path=config_path)
+            launch_config = config_path or DEFAULT_COMPANY_WIKI_CONFIG
         from transcript_companion import resolve_companion_transcript
         from transcript_tool_transport import EarningsTranscriptsTransport
 
         transport = EarningsTranscriptsTransport(
             wiki_root=wiki_root,
-            config_path=config_path or DEFAULT_COMPANY_WIKI_CONFIG,
+            config_path=launch_config,
             deadline=deadline,
         )
         result = resolve_companion_transcript(
@@ -1675,12 +1699,14 @@ def complete_filing_v2(
     config_path: Path | None,
     deadline: float,
     stats: dict[str, int],
+    request_context: RequestContext | None = None,
 ) -> dict[str, Any]:
     """Complete the public v2 result within the filing operation's deadline."""
     from ff_v2_envelope import success_envelope
 
     transcript = _resolve_v2_companion(
-        request=request, handle=handle, config_path=config_path, deadline=deadline, stats=stats,
+        request=request, handle=handle, config_path=config_path, deadline=deadline,
+        stats=stats, request_context=request_context,
     )
     return success_envelope(request, handle, transcript, stats)
 
@@ -1781,9 +1807,11 @@ def main(argv: list[str] | None = None) -> int:
         # One derivation point: v2 declares the intent in the request itself
         # (the --allow-download flag only ever applies to v1 requests).
         allow_download = _download_intent(request, None if v2_response else args.allow_download)
+        resolved_context: dict[str, RequestContext] = {}
         handle = resolve_filing(
             request=request,
             config_path=args.config,
+            context_out=resolved_context,
             allow_download=allow_download,
             timeout_seconds=args.timeout_seconds,
             pause_worker=not args.no_pause_worker,
@@ -1795,7 +1823,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         if v2_response:
             output = complete_filing_v2(
-                request=request, handle=handle, config_path=args.config, deadline=deadline, stats=stats,
+                request=request, handle=handle, config_path=args.config, deadline=deadline,
+                stats=stats, request_context=resolved_context.get("context"),
             )
         elif isinstance(handle, dict) and handle.get("status") == "gap":
             # FC-802: a structured gap passes through unwrapped — it is NOT
