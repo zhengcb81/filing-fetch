@@ -49,7 +49,7 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 - `scripts/ff_job_runner.py`：`_run_filing_engine` 用 `context_out` 取回同一 `RequestContext` 并传给 `complete_filing_v2`（3 行 composition-root 接线；按用户 2026-11-12 指令为闭合“一次请求配置归属”，未改 job 持久化/幂等/重试/费用语义）。
 - `tools/ci_tests.py`：登记新增隔离测试与 statements 三个测试（均在卡片测试入口中点名）。
 
-新增覆盖（审查后补）：job+companion 端到端、job engine 两次加载得到相等连接（非不同连接）、显式 `request_context` 不重载、poison `company_wiki` import 证明、prepare 后仍 miss 不再 ensure、公开样例字段校验；`test_one_request...` 同时断言 companion transport 收到同一 connection 对象，并校验 `fetch_filing.__file__` 与运行时 `SCRIPTS` 一致。
+新增覆盖（审查后补）：job+companion 端到端、job engine 单次加载/同一 connection、显式 `request_context` 不重载、poison `company_wiki` import 证明、prepare 后仍 miss 不再 ensure、公开样例字段校验；`test_one_request...` 同时断言 companion transport 收到同一 connection 对象，并校验 `fetch_filing.__file__` 与运行时 `SCRIPTS` 一致。
 
 公开小样例：`tests/fixtures/public_operation_isolation/samples/`（source_ref/candidate、query found/not_found、local_prepare、operation completed/gap、transcript import/usage known/unknown、error envelope），为人工对齐快照 + 字段级校验，供 ROOT 组合；fixture 常量变化需同 commit 更新。测试/恢复索引：`evidence/INDEX.md`。
 
