@@ -62,7 +62,7 @@
 
 ## 5. 独立审查
 
-- 审查 agent：`agent-d9d86973-09d1-4483-87dd-c8a15732311c`，三轮只读审查。
+- 审查 agent：`agent-d9d86973-09d1-4483-87dd-c8a15732311c`，四轮只读审查。
 - 第一轮（`652478f`）：PASS_WITH_FINDINGS；指出 job+companion 双载、C 阶段 import 可能来自 checkout、缺 identity/poison/显式 context 用例、文档数字过期。
 - 第二轮（`c00cfef`）：确认行为修复，但指出 `ff_job_runner.py` 不在写集合；要求回退或 ROOT 扩权。
 - 第三轮（`16f3ceb`）：PASS_WITH_FINDINGS，无代码阻断；要求修正两处文档措辞（`findings.md` 的“一次请求”范围与 ACQ-S2 描述）。已在文档提交中修正。
@@ -78,7 +78,7 @@
 ## 7. 安装/CI/合并状态与 ROOT 下一步
 
 - 安装：仅在 scratch 安装根验证；未部署全局 skill。
-- CI：本地完整 CI r4 通过；远端 GitHub Actions 未核验。
+- CI：本地完整 CI r5 通过（1012 passed / 2 skipped / 44 subtests）；远端 GitHub Actions 未核验。
 - 合并：作者未合并 `main`，未修改 ROOT 总 PWF。
 - ROOT 下一步（一条命令，使用本卡交接与 fixture）：
 
