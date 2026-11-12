@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="24" time="44.728" timestamp="2026-11-12T20:20:55.279067+00:00" hostname="DESKTOP-156V213"><testcase classname="tests.test_public_operation_isolation" name="test_filing_query_hit_is_provider_free_and_uses_only_query_command" time="1.790" /><testcase classname="tests.test_public_operation_isolation" name="test_filing_query_miss_prepares_local_once_then_queries_again" time="2.087" /><testcase classname="tests.test_public_operation_isolation" name="test_filing_ensure_is_one_bounded_operation_and_gap_stays_gap" time="2.321" /><testcase classname="tests.test_public_operation_isolation" name="test_transcript_companion_uses_query_open_import_and_independent_et_command" time="2.893" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_uses_only_public_three_table_operation" time="0.718" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_preserves_business_status[complete]" time="0.733" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_preserves_business_status[partial]" time="0.758" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_preserves_business_status[not_found]" time="0.766" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_preserves_business_status[unavailable]" time="0.811" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_structured_refusal_is_a_business_answer_not_upstream" time="0.780" /><testcase classname="tests.test_public_operation_isolation" name="test_statements_rejects_unknown_response_version" time="0.775" /><testcase classname="tests.test_public_operation_isolation" name="test_optional_large_diagnostic_does_not_mask_business_stdout" time="0.682" /><testcase classname="tests.test_public_operation_isolation" name="test_job_reuse_runs_through_the_same_connection_without_redownload" time="2.935" /><testcase classname="tests.test_public_operation_isolation" name="test_job_companion_runs_through_the_same_connection" time="3.390" /><testcase classname="tests.test_public_operation_isolation" name="test_job_engine_uses_one_connection_snapshot" time="3.442" /><testcase classname="tests.test_public_operation_isolation" name="test_explicit_request_context_is_used_without_reloading" time="1.200"><failure message="AssertionError: assert [] == ['catalog', 'query']&#10;  &#10;  Right contains 2 more items, first extra item: 'catalog'&#10;  Use -v to get more diff">tmp_path = WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a6/test_explicit_request_context_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000217EB8969E0&gt;
+
+    def test_explicit_request_context_is_used_without_reloading(tmp_path, monkeypatch):
+        harness = Harness(tmp_path)
+        import fetch_filing
+    
+        context = fetch_filing.RequestContext(
+            harness.config,
+            fetch_filing.load_company_wiki_root(config_path=harness.config),
+        )
+    
+        def forbidden(**kwargs):
+            raise AssertionError("explicit request_context must not reload config")
+    
+        monkeypatch.setattr(fetch_filing, "load_company_wiki_root", forbidden)
+        handle = fetch_filing.resolve_filing(
+            request=_v2_request(), request_context=context, source_ref_v2=True
+        )
+        assert handle["source_ref"]["content_sha256"]
+&gt;       assert harness.operations() == ["catalog", "query"]
+E       AssertionError: assert [] == ['catalog', 'query']
+E         
+E         Right contains 2 more items, first extra item: 'catalog'
+E         Use -v to get more diff
+
+tests\test_public_operation_isolation.py:566: AssertionError</failure></testcase><testcase classname="tests.test_public_operation_isolation" name="test_query_hit_never_imports_a_sibling_company_wiki" time="1.196" /><testcase classname="tests.test_public_operation_isolation" name="test_import_failure_keeps_known_provider_usage" time="3.688" /><testcase classname="tests.test_public_operation_isolation" name="test_unknown_provider_usage_stays_unknown_not_zero" time="3.501" /><testcase classname="tests.test_public_operation_isolation" name="test_invalid_et_stdout_keeps_usage_and_never_invokes_import" time="2.849" /><testcase classname="tests.test_public_operation_isolation" name="test_business_requests_cannot_carry_command_fields" time="1.724" /><testcase classname="tests.test_public_operation_isolation" name="test_unconfigured_operation_is_named_and_never_guessed" time="0.515" /><testcase classname="tests.test_public_operation_isolation" name="test_one_request_resolves_one_connection_snapshot" time="4.049" /><testcase classname="tests.test_public_operation_isolation" name="test_scripts_never_import_a_sibling_implementation" time="0.237" /></testsuite></testsuites>

@@ -46,11 +46,17 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 
 - `scripts/ff_request_context.py`（新增）：`RequestContext(config_path, connection)` 纯值。
 - `scripts/fetch_filing.py`：`resolve_filing` 增加可选 `request_context` / `context_out`；解析连接时生成一个 `RequestContext` 并通过 `context_out` 交给 composition root；`complete_filing_v2` / `_resolve_v2_companion` 增加可选 `request_context`，有则复用同一 connection，无则保持旧加载路径。`main` 用 `context_out` 把同一 context 传给 companion，不提前读配置（保留 FC-802 patched-resolve 行为）。
-- `tools/ci_tests.py`：登记新增隔离测试与 statements 三个测试。
+- `scripts/ff_job_runner.py`：`_run_filing_engine` 用 `context_out` 取回同一 `RequestContext` 并传给 `complete_filing_v2`（仅接线，不改 job 持久化/协议）。
+- `tools/ci_tests.py`：登记新增隔离测试与 statements 三个测试（均在卡片测试入口中点名）。
 
-`scripts/ff_job_runner.py` 未改（不在本卡写集合）。其 `_run_filing_engine` 对不带 companion 的作业只解析一次；若作业携带 companion，仍走 library fallback 再解析一次同一 config，得到相等的 `WikiConnection`（不是不同连接）。列为 ROOT 后续可选接线项，不作为本卡 RED。
+新增覆盖（审查后补）：job+companion 端到端、job engine 单次加载计数、显式 `request_context` 不重载、poison `company_wiki` import 证明；`test_one_request...` 同时断言 companion transport 收到同一 connection 对象，并校验 `fetch_filing.__file__` 与运行时 `SCRIPTS` 一致。
 
-公开 CLI/wire 未变：未新增/删除参数，未改 request/response schema，未改六 operation 名称，未新增业务请求字段。
+公开 CLI/wire 未变：未新增/删除参数，未改 request/response schema，未改六 operation 名称，未新增业务请求字段。`context_out` 只在内存中传递，不进入任何 envelope。
+
+## F5 范围外发现
+
+- 仓库内 `config/company_wiki.json` 仍是 legacy `company_wiki_root` 形态（`ff_company_wiki_connection.py:52-55` 的 `-m company_wiki...` + `:66-69` 的 PYTHONPATH）。本卡验证的是 `connection.commands` 部署形态；生产配置是否迁移由 ROOT/部署 owner 决定，本卡不改生产 config，也不声称生产已隔离。
+- `ff_job_runner.py` 的接线是 5 行 composition-root 调用，未改 job 状态/幂等/重试/费用语义；如 ROOT 认为该文件超出写集合，可回退该 5 行，job+companion 会回到“两次加载同一 config、连接相等”的旧行为（非不同连接）。
 
 ## F4 公开协议
 

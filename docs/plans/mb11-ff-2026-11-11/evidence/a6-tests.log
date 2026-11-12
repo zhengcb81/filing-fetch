@@ -1,0 +1,34 @@
+...............F........                                                 [100%]
+================================== FAILURES ===================================
+___________ test_explicit_request_context_is_used_without_reloading ___________
+
+tmp_path = WindowsPath('C:/Users/郑曾波/Projects/mb11-ff-scratch/pytest/a6/test_explicit_request_context_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000217EB8969E0>
+
+    def test_explicit_request_context_is_used_without_reloading(tmp_path, monkeypatch):
+        harness = Harness(tmp_path)
+        import fetch_filing
+    
+        context = fetch_filing.RequestContext(
+            harness.config,
+            fetch_filing.load_company_wiki_root(config_path=harness.config),
+        )
+    
+        def forbidden(**kwargs):
+            raise AssertionError("explicit request_context must not reload config")
+    
+        monkeypatch.setattr(fetch_filing, "load_company_wiki_root", forbidden)
+        handle = fetch_filing.resolve_filing(
+            request=_v2_request(), request_context=context, source_ref_v2=True
+        )
+        assert handle["source_ref"]["content_sha256"]
+>       assert harness.operations() == ["catalog", "query"]
+E       AssertionError: assert [] == ['catalog', 'query']
+E         
+E         Right contains 2 more items, first extra item: 'catalog'
+E         Use -v to get more diff
+
+tests\test_public_operation_isolation.py:566: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_public_operation_isolation.py::test_explicit_request_context_is_used_without_reloading
+1 failed, 23 passed in 44.73s

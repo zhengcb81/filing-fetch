@@ -490,6 +490,91 @@ def test_job_reuse_runs_through_the_same_connection_without_redownload(tmp_path)
     assert listed["items"][0]["owner_job_id"] == owner_job_id
 
 
+def test_job_companion_runs_through_the_same_connection(tmp_path):
+    harness = Harness(tmp_path)
+    body = {
+        "schema_version": "ff-job/1",
+        "command_id": "mbff-cmd-companion",
+        "kind": "filing.acquire",
+        "idempotency_key": "mbff-idem-companion",
+        "request": _v2_request(companion=_companion()),
+    }
+    submitted = harness.run_json(
+        "ff_job.py",
+        ["--jobs-dir", str(harness.jobs_dir), "submit", "--request-file",
+         harness.request_path(body, "job.json")],
+    )
+    ran = harness.run_json(
+        "ff_job.py",
+        ["--jobs-dir", str(harness.jobs_dir), "run", "--owner-job-id",
+         submitted["owner_job_id"], "--config", str(harness.config),
+         "--timeout-seconds", "30"],
+    )
+    assert ran["job"]["status"] == "succeeded"
+    assert ran["job"]["result"]["download_events"] == 0
+    assert harness.operations() == [
+        "catalog",
+        "query",
+        "query",
+        "et_tool",
+        "transcript_import",
+        "open",
+    ]
+
+
+def test_job_engine_uses_one_connection_snapshot(tmp_path, monkeypatch):
+    harness = Harness(tmp_path)
+    import fetch_filing
+    import ff_job_runner
+
+    original = fetch_filing.load_connection_root
+    loaded = []
+
+    def counting(config_path, *, skill_root):
+        value = original(config_path, skill_root=skill_root)
+        loaded.append(value)
+        return value
+
+    monkeypatch.setattr(fetch_filing, "load_connection_root", counting)
+    envelope, _ = ff_job_runner._run_filing_engine(
+        _v2_request(companion=_companion()),
+        config_path=harness.config,
+        timeout_seconds=30,
+        stats={"calls": 0, "downloads": 0},
+    )
+    assert len(loaded) == 1
+    assert envelope["transcript"]["status"] == "downloaded"
+
+
+def test_explicit_request_context_is_used_without_reloading(tmp_path, monkeypatch):
+    harness = Harness(tmp_path)
+    import fetch_filing
+
+    context = fetch_filing.RequestContext(
+        harness.config,
+        fetch_filing.load_company_wiki_root(config_path=harness.config),
+    )
+
+    def forbidden(**kwargs):
+        raise AssertionError("explicit request_context must not reload config")
+
+    monkeypatch.setattr(fetch_filing, "load_company_wiki_root", forbidden)
+    monkeypatch.setenv("MBFF_CALL_LOG", str(harness.log))
+    monkeypatch.setenv("MBFF_EMPTY_CWD", str(harness.empty_cwd))
+    handle = fetch_filing.resolve_filing(
+        request=_v2_request(), request_context=context, source_ref_v2=True
+    )
+    assert handle["source_ref"]["content_sha256"]
+    assert harness.operations() == ["catalog", "query"]
+
+
+def test_query_hit_never_imports_a_sibling_company_wiki(tmp_path):
+    harness = Harness(tmp_path, poison_company_wiki=True)
+    payload = harness.run_json("fetch_filing.py", harness.filing_arguments(_v2_request()))
+    assert payload["status"] == "source_candidate"
+    assert harness.operations() == ["catalog", "query"]
+
+
 def test_import_failure_keeps_known_provider_usage(tmp_path):
     harness = Harness(tmp_path, import_mode="rejected", et_usage="known")
     request = _v2_request(companion=_companion())
@@ -587,15 +672,31 @@ def test_one_request_resolves_one_connection_snapshot(tmp_path, monkeypatch):
     request_file = harness.request_path(request)
 
     import fetch_filing
+    import transcript_tool_transport
 
+    assert Path(fetch_filing.__file__).resolve() == (SCRIPTS / "fetch_filing.py").resolve()
     original = fetch_filing.load_connection_root
     loads: list[Path] = []
+    loaded_connections = []
 
     def counting(config_path, *, skill_root):
         loads.append(Path(config_path))
-        return original(config_path, skill_root=skill_root)
+        connection = original(config_path, skill_root=skill_root)
+        loaded_connections.append(connection)
+        return connection
+
+    real_transport = transcript_tool_transport.EarningsTranscriptsTransport
+    seen: dict = {}
+
+    class CapturingTransport(real_transport):
+        def __init__(self, **kwargs):
+            seen["wiki_root"] = kwargs.get("wiki_root")
+            super().__init__(**kwargs)
 
     monkeypatch.setattr(fetch_filing, "load_connection_root", counting)
+    monkeypatch.setattr(
+        transcript_tool_transport, "EarningsTranscriptsTransport", CapturingTransport
+    )
     monkeypatch.setattr(sys, "stdin", io.StringIO(""))
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
@@ -604,6 +705,7 @@ def test_one_request_resolves_one_connection_snapshot(tmp_path, monkeypatch):
         )
     assert exit_code == 0, output.getvalue()
     assert len(loads) == 1, f"config loaded {len(loads)} times: {loads}"
+    assert seen["wiki_root"] is loaded_connections[0]
     assert json.loads(output.getvalue())["transcript"]["status"] == "downloaded"
 
 
