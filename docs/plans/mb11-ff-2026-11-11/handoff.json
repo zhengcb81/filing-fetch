@@ -127,6 +127,9 @@
     "scripts/ff_job_runner.py 不在本卡写集合，未改；job+companion 仍每阶段加载一次同一 config，两次得到相等的 WikiConnection（非不同连接），已有用例证明；ROOT 如批准 3 行接线可进一步收敛。",
     "仓库内生产 config/company_wiki.json 仍是 legacy company_wiki_root 形态；本卡只证明 connection.commands 部署形态，未迁移生产配置。",
     "中间提交 c00cfef 曾接线 job engine，复审指出写集合后由 16f3ceb 回退；最终树无 ff_job_runner.py diff。",
+    "runtime4 精确做法：canonical installer 安装到 scratch，测试+fixtures 复制进安装根 tests/，config/company_wiki.json 换成无 commands 的 poison，空 cwd、显式 config、pythonpath=<install>/scripts 运行。",
+    "中间证据 a2/a3/a5/a6/a7/a8/r3/runtime3 仅迭代记录，最终只引 a9/a10/c-runtime4/ci-full-r4。",
+    "scratch 目录 C:/Users/郑曾波/Projects/mb11-ff-scratch/** 为仓外 lane 私有，可安全删除。",
     "远端 GitHub Actions 未核验；作者未合并 main、未修改 ROOT 总 PWF。"
   ],
   "next_root_action": "在集成后的 FF 树运行 python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovider，并按 handoff.md 核对最终 SHA/测试/状态。"

@@ -14,4 +14,4 @@
 - 最终测试（job runner 回退后的最终代码）：新 suite **24 passed**（`evidence/a9-tests.log`）；受影响集（基线 9 文件 + 新测试 + fc802）**195 passed + 6 subtests**（`evidence/a10-tests.log`）。
 - C：canonical installer 安装到 `mb11-ff-scratch/runtime4/skills/filing-fetch`（30 文件，install/check 退出 0，`evidence/install4*.json`）；安装根内复制同一测试+fixtures，把安装根 `config/company_wiki.json` 换成无 commands 的 poison 文件，从空 cwd 以显式 config 运行：**24 passed**（`evidence/c-runtime4-tests.log`）。
 - 完整 CI：首轮 1005 passed / 1 failed（FC-802 提前读 config，已修）；中间轮 1006 passed；最终代码 **1010 passed / 2 skipped / 44 subtests**（`evidence/ci-full-r4.log`）。
-- 状态：A/B 完成；C 已过安装 runtime、受影响集与完整 CI；待最终复审、handoff/review 与推送。中间轮日志（a2/a3/a5/a6/a7/a8/r3/runtime3）保留为迭代证据，不作为最终声明。
+- 状态：A/B/C 完成；终审 PASS_WITH_FINDINGS，R3 两项文档修正已应用；handoff/review 已写；代码 tip 与文档提交随分支推送，待 ROOT 合并。中间轮日志（a2/a3/a5/a6/a7/a8/r3/runtime3）保留为迭代证据，不作为最终声明。

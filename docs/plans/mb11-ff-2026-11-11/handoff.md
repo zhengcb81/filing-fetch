@@ -5,7 +5,7 @@
 - 工区：`C:/Users/郑曾波/Projects/mb11-ff`；分支 `codex/mb11-ff`；目标主线 FF `main`。
 - 实际代码基线：`ac798a250b2310e0c2714053b08246ad94fffd0c`（原仓 main）。
 - 最终代码提交：`16f3ceb2120ce45a222d89eaff38f294f79af8a0`。分支已推 `origin/codex/mb11-ff`（`pushed: true`）。
-- 本文档与 handoff.json/review.md 是最终代码提交之后的文档提交；不追自引用 hash，`documentation_commit` 记 null，实际 tip 以远端分支为准。
+- 本文档与 handoff.json/review.md 所在文档提交随分支一起推送；不追自引用 hash，`documentation_commit` 记 null。代码 tip 为 `16f3ceb`，分支 tip 以远端 `origin/codex/mb11-ff` 为准（推送后即包含本文档）。
 - 最终代码 diff（相对基线，仅允许写集合）：
 
 | 文件 | 变化 |
@@ -84,7 +84,7 @@ python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovi
 
 ## 8. 必须写明的限制 / out-of-scope
 
-1. `ff_job_runner.py` 不在写集合，未改。job+companion 仍按 library fallback 每阶段加载一次同一 config，两次得到相等的 `WikiConnection`（不是不同连接）；已由 `test_job_engine_reloads_equivalent_connection_not_a_different_one` 证明。ROOT 如批准 3 行接线，可进一步收敛为一次加载。
+1. `ff_job_runner.py` 不在写集合，未改；中间提交 `c00cfef` 曾接线 job engine，复审指出写集合后由 `16f3ceb` 回退，最终树无该文件 diff。job+companion 仍按 library fallback 每阶段加载一次同一 config，两次得到相等的 `WikiConnection`（不是不同连接）；已由 `test_job_engine_reloads_equivalent_connection_not_a_different_one` 证明。ROOT 如批准 3 行接线，可进一步收敛为一次加载。
 2. 仓库内生产 `config/company_wiki.json` 仍是 legacy `company_wiki_root` 形态；本卡只证明 `connection.commands` 部署形态，未迁移生产配置，也不声称生产已隔离。
 3. C 阶段精确做法：canonical installer 安装到 scratch；把同一测试文件+fixtures 复制进安装根 `tests/`；`config/company_wiki.json` 换成无 commands 的 poison；空 cwd、显式 config、`pythonpath=<install>/scripts` 运行。
 4. 中间证据 `a2/a3/a5/a6/a7/a8/r3/runtime3` 仅迭代记录，最终只引 `a9/a10/c-runtime4/ci-full-r4`。

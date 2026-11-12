@@ -41,4 +41,4 @@
 - [x] A0 归档与工区建立
 - [x] A 测试（六 operation/ET/statements/job；真实 subprocess、空 cwd、无邻仓 PYTHONPATH）
 - [x] B 修复（一次请求 `RequestContext` 注入；其余边界 `NO_CHANGE_PROVEN`）
-- [x] C 验收、独审、交付（runtime4 24 passed；受影响集 195 passed；完整 CI r4 1010 passed/2 skipped；独审 PASS，handoff/review 已写，分支已推送）
+- [x] C 验收、独审、交付（runtime4 24 passed；受影响集 195 passed；完整 CI r4 1010 passed/2 skipped；独审 PASS，handoff/review 已写，代码 tip 与文档提交随分支推送）
