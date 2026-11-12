@@ -60,8 +60,19 @@
 
 已核对：新 suite 26 passed；a12 197+6；c-runtime5 26；ci-full-r5 1012/2 skipped/44 subtests；W07 main 收据索引 6/6 SHA 匹配；A0 41-case 不覆盖、job reconcile 映射、PWF CLOSED 均已写入；`handoff.json` test_runs 数字正确。修正后仅剩推送动作。
 
+## R5 — 用户“做到清单要求完成”后的 job engine 复核（tip `c870ab7`）
+
+用户要求把“一次请求配置归属”完全闭合。作者将 `scripts/ff_job_runner._run_filing_engine` 接入同一 `RequestContext`（3 行 composition-root 接线，未改 job 持久化/幂等/重试/费用语义），并把测试改为 `test_job_engine_uses_one_connection_snapshot`，断言 job+companion 只加载一次。
+
+复核：
+
+- 新 suite **26 passed**（`a13`）；受影响集 **197 passed + 6 subtests**（`a14`）；runtime6 **26 passed**；完整 CI r6 **1012 passed / 2 skipped / 44 subtests**。
+- `ff_job_runner.py` 最终 diff 为 +3；未改公开 job 协议/状态语义。
+- 写集合扩权来源为用户 2026-11-12 指令，已在 handoff §1/§8 与 `out_of_scope_findings` 注明；ROOT 如认为需另案可回退这 3 行（会回到两次等价加载）。
+- 结论：**PASS**。唯一剩余限制是生产 legacy `config/company_wiki.json` 未迁移（卡片明确不改）与远端 Actions 未核验（非本卡要求）。
+
 ## 最终结论
 
 - 代码/测试/证据：**PASS**（无本卡可行动代码问题）。
-- 交付前文档修正：R3 两项 + R4 三项已完成；推送后 `pushed: true` 成立。
+- 交付前文档修正：R3 两项 + R4 三项 + R5 job engine 复核已完成；推送后 `pushed: true` 成立。
 - 开放项：无本卡 in-scope finding；out-of-scope 见 `handoff.md` §8 与 `handoff.json.out_of_scope_findings`。

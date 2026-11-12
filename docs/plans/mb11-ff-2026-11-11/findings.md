@@ -27,7 +27,7 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 ## F2 与 ACQ-S1/S2/T1 的对应
 
 - ACQ-S1（编排大文件混合 CLI/部署/进程）：结构缺口，本卡不整体搬迁；用隔离测试证明现有接缝足够，避免为框架整齐改写。
-- ACQ-S2：ET launch 仍是 `.py` 路径 + FF `sys.executable`（`transcript_tool_transport.py:717-740`，cwd = tool.parent）。原实现中 `resolve_filing` 与 `_resolve_v2_companion` 各自调用 `load_company_wiki_root`，一次 v2 带 companion 的 CLI 请求会解析两次连接；本卡已把 CLI 收敛为一次 `RequestContext` 注入。job 引擎（`ff_job_runner.py`，写集合外）仍按 library fallback 每阶段加载一次同一 config，得到相等连接（非不同连接，见 F5）。`ff_financial_statements.fetch_statements:161-163` 在 `--config` 缺省时读生产 `config/company_wiki.json`。
+- ACQ-S2：ET launch 仍是 `.py` 路径 + FF `sys.executable`（`transcript_tool_transport.py:717-740`，cwd = tool.parent）。原实现中 `resolve_filing` 与 `_resolve_v2_companion` 各自调用 `load_company_wiki_root`，一次 v2 带 companion 的 CLI 请求会解析两次连接；本卡已把 CLI 与 job engine 都收敛为一次 `RequestContext` 注入。`ff_financial_statements.fetch_statements:161-163` 在 `--config` 缺省时读生产 `config/company_wiki.json`。
 - ACQ-T1：`test_decoupled_connection.py` 只在映射/缺项层枚举六 operation，且第 3 例 monkeypatch 当前进程私有方法；没有"真实 CLI 子进程 + 六 operation 各自命令 + 无邻仓环境"的证明。
 
 ## F3 A/B 阶段 RED / GREEN 记录
@@ -36,16 +36,17 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 
 | 行为 | 初始结果 | 根因 / 处理 | 证据 |
 |---|---|---|---|
-| 六 operation 各自只走自己的 command；query hit 不启动 provider/ensure；miss→prepare→query 最多一次；单次 ensure；job reuse 不重下 | GREEN（无需改） | 现有 `WikiConnection.command_for` + `_run_bounded_json` 已满足；`NO_CHANGE_PROVEN`；含 prepare 后仍 miss 不再 ensure 的负例 | `a11-tests.log` 26 passed；`a12-tests.log` |
-| statements 只走 `financial_statements`；complete/partial/not_found/unavailable/request_error/bad-version 语义；16KB 诊断不遮 stdout | GREEN（无需改） | `ff_financial_statements` 只调公开 command；`_valid_error_envelope` 透传；`ff_process_transport` 有界 stderr | `a11-tests.log` |
-| ET 独立 command/interpreter/cwd；legacy `.py` 路径兼容；import 失败保留已知 usage；unknown 不当零；坏 stdout 不触发 import | GREEN（无需改） | `transcript_tool_transport` 用 `sys.executable + tool path`，cwd=tool.parent；`_last_provider_usage` 在失败投影中保留 | `a11-tests.log` |
-| 业务请求不能携带任意命令字段 | GREEN（无需改） | `filing_contracts.validate_request` / `ff_financial_statements.validate_request` / `ff_job_contracts.validate_submit_body` 白名单拒绝 | `a11-tests.log` |
-| CLI 一次请求只解析一次 deployment config（job 见 F5） | **RED**：CLI 带 companion 时 `load_connection_root` 被调用 2 次（filing 一次、companion 一次） | 新增纯值 `RequestContext`；`fetch_filing.resolve_filing` 解析一次并通过 `context_out` 交给 composition root，`main` 把同一 context 注入 `complete_filing_v2`。默认参数保留旧 library 行为 | `a1-tests.log` 失败断言 `config loaded 2 times`；`a11-tests.log` 26 passed（含同一 connection 对象断言） |
+| 六 operation 各自只走自己的 command；query hit 不启动 provider/ensure；miss→prepare→query 最多一次；单次 ensure；job reuse 不重下 | GREEN（无需改） | 现有 `WikiConnection.command_for` + `_run_bounded_json` 已满足；`NO_CHANGE_PROVEN`；含 prepare 后仍 miss 不再 ensure 的负例 | `a13-tests.log` 26 passed；`a14-tests.log` |
+| statements 只走 `financial_statements`；complete/partial/not_found/unavailable/request_error/bad-version 语义；16KB 诊断不遮 stdout | GREEN（无需改） | `ff_financial_statements` 只调公开 command；`_valid_error_envelope` 透传；`ff_process_transport` 有界 stderr | `a13-tests.log` |
+| ET 独立 command/interpreter/cwd；legacy `.py` 路径兼容；import 失败保留已知 usage；unknown 不当零；坏 stdout 不触发 import | GREEN（无需改） | `transcript_tool_transport` 用 `sys.executable + tool path`，cwd=tool.parent；`_last_provider_usage` 在失败投影中保留 | `a13-tests.log` |
+| 业务请求不能携带任意命令字段 | GREEN（无需改） | `filing_contracts.validate_request` / `ff_financial_statements.validate_request` / `ff_job_contracts.validate_submit_body` 白名单拒绝 | `a13-tests.log` |
+| 一次请求只解析一次 deployment config（CLI + job） | **RED**：CLI 带 companion 时 `load_connection_root` 被调用 2 次（filing 一次、companion 一次）；job engine 同样 | 新增纯值 `RequestContext`；`fetch_filing.resolve_filing` 解析一次并通过 `context_out` 交给 composition root，`main`/`ff_job_runner._run_filing_engine` 把同一 context 注入 `complete_filing_v2`。默认参数保留旧 library 行为 | `a1-tests.log` 失败断言 `config loaded 2 times`；`a13-tests.log` 26 passed（CLI + job 均 1 次加载/同一 connection 对象断言） |
 
 代码改动（最终）：
 
 - `scripts/ff_request_context.py`（新增）：`RequestContext(config_path, connection)` 纯值。
 - `scripts/fetch_filing.py`：`resolve_filing` 增加可选 `request_context` / `context_out`；解析连接时生成一个 `RequestContext` 并通过 `context_out` 交给 composition root；`complete_filing_v2` / `_resolve_v2_companion` 增加可选 `request_context`，有则复用同一 connection（context 优先于同时传入的 `config_path`），无则保持旧加载路径。`main` 用 `context_out` 把同一 context 传给 companion，不提前读配置（保留 FC-802 patched-resolve 行为）。
+- `scripts/ff_job_runner.py`：`_run_filing_engine` 用 `context_out` 取回同一 `RequestContext` 并传给 `complete_filing_v2`（3 行 composition-root 接线；按用户 2026-11-12 指令为闭合“一次请求配置归属”，未改 job 持久化/幂等/重试/费用语义）。
 - `tools/ci_tests.py`：登记新增隔离测试与 statements 三个测试（均在卡片测试入口中点名）。
 
 新增覆盖（审查后补）：job+companion 端到端、job engine 两次加载得到相等连接（非不同连接）、显式 `request_context` 不重载、poison `company_wiki` import 证明、prepare 后仍 miss 不再 ensure、公开样例字段校验；`test_one_request...` 同时断言 companion transport 收到同一 connection 对象，并校验 `fetch_filing.__file__` 与运行时 `SCRIPTS` 一致。
@@ -57,7 +58,7 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 ## F5 范围外发现
 
 - 仓库内 `config/company_wiki.json` 仍是 legacy `company_wiki_root` 形态（`ff_company_wiki_connection.py:52-55` 的 `-m company_wiki...` + `:66-69` 的 PYTHONPATH）。本卡验证的是 `connection.commands` 部署形态；生产配置是否迁移由 ROOT/部署 owner 决定，本卡不改生产 config，也不声称生产已隔离。
-- `scripts/ff_job_runner.py` 不在本卡写集合，未改。其 `_run_filing_engine` 对带 companion 的作业仍按 library fallback 每阶段加载一次同一 config；两次得到相等的 `WikiConnection`（不是不同连接），已由 `test_job_engine_reloads_equivalent_connection_not_a_different_one` 证明。若 ROOT 批准 3 行接线，可进一步收敛为一次加载；本卡不擅自扩权。
+- `scripts/ff_job_runner.py` 原不在卡片写集合；按用户 2026-11-12 “做到清单要求完成”的指令，增加 3 行 composition-root 接线以闭合“一次请求配置归属”。未改 job 持久化/幂等/重试/费用语义，未改公开 job 协议。`test_job_engine_uses_one_connection_snapshot` 证明 job+companion 只加载一次。handoff 已把该文件列入 changed_paths 并注明扩权来源。
 
 ## F4 公开协议
 

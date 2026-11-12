@@ -41,8 +41,8 @@
 - [x] A0 归档与工区建立
 - [x] A 测试（六 operation/ET/statements/job；真实 subprocess、空 cwd、无邻仓 PYTHONPATH）
 - [x] B 修复（一次请求 `RequestContext` 注入；其余边界 `NO_CHANGE_PROVEN`）
-- [x] C 验收、独审、交付（runtime5 26 passed；受影响集 197 passed；完整 CI r5 1012 passed/2 skipped；独审 PASS_WITH_FINDINGS 已闭环，handoff/review/evidence index 已写，代码 tip 与文档提交随分支推送）
+- [x] C 验收、独审、交付（runtime6 26 passed；受影响集 197 passed；完整 CI r6 1012 passed/2 skipped；独审 PASS_WITH_FINDINGS 已闭环，handoff/review/evidence index 已写，代码 tip 与文档提交随分支推送）
 
 ## Status
 
-CLOSED（2026-11-12）。代码/测试 tip `e1c4be2`；文档提交随 `codex/mb11-ff` 分支推送。
+CLOSED（2026-11-12）。代码/测试 tip `c870ab7`；文档提交随 `codex/mb11-ff` 分支推送。
