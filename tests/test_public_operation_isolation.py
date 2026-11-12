@@ -490,7 +490,7 @@ def test_job_reuse_runs_through_the_same_connection_without_redownload(tmp_path)
     assert listed["items"][0]["owner_job_id"] == owner_job_id
 
 
-def test_job_companion_runs_through_the_same_connection(tmp_path):
+def test_job_companion_runs_end_to_end(tmp_path):
     harness = Harness(tmp_path)
     body = {
         "schema_version": "ff-job/1",
@@ -522,7 +522,7 @@ def test_job_companion_runs_through_the_same_connection(tmp_path):
     ]
 
 
-def test_job_engine_uses_one_connection_snapshot(tmp_path, monkeypatch):
+def test_job_engine_reloads_equivalent_connection_not_a_different_one(tmp_path, monkeypatch):
     harness = Harness(tmp_path)
     import fetch_filing
     import ff_job_runner
@@ -542,7 +542,11 @@ def test_job_engine_uses_one_connection_snapshot(tmp_path, monkeypatch):
         timeout_seconds=30,
         stats={"calls": 0, "downloads": 0},
     )
-    assert len(loaded) == 1
+    # ff_job_runner.py is outside this card's write set: the job engine keeps
+    # the library fallback (one load per stage) but both loads must describe
+    # the same deployment config, never two different connections.
+    assert len(loaded) == 2
+    assert loaded[0] == loaded[1]
     assert envelope["transcript"]["status"] == "downloaded"
 
 
