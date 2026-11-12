@@ -27,7 +27,7 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 ## F2 与 ACQ-S1/S2/T1 的对应
 
 - ACQ-S1（编排大文件混合 CLI/部署/进程）：结构缺口，本卡不整体搬迁；用隔离测试证明现有接缝足够，避免为框架整齐改写。
-- ACQ-S2：ET launch 仍是 `.py` 路径 + FF `sys.executable`（`transcript_tool_transport.py:717-740`，cwd = tool.parent）；`resolve_filing` 与 `complete_filing_v2._resolve_v2_companion` **各自**调用 `load_company_wiki_root`（:1324、:1647），一次 v2 带 companion 的请求会解析两次连接、得到两个 `WikiConnection` 对象。这是"一次请求配置归属"的真实可测风险（结构缺口，尚非业务失败）。`ff_financial_statements.fetch_statements:161-163` 在 `--config` 缺省时读生产 `config/company_wiki.json`。
+- ACQ-S2：ET launch 仍是 `.py` 路径 + FF `sys.executable`（`transcript_tool_transport.py:717-740`，cwd = tool.parent）。原实现中 `resolve_filing` 与 `_resolve_v2_companion` 各自调用 `load_company_wiki_root`，一次 v2 带 companion 的 CLI 请求会解析两次连接；本卡已把 CLI 收敛为一次 `RequestContext` 注入。job 引擎（`ff_job_runner.py`，写集合外）仍按 library fallback 每阶段加载一次同一 config，得到相等连接（非不同连接，见 F5）。`ff_financial_statements.fetch_statements:161-163` 在 `--config` 缺省时读生产 `config/company_wiki.json`。
 - ACQ-T1：`test_decoupled_connection.py` 只在映射/缺项层枚举六 operation，且第 3 例 monkeypatch 当前进程私有方法；没有"真实 CLI 子进程 + 六 operation 各自命令 + 无邻仓环境"的证明。
 
 ## F3 A/B 阶段 RED / GREEN 记录
@@ -40,7 +40,7 @@ canonical 安装器 `tools/sync_installs_b3.py` 只安装 `SKILL.md`、`CHANGELO
 | statements 只走 `financial_statements`；complete/partial/not_found/unavailable/request_error/bad-version 语义；16KB 诊断不遮 stdout | GREEN（无需改） | `ff_financial_statements` 只调公开 command；`_valid_error_envelope` 透传；`ff_process_transport` 有界 stderr | `a3-tests.log` |
 | ET 独立 command/interpreter/cwd；legacy `.py` 路径兼容；import 失败保留已知 usage；unknown 不当零；坏 stdout 不触发 import | GREEN（无需改） | `transcript_tool_transport` 用 `sys.executable + tool path`，cwd=tool.parent；`_last_provider_usage` 在失败投影中保留 | `a3-tests.log` |
 | 业务请求不能携带任意命令字段 | GREEN（无需改） | `filing_contracts.validate_request` / `ff_financial_statements.validate_request` / `ff_job_contracts.validate_submit_body` 白名单拒绝 | `a3-tests.log` |
-| 一次请求只解析一次 deployment config | **RED**：CLI 带 companion 时 `load_connection_root` 被调用 2 次（filing 一次、companion 一次） | 新增纯值 `RequestContext`；`fetch_filing.resolve_filing` 解析一次并通过 `context_out` 交给 composition root，`main` 把同一 context 注入 `complete_filing_v2`。默认参数保留旧 library 行为 | `a1-tests.log` 失败断言 `config loaded 2 times`；`a9-tests.log` 24 passed（含同一 connection 对象断言） |
+| CLI 一次请求只解析一次 deployment config（job 见 F5） | **RED**：CLI 带 companion 时 `load_connection_root` 被调用 2 次（filing 一次、companion 一次） | 新增纯值 `RequestContext`；`fetch_filing.resolve_filing` 解析一次并通过 `context_out` 交给 composition root，`main` 把同一 context 注入 `complete_filing_v2`。默认参数保留旧 library 行为 | `a1-tests.log` 失败断言 `config loaded 2 times`；`a9-tests.log` 24 passed（含同一 connection 对象断言） |
 
 代码改动（最终）：
 

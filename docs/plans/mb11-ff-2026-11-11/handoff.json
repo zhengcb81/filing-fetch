@@ -1,0 +1,133 @@
+{
+  "schema_version": "module-boundary-handoff/1",
+  "lane": "MB-FF",
+  "status": "REVIEWED",
+  "repository_root": "C:/Users/郑曾波/Projects/mb11-ff",
+  "base_commit": "ac798a250b2310e0c2714053b08246ad94fffd0c",
+  "commit": "16f3ceb2120ce45a222d89eaff38f294f79af8a0",
+  "documentation_commit": null,
+  "branch": "codex/mb11-ff",
+  "target_branch": "main",
+  "pushed": true,
+  "changed_paths": [
+    "scripts/fetch_filing.py",
+    "scripts/ff_request_context.py",
+    "tests/test_public_operation_isolation.py",
+    "tests/fixtures/public_operation_isolation/README.md",
+    "tests/fixtures/public_operation_isolation/independent_service.py",
+    "tests/fixtures/public_operation_isolation/transcript_tool.py",
+    "tools/ci_tests.py",
+    "docs/plans/mb11-ff-2026-11-11/"
+  ],
+  "requirements": [
+    {
+      "id": "FF-01",
+      "result": "PASS",
+      "red_evidence": "NO_CHANGE_PROVEN: 现有 WikiConnection.command_for + bounded transport 已满足；真实 CLI 子进程、空 cwd、无邻仓 PYTHONPATH、显式 fixture command 下六 operation/query hit/miss/ensure/job reuse 全部通过。",
+      "green_evidence": "tests/test_public_operation_isolation.py 24 passed; evidence/a9-tests.log; evidence/a10-tests.log"
+    },
+    {
+      "id": "FF-02",
+      "result": "PASS",
+      "red_evidence": "CLI v2 带 companion 时 load_connection_root 被调用 2 次；evidence/a1-tests.log 失败断言 'config loaded 2 times'。",
+      "green_evidence": "RequestContext 注入后 1 次加载，且 companion transport 收到同一 connection 对象；evidence/a9-tests.log"
+    },
+    {
+      "id": "FF-03",
+      "result": "PASS",
+      "red_evidence": "NO_CHANGE_PROVEN: transcript_tool_transport 以 sys.executable + tool path 启动，cwd=tool.parent；usage 在 import/坏 stdout 失败投影中保留，unknown 不为零。",
+      "green_evidence": "tests/test_public_operation_isolation.py ET/usage 用例; evidence/a9-tests.log"
+    },
+    {
+      "id": "FF-04",
+      "result": "PASS",
+      "red_evidence": "NO_CHANGE_PROVEN: ff_financial_statements 只走 financial_statements command；request 白名单无命令字段；错误版本/请求拒绝保持既有语义。",
+      "green_evidence": "statements 用例 + evidence/a9-tests.log; tests/financial_statements/* 全绿"
+    },
+    {
+      "id": "FF-05",
+      "result": "PASS",
+      "red_evidence": "NO_CHANGE_PROVEN: 三个公开 validator 白名单拒绝 command/cwd 等未知字段。",
+      "green_evidence": "test_business_requests_cannot_carry_command_fields; evidence/a9-tests.log"
+    },
+    {
+      "id": "FF-06",
+      "result": "PASS",
+      "red_evidence": "真实交付 runtime 需在无邻仓/无生产 config 下运行。",
+      "green_evidence": "canonical installer runtime4 + poison config + 空 cwd: 24 passed; evidence/c-runtime4-tests.log"
+    }
+  ],
+  "public_contract_changes": [],
+  "test_runs": [
+    {
+      "command": "python -B -m pytest tests/test_decoupled_connection.py tests/test_source_ref_v2_db_query.py tests/test_ff_job_facade.py tests/test_transcript_companion_transport.py tests/test_transcript_owner_budget.py tests/test_failure_usage_continuity.py tests/financial_statements/test_fetch_statements.py tests/financial_statements/test_fetch_statements_subprocess.py tests/financial_statements/test_layer_boundary.py -q -p no:cacheprovider",
+      "exit_code": 0,
+      "passed": 164,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 19.79,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/baseline-tests.log"
+    },
+    {
+      "command": "python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovider",
+      "exit_code": 0,
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 31.61,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/a9-tests.log"
+    },
+    {
+      "command": "python -B -m pytest <baseline 9 files> tests/test_public_operation_isolation.py tests/test_fc802_gap_orchestration.py -q -p no:cacheprovider",
+      "exit_code": 0,
+      "passed": 195,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 48.6,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/a10-tests.log"
+    },
+    {
+      "command": "python tools/ci_tests.py",
+      "exit_code": 0,
+      "passed": 1010,
+      "failed": 0,
+      "skipped": 2,
+      "seconds": 154.09,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/ci-full-r4.log"
+    },
+    {
+      "command": "python tools/sync_installs_b3.py --install/--check --dest <scratch>/skills --json",
+      "exit_code": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 0.0,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/install4.json; install4-check.json"
+    },
+    {
+      "command": "python -B -m pytest <installed-root>/tests/test_public_operation_isolation.py -c <scratch>/pytest-runtime.ini -q -p no:cacheprovider",
+      "exit_code": 0,
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 32.23,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/c-runtime4-tests.log"
+    }
+  ],
+  "independent_review": {
+    "reviewer": "agent-d9d86973-09d1-4483-87dd-c8a15732311c",
+    "reviewed_code_commit": "16f3ceb2120ce45a222d89eaff38f294f79af8a0",
+    "report": "review.md",
+    "open_in_scope_findings": []
+  },
+  "environment_restored": true,
+  "network_calls": 0,
+  "model_calls": 0,
+  "out_of_scope_findings": [
+    "scripts/ff_job_runner.py 不在本卡写集合，未改；job+companion 仍每阶段加载一次同一 config，两次得到相等的 WikiConnection（非不同连接），已有用例证明；ROOT 如批准 3 行接线可进一步收敛。",
+    "仓库内生产 config/company_wiki.json 仍是 legacy company_wiki_root 形态；本卡只证明 connection.commands 部署形态，未迁移生产配置。",
+    "中间提交 c00cfef 曾接线 job engine，复审指出写集合后由 16f3ceb 回退；最终树无 ff_job_runner.py diff。",
+    "远端 GitHub Actions 未核验；作者未合并 main、未修改 ROOT 总 PWF。"
+  ],
+  "next_root_action": "在集成后的 FF 树运行 python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovider，并按 handoff.md 核对最终 SHA/测试/状态。"
+}

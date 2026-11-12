@@ -13,5 +13,5 @@
 - 独立审查第一轮（tip `652478f`）PASS_WITH_FINDINGS：指出 job+companion 双载、C 阶段 import 可能来自 checkout、缺少 identity/poison/显式 context 用例、progress 数字过期等。已修复：`test_one_request...` 断言 companion transport 收到同一 connection 对象并校验 `fetch_filing.__file__`；新增 job+companion、job engine 等价连接、显式 `request_context`、poison import 四个用例；C 改为把同一测试文件+fixtures 复制到安装根内运行（`ROOT` 即安装根），不再依赖 env override。job runner 的 3 行接线因写集合未获 ROOT 扩权，已回退并列入 out-of-scope。
 - 最终测试（job runner 回退后的最终代码）：新 suite **24 passed**（`evidence/a9-tests.log`）；受影响集（基线 9 文件 + 新测试 + fc802）**195 passed + 6 subtests**（`evidence/a10-tests.log`）。
 - C：canonical installer 安装到 `mb11-ff-scratch/runtime4/skills/filing-fetch`（30 文件，install/check 退出 0，`evidence/install4*.json`）；安装根内复制同一测试+fixtures，把安装根 `config/company_wiki.json` 换成无 commands 的 poison 文件，从空 cwd 以显式 config 运行：**24 passed**（`evidence/c-runtime4-tests.log`）。
-- 完整 CI：首轮 1005 passed / 1 failed（FC-802 提前读 config，已修）；中间轮 1006/1010 passed；最终代码 **1010 passed / 2 skipped / 44 subtests**（`evidence/ci-full-r4.log`）。
+- 完整 CI：首轮 1005 passed / 1 failed（FC-802 提前读 config，已修）；中间轮 1006 passed；最终代码 **1010 passed / 2 skipped / 44 subtests**（`evidence/ci-full-r4.log`）。
 - 状态：A/B 完成；C 已过安装 runtime、受影响集与完整 CI；待最终复审、handoff/review 与推送。中间轮日志（a2/a3/a5/a6/a7/a8/r3/runtime3）保留为迭代证据，不作为最终声明。
