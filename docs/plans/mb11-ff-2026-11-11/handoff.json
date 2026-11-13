@@ -134,7 +134,7 @@
     "scratch 目录 C:/Users/郑曾波/Projects/mb11-ff-scratch/** 为仓外 lane 私有，可安全删除；测试/恢复索引见 docs/plans/mb11-ff-2026-11-11/evidence/INDEX.md。",
     "远端 GitHub Actions 未核验；作者未合并 main、未修改 ROOT 总 PWF。"
   ],
-  "next_root_action": "none; FF integration and push verified",
+  "next_root_action": "none; MB-FF merged, pushed, PWF updated, dedicated worktrees and documented scratch reclaimed",
   "root_integration": {
     "date": "2026-11-13",
     "mainline_branch": "main",
@@ -168,6 +168,14 @@
     "note": "No production configuration, source files, acquisition data, or API key was read or changed.",
     "code_integration_commit": "41acdc8ea991d0d0b60037ef253c5b16c9492195",
     "integration_push_verified_ref": "41acdc8ea991d0d0b60037ef253c5b16c9492195",
-    "receipt_commit": "recorded by the subsequent PWF commit; no self-referential hash"
+    "receipt_commit": "recorded by the subsequent PWF commit; no self-referential hash",
+    "delivery_worktree_removed": true,
+    "integration_worktree_removed": true,
+    "scratch_root_removed": true,
+    "scratch_root_cleanup": {
+      "files": 5030,
+      "bytes": 18119347,
+      "scope": "pytest/review/runtime subdirectories documented in evidence/INDEX.md"
+    }
   }
 }

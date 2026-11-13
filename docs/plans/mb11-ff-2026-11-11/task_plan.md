@@ -58,3 +58,11 @@ CLOSED（2026-11-12）。代码/测试 tip `c870ab7`；文档提交随 `codex/mb
 ## Next Step
 
 无；MB-FF 已并入主线并推送。
+
+
+## ROOT 清理收尾（2026-11-13）
+
+- [x] 删除 handoff 已确认可重建的 MB-FF 测试 scratch 根。
+- [x] 删除两处 clean 专用 worktree，保留交付分支。
+- [x] 保留所有最终日志、manifest、API key 文件和业务作业数据。
+- [x] 无下一步。

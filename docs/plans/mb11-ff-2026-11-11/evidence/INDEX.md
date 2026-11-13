@@ -39,6 +39,6 @@
 ## 恢复状态
 
 - 仓内工作树最终 clean；未修改生产 `config/company_wiki.json`、`config/FMP_API_KEY.txt`、`.ff_jobs/**`、`.mimosa/**`、`.workbuddy-ai/**`、CWP/ET/SID/Dayu 源码、全局 skill。
-- 测试 scratch：`C:/Users/郑曾波/Projects/mb11-ff-scratch/**`（仓外，lane 私有，可删除）。
+- 测试 scratch：C:/Users/郑曾波/Projects/mb11-ff-scratch/** 已于2026-11-13验收后回收（5,030文件/18,119,347字节）；仓内索引与最终日志保留。
 - 真实网络/下载/收费调用：0；FF 产品模型调用：0。独立审查是 harness agent，不是 FF 产品调用。
 - A0 归档为只读复制；未删除/重置旧工区、分支或未提交文件。

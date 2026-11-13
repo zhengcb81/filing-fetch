@@ -106,3 +106,10 @@ python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovi
 - ROOT 在真实主线运行隔离套件：26 passed / 0 failed / 0 skipped，25.57s；交付分支完整 CI 仍为 1012 passed / 2 skipped（161.96s），详见 evidence/ci-full-r6.log。
 - 旧 §7 “作者未合并 main / ROOT 下一步运行隔离套件”是交付时状态，现由本节和 handoff.json.root_integration 更新为已完成。
 - 原仓 .ff_jobs/、.mimosa/、.workbuddy-ai/ 与 config/FMP_API_KEY.txt 保留；未读取密钥、未改生产配置或原始资料。
+
+
+## 10. 临时工区回收（2026-11-13）
+
+- MB-FF 专用交付 worktree 与 ROOT 集成 worktree 均已确认 clean 后回收；Git 分支及远端证据保留。
+- handoff 指定的仓外 scratch 根 mb11-ff-scratch 已删除。删除前确认只包含 pytest、review1–5、runtime1–6 的 lane 测试产物，共 5,030 个文件、18,119,347 字节；测试与审查日志在仓内 evidence 中保留，可按索引重建。
+- 原仓 .ff_jobs、配置密钥路径、.mimosa 与 .workbuddy-ai 未动；密钥未读取。无其他清理。

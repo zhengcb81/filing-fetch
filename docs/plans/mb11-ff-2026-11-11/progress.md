@@ -25,3 +25,10 @@
 - 在主线实际运行 tests/test_public_operation_isolation.py：26 passed / 0 failed / 0 skipped，25.57 秒；完整交付 CI 收据仍为 1012 passed / 2 skipped。
 - 原仓 .ff_jobs/、.mimosa/、.workbuddy-ai/、config/FMP_API_KEY.txt 均保留且未打开密钥内容。
 - 本条收据与对应 handoff.json/handoff.md 一起作为主线 PWF 更新提交。
+
+
+## ROOT 临时产物回收（2026-11-13）
+
+- 已删除经 handoff 明确归属本 lane 的 mb11-ff-scratch 测试安装目录：5,030 files / 18,119,347 bytes。
+- 本轮 FF delivery/integration 两个 clean worktree 已回收；分支保留。
+- .ff_jobs、.mimosa、.workbuddy-ai 与 API key 文件路径保留，未读取密钥内容。
