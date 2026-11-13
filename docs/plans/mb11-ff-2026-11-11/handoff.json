@@ -134,5 +134,40 @@
     "scratch 目录 C:/Users/郑曾波/Projects/mb11-ff-scratch/** 为仓外 lane 私有，可安全删除；测试/恢复索引见 docs/plans/mb11-ff-2026-11-11/evidence/INDEX.md。",
     "远端 GitHub Actions 未核验；作者未合并 main、未修改 ROOT 总 PWF。"
   ],
-  "next_root_action": "在集成后的 FF 树运行 python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovider，并按 handoff.md 核对最终 SHA/测试/状态。"
+  "next_root_action": "none; FF integration and push verified",
+  "root_integration": {
+    "date": "2026-11-13",
+    "mainline_branch": "main",
+    "delivery_code_commit": "c870ab78f14c4f7d458de87e907e311e7fc5eb5a",
+    "mainline_fast_forwarded": true,
+    "remote_push_verified": true,
+    "runtime_test": {
+      "command": "C:/Miniconda/python.exe -B -X utf8 -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovider",
+      "exit_code": 0,
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 25.57,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/root-integration-20261113.log"
+    },
+    "full_card_ci": {
+      "passed": 1012,
+      "failed": 0,
+      "skipped": 2,
+      "seconds": 161.96,
+      "log": "docs/plans/mb11-ff-2026-11-11/evidence/ci-full-r6.log",
+      "phase": "delivery branch; same source code tip c870ab7"
+    },
+    "independent_review": "PASS on delivery code commit c870ab78f14c4f7d458de87e907e311e7fc5eb5a",
+    "preserved_untracked": [
+      ".ff_jobs/",
+      ".mimosa/",
+      ".workbuddy-ai/",
+      "config/FMP_API_KEY.txt"
+    ],
+    "note": "No production configuration, source files, acquisition data, or API key was read or changed.",
+    "code_integration_commit": "41acdc8ea991d0d0b60037ef253c5b16c9492195",
+    "integration_push_verified_ref": "41acdc8ea991d0d0b60037ef253c5b16c9492195",
+    "receipt_commit": "recorded by the subsequent PWF commit; no self-referential hash"
+  }
 }

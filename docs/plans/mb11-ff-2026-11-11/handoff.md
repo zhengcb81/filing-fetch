@@ -98,3 +98,11 @@ python -B -m pytest tests/test_public_operation_isolation.py -q -p no:cacheprovi
 4. 中间证据 `a1/a2/a3/a5/a6/a7/a8/a9/a10/a11/a12/r2/r3/r4/r5/runtime*/install*` 仅迭代记录，最终只引 `a13/a14/c-runtime6/ci-full-r6/install6`；`a1` 的失败断言与 `a6` 的断言错误保留原文，不裁失败段。
 5. `context_out` 不落 wire；`complete_filing_v2` 同时收 `config_path`+`request_context` 时 context 优先。
 6. 分支已推送；handoff/review 为文档提交。scratch 目录归本 lane，可删除；测试/恢复索引见 `evidence/INDEX.md`。
+
+
+## 9. ROOT 主线并入记录（2026-11-13）
+
+- filing-fetch 主线已快进并推送到 41acdc8ea991d0d0b60037ef253c5b16c9492195；交付代码 c870ab78 及之后的 PWF 文档提交均在该主线历史中。
+- ROOT 在真实主线运行隔离套件：26 passed / 0 failed / 0 skipped，25.57s；交付分支完整 CI 仍为 1012 passed / 2 skipped（161.96s），详见 evidence/ci-full-r6.log。
+- 旧 §7 “作者未合并 main / ROOT 下一步运行隔离套件”是交付时状态，现由本节和 handoff.json.root_integration 更新为已完成。
+- 原仓 .ff_jobs/、.mimosa/、.workbuddy-ai/ 与 config/FMP_API_KEY.txt 保留；未读取密钥、未改生产配置或原始资料。
