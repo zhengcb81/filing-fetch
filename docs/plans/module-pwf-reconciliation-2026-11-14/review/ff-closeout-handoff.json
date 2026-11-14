@@ -10,12 +10,12 @@
   },
   "final": {
     "branch": "main",
-    "head": "PENDING_REVIEW_COMMIT",
-    "remote_head": "PENDING_REVIEW_COMMIT"
+    "head": "27babced4ab1e78fd0778b424c2535c343830b32",
+    "remote_head": "27babced4ab1e78fd0778b424c2535c343830b32"
   },
   "dispositions": [
     {"kind": "branch", "path": "codex/ff-job-facade-01", "status": "EVIDENCE_KEEP", "reason": "ff-job/1 交付分支：特性代码已被主线吸收——scripts/ff_job.py 与 main 逐字节一致（diff 为空），contracts/runner/store 由主线 57351d0/7d8392e 重落并经 MB-FF c870ab7 演化超前。分支唯一内容是 .planning/ff-job-facade-01/ lane 收据（handoff 绑 release=eaf8a5e、复测 0 OPEN P1/P2、P3 F-08 记录、验收 drill 证据）；2026-11-10 reflog reset 到 origin/main（f65e6ca）后这些收据不在主线历史，故保留分支作证据。", "evidence": "git diff 154c292 main -- scripts/ff_job.py 为空；git cherry main codex/ff-job-facade-01 七个提交均不在主线（SHA 不同、内容被主线演化吸收）；154c292 提交信息记录 mainline ff 与 release=eaf8a5e；reflog main@{2026-11-10} reset: moving to origin/main；git grep F-08 154c292 -- .planning/ff-job-facade-01 命中 handoff.json:149"},
-    {"kind": "branch", "path": "codex/dashboard-ff-b34-candidate", "status": "EVIDENCE_KEEP", "reason": "B34 SourceRef 元数据候选分支：修复已由主线吸收——5ec54e0（require explicit mid-import public lookup state）本身在 main 历史中；53285c2（preserve unknown publication on logical SourceRef candidates）的全部改动行是主线 d563b63 的子集且主线扩展了参数化测试。唯一内容 = 9be5587 的 .planning/dashboard-B34-source-candidate/ 收据（handoff.md/json + evidence manifest，9 文件 +206 行）。", "evidence": "git merge-base --is-ancestor 5ec54e0 main => true；git cherry main 9be5587 仅余 53285c2/9be5587；53285c2 vs d563b63 sorted-line diff 无 '<' 行（子集关系）；git show 9be5587 --stat"},
+    {"kind": "branch", "path": "codex/dashboard-ff-b34-candidate", "status": "EVIDENCE_KEEP", "reason": "B34 SourceRef 元数据候选分支：修复已由主线吸收——5ec54e0（require explicit mid-import public lookup state）本身在 main 历史中；53285c2（preserve unknown publication on logical SourceRef candidates）的全部改动行是主线 d563b63 的子集且主线扩展了参数化测试。唯一内容 = 9be5587 的 docs/handoffs/dashboard-B34-source-candidate/ 收据（handoff.md/json + evidence manifest，9 文件 +206 行）。", "evidence": "git merge-base --is-ancestor 5ec54e0 main => true；git cherry main 9be5587 仅余 53285c2/9be5587；53285c2 vs d563b63 sorted-line diff 无 '<' 行（子集关系）；git ls-tree 9be5587 证实 docs/handoffs/dashboard-B34-source-candidate/ 九个文件"},
     {"kind": "branch", "path": "codex/transcript-companion", "status": "EVIDENCE_KEEP", "reason": "旧 transcript companion 原型（2026-09 WIP）：与当前 v2/DU11 处理比较后确认被取代——原型的 scripts/transcript_companion.py（旧 schema/路径假设：Company-wiki owns identity, rights, resolution and canonical writes）与主线版本约 758 行差异（193+/565-）；主线另有 transcript_reuse_selection.py（DU11 复用选择）与 transcript_tool_transport.py（DU11 子进程传输）两模块；fetch_filing.py 的 companion 挂钩两版各 1 处、无缺失集成。按 10-04 PWF 既定判断保留作历史材料，不适配、不整体 cherry-pick。", "evidence": "git diff 29085f7 main --stat -- scripts/transcript_companion.py（193+/565-）；两版 docstring 对比（prototype: Exact-period transcript companion...；main: Exact-period transcript orchestration with a replaceable transport）；PLANNING_STATUS.md 历史节 2026-10-04 原文"},
     {"kind": "worktree", "path": "C:/Users/郑曾波/Projects/filing-fetch", "status": "ACTIVE_KEEP", "reason": "本仓唯一主检出与 FF owner 工作区；untracked 的 .ff_jobs/、.mimosa/、.workbuddy-ai/、config/FMP_API_KEY.txt 为运行状态与用户凭据，按卡保留原样、密钥未读取。", "evidence": "git worktree list 首项；git status --porcelain 仅 4 个保留项"},
     {"kind": "worktree", "path": "C:/Users/郑曾波/.codex/worktrees/du11-ff-reception/filing-fetch", "status": "DELETE_AFTER_OWNER_CONFIRMATION", "reason": "DU11 FF 接收 lane（codex/root-du11-ff-reception@e874074，已在 main）；clean；收据 docs/plans/du11-root-reception-2026-10-18/ 在主线；分支与内容无独有项。可删（保留分支）；实际移除待确认无在途会话占用该路径。", "evidence": "git merge-base --is-ancestor e874074 main => true；git status --porcelain 为空；docs/plans/du11-root-reception-2026-10-18/handoff.md（独立有界工程审查 PASS）"},
@@ -82,9 +82,9 @@
     {"command": "git diff --cached --check", "result": "无空白错误（WHITESPACE-CHECK-PASS）"}
   ],
   "independent_review": {
-    "reviewer_agent": "PENDING",
-    "reviewed_head": "PENDING",
-    "result": "PENDING",
+    "reviewer_agent": "agent_19c41ddd-9f90-4f0b-b6ff-caa9372eaac6",
+    "reviewed_head": "27babced4ab1e78fd0778b424c2535c343830b32",
+    "result": "PASS",
     "report_path": "docs/plans/module-pwf-reconciliation-2026-11-14/review/ff-closeout-review.md"
   },
   "remaining_items": [

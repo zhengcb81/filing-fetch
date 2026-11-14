@@ -20,7 +20,7 @@
 ## 2. PWF landing 动作（步骤 1）
 
 1. `PLANNING_STATUS.md`：新 "Current checkpoint — 2026-11-14" —— 唯一主线 `main@d4f35ca`、owner、无未结产品 lane（本 closeout 为唯一在办）、已完成 lane 索引、FF 产品面唯一未决项 F-08、下一步、保留项。原 10-04 checkpoint 原文逐字保留在 "历史快照入口" 节内并标注取代关系；更早 9 月段落原样保留。
-2. 根 `task_plan.md`/`progress.md`/`findings.md`：顶部加 2026-11-14 历史档案 banner（链接 `PLANNING_STATUS.md` 与 `TERMINAL_NOTICE.json`），原文未动。
+2. 根 `task_plan.md`/`progress.md`/`findings.md`：顶部加 2026-11-14 历史档案 banner（链接 `PLANNING_STATUS.md` 与 `TERMINAL_NOTICE.json`），原文未动。原 10-04 checkpoint 原文保留在 "历史快照入口" 节内并标注取代关系（首条 bullet 按过去时态微调指向，其余逐字）。
 3. `docs/plans/w20-ff-replay-2026-10-28/task_plan.md`：顶部 banner —— READY 状态被 `root_closeout.md`（2026-10-29 ROOT 收尾：mid-import 三态修复，7 参数化 RED，短包 203 passed，R3 复审由 company-wiki w20-reception-r3 记录）取代；分支 tip `2b61088` 已在 main。状态 completed（superseded）。
 4. `docs/plans/du10-ff41-close-2026-10-17/NEXT_HANDOFF.md`：顶部 banner —— 待做 1–4 被 `ROOT_RECEPTION.md`（PASS / 0 未解决）与作者最终提交 `ff2ba40`（含 handoff/审查归档/临时树清理）取代；保留作熔断中断恢复的历史记录。状态 superseded（completed）。
 
@@ -38,15 +38,15 @@
 | ref | disposition | 核心依据 |
 |---|---|---|
 | `codex/ff-job-facade-01@154c292` | EVIDENCE_KEEP | 特性代码已被主线吸收：`scripts/ff_job.py` 与 main 逐字节一致（diff 为空）；contracts/runner/store 由主线 `57351d0`/`7d8392e` 重落并经 `c870ab7`（MB-FF 一次请求接线）演化超前。分支唯一内容 = `.planning/ff-job-facade-01/**` lane 收据（handoff 绑 release=eaf8a5e、复测 0 OPEN P1/P2、P3 F-08、验收 drill 证据）；11-10 reset 后这些收据不在主线历史 |
-| `codex/dashboard-ff-b34-candidate@9be5587` | EVIDENCE_KEEP | 修复已吸收：`5ec54e0`（mid-import public lookup state）本身在 main（merge-base 验证）；`53285c2`（unknown publication）的全部改动行是主线 `d563b63` 的子集且主线扩展了参数化测试（sorted-line diff 无 “<” 行）。唯一内容 = `9be5587` 的 `.planning/dashboard-B34-source-candidate/**` 收据（handoff + evidence manifest，9 文件 +206 行） |
+| `codex/dashboard-ff-b34-candidate@9be5587` | EVIDENCE_KEEP | 修复已吸收：`5ec54e0`（mid-import public lookup state）本身在 main（merge-base 验证）；`53285c2`（unknown publication）的全部改动行是主线 `d563b63` 的子集且主线扩展了参数化测试（sorted-line diff 无 “<” 行）。唯一内容 = `9be5587` 的 `docs/handoffs/dashboard-B34-source-candidate/**` 收据（handoff + evidence manifest，9 文件 +206 行） |
 | `codex/transcript-companion@29085f7` | EVIDENCE_KEEP | 与当前 v2/DU11 处理比较后确认取代：原型 `transcript_companion.py`（旧 schema/路径假设，"Company-wiki owns … canonical writes"）与主线版本 758 行差异（193+/565-）；主线另有 `transcript_reuse_selection.py`（DU11 复用选择）与 `transcript_tool_transport.py`（DU11 子进程传输）。按 10-04 PWF 判断保留作历史材料，不适配、不 cherry-pick |
 
 ## 5. worktree 与目录 disposition 摘要（35 + 14，明细见 handoff.json）
 
-- **ACTIVE_KEEP（1）**：主检出 `Projects/filing-fetch`。
+- **ACTIVE_KEEP（worktree 1 + 目录 1，合计 2 条）**：主检出 `Projects/filing-fetch`（worktree 与 directory 各一条）。
 - **DELETE_AFTER_OWNER_CONFIRMATION（worktree 20 + 目录 13）**：所有 clean 且分支/HEAD 已在 main、收据在主线（docs/plans/** 或 .planning/**）的 FF lane 工区——`.codex/worktrees/{du11-ff-reception,m3-acceptance-20261010,m3-acquisition-usage-20261010}`、`_harness_worktrees/cmrf-20261008/{ff-diagnostics,ff-permission-residue}`、`_harness_worktrees/w06/ff-contract-matrix-root`、`ffjf01`、13 个 `Projects/filing-fetch-*`。本卡作为 FF owner 的分类结论：可删（分支保留，无可删独有内容）；实际移除待确认无在途会话占用路径后执行（本卡未执行任何删除）。
 - **UNCLASSIFIED_HOLD（worktree 14）**：
-  - `.fcap-review/*`（6）：用户 FCAP 跨仓审查快照（detached，全部 HEAD 在 main、clean），owner 未在本仓 PWF 查清，原样保留。
+  - `.fcap-review/*`（7）：用户 FCAP 跨仓审查快照（detached，全部 HEAD 在 main、clean），owner 未在本仓 PWF 查清，原样保留。
   - `_harness_worktrees/dashboard-ff-job-20261109`（dirty）：`docs/ff-job-protocol.md` 未提交修改 = F-08 修复设计草案（owner-local OS lock 替代 O_EXCL pointer-first + `.submit.lock`）——在途 dashboard lane 工作，原样保留并上报。
   - `_harness_worktrees/dashboard-ff-job-release-20261109`（clean，7d8392e 已在 main）：dashboard 模块 lane 工区，归属 dashboard，原样保留。
   - `_harness_worktrees/w06/ff-contract-matrix`（dirty）：`.planning/w06-ff-matrix/{progress,task_plan}.md` +7/-4 与 untracked `docs/handoffs/w06-ff-matrix/input/`（lane 输入文档）——w06 lane 残留，保留。
