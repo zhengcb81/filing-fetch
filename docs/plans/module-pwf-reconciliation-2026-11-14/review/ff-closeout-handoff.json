@@ -75,6 +75,8 @@
   ],
   "cleanup": {"paths": [], "file_count": 0, "bytes": 0},
   "tests": [
+    {"command": "/c/Miniconda/python.exe -B -m pytest tests/test_process_business_exit.py tests/test_public_operation_isolation.py -q -p no:cacheprovider --basetemp=<仓外 scratch>", "result": "48 passed, exit 0"},
+    {"command": "/c/Miniconda/python.exe -B tools/ci_tests.py", "result": "1012 passed / 2 skipped / 44 subtests, exit 0, 147.51s（两个 skip 为既有的 production security-master 缺失与 Windows symlink 不支持）"},
     {"command": "python -I -c \"import json;json.load(open('docs/plans/module-pwf-reconciliation-2026-11-14/review/ff-closeout-handoff.json',encoding='utf-8'))\"", "result": "exit 0；schema_version=1；顶层键与 13 个固定键完全一致；dispositions=52（worktree 35 + directory 14 + branch 3；DELETE_AFTER_OWNER_CONFIRMATION 33 / UNCLASSIFIED_HOLD 14 / EVIDENCE_KEEP 3 / ACTIVE_KEEP 2）"},
     {"command": "python -I -c <relative-link check over the 7 new/changed markdown files>", "result": "broken links: NONE"},
     {"command": "git diff --cached --check", "result": "无空白错误（WHITESPACE-CHECK-PASS）"}
@@ -91,7 +93,7 @@
     "20 个 worktree + 13 个 Projects 顶层目录的 DELETE_AFTER_OWNER_CONFIRMATION 实际移除：待无在途会话确认后执行（分支一律保留）",
     "D4-05 stderr-window contract 的 ROOT ratification（bf7e1da 已在 main）：owner=ROOT reconciliation",
     "生产 config/company_wiki.json legacy 形态迁移：mb11 out-of-scope 记录在案",
-    "Mimosa git-gate（3 高危在密封测试代码）与 SHA 绑定收据的冲突裁决：见 handoff.md §10；密封扫描 scan-job-mwgfli7e-fabfd2aea2bd0a56 已完成（scanId scan-2026-11-14T13-18-59.787Z-e5e73baabdfa，seal sha256:db39d990d7e9458ebe9fa5ec1e38e9c9cf0cbb0a7da42e85fdb23f64b6cf3f2a，findingCount=1）但 git-gate 不采纳、仍拦截提交；提交与推送待 owner 裁决后执行"
+    "Mimosa git-gate 冲突已按用户 2026-11-14 授权修复 3 个 high（tests/test_process_business_exit.py 与 tests/fixtures/public_operation_isolation/independent_service.py，测试代码、行为保持，受影响 48 passed + 完整 CI 1012/2/44 与 mb11 基线一致；两文件无 SHA 字节绑定收据，DU11 绑定文件未触碰）；剩余 6 个 low 不阻断，修复或登记接受归后续任务；密封扫描 scanId scan-2026-11-14T13-18-59.787Z-e5e73baabdfa seal sha256:db39d990d7e9458ebe9fa5ec1e38e9c9cf0cbb0a7da42e85fdb23f64b6cf3f2a"
   ],
   "next_step": "等待 dashboard F-08 修复 lane 按正常流程并线 FF main：依赖 = dashboard lane 交付修复 + FF job 受影响回归 + 一次完整 CI 绿；FF 无其他待开工任务"
 }

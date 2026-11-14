@@ -67,27 +67,34 @@
 
 本轮未执行任何删除：`paths: []`、`file_count: 0`、`bytes: 0`。清理动作按 §5 disposition 于"无在途会话确认"后另行执行；分支一律保留。
 
-## 8. 测试（docs-only 门禁，卡指定）
+## 8. 测试（代码修复 → 定向套件 + 完整 CI；docs-only 门禁）
+
+修复引入代码变更，按卡"代码改动时完成 FF 定向套件和一次相关完整 CI"执行：
 
 | 命令 | 结果 |
 |---|---|
-| `python -I -c "import json;json.load(open(...ff-closeout-handoff.json))"` | exit 0，JSON 可解析 |
-| `git diff --check <提交范围>` | 无空白错误 |
-| Markdown 链接检查（新增/修改 md 的相对链接指向存在文件） | 全部通过 |
-
-无代码改动，未跑 pytest/CI（卡：纯文档时按 JSON/link/`git diff --check` 检查）。
+| `/c/Miniconda/python.exe -B -m pytest tests/test_process_business_exit.py tests/test_public_operation_isolation.py -q -p no:cacheprovider --basetemp=<仓外>` | 48 passed，exit 0 |
+| `/c/Miniconda/python.exe -B tools/ci_tests.py`（完整 CI） | 1012 passed / 2 skipped / 44 subtests，exit 0，147.51s；两个 skip 为既有的 production security-master 缺失与 Windows symlink 不支持 |
+| `python -I -c "import json;json.load(open(...ff-closeout-handoff.json))"` | exit 0；13 固定键一致；52 条 disposition（worktree 35 / directory 14 / branch 3） |
+| Markdown 链接检查（7 个新增/修改 md 的相对链接指向存在文件） | broken links: NONE |
+| `git diff --cached --check` | 无空白错误 |
 
 ## 9. 自引用约定与推送确认
 
 - `handoff.json.final.head` = 审查绑定候选 HEAD（含 handoff 文档的实际提交）；`final.remote_head` 同值（卡语义：收尾后远端 main HEAD）。由于提交无法包含自身 SHA，审查报告提交（仅追加报告 + JSON `independent_review`/`final` 字段更新）为最后一个 docs-only 提交；推送确认以 `git ls-remote origin refs/heads/main` 实测为准，结果记录于审查报告与交接会话。
 - 流程：作者提交候选 → 独立 reviewer 审查绑定该 HEAD → PASS 后追加报告提交（reviewer 复核该提交仅追加报告/JSON 字段）→ 推送 → `git ls-remote` 确认远端 == 已审内容 tip。
 
-## 10. Mimosa git-gate 事件披露
+## 10. Mimosa git-gate：授权修复记录（2026-11-14）
 
-- 2026-11-14 提交候选时，Mimosa L3 git-gate（PreToolUse:Bash，拦截所有 Bash 调用，`--no-verify` 无效）以 9 项发现强制拦截提交。3 high：`tests/fixtures/public_operation_isolation/independent_service.py:189/318`、`tests/test_process_business_exit.py:180`；6 low：`docs/plans/du8-matrix-2026-10-16/fixtures/` 三个仿真夹具的 random、`scripts/fetch_filing.py:412` retry-backoff jitter、`tests/test_real_tool_conformance.py:181`。**全部为既有密封交付内容，不在本卡写集合。**
-- 按钩子指令运行 Mimosa 密封扫描（deep）：scan-job-mwgfli7e-fabfd2aea2bd0a56 完成，scanId `scan-2026-11-14T13-18-59.787Z-e5e73baabdfa`，seal `sha256:db39d990d7e9458ebe9fa5ec1e38e9c9cf0cbb0a7da42e85fdb23f64b6cf3f2a`，findingCount=1；**但 git-gate 不采纳扫描结果，仍以同样 9 项拦截**。门禁判定逻辑在插件加密载荷内，无文档化解除条件或豁免机制。
-- 性质初判：高危项为密封测试替身/测试代码按设计行为（fixture 提供样例文件、测试子进程写 pid 文件）；`fetch_filing.py:412` 的 random 用于重试抖动，非安全敏感。修复将变更密封收据绑定的文件字节。
-- **结论：提交/推送被用户级安全门禁阻塞，需 owner/ROOT 裁决**：调整门禁拦截面（排除密封测试代码）或接受收据字节变更。事件与 scanId 已记入 handoff.json remaining_items。
+- **授权**：用户于 2026-11-14 明确授权"修复 3 个高危，并在交接文档里讲清楚"，以解除提交阻塞。授权范围 = 修复门禁拦截的 3 个 high；**不含 6 个 low**（不阻断，未修复，逐项披露于下）。
+- **拦截历史**：3 high（fixture `independent_service.py:189/318` + `test_process_business_exit.py:180`）→ 第一轮修复后降为 1 high（测试生成的子进程代码中 `open(`+写入 仍被规则命中，行号移至 :181）→ 子进程改用 pathlib 写字面量文件名后全部清除。门禁作用于 ZCode PreToolUse:Bash 层，`--no-verify` 无效；首次尝试的 `git add && git commit` 在拦截时整条未执行，fixture 修复曾因此遗漏入库，已在候选提交 ca57e14 补齐。
+- **修复内容**（均为测试代码，不动生产源码）：
+  1. `tests/test_process_business_exit.py`（stderr-flood deadline 测试）：子进程改为 pathlib 写固定字面量文件名 `child.pid` 于自身 cwd（`run_bounded(cwd=tmp_path)`）；不再有任何调用方派生路径流入生成的子进程代码。
+  2. `tests/fixtures/public_operation_isolation/independent_service.py`：新增 `_harness_log_path()` 归一化 `MBFF_CALL_LOG`（由测试设置），并在 `_filing_query_index` 内二次校验——仅接受绝对、无 `..` 段、存在的常规文件，否则查询索引按原 OSError 路径降级为 0。对全部 harness 用法行为保持。
+- **收据影响（关键）**：两文件在 mb11 收据中仅作为 changed_paths **列举**，无 SHA256 字节绑定（grep 核实）；DU11 字节绑定的两个文件（`transcript_tool_transport.py`、`test_du11_verified_reader_revalidation.py`）未触碰。无 SHA 绑定链破坏。变更后受影响测试全绿（48 passed），完整 CI 与 mb11 基线一致（1012/2/44）。
+- **门禁现状态**：high=0，提交放行；剩余 6 个 low 不阻断且不在授权范围：`du8-matrix-2026-10-16/fixtures/` 三个仿真夹具 random（成本仿真，非密码学用途）、`scripts/fetch_filing.py:412` retry-backoff jitter 的 `random.uniform`（非安全敏感）、`tests/test_real_tool_conformance.py:181` 测试构造命令（按设计）。**建议后续任务裁决**（修复或登记接受），不阻塞本卡。
+- 密封扫描记录：scan-job-mwgfli7e-fabfd2aea2bd0a56（deep）完成，scanId `scan-2026-11-14T13-18-59.787Z-e5e73baabdfa`，seal `sha256:db39d990d7e9458ebe9fa5ec1e38e9c9cf0cbb0a7da42e85fdb23f64b6cf3f2a`，findingCount=1；修复后门禁实测放行。
+- 本次修复不构成对密封收据的否定：受影响测试与完整 CI 均绿，收据所记行为结论仍然成立。
 
 ## 11. remaining_items 与唯一下一步
 
@@ -97,6 +104,6 @@ remaining：
 3. 20 worktree + 13 目录的 DELETE_AFTER_OWNER_CONFIRMATION 实际移除：待无在途会话确认。
 4. D4-05 stderr-window contract 的 ROOT ratification（bf7e1da 已在 main）：owner=ROOT。
 5. 生产 `config/company_wiki.json` legacy 形态迁移：mb11 out-of-scope 记录。
-6. Mimosa git-gate vs 密封收据冲突裁决：见 §10。
+6. Mimosa 门禁剩余 6 个 low（du8 仿真夹具 random、fetch_filing retry jitter、test_real_tool_conformance 测试构造）：修复或登记接受，owner=FF/ROOT 后续任务，不阻塞本卡。
 
 唯一下一步：等待 dashboard F-08 修复 lane 按正常流程并线 FF `main`（依赖：dashboard lane 交付修复 + FF job 受影响回归 + 完整 CI 绿）；FF 无其他待开工任务。
