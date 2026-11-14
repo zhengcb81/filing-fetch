@@ -2,6 +2,14 @@
 
 ## Current checkpoint — 2026-11-14（当前有效）
 
+### 2026-11-14 仓库收尾与工区清理对账
+
+- 收尾前核对的本地 `main` 与 `origin/main` 均为 `c2aec910b7b2dc210f60c687390b4da220decbbc`；本轮无产品代码等待并线。三条非祖先 ref（`codex/ff-job-facade-01`、`codex/dashboard-ff-b34-candidate`、`codex/transcript-companion`）均按本文件上文继续作为 `EVIDENCE_KEEP` 保留，没有合并或删除它们。
+- 清理并移除 12 个已完成、源码已在 `main` 历史中的 FF 注册工区：`filing-fetch-du10-41-matrix`、`filing-fetch-du11-local-transcript-reuse`、`filing-fetch-du6-portable`、`filing-fetch-du67-integration`、`filing-fetch-du8-integration`、`filing-fetch-du8-matrix`、`filing-fetch-r1-boundary`、`filing-fetch-r1-local-observation`、`filing-fetch-s3-limits`、`filing-fetch-source-ref-v2-20261004`、`filing-fetch-w19-sina-statements`、`filing-fetch-w20-replay`。逐个确认其 HEAD 是 `main` 祖先、无 tracked/untracked 修改、无 reparse point；仅含已识别的 Python/test 缓存、coverage、benchmark 或 CodeGraph 派生索引。使用普通 `git worktree remove`，未使用 force；保留全部 branch refs 与共享 Git 对象。
+- 上述 12 个工区共移除 9,902 个常规文件，工作目录文件长度合计 138,465,789 bytes（约 138.5 MB 十进制；包含各工区源码/PWF工作副本及生成缓存，不代表 Git 对象库空间）。清理后 FF 共 23 个注册工区。
+- 剩余工区按活动/证据/所有权保留：Dashboard F-08 活动工区；W06/W07 活动或审查证据；三条 `EVIDENCE_KEEP` ref 对应工区；Codex app 管理的工区、`.fcap-review` 快照、CMRF/P5 联合工作区，以及不属于本次精确 FF 临时目录范围的其他工区。没有对它们做清理。
+- 主工区仍有未跟踪内容：`.ff_jobs/`（作业运行数据）、`.mimosa/`（工具状态）、`.workbuddy-ai/`（用户/工具记忆）、`config/FMP_API_KEY.txt`（凭据）。均按本计划保留；凭据未读取、未暂存。清理后现场复核这些目录仍在。
+- 本轮没有代码改动，因此未跑产品测试；PWF 文档检查与最终 Git/远端状态在本次提交前后记录。下一产品动作仍是 Dashboard owner 完成 F-08 修复后按正常流程并线。
 - 唯一主线：`main`（= `origin/main`，remote `https://github.com/zhengcb81/filing-fetch.git`）。收尾交付内容 tip 为 `cc6f55b`，其后的 docs-only 修正提交随收尾链经同链 delta 复核推进（链条见 closeout handoff §9）。仓 owner 为 FF owner，计划/代码/Git 操作都在本仓完成。
 - **当前活动计划：无未结产品 lane。** 规划/worktree 收尾卡 FF-PLAN-WORKTREE-CLOSEOUT（卡位于 company-wiki `docs/plans/module-pwf-reconciliation-2026-11-14/owner_cards/ff_closeout.md`）**已交付**：独立审查 PASS（绑定 `27babce`，delta 复核延伸至推送 tip），交付固定位于本仓 `docs/plans/module-pwf-reconciliation-2026-11-14/review/`（`ff-closeout-handoff.md`、`ff-closeout-handoff.json`、独立审查 `ff-closeout-review.md`）。
 - **已完成 lane 索引**（代码均已在 `main` 历史中，逐项 disposition 见 closeout `handoff.json`）：MB-FF（2026-11-13 并线，完整 CI 1012 passed / 2 skipped / 44 subtests）、DU10-FF41（41/41 PASS，`ff2ba40`）、DU11 接收（`e874074`）、DU6/DU67/DU8/DU8-matrix、R1 boundary/observation、S3 limits（`1d0c73c`）、SourceRef v2（`e1eda60`）、M3 acceptance/usage、P5 main-integration/runtime-cleanup、W06/W07 矩阵、W19 sina statements（`d396fe7`）、W20 replay（`2b61088`）、ff-job/1 job facade（经 `57351d0`/`7d8392e` 重落主线后由 MB-FF `c870ab7` 继续演化）。
