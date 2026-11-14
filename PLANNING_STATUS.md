@@ -1,8 +1,23 @@
 # filing-fetch 当前规划状态
 
-## Current checkpoint — 2026-10-04（当前有效）
+## Current checkpoint — 2026-11-14（当前有效）
 
-- 当前 FF 主线为 `fcap@eb0af13`，与 live `origin/main` 同步；本地名为 `main` 的旧 ref 落后，不作为工作线。唯一未跟踪的 `config/FMP_API_KEY.txt` 是用户凭据，保持原地、未读取、未暂存。
+- 唯一主线：`main@d4f35ca`（= `origin/main`，remote `https://github.com/zhengcb81/filing-fetch.git`）。仓 owner 为 FF owner，计划/代码/Git 操作都在本仓完成。
+- **当前活动计划：无未结产品 lane。** 唯一在办事项是规划/worktree 收尾卡 FF-PLAN-WORKTREE-CLOSEOUT（卡位于 company-wiki `docs/plans/module-pwf-reconciliation-2026-11-14/owner_cards/ff_closeout.md`），交付固定写入本仓 `docs/plans/module-pwf-reconciliation-2026-11-14/review/`（`ff-closeout-handoff.md`、`ff-closeout-handoff.json`、独立审查 `ff-closeout-review.md`）。
+- **已完成 lane 索引**（代码均已在 `main` 历史中，逐项 disposition 见 closeout `handoff.json`）：MB-FF（2026-11-13 并线，完整 CI 1012 passed / 2 skipped / 44 subtests）、DU10-FF41（41/41 PASS，`ff2ba40`）、DU11 接收（`e874074`）、DU6/DU67/DU8/DU8-matrix、R1 boundary/observation、S3 limits（`1d0c73c`）、SourceRef v2（`e1eda60`）、M3 acceptance/usage、P5 main-integration/runtime-cleanup、W06/W07 矩阵、W19 sina statements（`d396fe7`）、W20 replay（`2b61088`）、ff-job/1 job facade（经 `57351d0`/`7d8392e` 重落主线后由 MB-FF `c870ab7` 继续演化）。
+- **FF 产品面唯一未决项**：ff-job/1 的 P3 F-08（idempotency 指针 O_EXCL 后、内容写前的空指针文件硬崩溃窗口，报告为命名 busy 错误、无数据损伤）。dashboard lane 已在 `_harness_worktrees/dashboard-ff-job-20261109` 留有未提交的修复设计草案（owner-local OS lock 替代 O_EXCL pointer-first，`docs/ff-job-protocol.md` dirty 原样保留）；该修复按正常并线流程落地后需跑 job 相关回归与一次完整 CI。
+- **三个未并入 ref 均为证据保留（EVIDENCE_KEEP），不再适配**：`codex/ff-job-facade-01@154c292`（唯一 lane 收据含 F-08 记录；特性代码已被主线吸收：`scripts/ff_job.py` 与主线逐字节一致，其余经主线版本继续演化）、`codex/dashboard-ff-b34-candidate@9be5587`（唯一 B34 收据；修复由主线 `d563b63` 超集吸收、`5ec54e0` 本身已在主线）、`codex/transcript-companion@29085f7`（旧 schema/路径假设原型，已被主线 v2 三模块 `transcript_companion.py`/`transcript_reuse_selection.py`/`transcript_tool_transport.py` 取代）。
+- **下一步（唯一）**：等待 dashboard F-08 修复 lane 完成并按正常流程并线 FF `main`（依赖：dashboard lane 交付修复 + FF job 受影响回归 + 一次完整 CI 绿）。除此之外 FF 无待开工任务；worktree/目录清理按 closeout handoff 的 disposition 执行。
+- **保留原样**：`.ff_jobs/`、`.mimosa/`、`.workbuddy-ai/`、`config/FMP_API_KEY.txt`（用户凭据，未读取、未暂存）。
+- 2026-11-10 曾发生 `reset: moving to origin/main`（f65e6ca）：本地 11-07 快进到 `154c292` 的未推送历史被丢弃，origin/main 上的独立等价实现（`57351d0`/`7d8392e`）成为 job facade 的主线形态。相关 lane 收据（含 F-08）仅在分支 `codex/ff-job-facade-01` 上，按证据保留。
+
+## 历史快照入口（2026-10-04 checkpoint 及更早）
+
+> 下方全部内容为历史观测，不再驱动执行。10-04 checkpoint 所指 `fcap@eb0af13` 主线已被 11 月重建的 `main` 取代（2026-11-10 reset 到 origin/main，经 MB-FF 等 lane 并线推进到 `d4f35ca`）；根 `task_plan.md`/`progress.md`/`findings.md` 为 2026-08 历史档案（`TERMINAL_NOTICE.json`，closed_superseded_incomplete），均已链接回本入口。
+
+### 2026-10-04 checkpoint 原文（历史，当时标"当前有效"）
+
+- 当时 FF 主线记录为 `fcap@eb0af13`，与当时 live `origin/main` 同步；本地名为 `main` 的旧 ref 落后，不作为工作线。唯一未跟踪的 `config/FMP_API_KEY.txt` 是用户凭据，保持原地、未读取、未暂存。
 - FF-S3 的实现提交序列已进入远端 `main`。FF→ET→CWP 的 transcript companion 主线也已交付，旧分支 `codex/transcript-companion@29085f7` 是旧 schema/路径假设原型，与现行 v2 契约冲突，保留作历史材料，不整体合并。
 - S3 跨仓 bounded-provider 缺口已由 CWP 接入 StockInfoDLSimple CNINFO 1.2.0 并通过真实 BYD FY2024 年报链路：10,092,140 B，原 PDF、SourceRef SHA/size 一致；reuse-only 和无预算 fail-closed 也有记录。权威记录见 company-wiki `docs/plans/narrative-evidence-pilot-2026-09-26/task_plan.md` 与 `progress.md`。
 - 当前没有待从 FF 支线并入主线的有效产品改动。N4C 真实多类型样本、并发吞吐与空间测量归 company-wiki 总计划，不在 FF-S3 局部卡内重开。

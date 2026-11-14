@@ -1,5 +1,7 @@
 # filing-fetch 全面审查与测试加固 — 实施计划
 
+> **2026-11-14 历史档案标注（FF-PLAN-WORKTREE-CLOSEOUT）**：本文件是 2026-08 历史档案（另见 [TERMINAL_NOTICE.json](TERMINAL_NOTICE.json)，`closed_superseded_incomplete`）。当前规划的唯一入口是 [PLANNING_STATUS.md](PLANNING_STATUS.md)（2026-11-14 checkpoint）；本文件不再驱动任何执行，仅作历史证据保留。
+
 > **2026-08-09 状态覆盖：`completed_historical_scope`。** 本文件的 v1.3.0 六阶段、75 项旧范围工作保持已完成；其测试数字和 live 证据是历史快照。最新要求增加了统一 resolver、Dropbox-only、latest 单次闭环、SourceBundle、current-triplet CI 和持续动态审核，统一由 revenue-forecast 的 [FCAP r2](../revenue-forecast/audit_review/2026-08-09_full_completion_assurance_plan/task_plan.md) 接管。本文件不再新增同类待办，也不能单独证明六项目标完成。
 
 > **2026-09-09 深夜状态（只读核对，不新增待办）**：本仓当前 HEAD `bb8d485`、工作树干净；CI（`quality.yml`，含 `--require-revenue-config` 与 `$GITHUB_WORKSPACE` 符号链接）最近一次推送全绿。E2E 设计已于 `bb8d485` 提交：**harness 明确为 synthetic T1 范围，不代表真实数据 E2E**；真实原文/CLI/provider 层路由到 R4 测试矩阵（L/P/VR/AR），见 [e2e/E2E_DESIGN.md](e2e/E2E_DESIGN.md)。filing 的消费面证据仍在 R4 审计目录 [filing-audit.md](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/filing-audit.md) 与最新 [current-delta-2026-09-09.md](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/current-delta-2026-09-09.md)；本轮未改代码/配置/任务。

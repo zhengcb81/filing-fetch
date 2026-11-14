@@ -1,5 +1,7 @@
 # 研究发现 — filing-fetch 审查（2026-08-01）
 
+> **2026-11-14 历史档案标注（FF-PLAN-WORKTREE-CLOSEOUT）**：本文件是 2026-08 历史档案（另见 [TERMINAL_NOTICE.json](TERMINAL_NOTICE.json)，`closed_superseded_incomplete`）。当前规划的唯一入口是 [PLANNING_STATUS.md](PLANNING_STATUS.md)（2026-11-14 checkpoint）；本文件不再驱动任何执行，仅作历史证据保留。
+
 > **2026-09-09 补充（只读）**：本仓 E2E 范围已收窄并提交（`bb8d485`）——harness 是 **synthetic T1 only**，真实数据/CLI/provider 层由 R4 测试矩阵承接（[e2e/E2E_DESIGN.md](e2e/E2E_DESIGN.md)）。下方 2026-08-01 的架构/契约结论仍是历史快照；当前消费面证据以 company-wiki R4 目录的 [filing-audit.md](../company-wiki/docs/plans/painpoint-outcome-audit-2026-09-05/filing-audit.md) 为准。本轮未改代码。
 
 ## 架构结论

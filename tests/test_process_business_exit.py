@@ -174,10 +174,12 @@ def test_incomplete_stdin_still_fails_under_a_stderr_flood():
 
 
 def test_stderr_flood_still_obeys_the_real_deadline(tmp_path):
-    pid_file = tmp_path / "child.pid"
+    # The child writes a fixed literal filename inside its own cwd, so no
+    # caller-derived path ever flows into the generated child code.
     source = (
         "import os,sys,time\n"
-        f"open({str(pid_file)!r},'w').write(str(os.getpid()))\n"
+        "from pathlib import Path\n"
+        "Path('child.pid').write_text(str(os.getpid()))\n"
         "while True:\n"
         "    sys.stderr.buffer.write(b'z' * 4096)\n"
         "    sys.stderr.buffer.flush()\n"
@@ -185,10 +187,10 @@ def test_stderr_flood_still_obeys_the_real_deadline(tmp_path):
     )
     start = time.monotonic()
     with pytest.raises(transport.ChildTimeout):
-        transport.run_bounded(_command(source), timeout_seconds=1.5)
+        transport.run_bounded(_command(source), timeout_seconds=1.5, cwd=str(tmp_path))
     assert time.monotonic() - start < 8.0
     assert _ff_threads() == []
-    assert not transport.pid_is_alive(int(pid_file.read_text()))
+    assert not transport.pid_is_alive(int((tmp_path / "child.pid").read_text()))
 
 
 def test_diagnostics_before_a_late_payload_do_not_deadlock():

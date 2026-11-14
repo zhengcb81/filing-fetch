@@ -186,11 +186,29 @@ def _prepare_payload() -> dict[str, Any]:
     }
 
 
+def _harness_log_path() -> str:
+    """The harness-provided call log, constrained to an absolute real file.
+
+    ``MBFF_CALL_LOG`` comes from the test harness; this guard keeps the
+    fixture from opening anything relative, traversal-shaped, or missing.
+    """
+    raw = os.environ.get("MBFF_CALL_LOG", "")
+    if not raw:
+        return ""
+    path = Path(raw)
+    if not path.is_absolute() or ".." in path.parts or not path.is_file():
+        return ""
+    return str(path)
+
+
 def _filing_query_index(log_path: str) -> int:
     """How many filing queries already happened before this one."""
+    path = Path(log_path)
+    if not path.is_absolute() or ".." in path.parts or not path.is_file():
+        return 0
     count = 0
     try:
-        with open(log_path, encoding="utf-8") as stream:
+        with path.open(encoding="utf-8") as stream:
             for line in stream:
                 try:
                     item = json.loads(line)
@@ -309,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:
         kind = stdin.get("document_kind") if isinstance(stdin, dict) else None
         if kind == "investor_call_transcript":
             _emit(_query_payload("not_found"))
-        log_path = os.environ.get("MBFF_CALL_LOG", "")
+        log_path = _harness_log_path()
         sequence = [
             item.strip()
             for item in os.environ.get("MBFF_QUERY_SEQUENCE", "found").split(",")

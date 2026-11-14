@@ -1,5 +1,7 @@
 # NEXT_HANDOFF — 恢复后必做事项
 
+> **2026-11-14 状态覆盖（FF closeout 核对）**：本文"待做 1–4"已被 [ROOT_RECEPTION.md](ROOT_RECEPTION.md)（状态 PASS / 0 未解决）与作者最终提交 `ff2ba40`（"du10: COMPLETE — handoff, review archive and temp-tree cleanup"，已在主线 `main` 历史中）取代：独立审查（ROOT agent PASS）、`handoff.md`/`handoff.json`、`.du10-tmp` 临时树清理均已完成。**状态：superseded（completed）；本文保留作 5 小时熔断中断恢复的历史记录，不再有待办。**
+
 本卡 DU10-FF41-CLOSE 在节点 A/B/C 全部完成、修复已 commit 时，作者会话因 5 小时
 额度熔断中止（`exec exec_…` 返回 `Usage limit reached`）。本文固化剩余事项
 与精确恢复指令，**下一个会话不得跳过/改动已完成节点**，只需按下面顺序收尾。

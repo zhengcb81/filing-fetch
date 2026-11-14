@@ -1,5 +1,7 @@
 # W20-FF-REPLAY 独立施工计划
 
+> **2026-11-14 状态覆盖（FF closeout 核对）**：下方"READY，作者尚未开始"状态已被 [root_closeout.md](root_closeout.md)（2026-10-29 ROOT 隔离收尾）取代：mid-import 三态修复已完成，7 参数化真实 RED（6 失败 1 控制通过），W20/authority 相关短包 203 passed；独立最终复审、Git 发布与全局技能部署由 company-wiki 主计划 `docs/plans/du11-source-closure-2026-10-18/review/w20-reception-r3-20261029/` 统一记录。分支 `codex/w20-ff-replay-20261028@2b61088` 已在主线 `main` 历史中。**状态：completed（superseded）；本计划不再作为 READY 待领。**
+
 状态：READY，ROOT已准备工区/本计划，作者尚未开始；不冒称任何实现/测试完成。
 
 唯一执行入口：[construction_card.md](construction_card.md)。本计划PLAN_ID=w20-ff-replay-2026-10-28，PWF_PLAN_ROOT=docs/plans。
