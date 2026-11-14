@@ -81,8 +81,8 @@
 
 ## 9. 自引用约定与推送确认
 
-- `handoff.json.final.head` = 审查绑定候选 HEAD（含 handoff 文档的实际提交）；`final.remote_head` 同值（卡语义：收尾后远端 main HEAD）。由于提交无法包含自身 SHA，审查报告提交（仅追加报告 + JSON `independent_review`/`final` 字段更新）为最后一个 docs-only 提交；推送确认以 `git ls-remote origin refs/heads/main` 实测为准，结果记录于审查报告与交接会话。
-- 流程：作者提交候选 → 独立 reviewer 审查绑定该 HEAD → PASS 后追加报告提交（reviewer 复核该提交仅追加报告/JSON 字段）→ 推送 → `git ls-remote` 确认远端 == 已审内容 tip。
+- `handoff.json.final.head` = 审查绑定候选 HEAD `27babce`（全量审计对象）；`final.remote_head` 同值记录该审查绑定值。由于提交无法包含自身 SHA，其后的 docs-only 提交经 reviewer **delta 复核**（核实仅追加报告/JSON 字段/文档修正、无代码无收据触碰）后，PASS 链延伸至推送 tip；推送确认以 `git ls-remote origin refs/heads/main` 实测为准。
+- 实际链条：`27babce` 全量审计 PASS → `cc6f55b`（追加审查报告 + JSON 回填 + 3 个 P3 文档修正）delta 复核 PASS → 单一入口 HEAD 修正提交（PLANNING_STATUS checkpoint 的当前 HEAD/在办状态两处更新 + 本节措辞对齐）delta 复核 PASS → 推送 → `git ls-remote` 确认远端 == 推送 tip。
 
 ## 10. Mimosa git-gate：授权修复记录（2026-11-14）
 
