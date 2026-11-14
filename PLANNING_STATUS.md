@@ -2,7 +2,7 @@
 
 ## Current checkpoint — 2026-11-14（当前有效）
 
-- 唯一主线：`main@cc6f55b`（= `origin/main`，remote `https://github.com/zhengcb81/filing-fetch.git`）。仓 owner 为 FF owner，计划/代码/Git 操作都在本仓完成。
+- 唯一主线：`main`（= `origin/main`，remote `https://github.com/zhengcb81/filing-fetch.git`）。收尾交付内容 tip 为 `cc6f55b`，其后的 docs-only 修正提交随收尾链经同链 delta 复核推进（链条见 closeout handoff §9）。仓 owner 为 FF owner，计划/代码/Git 操作都在本仓完成。
 - **当前活动计划：无未结产品 lane。** 规划/worktree 收尾卡 FF-PLAN-WORKTREE-CLOSEOUT（卡位于 company-wiki `docs/plans/module-pwf-reconciliation-2026-11-14/owner_cards/ff_closeout.md`）**已交付**：独立审查 PASS（绑定 `27babce`，delta 复核延伸至推送 tip），交付固定位于本仓 `docs/plans/module-pwf-reconciliation-2026-11-14/review/`（`ff-closeout-handoff.md`、`ff-closeout-handoff.json`、独立审查 `ff-closeout-review.md`）。
 - **已完成 lane 索引**（代码均已在 `main` 历史中，逐项 disposition 见 closeout `handoff.json`）：MB-FF（2026-11-13 并线，完整 CI 1012 passed / 2 skipped / 44 subtests）、DU10-FF41（41/41 PASS，`ff2ba40`）、DU11 接收（`e874074`）、DU6/DU67/DU8/DU8-matrix、R1 boundary/observation、S3 limits（`1d0c73c`）、SourceRef v2（`e1eda60`）、M3 acceptance/usage、P5 main-integration/runtime-cleanup、W06/W07 矩阵、W19 sina statements（`d396fe7`）、W20 replay（`2b61088`）、ff-job/1 job facade（经 `57351d0`/`7d8392e` 重落主线后由 MB-FF `c870ab7` 继续演化）。
 - **FF 产品面唯一未决项**：ff-job/1 的 P3 F-08（idempotency 指针 O_EXCL 后、内容写前的空指针文件硬崩溃窗口，报告为命名 busy 错误、无数据损伤）。dashboard lane 已在 `_harness_worktrees/dashboard-ff-job-20261109` 留有未提交的修复设计草案（owner-local OS lock 替代 O_EXCL pointer-first，`docs/ff-job-protocol.md` dirty 原样保留）；该修复按正常并线流程落地后需跑 job 相关回归与一次完整 CI。
