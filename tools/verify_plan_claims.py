@@ -202,6 +202,50 @@ def _is_archived(plan_text: str) -> bool:
     return any(marker in plan_text for marker in _ARCHIVED_MARKERS)
 
 
+_ARCHIVE_MANIFEST_NAME = "ARCHIVE_MANIFEST.json"
+
+
+def _archived_by_manifest(plan_path: Path) -> bool:
+    """True when an archive manifest declares this plan file an archived input.
+
+    A plan copied into the repository as READ-ONLY archive material is not an
+    active plan, but its text may carry no archive marker of its own (the
+    snapshot is kept byte-identical, often sha256-pinned by the manifest that
+    declares it).  Such a plan is still historical reference, so the same
+    exemption the text marker grants applies.
+
+    The declaration is read from an explicit, machine-readable manifest:
+    an ``ARCHIVE_MANIFEST.json`` in an ancestor directory of the plan lists
+    the plan's path under its ``files`` entries.  The exemption therefore
+    never depends on a path segment that merely looks like an archive, and
+    never applies to a plan no manifest declares.
+    """
+    for ancestor in plan_path.parents:
+        manifest_path = ancestor / _ARCHIVE_MANIFEST_NAME
+        if not manifest_path.is_file():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        entries = manifest.get("files") if isinstance(manifest, dict) else None
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            declared = entry.get("path")
+            if not isinstance(declared, str) or not declared:
+                continue
+            try:
+                target = (ancestor / declared).resolve()
+            except OSError:
+                continue
+            if target == plan_path.resolve():
+                return True
+    return False
+
+
 def verify(plan_text: str, progress_text: str) -> tuple[list[str], list[dict]]:
     if _is_archived(plan_text):
         return [], []
@@ -268,6 +312,11 @@ def main() -> int:
             print(f"no task_plan.md/progress.md pairs under {args.plan_dir}")
             return 2
         for plan_path, progress_path, findings_path in pairs:
+            if _archived_by_manifest(plan_path):
+                # An archive manifest declares this plan an archived input
+                # snapshot: historical reference, not an active plan.
+                all_reports.append({"plan": str(plan_path), "report": [], "archived": True})
+                continue
             problems, report = verify(
                 plan_path.read_text(encoding="utf-8"),
                 progress_path.read_text(encoding="utf-8"),
