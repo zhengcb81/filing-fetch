@@ -63,6 +63,8 @@ from ff_configuration import load_connection_root, validate_company_wiki_root
 from ff_company_wiki_connection import WikiConnection, WikiEndpoint, command_for, connection_cwd, connection_environment, acquisition_arguments
 from ff_request_context import RequestContext
 from ff_source_candidate import (
+    CANDIDATE_DETAIL_FIELDS as _CANDIDATE_DETAIL_FIELDS,
+    CANDIDATE_DETAIL_LIMIT as _CANDIDATE_DETAIL_LIMIT,
     COMPANY_IDENTITY_FIELDS as _COMPANY_IDENTITY_FIELDS,
     SOURCE_CANDIDATE_FIELDS as _SOURCE_CANDIDATE_FIELDS,
     contains_physical_field as _contains_physical_field,
@@ -834,26 +836,10 @@ _SOURCE_OPERATION_STATUSES = frozenset(
 )
 # FF-1 candidate-detail contract (consumed here, produced by the CWP lane
 # under the same shared text): candidates ride only ambiguous/not_found
-# operations; every item is a closed pathless field set; at most 5 items.
+# operations; every item is a closed pathless field set; at most 5 items
+# (field set and limit shared with ff_source_candidate so the error-envelope
+# projection cannot drift from intake validation).
 _OPERATION_CANDIDATE_STATUSES = frozenset({"ambiguous", "not_found"})
-_OPERATION_CANDIDATE_LIMIT = 5
-_OPERATION_CANDIDATE_FIELDS = frozenset(
-    {
-        "document_id",
-        "title",
-        "document_kind",
-        "provider",
-        "provider_document_id",
-        "form_type",
-        "fiscal_year",
-        "fiscal_period",
-        "language",
-        "content_sha256",
-        "byte_size",
-        "publication_status",
-        "exclusion_reason",
-    }
-)
 _OPERATION_CANDIDATE_PUBLICATION_STATUSES = frozenset({"known", "unknown", "future"})
 _OPERATION_CANDIDATE_EXCLUSION_REASONS = frozenset(
     {
@@ -915,11 +901,11 @@ def _validated_operation_candidates(
     if status not in _OPERATION_CANDIDATE_STATUSES:
         # completed/gap (and every other status) must not carry candidates.
         raise _invalid("company-wiki operation candidates are invalid")
-    if not isinstance(raw_candidates, list) or len(raw_candidates) > _OPERATION_CANDIDATE_LIMIT:
+    if not isinstance(raw_candidates, list) or len(raw_candidates) > _CANDIDATE_DETAIL_LIMIT:
         raise _invalid("company-wiki operation candidates are invalid")
     validated: list[dict[str, Any]] = []
     for item in raw_candidates:
-        if not isinstance(item, dict) or set(item) != _OPERATION_CANDIDATE_FIELDS:
+        if not isinstance(item, dict) or set(item) != _CANDIDATE_DETAIL_FIELDS:
             raise _invalid("company-wiki operation candidates are invalid")
         copy = dict(item)
         for field in ("document_id", "title", "document_kind"):
@@ -1994,6 +1980,7 @@ def main(argv: list[str] | None = None) -> int:
                 request_diagnostic=exc.request_diagnostic,
                 producer_exit_code=exc.producer_exit_code,
                 local_preparation_observation=exc.local_preparation_observation,
+                candidates=exc.candidates,
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")

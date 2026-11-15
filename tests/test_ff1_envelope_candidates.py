@@ -7,10 +7,14 @@ shared CWP producer contract.
 
 from __future__ import annotations
 
+import io
+import json
+
 import pytest
 
 import fetch_filing as ff
 from filing_contracts import FilingFetchError
+from ff_v2_envelope import error_envelope
 from test_source_ref_v2_db_query import _operation_v2
 
 
@@ -193,3 +197,155 @@ class TestC1OperationContract:
         validated = ff._validated_operation(payload, "ensure")
         assert validated["candidates"][0]["provider"] is None
         assert validated["candidates"][0]["fiscal_year"] is None
+
+
+_IDENTITY_CANDIDATES = [
+    {
+        "ticker": "GOOGL",
+        "canonical_name": "Alphabet Inc.",
+        "market": "US",
+        "exchange": "NASDAQ",
+    },
+    {
+        "ticker": "GOOG",
+        "canonical_name": "Alphabet Inc.",
+        "market": "US",
+        "exchange": "NASDAQ",
+    },
+]
+
+
+class TestC2V2ErrorEnvelope:
+    def test_ambiguous_code_writes_candidates_and_hint(self):
+        result = error_envelope(
+            "ambiguous", "company-wiki ensure ambiguous", retryable=False,
+            candidates=[_candidate(1), _candidate(2)],
+        )
+        assert result["filing"]["candidates"] == [_candidate(1), _candidate(2)]
+        assert result["filing"]["hint"] == (
+            "select one candidate from filing.candidates and resubmit "
+            "with disambiguation fields"
+        )
+
+    def test_identity_error_writes_identity_candidates_and_v1_hint(self):
+        result = error_envelope(
+            "identity_error", "company identity is not uniquely resolved: ambiguous / fuzzy",
+            retryable=False, candidates=list(_IDENTITY_CANDIDATES),
+        )
+        assert result["filing"]["candidates"] == _IDENTITY_CANDIDATES
+        assert result["filing"]["hint"] == (
+            "identity is ambiguous; disambiguate by adding market/exchange "
+            "or by using a specific ticker in company_query"
+        )
+
+    def test_not_found_writes_candidates_without_hint(self):
+        result = error_envelope(
+            "not_found", "company-wiki ensure not_found", retryable=False,
+            candidates=[_candidate(1)],
+        )
+        assert result["filing"]["candidates"] == [_candidate(1)]
+        assert "hint" not in result["filing"]
+
+    @pytest.mark.parametrize(
+        "code", ["upstream_error", "request_error", "source_blocked", "fatal", "gap"],
+    )
+    def test_other_codes_never_carry_candidates(self, code):
+        result = error_envelope(
+            code, "failed", retryable=False, candidates=[_candidate(1)],
+        )
+        assert "candidates" not in result["filing"]
+        assert "hint" not in result["filing"]
+
+    def test_absent_or_empty_candidates_leave_shape_unchanged(self):
+        legacy = error_envelope("ambiguous", "failed", retryable=False)
+        empty = error_envelope("ambiguous", "failed", retryable=False, candidates=[])
+        none_value = error_envelope("ambiguous", "failed", retryable=False, candidates=None)
+        assert legacy == empty == none_value
+        assert set(legacy["filing"]) == {"status", "reason", "retryable"}
+
+    @pytest.mark.parametrize(
+        "unsafe",
+        [
+            [{"ticker": "GOOGL", "path": "hidden/original.pdf"}],
+            ["not-a-dict"],
+            [{"unknown_only": "junk"}],
+            [{"ticker": "GOOGL"}, {"bundle": "originals.bundle"}],
+        ],
+    )
+    def test_unsafe_candidates_are_dropped_not_leaked(self, unsafe):
+        result = error_envelope(
+            "identity_error", "ambiguous", retryable=False, candidates=unsafe,
+        )
+        assert "candidates" not in result["filing"]
+        assert "hint" not in result["filing"]
+
+    def test_unknown_keys_are_projected_out_of_identity_candidates(self):
+        raw = [dict(item, credentials="api-key", collector="x") for item in _IDENTITY_CANDIDATES]
+        result = error_envelope(
+            "identity_error", "ambiguous", retryable=False, candidates=raw,
+        )
+        assert result["filing"]["candidates"] == _IDENTITY_CANDIDATES
+
+    def test_main_v2_identity_error_carries_candidates_and_hint(self, monkeypatch, capsys):
+        def boom(**kwargs):
+            raise FilingFetchError(
+                "company identity is not uniquely resolved: ambiguous / fuzzy",
+                code="identity_error",
+                candidates=list(_IDENTITY_CANDIDATES),
+            )
+
+        monkeypatch.setattr(ff, "resolve_filing", boom)
+        monkeypatch.setattr(
+            "sys.stdin", io.StringIO(json.dumps(_v2_cli_request())),
+        )
+        rc = ff.main([])
+        out = json.loads(capsys.readouterr().out)
+        assert rc == 2
+        assert out["filing"]["candidates"] == _IDENTITY_CANDIDATES
+        assert "market/exchange" in out["filing"]["hint"]
+
+    def test_main_v2_operation_ambiguous_error_carries_candidates(self, monkeypatch, capsys):
+        def boom(**kwargs):
+            raise FilingFetchError(
+                "company-wiki ensure ambiguous: multiple_candidates",
+                code="ambiguous",
+                candidates=[_candidate(1), _candidate(2)],
+            )
+
+        monkeypatch.setattr(ff, "resolve_filing", boom)
+        monkeypatch.setattr(
+            "sys.stdin", io.StringIO(json.dumps(_v2_cli_request())),
+        )
+        rc = ff.main([])
+        out = json.loads(capsys.readouterr().out)
+        assert rc == 2
+        assert out["filing"]["candidates"] == [_candidate(1), _candidate(2)]
+        assert "hint" in out["filing"]
+
+    def test_main_v2_error_without_candidates_keeps_legacy_filing_shape(
+            self, monkeypatch, capsys):
+        def boom(**kwargs):
+            raise FilingFetchError("company-wiki ensure not_found", code="not_found")
+
+        monkeypatch.setattr(ff, "resolve_filing", boom)
+        monkeypatch.setattr(
+            "sys.stdin", io.StringIO(json.dumps(_v2_cli_request())),
+        )
+        rc = ff.main([])
+        out = json.loads(capsys.readouterr().out)
+        assert rc == 2
+        assert set(out["filing"]) == {"status", "reason", "retryable"}
+
+
+def _v2_cli_request() -> dict:
+    return {
+        "schema_version": "2.0",
+        "company_query": "Fixture Co",
+        "market": "HK",
+        "document_kind": "semi_annual_report",
+        "mode": "exact",
+        "fiscal_year": 2025,
+        "fiscal_period": "H1",
+        "as_of_date": "2026-10-21",
+        "filing_intent": "reuse_only",
+    }
