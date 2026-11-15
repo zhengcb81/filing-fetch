@@ -2,7 +2,13 @@
 
 ## Session 2026-11-15
 
-- 开工：worktree C:/Users/郑曾波/Projects/filing-fetch-ff1-envelope-20261115 建于 main 1dfd818，分支 codex/ff1-envelope-candidates-20261115。git worktree add 成功（1275 files）。
-- 诊断复核：确认 fetch_filing.py:803-819 白名单无 candidates/reason；_pathless_operation_handle:1019-1046 不挂候选；ff_v2_envelope.error_envelope:138-149 无 candidates 参数；ff_job_contracts._ERROR_FIELDS:67 闭集、error_view_from_exception:226-227 不透传、build_job_view:373-375 error 不过 pathless 防线；docs/ff-job-protocol.md:116 error 六字段。
-- PWF 登记：task_plan.md/findings.md/progress.md 建立。
-- [进行中] 跑测试基线。
+- 开工：worktree C:/Users/郑曾波/Projects/filing-fetch-ff1-envelope-20261115 建于 main 1dfd818，分支 codex/ff1-envelope-candidates-20261115。
+- 诊断复核：确认 fetch_filing 白名单无 candidates/reason、_pathless_operation_handle 不挂候选、v2 error_envelope 无 candidates 参数、job _ERROR_FIELDS 闭集且 error 块无 pathless 防线、文档 error 行六字段。
+- 基线：全量 17F/1537P/11S/3E/44sub；ruff 过；聚焦文件 93P/6sub。
+- C1 完成：_SOURCE_OPERATION_FIELDS+2 字段；_validated_operation_candidates 严格校验（状态门控/全等闭集/枚举/≤5）；_pathless_operation_handle 挂载+reason 入消息；37 测试绿；回归 254P 绿；commit feat(contracts)。
+- C2 完成：ff_source_candidate 增 projected_error_candidates+CANDIDATE_DETAIL_FIELDS/LIMIT（C1 常量上收共享）；error_envelope 可选 candidates（filing.candidates+闭集 hint，仅三 code）；main() v2 分环传 exc.candidates；17 新测试绿；回归 411P（1 失败=基线预存 provider_diagnostics real CLI）；ruff 过；commit feat(v2)。
+- C3 完成：_ERROR_FIELDS+candidates；error_view_from_exception 投影透传（同三 code 门控，ERROR_CANDIDATE_CODES 共享）；build_job_view 子集校验+error 块 _assert_pathless+存储候选形状校验；docs/ff-job-protocol.md error 行更新；15 新测试绿；回归 420P（同 1 预存失败）；ruff 过；commit feat(job)。
+- 全量改后：17F/1604P/11S/3E/44sub；失败集与基线逐名一致（主工作区 base commit 重跑 6 个失败文件复核同名单）；passed +67。
+- 链路验收：TestFF1ChainAcceptance 2 项（operation payload→exception→v2 envelope→job view 一条链）；文件 69P 全绿；ruff 过。
+- 收尾：PWF 三文件终态更新；收尾 commit。
+- 红线核对：未 push、未并 main、每 commit 前 git branch --show-current 核对、旧负载/旧记录形状断言全绿、物理防线覆盖 candidates。

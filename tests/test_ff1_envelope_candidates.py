@@ -479,3 +479,47 @@ class TestC3JobErrorView:
         assert final["error"]["candidates"] == [_candidate(1), _candidate(2)]
         view = build_job_view(final)
         assert view["error"]["candidates"] == [_candidate(1), _candidate(2)]
+
+
+class TestFF1ChainAcceptance:
+    """One operation payload, three surfaces: exception, v2 envelope, job view.
+
+    Chain-level evidence for FF-1 acceptance ①: a legal candidates+reason
+    operation payload reaches every error face without manual reshaping.
+    """
+
+    def _raised(self, payload):
+        with pytest.raises(FilingFetchError) as caught:
+            ff._pathless_operation_handle(
+                payload, operation="ensure", request=_request(),
+                company_identity={}, stats={"calls": 0, "downloads": 0},
+            )
+        return caught.value
+
+    def test_operation_payload_reaches_v2_envelope_and_job_view(self):
+        payload = _operation_with_candidates(
+            status="ambiguous", reason="multiple_candidates")
+        exc = self._raised(payload)
+        envelope = error_envelope(
+            exc.code, str(exc), retryable=exc.retryable, candidates=exc.candidates,
+        )
+        view = error_view_from_exception(exc, "ffjob-000000000001")
+        assert exc.code == "ambiguous"
+        assert exc.candidates == payload["candidates"]
+        assert "multiple_candidates" in envelope["filing"]["reason"]
+        assert envelope["filing"]["candidates"] == payload["candidates"]
+        assert envelope["filing"]["hint"]
+        assert view["candidates"] == payload["candidates"]
+        assert build_job_view(_record(view))["error"]["candidates"] == payload["candidates"]
+
+    def test_not_found_payload_reaches_both_faces_without_hint(self):
+        payload = _operation_with_candidates(
+            status="not_found", reason="published_date_unknown")
+        exc = self._raised(payload)
+        envelope = error_envelope(
+            exc.code, str(exc), retryable=exc.retryable, candidates=exc.candidates,
+        )
+        assert envelope["filing"]["candidates"] == payload["candidates"]
+        assert "hint" not in envelope["filing"]
+        assert error_view_from_exception(exc, "ffjob-000000000001")["candidates"] == \
+            payload["candidates"]
