@@ -106,6 +106,56 @@ def contains_physical_field(value: object) -> bool:
     return False
 
 
+# FF-1: the candidate-detail field set the CWP producer lane emits on
+# ambiguous/not_found operations (shared consumer contract; fetch_filing
+# enforces it strictly at operation intake, projections reuse it here).
+CANDIDATE_DETAIL_FIELDS = frozenset(
+    {
+        "document_id",
+        "title",
+        "document_kind",
+        "provider",
+        "provider_document_id",
+        "form_type",
+        "fiscal_year",
+        "fiscal_period",
+        "language",
+        "content_sha256",
+        "byte_size",
+        "publication_status",
+        "exclusion_reason",
+    }
+)
+CANDIDATE_DETAIL_LIMIT = 5
+_ERROR_CANDIDATE_FIELDS = CANDIDATE_DETAIL_FIELDS | COMPANY_IDENTITY_FIELDS
+# The error codes whose responses may carry candidate details (shared by the
+# v2 error envelope and the job error view so the two faces cannot drift).
+ERROR_CANDIDATE_CODES = frozenset({"ambiguous", "identity_error", "not_found"})
+
+
+def projected_error_candidates(value: object) -> list[dict[str, Any]] | None:
+    """Safety projection for candidate details riding error envelopes.
+
+    Accepts either producer shape — operation candidate detail (closed field
+    set, already validated strictly at operation intake) or company-identity
+    candidates from an ambiguous resolve — and returns only closed, pathless
+    copies. Any non-dict item, physical-location key, or item with no
+    recognized field removes the whole block (fail closed against leaks,
+    never a partial guess). Returns None for an absent/empty/unsafe list.
+    """
+    if not isinstance(value, list) or not value:
+        return None
+    projected: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict) or contains_physical_field(item):
+            return None
+        cleaned = {key: child for key, child in item.items() if key in _ERROR_CANDIDATE_FIELDS}
+        if not cleaned:
+            return None
+        projected.append(cleaned)
+    return projected
+
+
 def validate_source_candidate(
     candidate: object,
     source_ref: object,

@@ -6,6 +6,7 @@ from typing import Any
 
 from filing_contracts import FilingFetchError, FILING_V2_RESPONSE_SCHEMA_VERSION, _validate_companion_request
 from ff_source_ref import validate_source_ref as _reference
+from ff_source_candidate import ERROR_CANDIDATE_CODES, projected_error_candidates
 from ff_local_preparation_observation import validated_local_preparation_observation
 from ff_provider_cause import (
     STAGES,
@@ -14,6 +15,20 @@ from ff_provider_cause import (
     validated_cause,
     validated_request_diagnostic,
 )
+
+
+# FF-1: candidate details ride the filing block only on the disambiguation
+# codes (ERROR_CANDIDATE_CODES), each with one closed hint (never free text).
+_DISAMBIGUATION_HINTS = {
+    # Same semantics as the v1 identity hint.
+    "identity_error": (
+        "identity is ambiguous; disambiguate by adding market/exchange "
+        "or by using a specific ticker in company_query"
+    ),
+    "ambiguous": "select one candidate from filing.candidates and resubmit with disambiguation fields",
+    # not_found deliberately has no hint (v1 precedent): the candidates
+    # themselves explain what was excluded and why.
+}
 
 
 _TRANSCRIPT_KEYS = (
@@ -146,6 +161,7 @@ def error_envelope(
     request_diagnostic: dict[str, Any] | None = None,
     producer_exit_code: int | None = None,
     local_preparation_observation: dict[str, Any] | None = None,
+    candidates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     stats = stats or {"calls": 0, "downloads": 0}
     filing: dict[str, Any] = {"status": code, "reason": reason, "retryable": retryable}
@@ -165,6 +181,15 @@ def error_envelope(
         filing["stage"] = stage
     if type(attempts) is int and attempts >= 0:
         filing["attempts"] = attempts
+    # FF-1: closed, pathless candidate details plus one closed hint ride the
+    # filing block only on the disambiguation codes and only when the list
+    # survives the safety projection (an unsafe list is dropped, not leaked).
+    safe_candidates = projected_error_candidates(candidates)
+    if safe_candidates is not None and code in ERROR_CANDIDATE_CODES:
+        filing["candidates"] = safe_candidates
+        hint = _DISAMBIGUATION_HINTS.get(code)
+        if hint is not None:
+            filing["hint"] = hint
     result = {
         "schema_version": FILING_V2_RESPONSE_SCHEMA_VERSION,
         "status": code,

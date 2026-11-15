@@ -63,6 +63,8 @@ from ff_configuration import load_connection_root, validate_company_wiki_root
 from ff_company_wiki_connection import WikiConnection, WikiEndpoint, command_for, connection_cwd, connection_environment, acquisition_arguments
 from ff_request_context import RequestContext
 from ff_source_candidate import (
+    CANDIDATE_DETAIL_FIELDS as _CANDIDATE_DETAIL_FIELDS,
+    CANDIDATE_DETAIL_LIMIT as _CANDIDATE_DETAIL_LIMIT,
     COMPANY_IDENTITY_FIELDS as _COMPANY_IDENTITY_FIELDS,
     SOURCE_CANDIDATE_FIELDS as _SOURCE_CANDIDATE_FIELDS,
     contains_physical_field as _contains_physical_field,
@@ -815,6 +817,11 @@ _SOURCE_OPERATION_FIELDS = frozenset(
         "acquisition_failure",
         "acquisition_observation",
         "local_preparation",
+        # FF-1: optional candidate detail for ambiguous/not_found operations
+        # and the optional machine-readable non-completed reason. Both stay
+        # optional forever; legacy payloads without them validate unchanged.
+        "candidates",
+        "reason",
     }
 )
 _SOURCE_OPERATION_STATUSES = frozenset(
@@ -827,9 +834,108 @@ _SOURCE_OPERATION_STATUSES = frozenset(
         "blocked",
     }
 )
+# FF-1 candidate-detail contract (consumed here, produced by the CWP lane
+# under the same shared text): candidates ride only ambiguous/not_found
+# operations; every item is a closed pathless field set; at most 5 items
+# (field set and limit shared with ff_source_candidate so the error-envelope
+# projection cannot drift from intake validation).
+_OPERATION_CANDIDATE_STATUSES = frozenset({"ambiguous", "not_found"})
+_OPERATION_CANDIDATE_PUBLICATION_STATUSES = frozenset({"known", "unknown", "future"})
+_OPERATION_CANDIDATE_EXCLUSION_REASONS = frozenset(
+    {
+        "published_date_unknown",
+        "fiscal_year_mismatch",
+        "multiple_candidates",
+        "identity_mismatch",
+        "capture_not_ready",
+        "other_excluded",
+    }
+)
+_URN_RE = re.compile(r"urn:[a-z0-9][a-z0-9.:-]{0,255}")
+# The optional top-level reason is a closed-set machine token for a
+# non-completed status (same token shape as local_preparation reasons).
+_OPERATION_REASON_RE = re.compile(r"[a-z][a-z0-9_]{0,79}")
 
 
 
+
+
+def _validated_operation_candidates(
+    payload: dict[str, Any],
+    *,
+    operation: str,
+    upstream_cause: dict[str, Any] | None,
+    receipt: dict[str, Any] | None,
+    observation: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """FF-1: validate the optional candidate detail and machine reason.
+
+    Shared contract with the CWP producer lane: ``candidates`` is a
+    ``list[object]`` legal only on ambiguous/not_found operations (a
+    completed/gap payload carrying it is invalid, fail-closed), each item is
+    exactly the closed pathless field set below, and there are at most five
+    items. ``reason`` is an optional closed-set machine token for a
+    non-completed status. Both fields stay optional; payloads without them
+    pass through unchanged.
+    """
+    status = payload.get("status")
+    reason = payload.get("reason")
+    raw_candidates = payload.get("candidates")
+
+    def _invalid(message: str) -> FilingFetchError:
+        return FilingFetchError(
+            message, code="upstream_error",
+            upstream_cause=upstream_cause or ff_provider_cause.source_condition(
+                operation, "invalid_producer_schema"),
+            acquisition_failure=receipt,
+            acquisition_observation=observation,
+        )
+
+    if reason is not None:
+        if (status == "completed"
+                or not isinstance(reason, str)
+                or not _OPERATION_REASON_RE.fullmatch(reason)):
+            raise _invalid("company-wiki operation reason is invalid")
+    if raw_candidates is None:
+        return payload
+    if status not in _OPERATION_CANDIDATE_STATUSES:
+        # completed/gap (and every other status) must not carry candidates.
+        raise _invalid("company-wiki operation candidates are invalid")
+    if not isinstance(raw_candidates, list) or len(raw_candidates) > _CANDIDATE_DETAIL_LIMIT:
+        raise _invalid("company-wiki operation candidates are invalid")
+    validated: list[dict[str, Any]] = []
+    for item in raw_candidates:
+        if not isinstance(item, dict) or set(item) != _CANDIDATE_DETAIL_FIELDS:
+            raise _invalid("company-wiki operation candidates are invalid")
+        copy = dict(item)
+        for field in ("document_id", "title", "document_kind"):
+            value = copy[field]
+            if field == "document_id":
+                if (not isinstance(value, str) or not value.strip()
+                        or value != value.strip() or not _URN_RE.fullmatch(value)):
+                    raise _invalid("company-wiki operation candidates are invalid")
+            elif not isinstance(value, str) or not value.strip() or value != value.strip():
+                raise _invalid("company-wiki operation candidates are invalid")
+        for field in ("provider", "provider_document_id", "form_type",
+                      "fiscal_period", "language"):
+            value = copy[field]
+            if value is not None and (not isinstance(value, str) or not value.strip()
+                                      or value != value.strip()):
+                raise _invalid("company-wiki operation candidates are invalid")
+        fiscal_year = copy["fiscal_year"]
+        if fiscal_year is not None and type(fiscal_year) is not int:
+            raise _invalid("company-wiki operation candidates are invalid")
+        sha = copy["content_sha256"]
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha):
+            raise _invalid("company-wiki operation candidates are invalid")
+        if type(copy["byte_size"]) is not int or copy["byte_size"] < 0:
+            raise _invalid("company-wiki operation candidates are invalid")
+        if copy["publication_status"] not in _OPERATION_CANDIDATE_PUBLICATION_STATUSES:
+            raise _invalid("company-wiki operation candidates are invalid")
+        if copy["exclusion_reason"] not in _OPERATION_CANDIDATE_EXCLUSION_REASONS:
+            raise _invalid("company-wiki operation candidates are invalid")
+        validated.append(copy)
+    return {**payload, "candidates": validated}
 
 
 def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, Any]:
@@ -862,6 +968,9 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             acquisition_failure=receipt,
             acquisition_observation=observation,
         )
+    payload = _validated_operation_candidates(payload, operation=operation,
+                                               upstream_cause=upstream_cause,
+                                               receipt=receipt, observation=observation)
     local = payload.get("local_preparation")
     local_fields = {"status", "reason", "blocks_download", "causes"}
     if local is not None and (
@@ -1032,10 +1141,20 @@ def _pathless_operation_handle(
             local_cause.update(provider_started=False, usage_complete=True)
             if "local_read_budget" in local:
                 local_observation = _local_preparation_observation_from_operation(local)
+        # FF-1: the validated candidate detail rides only the disambiguation
+        # codes; the optional machine reason token joins the message so every
+        # envelope (v1/v2/job) sees it without a new protocol field.
+        detail = result.get("candidates")
+        candidates = detail if detail and result["status"] in _OPERATION_CANDIDATE_STATUSES else None
+        machine_reason = result.get("reason")
+        message = f"company-wiki {operation} {result['status']}"
+        if isinstance(machine_reason, str):
+            message = f"{message}: {machine_reason}"
         raise FilingFetchError(
-            f"company-wiki {operation} {result['status']}",
+            message,
             code=code,
             stage=stage,
+            candidates=candidates,
             upstream_cause=ff_provider_cause.diagnose_acquisition_failure(
                 operation, result.get("acquisition_failure")
             ) or local_cause or ff_provider_cause.source_condition(operation, "source_not_found" if result["status"] == "not_found" else "unknown"),
@@ -1861,6 +1980,7 @@ def main(argv: list[str] | None = None) -> int:
                 request_diagnostic=exc.request_diagnostic,
                 producer_exit_code=exc.producer_exit_code,
                 local_preparation_observation=exc.local_preparation_observation,
+                candidates=exc.candidates,
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")

@@ -41,7 +41,11 @@ from typing import Any
 
 from filing_contracts import FilingFetchError, FILING_V2_REQUEST_SCHEMA_VERSION, validate_request
 from ff_financial_statements import validate_request as validate_statements_request
-from ff_source_candidate import contains_physical_field as _contains_physical_field
+from ff_source_candidate import (
+    ERROR_CANDIDATE_CODES,
+    contains_physical_field as _contains_physical_field,
+    projected_error_candidates as _projected_error_candidates,
+)
 
 FF_JOB_SCHEMA_VERSION = "ff-job/1"
 JOB_OWNER_NAME = "filing-fetch"
@@ -64,7 +68,15 @@ _IDEMPOTENCY_KEY_RE = re.compile(r"[A-Za-z0-9._:~/-]{1,256}")
 _OWNER_JOB_ID_RE = re.compile(r"ffjob-[0-9a-f]{12}")
 
 _SUBMIT_BODY_FIELDS = frozenset({"schema_version", "command_id", "kind", "idempotency_key", "request"})
-_ERROR_FIELDS = frozenset({"code", "message", "owner", "retryable", "next_actions", "correlation_id"})
+# FF-1: the optional "candidates" key rides only disambiguation errors
+# (ambiguous/identity_error/not_found) and stays absent otherwise, so old
+# stored records keep their exact byte shape. A stored error is valid only
+# as the exact six-key legacy shape or the exact seven-key candidates
+# shape; a partial subset is invalid (review F1: no残缺 shapes).
+_ERROR_BASE_FIELDS = frozenset(
+    {"code", "message", "owner", "retryable", "next_actions", "correlation_id"}
+)
+_ERROR_FIELDS = _ERROR_BASE_FIELDS | {"candidates"}
 # The Dashboard DecimalValue contract, field for field.
 _COST_FIELDS = frozenset(
     {"value", "currency", "unit", "scale", "period_start", "period_end", "period_kind",
@@ -224,7 +236,13 @@ def _error_view(code: str, message: str, retryable: bool, correlation_id: str) -
 
 
 def error_view_from_exception(exc: FilingFetchError, correlation_id: str) -> dict[str, Any]:
-    return _error_view(exc.code, str(exc), exc.retryable, correlation_id)
+    view = _error_view(exc.code, str(exc), exc.retryable, correlation_id)
+    # FF-1: validated candidate details ride only the disambiguation codes,
+    # mirroring the v2 error envelope so both faces answer alike.
+    candidates = _projected_error_candidates(exc.candidates)
+    if candidates is not None and exc.code in ERROR_CANDIDATE_CODES:
+        view["candidates"] = candidates
+    return view
 
 
 def cost_for_pending(intent: str, status: str) -> tuple[dict[str, Any] | None, str]:
@@ -371,8 +389,25 @@ def build_job_view(record: dict[str, Any], *, fresh_actions: list[str] | None = 
         if legacy_zero_without_evidence or legacy_companion_not_counted:
             view["cost"], view["cost_state"] = None, "unknown"
     error = view.get("error")
-    if error is not None and set(error) != _ERROR_FIELDS:
-        raise FFJobError("stored error shape is invalid", code="fatal")
+    if error is not None:
+        # FF-1: a stored error is valid only as the exact six-key legacy
+        # shape or the exact seven-key candidates shape; partial subsets and
+        # unknown keys are invalid (review F1).
+        if set(error) not in (_ERROR_BASE_FIELDS, _ERROR_FIELDS):
+            raise FFJobError("stored error shape is invalid", code="fatal")
+        # The error block rides the view like any other projection, so it
+        # inherits the same physical-location guard (candidates included).
+        _assert_pathless(error, "error")
+        # Review F2: validate and emit the same object — the view carries the
+        # projected candidate copy, so unknown stored keys (credentials,
+        # commands) are stripped exactly like the v2 envelope face strips
+        # them; an unprojectable stored list stays fatal.
+        stored_candidates = error.get("candidates")
+        if stored_candidates is not None:
+            projected = _projected_error_candidates(stored_candidates)
+            if projected is None:
+                raise FFJobError("stored error candidates are invalid", code="fatal")
+            view["error"] = {**error, "candidates": projected}
     return view
 
 
