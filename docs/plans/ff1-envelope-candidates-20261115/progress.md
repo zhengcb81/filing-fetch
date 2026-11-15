@@ -12,3 +12,13 @@
 - 链路验收：TestFF1ChainAcceptance 2 项（operation payload→exception→v2 envelope→job view 一条链）；文件 69P 全绿；ruff 过。
 - 收尾：PWF 三文件终态更新；收尾 commit。
 - 红线核对：未 push、未并 main、每 commit 前 git branch --show-current 核对、旧负载/旧记录形状断言全绿、物理防线覆盖 candidates。
+
+## Session 2026-11-15（第二轮：独立重审修复）
+
+- 重审 finding：F1 (P2) build_job_view 存储 error 子集校验过宽（残缺形状放行）；F2 (P2) candidates 校验对象（投影）与输出对象（record 原件）分离，篡改存储未知键可透进 JobView；F3 (P3) 大写 sha/float fiscal_year/bool byte_size 缺显式拒收测试。
+- 修复 F1=收紧路径：_ERROR_BASE_FIELDS（六键）/_ERROR_FIELDS（七键）两个全等合法形状，其余 fatal；新增 6 缺键参数化 + 七键缺 base 字段 + 单键拒收测试。
+- 修复 F2=重写路径：校验通过后 view["error"] = {**error, "candidates": 投影副本}（不动 record 原件）；不可投影 fatal；新增 api_key/command 未知键剥离测试 + 全未知键项 fatal 测试。
+- 修复 F3：坏形状参数化补 uppercase sha / fiscal_year=2025.0 / byte_size=True。
+- 复跑：test_ff1_envelope_candidates.py 82 passed（69+13）；ruff 全过；聚焦回归 303P/1S/44sub（1 失败=基线预存 provider real CLI）；全量 17 failed / 1619 passed / 11 skipped / 3 errors / 44 subtests。
+- 失败集逐名核verify：17 个失败节点 = base commit 6 文件重跑的 16 个（逐名一致）+ test_config_doctor（在主工作区 base commit 单跑确认 FAILED，预存）。零新增失败；passed 1537→1619（+82 全为本 lane 测试，含链路与重审新增）。
+- commit fix(job): 重审修复单独提交。

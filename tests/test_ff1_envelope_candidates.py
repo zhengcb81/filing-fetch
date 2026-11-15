@@ -134,10 +134,13 @@ class TestC1OperationContract:
             {"publication_status": None},
             {"content_sha256": "not-hex"},
             {"content_sha256": None},
+            {"content_sha256": "A" * 64},  # uppercase hex is not the closed shape
             {"byte_size": "1024"},
             {"byte_size": -1},
+            {"byte_size": True},  # bool is not an int byte size
             {"fiscal_year": "2025"},
             {"fiscal_year": True},
+            {"fiscal_year": 2025.0},  # float is not an int fiscal year
             {"document_id": "hidden/original.pdf"},
             {"document_id": 12345},
             {"title": ""},
@@ -438,6 +441,29 @@ class TestC3JobErrorView:
         with pytest.raises(FFJobError, match="stored error shape"):
             build_job_view(_record(error))
 
+    @pytest.mark.parametrize(
+        "drop", ["correlation_id", "owner", "code", "message", "retryable", "next_actions"],
+    )
+    def test_build_job_view_rejects_partial_error_shapes(self, drop):
+        # Review F1: a stored error must be exactly the six-key legacy shape
+        # or the seven-key candidates shape — a five-key subset is invalid.
+        error = {key: value for key, value in _LEGACY_ERROR_VIEW.items() if key != drop}
+        with pytest.raises(FFJobError, match="stored error shape"):
+            build_job_view(_record(error))
+
+    def test_build_job_view_rejects_seven_keys_missing_a_base_field(self):
+        # Seven keys but not the seven-key contract shape (owner replaced by
+        # candidates): still a partial shape, still fatal.
+        error = {key: value for key, value in _LEGACY_ERROR_VIEW.items()
+                 if key != "owner"}
+        error["candidates"] = [_candidate(1)]
+        with pytest.raises(FFJobError, match="stored error shape"):
+            build_job_view(_record(error))
+
+    def test_build_job_view_rejects_single_key_error(self):
+        with pytest.raises(FFJobError, match="stored error shape"):
+            build_job_view(_record({"code": "not_found"}))
+
     def test_build_job_view_rejects_physical_leak_inside_error(self):
         error = dict(_LEGACY_ERROR_VIEW, candidates=[
             dict(_candidate(1), canonical_path="hidden/original.pdf"),
@@ -447,6 +473,25 @@ class TestC3JobErrorView:
 
     def test_build_job_view_rejects_invalid_stored_candidates(self):
         error = dict(_LEGACY_ERROR_VIEW, candidates="junk")
+        with pytest.raises(FFJobError, match="stored error candidates"):
+            build_job_view(_record(error))
+
+    def test_build_job_view_strips_unknown_stored_candidate_keys(self):
+        # Review F2: a tampered stored record must not reach the view as-is;
+        # the view carries the projected copy, so unknown keys (credentials,
+        # commands) are stripped exactly like the v2 envelope face.
+        tampered = dict(_candidate(1), api_key="secret-token", command="rm -rf /")
+        error = dict(_LEGACY_ERROR_VIEW, candidates=[tampered])
+        view = build_job_view(_record(error))
+        assert view["error"]["candidates"] == [_candidate(1)]
+        assert view["error"]["candidates"][0] is not tampered
+        assert "api_key" not in str(view["error"])
+        assert "command" not in str(view["error"])
+
+    def test_build_job_view_fatals_on_all_unknown_stored_candidate(self):
+        # An item with no recognized field cannot be projected: fatal, never
+        # a guess (the rewrite path fails closed).
+        error = dict(_LEGACY_ERROR_VIEW, candidates=[{"api_key": "secret"}])
         with pytest.raises(FFJobError, match="stored error candidates"):
             build_job_view(_record(error))
 

@@ -52,3 +52,11 @@
 ## NOT_RUN
 - 真实 CWP 生产方端到端（生产方 lane 并行开发中）：全部证据为 mock/单测，如实标注。
 - 未 push 远端、未并 main（按红线）。
+
+## 独立重审修复（Lane C re-review，2026-11-15 第二轮）
+重审结论：0 OPEN P1；2 OPEN P2 + 1 P3，均已修复并单独 commit。
+
+- F1 (P2) build_job_view 存储 error 形状校验过宽：子集校验（set(error) <= _ERROR_FIELDS）放行残缺形状（单键/五键缺 correlation_id）。修复=收紧路径：`_ERROR_BASE_FIELDS`（六键 legacy）与 `_ERROR_FIELDS`（七键含 candidates）两个全等合法形状，`set(error) not in (_ERROR_BASE_FIELDS, _ERROR_FIELDS)` → FFJobError fatal。新增测试：六种缺键参数化拒收、七键但缺 base 字段拒收、单键拒收（原测试只测多余键）。
+- F2 (P2) 校验对象与输出对象分离：存储 candidates 用投影校验、view 却取 record 原件，篡改存储的未知键（api_key/command）原样透进 JobView（envelope 面剥离、job 面不剥，防线不等强）。修复=重写路径：形状+pathless 校验后把 `view["error"]` 重写为 `{**error, "candidates": 投影副本}`（不改动 stored record 原件）；不可投影列表（非 dict/物理键/全未知键项）仍 fatal。新增对抗测试：七键 error + candidates 项带 api_key/command → 视图只含闭集键且非原对象；全未知键项 → fatal。
+- F3 (P3) 类型边界显式固化：参数化坏形状补 uppercase sha（"A"*64）、fiscal_year=2025.0（float）、byte_size=True（bool）三种拒收（代码行为已正确，测试固化）。
+- 修复后复跑：tests/test_ff1_envelope_candidates.py 82 passed（69+13 新增）；ruff 全过；job/envelope 聚焦回归 303 passed 1 skipped 44 subtests（1 失败=基线预存 test_real_cli_config_error_has_no_upstream_cause）；全量套件见 progress.md 终数。
