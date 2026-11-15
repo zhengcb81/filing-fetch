@@ -1,5 +1,6 @@
 """Regression tests for completed-phase plan scoping."""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -69,3 +70,90 @@ def test_manifest_exemption_does_not_cover_sibling_plans(tmp_path):
 
     assert _archived_by_manifest(archived) is True
     assert _archived_by_manifest(other) is False
+
+
+def test_manifest_with_matching_digest_pins_the_archived_bytes(tmp_path):
+    """With a pinned sha256 the exemption is bound to the archived bytes."""
+    plan = _write_plan(tmp_path, "archive-input/w06")
+    digest = hashlib.sha256(plan.read_bytes()).hexdigest()
+    manifest = tmp_path / "archive-input" / "ARCHIVE_MANIFEST.json"
+    manifest.write_text(
+        json.dumps({
+            "scope": "A0 archive",
+            "files": [{"path": "w06/task_plan.md", "sha256": digest}],
+        }),
+        encoding="utf-8",
+    )
+
+    assert _archived_by_manifest(plan) is True
+
+    # An edited snapshot no longer matches its pinned digest: the archived
+    # status is refused, so the plan is verified like any other.
+    plan.write_text("## Phase 1 — Edited — 状态：completed\n- [x] Task\n", encoding="utf-8")
+    assert _archived_by_manifest(plan) is False
+
+
+def test_pinned_digest_is_honored_across_line_endings(tmp_path):
+    """A pin taken over another line-ending form still identifies the content."""
+    plan = _write_plan(tmp_path, "archive-input/w06")
+    lf = plan.read_bytes().replace(b"\r\n", b"\n")
+    crlf_digest = hashlib.sha256(lf.replace(b"\n", b"\r\n")).hexdigest()
+    manifest = tmp_path / "archive-input" / "ARCHIVE_MANIFEST.json"
+    manifest.write_text(
+        json.dumps({
+            "scope": "A0 archive",
+            "files": [{"path": "w06/task_plan.md", "sha256": crlf_digest}],
+        }),
+        encoding="utf-8",
+    )
+
+    assert _archived_by_manifest(plan) is True
+
+
+def test_unreadable_manifests_grant_no_exemption(tmp_path):
+    """A manifest this process cannot parse never grants an exemption."""
+    plan = _write_plan(tmp_path, "archive-input/w06")
+    manifest = tmp_path / "archive-input" / "ARCHIVE_MANIFEST.json"
+
+    manifest.write_bytes(b"\xff\xfe\x00not-utf8")
+    assert _archived_by_manifest(plan) is False
+
+    manifest.write_text("{not json", encoding="utf-8")
+    assert _archived_by_manifest(plan) is False
+
+    manifest.write_text(json.dumps({"scope": "A0 archive"}), encoding="utf-8")
+    assert _archived_by_manifest(plan) is False
+
+    manifest.write_text(json.dumps({"files": "w06/task_plan.md"}), encoding="utf-8")
+    assert _archived_by_manifest(plan) is False
+
+    manifest.write_text(json.dumps({"files": ["w06/task_plan.md"]}), encoding="utf-8")
+    assert _archived_by_manifest(plan) is False
+
+
+def test_manifest_above_the_verified_root_is_not_consulted(tmp_path):
+    """Only manifests inside the verified tree can grant an exemption."""
+    plan = _write_plan(tmp_path, "tree/archive-input/w06")
+    manifest = tmp_path / "ARCHIVE_MANIFEST.json"
+    manifest.write_text(
+        json.dumps({
+            "scope": "A0 archive",
+            "files": [{"path": "tree/archive-input/w06/task_plan.md"}],
+        }),
+        encoding="utf-8",
+    )
+
+    assert _archived_by_manifest(plan, root=tmp_path / "tree") is False
+    assert _archived_by_manifest(plan) is True
+
+
+def test_declared_path_separators_and_case_are_normalised(tmp_path):
+    """A manifest written with backslashes names the same archived file."""
+    plan = _write_plan(tmp_path, "archive-input/w06")
+    manifest = tmp_path / "archive-input" / "ARCHIVE_MANIFEST.json"
+    manifest.write_text(
+        json.dumps({"scope": "A0 archive", "files": [{"path": "w06\\task_plan.md"}]}),
+        encoding="utf-8",
+    )
+
+    assert _archived_by_manifest(plan) is True

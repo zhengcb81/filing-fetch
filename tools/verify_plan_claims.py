@@ -16,7 +16,9 @@ Exit code 0 = all completed claims backed; 1 = problems found.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -205,7 +207,64 @@ def _is_archived(plan_text: str) -> bool:
 _ARCHIVE_MANIFEST_NAME = "ARCHIVE_MANIFEST.json"
 
 
-def _archived_by_manifest(plan_path: Path) -> bool:
+def _manifest_entries(manifest_path: Path) -> list[dict]:
+    """Read one archive manifest's file entries; an unreadable manifest is none.
+
+    A manifest that cannot be read (bad JSON, wrong encoding, not a file)
+    grants no exemption - the exemption is only ever given by a manifest this
+    process could actually parse.
+    """
+    try:
+        raw = manifest_path.read_bytes()
+    except OSError:
+        return []
+    try:
+        manifest = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return []
+    entries = manifest.get("files") if isinstance(manifest, dict) else None
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)]
+
+
+def _declared_target(ancestor: Path, declared: str) -> Path | None:
+    """Resolve one declared manifest path against its manifest directory.
+
+    The declared path is written with POSIX separators by convention, but a
+    manifest authored on Windows may use backslashes; both spellings name
+    the same file.  The comparison is case-normalised so the same manifest
+    grants the same exemption on every platform (Windows folds case, POSIX
+    does not - the manifest must not decide a different gate result per
+    machine).
+    """
+    normalised = declared.replace("\\", "/")
+    candidate = ancestor / Path(normalised)
+    try:
+        return candidate.resolve()
+    except OSError:
+        return None
+
+
+def _digest_variants(data: bytes) -> set[str]:
+    """sha256 of one file's content across the recognized line-ending forms.
+
+    An archive manifest pins a digest of the content it archived, but the
+    pinned bytes depend on the line-ending form the archiving machine had
+    checked out (this repository's ``core.autocrlf`` makes a worktree CRLF
+    while the committed blob stays LF).  Line endings are not content, so a
+    pin is honored when it matches any recognized form - and a genuine edit
+    changes every form at once, so tampering is still detected.
+    """
+    lf = data.replace(b"\r\n", b"\n")
+    crlf = lf.replace(b"\n", b"\r\n")
+    return {
+        hashlib.sha256(candidate).hexdigest()
+        for candidate in (data, lf, crlf)
+    }
+
+
+def _archived_by_manifest(plan_path: Path, root: Path | None = None) -> bool:
     """True when an archive manifest declares this plan file an archived input.
 
     A plan copied into the repository as READ-ONLY archive material is not an
@@ -219,30 +278,50 @@ def _archived_by_manifest(plan_path: Path) -> bool:
     the plan's path under its ``files`` entries.  The exemption therefore
     never depends on a path segment that merely looks like an archive, and
     never applies to a plan no manifest declares.
+
+    When the entry pins a ``sha256``, the archived file must still hash to
+    it: the exemption is bound to the archived bytes, not only to their
+    name, so a tampered snapshot loses its archived status.
+
+    ``root`` bounds the ancestor search: only manifests inside the tree
+    being verified can grant an exemption, so a file outside the repository
+    cannot change the local gate result (and diverge from CI).
     """
+    try:
+        plan_target = plan_path.resolve()
+    except OSError:
+        return False
+    plan_key = os.path.normcase(str(plan_target))
+    stop = root.resolve() if root is not None else None
     for ancestor in plan_path.parents:
+        if stop is not None:
+            try:
+                if os.path.normcase(str(ancestor.resolve())) == os.path.normcase(str(stop)):
+                    break
+            except OSError:
+                break
         manifest_path = ancestor / _ARCHIVE_MANIFEST_NAME
         if not manifest_path.is_file():
             continue
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        entries = manifest.get("files") if isinstance(manifest, dict) else None
-        if not isinstance(entries, list):
-            continue
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
+        for entry in _manifest_entries(manifest_path):
             declared = entry.get("path")
             if not isinstance(declared, str) or not declared:
                 continue
-            try:
-                target = (ancestor / declared).resolve()
-            except OSError:
+            target = _declared_target(ancestor, declared)
+            if target is None or os.path.normcase(str(target)) != plan_key:
                 continue
-            if target == plan_path.resolve():
-                return True
+            digest = entry.get("sha256")
+            if isinstance(digest, str) and digest:
+                try:
+                    actual = _digest_variants(plan_path.read_bytes())
+                except OSError:
+                    continue
+                if digest.lower() not in actual:
+                    # The archived bytes no longer match the pinned digest:
+                    # the snapshot was edited, so it is no longer the
+                    # archived artifact the manifest declares.
+                    continue
+            return True
     return False
 
 
@@ -312,7 +391,7 @@ def main() -> int:
             print(f"no task_plan.md/progress.md pairs under {args.plan_dir}")
             return 2
         for plan_path, progress_path, findings_path in pairs:
-            if _archived_by_manifest(plan_path):
+            if _archived_by_manifest(plan_path, root=args.plan_dir):
                 # An archive manifest declares this plan an archived input
                 # snapshot: historical reference, not an active plan.
                 all_reports.append({"plan": str(plan_path), "report": [], "archived": True})
