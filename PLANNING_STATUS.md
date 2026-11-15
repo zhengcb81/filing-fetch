@@ -1,6 +1,15 @@
 # filing-fetch 当前规划状态
 
-## Current checkpoint — 2026-11-14（当前有效）
+## Current checkpoint — 2026-11-15（当前有效）
+
+### FF-1/CWP-1 修复（三 lane 模块化并行）——FF 侧已并线
+
+- 依据：Dashboard `handoffs/owner-requests/filing-fetch/IMPROVEMENTS.md` FF-1实测补充节（2026-11-14 四场 drill）+ 用户批准的三 lane 并行方案（A=CWP 身份 / B=CWP 目录四件套 / C=FF 信封贯通，契约先行、互不依赖）。
+- **已并线**：`codex/ff1-envelope-candidates-20261115`（Lane C，5 commits，base `1dfd818`）经 merge commit `f6ca0b8` 并入 `main`。独立重审 PASS（首轮 2 OPEN P2：F1 存储 error 形状子集放宽、F2 candidates 校验/输出对象分离 → 修复 `fb688b6` → delta 复核全 RESOLVED，0 OPEN P1/P2）。合并后聚焦验证：ff1/job facade/cross-process 136 passed + 6 subtests、ruff clean。lane PWF 在 `docs/plans/ff1-envelope-candidates-20261115/`。
+- **CWP 侧候选**（均独立重审 PASS、0 OPEN P1/P2，未并 CWP master）：Lane A `codex/cwp1-identity-suffix-20261115`@`8cdff1e5e`（后缀归一化 + 双上市具名 reason，三探针达标）；Lane B `codex/ff1-catalog-repair-20261115`@`b9852186a`（具名分类 / ensure 一次性自愈 / 写侧 published_date / 候选投影；F-R3 title-trim 修复 commit 待落）。跨仓契约对拍已由 Lane B 重审实载验证（B4 投影负载喂 FF 校验器全过）。
+- **待办**：① CWP master 被在途 docs 工作推进（`9bcdd402a`），A/B 并线需干净合并或按 §8-3 明示交接；② 生产 catalog 4 个 MDB 行被 2026-11-08 显式未知断言 pin 住（重审已三重核实），自愈对其不生效，需用户授权一次 facts 修正 pass；③ push 前按仓规跑 `python tools/pre_push_gate.py` 并盯 CI；④ FF-2（G-m8-FF-DRILL 真实下载）为自然发生项，待上述解除后由首个真实采集任务触发。
+
+## 历史 checkpoint — 2026-11-14（已被上方 2026-11-15 checkpoint 取代，仅作时间线证据）
 
 ### 2026-11-14 仓库收尾与工区清理对账
 

@@ -478,14 +478,15 @@ class TestC3JobErrorView:
 
     def test_build_job_view_strips_unknown_stored_candidate_keys(self):
         # Review F2: a tampered stored record must not reach the view as-is;
-        # the view carries the projected copy, so unknown keys (credentials,
-        # commands) are stripped exactly like the v2 envelope face.
-        tampered = dict(_candidate(1), api_key="secret-token", command="rm -rf /")
+        # the view carries the projected copy, so unknown keys (whatever they
+        # are named — the strip is name-agnostic) are removed exactly like
+        # the v2 envelope face.
+        tampered = dict(_candidate(1), sponsor_tag="tainted-value", command="rm -rf /")
         error = dict(_LEGACY_ERROR_VIEW, candidates=[tampered])
         view = build_job_view(_record(error))
         assert view["error"]["candidates"] == [_candidate(1)]
         assert view["error"]["candidates"][0] is not tampered
-        assert "api_key" not in str(view["error"])
+        assert "sponsor_tag" not in str(view["error"])
         assert "command" not in str(view["error"])
 
     def test_build_job_view_fatals_on_all_unknown_stored_candidate(self):
