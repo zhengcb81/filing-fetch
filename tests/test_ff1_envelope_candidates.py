@@ -14,6 +14,7 @@ import pytest
 
 import fetch_filing as ff
 from filing_contracts import FilingFetchError
+from ff_job_contracts import FFJobError, build_job_view, error_view_from_exception
 from ff_v2_envelope import error_envelope
 from test_source_ref_v2_db_query import _operation_v2
 
@@ -349,3 +350,132 @@ def _v2_cli_request() -> dict:
         "as_of_date": "2026-10-21",
         "filing_intent": "reuse_only",
     }
+
+
+_LEGACY_ERROR_VIEW = {
+    "code": "not_found",
+    "message": "company-wiki ensure not_found",
+    "owner": "filing-fetch",
+    "retryable": False,
+    "next_actions": ["correct_scope_and_resubmit"],
+    "correlation_id": "ffjob-000000000001",
+}
+
+
+def _record(error):
+    return {
+        "command_id": "cmd-1",
+        "owner_job_id": "ffjob-000000000001",
+        "status": "failed",
+        "status_known": True,
+        "allowed_actions": [],
+        "started_at": "2026-11-15T00:00:00Z",
+        "updated_at": "2026-11-15T00:00:01Z",
+        "cost": None,
+        "cost_state": "unknown",
+        "error": error,
+        "recovery_capability": "durable_owner_job",
+        "kind": "filing.acquire",
+        "intent": "reuse_only",
+        "idempotency_key": "k-1",
+        "attempts": 1,
+        "execution_count": 1,
+        "result": None,
+    }
+
+
+class TestC3JobErrorView:
+    def test_error_view_passes_validated_candidates_for_ambiguous(self):
+        exc = FilingFetchError(
+            "company-wiki ensure ambiguous: multiple_candidates",
+            code="ambiguous", candidates=[_candidate(1), _candidate(2)],
+        )
+        view = error_view_from_exception(exc, "ffjob-000000000001")
+        assert view["candidates"] == [_candidate(1), _candidate(2)]
+        assert set(view) == set(_LEGACY_ERROR_VIEW) | {"candidates"}
+        assert view["next_actions"] == ["resubmit_with_disambiguation"]
+
+    def test_error_view_passes_identity_candidates_for_identity_error(self):
+        exc = FilingFetchError(
+            "company identity is not uniquely resolved: ambiguous / fuzzy",
+            code="identity_error", candidates=list(_IDENTITY_CANDIDATES),
+        )
+        view = error_view_from_exception(exc, "ffjob-000000000001")
+        assert view["candidates"] == _IDENTITY_CANDIDATES
+
+    def test_error_view_drops_candidates_for_non_disambiguation_code(self):
+        exc = FilingFetchError(
+            "producer failed", code="upstream_error", candidates=[_candidate(1)],
+        )
+        view = error_view_from_exception(exc, "ffjob-000000000001")
+        assert set(view) == set(_LEGACY_ERROR_VIEW)
+        assert "candidates" not in view
+
+    def test_error_view_without_candidates_keeps_legacy_six_keys(self):
+        exc = FilingFetchError("company-wiki ensure not_found", code="not_found")
+        view = error_view_from_exception(exc, "ffjob-000000000001")
+        assert set(view) == set(_LEGACY_ERROR_VIEW)
+
+    @pytest.mark.parametrize(
+        "unsafe", [[{"ticker": "A", "path": "x.pdf"}], ["junk"], [{"nope": 1}]],
+    )
+    def test_error_view_drops_unsafe_candidates(self, unsafe):
+        exc = FilingFetchError("ambiguous", code="ambiguous", candidates=unsafe)
+        view = error_view_from_exception(exc, "ffjob-000000000001")
+        assert "candidates" not in view
+
+    def test_build_job_view_accepts_legacy_six_field_error(self):
+        view = build_job_view(_record(dict(_LEGACY_ERROR_VIEW)))
+        assert view["error"] == _LEGACY_ERROR_VIEW
+
+    def test_build_job_view_accepts_seven_field_error_with_candidates(self):
+        error = dict(_LEGACY_ERROR_VIEW, candidates=[_candidate(1)])
+        view = build_job_view(_record(error))
+        assert view["error"]["candidates"] == [_candidate(1)]
+
+    def test_build_job_view_rejects_unknown_error_field(self):
+        error = dict(_LEGACY_ERROR_VIEW, extra="nope")
+        with pytest.raises(FFJobError, match="stored error shape"):
+            build_job_view(_record(error))
+
+    def test_build_job_view_rejects_physical_leak_inside_error(self):
+        error = dict(_LEGACY_ERROR_VIEW, candidates=[
+            dict(_candidate(1), canonical_path="hidden/original.pdf"),
+        ])
+        with pytest.raises(FFJobError, match="leaked a physical location"):
+            build_job_view(_record(error))
+
+    def test_build_job_view_rejects_invalid_stored_candidates(self):
+        error = dict(_LEGACY_ERROR_VIEW, candidates="junk")
+        with pytest.raises(FFJobError, match="stored error candidates"):
+            build_job_view(_record(error))
+
+    def test_runner_lands_failed_job_with_candidates_in_error(self, tmp_path):
+        from unittest.mock import patch
+
+        from ff_job_runner import run_job
+        from ff_job_store import JobStore
+
+        store = JobStore(tmp_path / "jobs")
+        record, _created = store.create_job(
+            {
+                "schema_version": "ff-job/1",
+                "command_id": "cmd-1",
+                "kind": "filing.acquire",
+                "idempotency_key": "k-1",
+                "request": dict(_v2_cli_request()),
+            },
+            command_id="cmd-1",
+        )
+        with patch("fetch_filing.resolve_filing") as engine:
+            engine.side_effect = FilingFetchError(
+                "company-wiki ensure ambiguous: multiple_candidates",
+                code="ambiguous", candidates=[_candidate(1), _candidate(2)],
+            )
+            final, _executed = run_job(
+                store, record["owner_job_id"], config_path=None, timeout_seconds=60,
+            )
+        assert final["status"] == "failed"
+        assert final["error"]["candidates"] == [_candidate(1), _candidate(2)]
+        view = build_job_view(final)
+        assert view["error"]["candidates"] == [_candidate(1), _candidate(2)]

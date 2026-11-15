@@ -128,6 +128,9 @@ CANDIDATE_DETAIL_FIELDS = frozenset(
 )
 CANDIDATE_DETAIL_LIMIT = 5
 _ERROR_CANDIDATE_FIELDS = CANDIDATE_DETAIL_FIELDS | COMPANY_IDENTITY_FIELDS
+# The error codes whose responses may carry candidate details (shared by the
+# v2 error envelope and the job error view so the two faces cannot drift).
+ERROR_CANDIDATE_CODES = frozenset({"ambiguous", "identity_error", "not_found"})
 
 
 def projected_error_candidates(value: object) -> list[dict[str, Any]] | None:

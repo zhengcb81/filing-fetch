@@ -113,7 +113,7 @@ replay guarantee.
 | `started_at` / `updated_at` | UTC ISO-8601 |
 | `cost` | Dashboard DecimalValue shape, all 12 contract fields (`value`/`currency`/`unit`/`scale`/`period_*`/`fiscal_year`/`basis`/`scenario`/`actual_or_forecast`=`"actual"`/`analysis_subject_id`) |
 | `cost_state` | `known | unknown | not_applicable` |
-| `error` | Dashboard ApiError shape (`code`/`message`/`owner`/`retryable`/`next_actions`/`correlation_id`) or null |
+| `error` | Dashboard ApiError shape (`code`/`message`/`owner`/`retryable`/`next_actions`/`correlation_id`, plus optional `candidates` on disambiguation errors `ambiguous`/`identity_error`/`not_found`) or null |
 | `recovery_capability` | `durable_owner_job` for both acquire kinds |
 | `kind` / `intent` / `idempotency_key` / `attempts` / `execution_count` | owner-native extensions |
 | `result` | pathless return context (closed whitelist; physical-location guard enforced) |

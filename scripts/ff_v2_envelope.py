@@ -6,7 +6,7 @@ from typing import Any
 
 from filing_contracts import FilingFetchError, FILING_V2_RESPONSE_SCHEMA_VERSION, _validate_companion_request
 from ff_source_ref import validate_source_ref as _reference
-from ff_source_candidate import projected_error_candidates
+from ff_source_candidate import ERROR_CANDIDATE_CODES, projected_error_candidates
 from ff_local_preparation_observation import validated_local_preparation_observation
 from ff_provider_cause import (
     STAGES,
@@ -18,8 +18,7 @@ from ff_provider_cause import (
 
 
 # FF-1: candidate details ride the filing block only on the disambiguation
-# codes, each with one closed hint (never free text).
-_CANDIDATE_ERROR_CODES = frozenset({"ambiguous", "identity_error", "not_found"})
+# codes (ERROR_CANDIDATE_CODES), each with one closed hint (never free text).
 _DISAMBIGUATION_HINTS = {
     # Same semantics as the v1 identity hint.
     "identity_error": (
@@ -186,7 +185,7 @@ def error_envelope(
     # filing block only on the disambiguation codes and only when the list
     # survives the safety projection (an unsafe list is dropped, not leaked).
     safe_candidates = projected_error_candidates(candidates)
-    if safe_candidates is not None and code in _CANDIDATE_ERROR_CODES:
+    if safe_candidates is not None and code in ERROR_CANDIDATE_CODES:
         filing["candidates"] = safe_candidates
         hint = _DISAMBIGUATION_HINTS.get(code)
         if hint is not None:
