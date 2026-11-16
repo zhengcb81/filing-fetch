@@ -1,6 +1,12 @@
 # filing-fetch 当前规划状态
 
-## Current checkpoint — 2026-11-15（当前有效）
+## M3 有限下载 T3 — 2026-11-16
+
+- 已补齐三个市场首轮及复用请求、损坏件重试的 1.1 限额。各请求上限 50 MiB、180 秒、零 provider 费用。T3 的独立临时库沿用 CWP 当前配置的 SDK 入口和版本。
+- 正式四项 **4 passed / 0 skipped**，72.57 秒。三市场均完成首轮导入、原文 SHA 验真及零下载复用。损坏原件在 provider 启动前被拒绝。临时目录无残留。RF 历史周跑状态由 RF owner 单独维护。
+- 验收版本、SID 归属字段修复、Dayu Low 临时目录复现及 102 项聚焦回归见 [M3 T3 收尾](docs/plans/mb11-ff-2026-11-11/m3-t3-download-closeout-20261116.md)。
+
+## FF-1 checkpoint — 2026-11-15
 
 ### FF-1/CWP-1 修复（三 lane 模块化并行）——FF 侧已并线
 

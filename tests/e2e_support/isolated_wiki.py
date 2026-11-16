@@ -31,6 +31,8 @@ import tempfile
 import time
 from pathlib import Path
 
+import yaml
+
 # Prefer the sibling layout (…/Projects/<repo>) so the harness also works when
 # the weekly T3 scheduled task runs as SYSTEM, where Path.home() is the system
 # profile; fall back to ~/Projects for installed skill copies (GP-009 fix).
@@ -195,35 +197,11 @@ adapters:
     command: __NOOP_ADAPTER__
 """.replace("__NOOP_ADAPTER__", json.dumps(_NOOP_ADAPTER, ensure_ascii=False))
 
-# Phase 4: real downloads.  Mirrors the production source_acquisition.yaml
-# but with absolute USER_PROFILE-based tool paths (the fixture's PROJECT_ROOT
-# is a temp dir, so the production relative ".." tokens would not resolve).
-_PRODUCTION_ACQUISITION_YAML = """schema_version: "1.1"
-staging_root: "${PROJECT_ROOT}/.source_catalog/staging"
-timeout_seconds: 1800
-adapters:
-  cn:
-    name: "stockinfo-cninfo"
-    version: "1.1.0"
-    interface: "json_command_v1"
-    project_root: "${USER_PROFILE}/Projects/StockInfoDLSimple/v2-clean-rewrite"
-    config_root: null
-    command: ["${PYTHON_EXECUTABLE}", "-m", "src.company_wiki_adapter_cli"]
-  hk:
-    name: "dayu-hkex-cli"
-    version: "1.0.0"
-    interface: "dayu_cli_v1"
-    project_root: "${USER_PROFILE}/Projects/dayu-agent/dayu-agent"
-    config_root: "${USER_PROFILE}/Projects/dayu-agent/workspace/config"
-    command: ["${USER_PROFILE}/Projects/dayu-agent/dayu-agent/.venv/Scripts/python.exe", "-m", "dayu.cli"]
-  us:
-    name: "dayu-sec-cli"
-    version: "1.0.0"
-    interface: "dayu_cli_v1"
-    project_root: "${USER_PROFILE}/Projects/dayu-agent/dayu-agent"
-    config_root: "${USER_PROFILE}/Projects/dayu-agent/workspace/config"
-    command: ["${USER_PROFILE}/Projects/dayu-agent/dayu-agent/.venv/Scripts/python.exe", "-m", "dayu.cli"]
-"""
+def _configured_code_path(value: str) -> str:
+    """Keep deployed code entry points resolvable from a temporary wiki."""
+    if value.startswith(("${PROJECT_ROOT}/../", "${PROJECT_ROOT}/tools/")):
+        return value.replace("${PROJECT_ROOT}", PRODUCTION_WIKI.as_posix(), 1)
+    return value
 
 
 _WORKER_CONTROL = {
@@ -304,13 +282,21 @@ class IsolatedWiki:
         self.config_path = config / "source_catalog.yaml"
 
     def use_production_adapters(self) -> None:
-        """Point the acquisition config at the REAL download tools (Phase 4).
-
-        Absolute USER_PROFILE-based paths, mirroring the production
-        source_acquisition.yaml; only staging stays inside the temp instance.
-        """
+        """Use the owner's adapter configuration with isolated writable state."""
+        source = PRODUCTION_WIKI / "config" / "source_acquisition.yaml"
+        config = yaml.safe_load(source.read_text(encoding="utf-8"))
+        config["staging_root"] = str(self.catalog_dir / "staging")
+        for adapter in config["adapters"].values():
+            for field in ("project_root", "config_root"):
+                if adapter[field] is not None:
+                    adapter[field] = _configured_code_path(adapter[field])
+            command = [_configured_code_path(value) for value in adapter["command"]]
+            if "--provider-state-root" in command:
+                state_arg = command.index("--provider-state-root") + 1
+                command[state_arg] = str(self.catalog_dir / "provider-state" / "dayu")
+            adapter["command"] = command
         (self.root / "config" / "source_acquisition.yaml").write_text(
-            _PRODUCTION_ACQUISITION_YAML, encoding="utf-8"
+            json.dumps(config, ensure_ascii=False), encoding="utf-8"
         )
 
     def journal_outcomes(self) -> list[str]:
@@ -355,6 +341,7 @@ class IsolatedWiki:
         """Run the real ``scan`` CLI (acquires and releases the catalog lock)."""
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         proc = subprocess.run(
             [
                 sys.executable,
@@ -401,6 +388,7 @@ class IsolatedWiki:
             command.extend(extra_args)
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         proc = subprocess.run(
             command,
             input=json.dumps(request, ensure_ascii=False),
