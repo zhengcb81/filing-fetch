@@ -1,6 +1,6 @@
 # FB-FF　下载、复用和作业反馈接线
 
-施工状态：已规划，ROOT 保留此项的复杂接线，并与 FF owner 对接业务入口、未知用量及只读恢复。当前外派窗口交 ET 和 SID。唯一工作目录为 `C:/Users/郑曾波/Projects/filing-fetch`，主线 `main`，本次计划基线 `4c7f501b`。本仓 canonical PWF 是 [PLANNING_STATUS.md](../../../PLANNING_STATUS.md)。
+施工状态：已规划，ROOT 保留此项的复杂接线，并与 FF owner 对接业务入口、未知用量及只读恢复。采集侧两张独立卡由 ET 和 SID 并行施工；全局另有 industry-research（IR）独立研究报告卡。唯一工作目录为 `C:/Users/郑曾波/Projects/filing-fetch`，主线 `main`，本次计划基线 `4c7f501b`。本仓 canonical PWF 是 [PLANNING_STATUS.md](../../../PLANNING_STATUS.md)。
 
 ## 交付范围和现有依据
 
@@ -12,7 +12,7 @@
 
 ## 与 ROOT 的交接格式
 
-观察格式为 feedback-observation/1。一行一个独立对象。必填字符串字段为 schema_version、owner、run_id、attempt_id、step_id、check_id、expected、actual。expected 和 actual 是适用于该检查的稳定结果词。可选字段为 issue_key、evidence_ref、version、parent_step_id、details_ref、disposition、origin_owner。disposition 仅取 expected、deviation 或 unknown；issue_key 是有证据支持的责任仓规则签名。引用为不含凭据、路径和可执行命令的本仓不透明标识。version 记录被观察运行的版本，交接报告另列被测代码版本。合法拒绝按实际预期归类。例子仅说明协议字段，运行时产生真实 ID 和版本。
+观察格式为 feedback-observation/1。一行一个独立对象。必填字符串字段为 schema_version、owner、run_id、attempt_id、step_id、check_id、expected、actual。expected 和 actual 是适用于该检查的稳定结果词。可选字段为 issue_key、evidence_ref、version、parent_step_id、details_ref、disposition、origin_owner。disposition 仅取 expected、deviation 或 unknown；issue_key 是有证据支持的责任仓规则签名。同一 run/attempt 并发处理多项同类任务时，step_id 或 check_id 带原生的稳定 invocation/item ID，以区分不同材料或子作业。重复投递复用原身份，另一次真实执行使用新 attempt_id；有新证据时可用 original_occurrence_id 关联首笔发生。引用使用各自产生方可解析的不透明标识：issue_ref 由责任仓解析，原始 evidence_ref/details_ref 与复验引用由出具证据的 owner 解析。跨仓方凭公开接口和引用访问证据，物理路径、凭据及可执行命令留在原仓。version 记录被观察运行的版本，交接报告另列被测代码版本。合法拒绝按实际预期归类。例子仅说明协议字段，运行时产生真实 ID 和版本。
 
 ~~~json
 {"schema_version":"feedback-observation/1","owner":"filing-fetch","run_id":"run-example","attempt_id":"try-1","step_id":"step-1","check_id":"local-reuse-provider-start","expected":"not_started","actual":"started","disposition":"deviation","issue_key":"reuse-started-provider","evidence_ref":"case-example","version":"fixture-v1"}
