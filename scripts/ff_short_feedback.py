@@ -221,7 +221,7 @@ def observation_rows(
                        "unknown" if downloads == "unknown" else "expected"))
 
     if isinstance(request, dict) and isinstance(request.get("companion_transcript"), dict):
-        transcript_usage = _transcript_usage(facts.transcript)
+        transcript_usage = _transcript_usage(facts.transcript, facts)
         rows.append(_check(
             {**base, "step_id": f"{base['step_id']}/transcript"},
             TRANSCRIPT_USAGE_CHECK, "accounted", transcript_usage,
@@ -486,9 +486,14 @@ def _download_token(facts: _Facts) -> str:
     return "unknown"
 
 
-def _transcript_usage(transcript: dict[str, Any] | None) -> str:
+def _transcript_usage(transcript: dict[str, Any] | None, facts: _Facts) -> str:
     """The companion scope's fee account, separate from the filing's."""
     if not isinstance(transcript, dict):
+        # No transcript block plus no producer dispatch proves the companion
+        # scope could not have spent (e.g. a rejected v1 request carrying an
+        # unknown companion field).
+        if facts.calls == 0 and facts.status != "unknown":
+            return "known"
         return "unknown"
     if transcript.get("status") in _TRANSCRIPT_NO_PROVIDER:
         return "known"

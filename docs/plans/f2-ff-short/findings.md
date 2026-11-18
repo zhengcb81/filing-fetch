@@ -3,7 +3,7 @@
 ## 基线与 RED
 
 - ROOT 预检与本轮复跑：`tests/test_ff1_envelope_candidates.py`、`tests/test_failure_usage_continuity.py`、`tests/test_m3_acquisition_usage_ff.py`、`tests/test_ff_job_facade.py` 共 **174 passed, 8 subtests passed**，22.92 秒（`--basetemp=C:/tmp/ff-f2-short-baseline`）。
-- RED：先提交 `tests/test_feedback_observation.py` 与受控夹具，移除 `scripts/ff_short_feedback.py` 和 `scripts/fetch_filing.py` 的接线后，收集阶段即 `ModuleNotFoundError: No module named 'ff_short_feedback'`。实现接线后同一文件 **24 passed**（独审后补坏 JSON、v2 gap、v1 错误携带 observation 三例）。RED 证明侧车不是测试自证；业务信封对照另有逐字节断言。
+- RED：先提交 `tests/test_feedback_observation.py` 与受控夹具，移除 `scripts/ff_short_feedback.py` 和 `scripts/fetch_filing.py` 的接线后，收集阶段即 `ModuleNotFoundError: No module named 'ff_short_feedback'`。实现接线后同一文件 **30 passed**（独审后补坏 JSON、v2 gap、v1 错误携带 observation、五场景启用/禁用逐字节对照、v1 拒绝请求的电话会范围）。RED 证明侧车不是测试自证；业务信封对照另有逐字节断言。
 
 ## 证据来源（只读现有 owner 投影）
 

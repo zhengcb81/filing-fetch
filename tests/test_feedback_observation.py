@@ -569,6 +569,29 @@ def test_non_object_request_is_a_named_request_error(tmp_path):
     assert harness.calls() == []
 
 
+@pytest.mark.parametrize(
+    ("scenario", "body"),
+    [
+        ("latest_reuse", _latest_request()),
+        ("download", _v2_request("fetch_if_missing")),
+        ("ensure_gap", _v2_request("fetch_if_missing")),
+        ("corrupt", _v2_request("fetch_if_missing")),
+        ("zero_companion", _v2_request(
+            "fetch_if_missing", companion_transcript=_companion())),
+    ],
+    ids=["latest", "download", "gap", "corrupt", "companion"],
+)
+def test_enabling_the_sidecar_never_changes_the_business_result(
+    tmp_path, scenario, body,
+):
+    enabled = Harness(tmp_path / "enabled", scenario=scenario).run(
+        body, out=tmp_path / f"{scenario}.jsonl")
+    baseline = Harness(tmp_path / "baseline", scenario=scenario).run(body)
+    assert enabled.returncode == baseline.returncode
+    assert enabled.stdout == baseline.stdout
+    assert enabled.stderr == baseline.stderr
+
+
 def test_real_utf8_stdin_smoke_writes_the_same_observation(tmp_path):
     harness = Harness(tmp_path / "stdin")
     request = _v2_request(company_query="腾讯控股")
@@ -758,6 +781,30 @@ def test_unit_v1_error_uses_the_typed_exception_observation():
     _assert_row_shape(rows)
     usage = _single(rows, "provider-usage")
     assert (usage["actual"], usage["disposition"]) == ("known", "expected")
+
+
+def test_unit_rejected_v1_companion_scope_is_a_known_zero():
+    rows = ff_short_feedback.observation_rows(
+        output={
+            "schema_version": "1.1",
+            "status": "request_error",
+            "error": "unknown field",
+            "error_code": "request_error",
+            "retryable": False,
+            "calls": 0,
+            "downloads": 0,
+        },
+        stats={"calls": 0, "downloads": 0},
+        request={
+            "schema_version": "1.2",
+            "companion_transcript": {"intent": "fetch_if_missing"},
+        },
+        allow_download=False,
+        identity=_identity(),
+    )
+    _assert_row_shape(rows)
+    row = _single(rows, "transcript-provider-usage")
+    assert (row["actual"], row["disposition"]) == ("known", "expected")
 
 
 def test_unit_request_rejection_before_dispatch_is_known_zero():

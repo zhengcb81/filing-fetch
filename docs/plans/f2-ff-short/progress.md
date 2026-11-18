@@ -5,7 +5,7 @@
 1. **基线**：本工作树 `codex/f2-ff-short`（`92e52b5`）干净。四个既有文件 **174 passed, 8 subtests passed**，22.92 秒。
 2. **RED**：新增 `tests/test_feedback_observation.py` 和 `tests/fixtures/short_feedback/connector.py`，在未接线时收集失败 `ModuleNotFoundError: ff_short_feedback`。
 3. **实现**：新建 `scripts/ff_short_feedback.py`；在 `scripts/fetch_filing.py` 的 `main(argv)` 业务请求边界写 `action-started`，三条返回路径写 `request-outcome`、`provider-start`、`provider-usage`、`download-receipt`，有伴随电话会时另写 `transcript-provider-usage`。CLI 读取运行上下文后清除三个环境量，子进程实测未继承。
-4. **GREEN**：`tests/test_feedback_observation.py` **24 passed**。定向五文件 **198 passed, 8 subtests passed**。相邻回归（加 `test_fetch_filing`、`test_public_operation_isolation`、`test_s3_install_surface`、`test_architecture_quality`）**386 passed, 1 skipped, 46 subtests passed**；跳过为既有“production security-master snapshots not present”。
+4. **GREEN**：`tests/test_feedback_observation.py` **30 passed**。定向五文件 **204 passed, 8 subtests passed**。相邻回归（加 `test_fetch_filing`、`test_public_operation_isolation`、`test_s3_install_surface`、`test_architecture_quality`）**392 passed, 1 skipped, 46 subtests passed**；跳过为既有“production security-master snapshots not present”。
 5. **静态检查**：`ruff check scripts tests/test_feedback_observation.py tests/fixtures/short_feedback/connector.py` 通过；`mypy scripts/filing_contracts.py scripts/fetch_filing.py scripts/ff_short_feedback.py` 通过；host assumption guard `new=0`。
 6. **已知基线差异**：`tests/test_provider_diagnostics_cli.py::test_real_cli_config_error_has_no_upstream_cause` 在本机基线上同样失败（期望 `config_error`，实得 `fatal`），与本卡改动无关，未计入定向集。
 
