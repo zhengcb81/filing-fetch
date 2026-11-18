@@ -3,7 +3,7 @@
 ## 基线与 RED
 
 - ROOT 预检与本轮复跑：`tests/test_ff1_envelope_candidates.py`、`tests/test_failure_usage_continuity.py`、`tests/test_m3_acquisition_usage_ff.py`、`tests/test_ff_job_facade.py` 共 **174 passed, 8 subtests passed**，22.92 秒（`--basetemp=C:/tmp/ff-f2-short-baseline`）。
-- RED：先提交 `tests/test_feedback_observation.py` 与受控夹具，移除 `scripts/ff_short_feedback.py` 和 `scripts/fetch_filing.py` 的接线后，收集阶段即 `ModuleNotFoundError: No module named 'ff_short_feedback'`。实现接线后同一文件 **21 passed**。RED 证明侧车不是测试自证；业务信封对照另有逐字节断言。
+- RED：先提交 `tests/test_feedback_observation.py` 与受控夹具，移除 `scripts/ff_short_feedback.py` 和 `scripts/fetch_filing.py` 的接线后，收集阶段即 `ModuleNotFoundError: No module named 'ff_short_feedback'`。实现接线后同一文件 **24 passed**（独审后补坏 JSON、v2 gap、v1 错误携带 observation 三例）。RED 证明侧车不是测试自证；业务信封对照另有逐字节断言。
 
 ## 证据来源（只读现有 owner 投影）
 
@@ -28,7 +28,7 @@
 
 ## 真实 CLI 样本
 
-`samples/` 下 6 份 JSONL 由真实 `scripts/fetch_filing.py` 在受控 mock connector 上逐场景执行产出；`samples/manifest.json` 记录请求、退出码、业务摘要、stub 操作序列与调用次数、行数、检查名、证据引用和子进程环境检查。`reimport_zero_new=true` 表示重复读取零新增。生成步骤与复现片段见 `samples/README.md`。
+`samples/` 下 6 份 JSONL 由真实 `scripts/fetch_filing.py` 在受控 mock connector 上逐场景执行产出；`samples/manifest.json` 记录请求、退出码、业务摘要、stub 操作序列与调用次数、行数、检查名、证据引用和子进程环境检查。`first_import_rows=27` / `second_import_rows=0` 表示按协议身份 `(run_id, attempt_id, step_id, check_id)` 重复导入零新增。生成步骤与复现片段见 `samples/README.md`。
 
 ## 未开问题卡
 

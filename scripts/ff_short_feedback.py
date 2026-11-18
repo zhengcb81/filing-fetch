@@ -9,9 +9,10 @@ diagnostic gap, never a business failure.
 
 Contract notes (``feedback-observation/1``, shared with the feedback-loop plan):
 
-* One writer per file. The CLI reads the inherited run context and removes the
-  three variables from its own environment before it launches any producer, so
-  a child process cannot append to the same sidecar.
+* One writer per file. When a sidecar is enabled, the CLI reads the inherited
+  run context and removes the three variables from its own environment before
+  it launches any producer, so a child process cannot append to the same file.
+  Without a path nothing is owned and the environment is left untouched.
 * ``owner`` is always ``filing-fetch``. This lane never infers another repo's
   responsibility from a company name, a command line or request wording.
 * A short call may only cite ``ff-short/1/<operation-id>``; ``ff-job/1`` is
@@ -159,9 +160,10 @@ class ShortObservation:
 def begin_observation() -> ShortObservation | None:
     """Start one observation when the caller supplied an exclusive path.
 
-    The inherited run/attempt labels are read first; the three variables are
-    then removed from this process so every producer launched later inherits a
-    clean environment (one writer per sidecar).
+    When a path is present, the inherited run/attempt labels are read first and
+    the three variables are removed from this process so every producer
+    launched later inherits a clean environment (one writer per sidecar).
+    Without a path this process owns nothing, so the environment is untouched.
     """
     path = os.environ.get(OUT_ENV)
     if not path:
@@ -345,7 +347,8 @@ def _v1_facts(facts: _Facts, output: dict[str, Any]) -> None:
         return
     if status == "gap":
         facts.outcome = "gap"
-        # A structured gap is a metadata-only plan: no capture happened.
+        # The legacy gap envelope carries no counter. Zero is the gap contract
+        # (a metadata-only plan), not a producer download count.
         if facts.downloads is None:
             facts.downloads = 0
     facts.receipt = validated_acquisition_failure(output.get("acquisition_failure"))
@@ -407,6 +410,8 @@ def _usage_evidence(
 def _usage_state(intent: str | None, facts: _Facts) -> str:
     started, complete, cost = _usage_evidence(facts)
     if intent == "reuse_only" and started is not True:
+        # Owner contract: the exact reuse route is read-only and has no fee
+        # dimension. An explicit producer "started" still wins over this.
         return "not_applicable"
     if facts.calls == 0 and facts.status != "unknown":
         # No producer process was launched: no provider work could happen.

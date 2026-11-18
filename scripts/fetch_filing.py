@@ -1930,8 +1930,12 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.reconfigure(encoding="utf-8", errors="strict")
         # The optional sidecar starts at the business-request boundary. It
         # reads the inherited run context and clears it before any producer is
-        # launched, so one file keeps exactly one writer.
-        observation = ff_short_feedback.begin_observation()
+        # launched, so one file keeps exactly one writer. A diagnostic failure
+        # here must never change the business path.
+        try:
+            observation = ff_short_feedback.begin_observation()
+        except Exception:  # noqa: BLE001 - the sidecar is never business-critical
+            observation = None
         parsed: Any = None
         try:
             if args.request_file:

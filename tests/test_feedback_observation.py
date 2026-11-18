@@ -25,6 +25,7 @@ PY = sys.executable
 OPERATIONS = ("catalog", "query", "local_prepare", "open", "transcript_import")
 
 sys.path.insert(0, str(SCRIPTS))
+import fetch_filing  # noqa: E402
 import ff_short_feedback  # noqa: E402
 
 LIMITS = {"max_bytes": 5_000_000, "timeout_seconds": 60, "max_cost_usd": "1.00"}
@@ -138,6 +139,7 @@ class Harness:
         request: object,
         *,
         via: str = "file",
+        raw: bool = False,
         out: Path | str | None = None,
         run_id: str | None = None,
         attempt_id: str | None = None,
@@ -150,12 +152,13 @@ class Harness:
         if attempt_id is not None:
             env["RESEARCH_FEEDBACK_ATTEMPT_ID"] = attempt_id
         args = ["--config", str(self.config)]
+        text = request if raw else json.dumps(request, ensure_ascii=False)
         if via == "stdin":
-            input_bytes = json.dumps(request, ensure_ascii=False).encode("utf-8")
+            input_bytes = text.encode("utf-8")
         else:
             self._sequence += 1
             path = self.base / f"request-{self._sequence}.json"
-            path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
+            path.write_text(text, encoding="utf-8")
             args.extend(("--request-file", str(path)))
             input_bytes = b""
         return subprocess.run(
@@ -394,6 +397,27 @@ def test_corrupt_item_is_an_expected_rejection_with_known_zero_usage(tmp_path):
     assert {row["disposition"] for row in rows} == {"expected"}
 
 
+def test_v2_gap_keeps_missing_metering_unknown(tmp_path):
+    harness = Harness(tmp_path, scenario="ensure_gap")
+    out = tmp_path / "observations.jsonl"
+    completed = harness.run(_v2_request("fetch_if_missing"), out=out)
+
+    assert completed.returncode == 0, completed.stderr.decode("utf-8", "replace")
+    payload = json.loads(completed.stdout.decode("utf-8"))
+    assert payload["status"] == "gap"
+    assert payload["filing"]["status"] == "gap"
+    assert payload["downloads"] == 0
+
+    rows = _rows(out)
+    _assert_protocol(rows)
+    assert _single(rows, "request-outcome")["actual"] == "gap"
+    assert "provider-start" not in {row["check_id"] for row in rows}
+    usage = _single(rows, "provider-usage")
+    assert (usage["actual"], usage["disposition"]) == ("unknown", "unknown")
+    assert _single(rows, "download-receipt")["actual"] == "0"
+    assert harness.operations() == ["catalog", "catalog"]
+
+
 def test_legacy_gap_keeps_missing_fields_unknown(tmp_path):
     harness = Harness(tmp_path, scenario="ensure_gap")
     request = _legacy_latest_request()
@@ -448,6 +472,17 @@ def test_companion_fee_is_a_separate_unknown_scope(tmp_path):
     assert sum(1 for item in operations if item == "et_tool") == 1
 
 
+def _import_observations(rows: list[dict], seen: set[tuple]) -> int:
+    """Model the consumer's duplicate-import rule on the protocol identity."""
+    added = 0
+    for row in rows:
+        key = (row["run_id"], row["attempt_id"], row["step_id"], row["check_id"])
+        if key not in seen:
+            seen.add(key)
+            added += 1
+    return added
+
+
 def test_same_run_and_attempt_keep_two_content_identities_and_reimport_adds_nothing(
     tmp_path,
 ):
@@ -472,6 +507,11 @@ def test_same_run_and_attempt_keep_two_content_identities_and_reimport_adds_noth
         "source_candidate/reused_existing", "source_candidate/downloaded_new",
     }
 
+    # Every row owns a unique protocol identity, so importing the same file
+    # twice adds zero new records; reading it never rewrites the bytes.
+    seen: set[tuple] = set()
+    assert _import_observations(rows, seen) == len(rows)
+    assert _import_observations(rows, seen) == 0
     before = out.read_bytes()
     assert _rows(out) == rows
     assert out.read_bytes() == before
@@ -496,6 +536,22 @@ def test_disabled_and_broken_sidecars_leave_the_business_result_untouched(tmp_pa
     disabled = Harness(tmp_path / "disabled")
     disabled.run(_v2_request())
     assert not (disabled.base / "observations.jsonl").exists()
+
+
+def test_bad_json_is_a_named_request_error_and_keeps_the_start_pair(tmp_path):
+    harness = Harness(tmp_path)
+    out = tmp_path / "observations.jsonl"
+    completed = harness.run("{", raw=True, out=out)
+
+    assert completed.returncode == 2
+    payload = json.loads(completed.stdout.decode("utf-8"))
+    assert payload["status"] == "request_error"
+    rows = _rows(out)
+    _assert_protocol(rows)
+    assert _single(rows, "request-outcome")["actual"] == "request_error"
+    assert _single(rows, "provider-start")["actual"] == "not_started"
+    assert _single(rows, "provider-usage")["actual"] == "known"
+    assert harness.calls() == []
 
 
 def test_non_object_request_is_a_named_request_error(tmp_path):
@@ -664,6 +720,44 @@ def test_unit_v1_error_without_usage_fields_stays_unknown():
     assert (usage["actual"], usage["disposition"]) == ("unknown", "unknown")
     download = _single(rows, "download-receipt")
     assert (download["actual"], download["disposition"]) == ("unknown", "unknown")
+
+
+def test_unit_v1_error_uses_the_typed_exception_observation():
+    observation = {
+        "schema_version": "acquisition-observation/1",
+        "usage_scope": "operation",
+        "outcome": "reused_before_download",
+        "provider_started": False,
+        "usage_complete": True,
+        "wire_body_bytes": 0,
+        "wire_usage_complete": True,
+        "entity_body_bytes": 0,
+        "http_exchanges": 0,
+        "http_exchanges_complete": True,
+        "cost_usd": "0.00",
+        "http_observation": None,
+    }
+    error = fetch_filing.FilingFetchError(
+        "safe fixed text", code="upstream_error",
+        acquisition_observation=observation,
+    )
+    rows = ff_short_feedback.observation_rows(
+        output={
+            "schema_version": "1.1",
+            "status": "upstream_error",
+            "error": "safe fixed text",
+            "error_code": "upstream_error",
+            "retryable": True,
+        },
+        error=error,
+        stats={"calls": 1, "downloads": 0},
+        request={"schema_version": "1.2", "mode": "latest_as_of"},
+        allow_download=False,
+        identity=_identity(),
+    )
+    _assert_row_shape(rows)
+    usage = _single(rows, "provider-usage")
+    assert (usage["actual"], usage["disposition"]) == ("known", "expected")
 
 
 def test_unit_request_rejection_before_dispatch_is_known_zero():

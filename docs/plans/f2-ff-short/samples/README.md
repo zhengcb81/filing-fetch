@@ -6,7 +6,7 @@
 
 1. 使用本仓 `tests/test_feedback_observation.py` 的 `Harness`（受控 mock connector + 独占临时目录）逐场景运行 CLI。
 2. 每个场景把 `RESEARCH_FEEDBACK_OUT` 指向一个新的 `*.jsonl`，读取退出码和业务信封。
-3. 原样复制侧车文件；再读一次确认零新增（`manifest.json` 的 `reimport_zero_new=true`）。
+3. 原样复制侧车文件；按协议身份 `(run_id, attempt_id, step_id, check_id)` 导入两次，第二次新增 0（`manifest.json` 的 `first_import_rows` / `second_import_rows` / `reimport_zero_new`）。
 
 复现片段（在仓根用同一解释器运行）：
 
