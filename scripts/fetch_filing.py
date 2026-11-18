@@ -73,6 +73,7 @@ from ff_source_candidate import (
 from ff_local_preparation_observation import (
     local_preparation_observation as _local_preparation_observation,
 )
+import ff_short_feedback
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_COMPANY_WIKI_CONFIG = SKILL_ROOT / "config" / "company_wiki.json"
@@ -1910,6 +1911,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     v2_response = False
+    request: dict[str, Any] | None = None
+    stats: dict[str, int] | None = None
+    allow_download: bool | None = None
+    observation: ff_short_feedback.ShortObservation | None = None
 
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
         print("error: timeout-seconds must be positive and finite", file=sys.stderr)
@@ -1923,15 +1928,21 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdin.reconfigure(encoding="utf-8", errors="strict")
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+        # The optional sidecar starts at the business-request boundary. It
+        # reads the inherited run context and clears it before any producer is
+        # launched, so one file keeps exactly one writer.
+        observation = ff_short_feedback.begin_observation()
+        parsed: Any = None
         try:
             if args.request_file:
-                request = json.loads(args.request_file.read_text(encoding="utf-8"))
+                parsed = json.loads(args.request_file.read_text(encoding="utf-8"))
             else:
-                request = json.loads(sys.stdin.read())
+                parsed = json.loads(sys.stdin.read())
         except (OSError, json.JSONDecodeError) as exc:
             raise FilingFetchError(f"invalid request: {exc}", code="request_error") from exc
-        if not isinstance(request, dict):
+        if not isinstance(parsed, dict):
             raise FilingFetchError("request must be a JSON object", code="request_error")
+        request = parsed
         v2_response = request.get("schema_version") == FILING_V2_REQUEST_SCHEMA_VERSION
         if v2_response:
             validate_request(request)
@@ -1976,6 +1987,9 @@ def main(argv: list[str] | None = None) -> int:
             }
         json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
+        if observation is not None:
+            observation.finished(output=output, stats=stats, request=request,
+                                 allow_download=allow_download)
         return 0
     except FilingFetchError as exc:
         if v2_response:
@@ -1985,8 +1999,8 @@ def main(argv: list[str] | None = None) -> int:
                 exc.code,
                 str(exc),
                 retryable=exc.retryable,
-                stats=stats if "stats" in locals() else None,
-                request=request if "request" in locals() and isinstance(request, dict) else None,
+                stats=stats,
+                request=request,
                 upstream_cause=exc.upstream_cause,
                 acquisition_failure=exc.acquisition_failure,
                 stage=exc.stage,
@@ -1999,6 +2013,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")
+            if observation is not None:
+                observation.finished(output=output, error=exc, stats=stats,
+                                     request=request, allow_download=allow_download)
             return 2
         error_response: dict[str, Any] = {
             "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
@@ -2036,11 +2053,14 @@ def main(argv: list[str] | None = None) -> int:
         diagnostic = ff_provider_cause.validated_request_diagnostic(exc.request_diagnostic)
         if diagnostic is not None:
             error_response["request_diagnostic"] = diagnostic
-        if "stats" in locals():
+        if stats is not None:
             error_response["calls"] = stats["calls"]
             error_response["downloads"] = stats["downloads"]
         json.dump(error_response, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
+        if observation is not None:
+            observation.finished(output=error_response, error=exc, stats=stats,
+                                 request=request, allow_download=allow_download)
         return 2
     except Exception as exc:
         if v2_response:
@@ -2050,25 +2070,32 @@ def main(argv: list[str] | None = None) -> int:
                 "fatal",
                 str(exc),
                 retryable=False,
-                stats=stats if "stats" in locals() else None,
-                request=request if "request" in locals() and isinstance(request, dict) else None,
+                stats=stats,
+                request=request,
             )
             json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
             sys.stdout.write("\n")
+            if observation is not None:
+                observation.finished(output=output, error=exc, stats=stats,
+                                     request=request, allow_download=allow_download)
             return 1
+        output = {
+            "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
+            "status": "fatal",
+            "error": str(exc),
+            "error_code": "fatal",
+            "retryable": False,
+        }
         json.dump(
-            {
-                "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
-                "status": "fatal",
-                "error": str(exc),
-                "error_code": "fatal",
-                "retryable": False,
-            },
+            output,
             sys.stdout,
             ensure_ascii=False,
             indent=2,
         )
         sys.stdout.write("\n")
+        if observation is not None:
+            observation.finished(output=output, error=exc, stats=stats,
+                                 request=request, allow_download=allow_download)
         return 1
 
 

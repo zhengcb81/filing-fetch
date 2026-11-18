@@ -1,0 +1,403 @@
+{
+  "cases": [
+    {
+      "sample": "docs/plans/f2-ff-short/samples/sample-1-reuse-hit.jsonl",
+      "scenario": "reuse_hit",
+      "request": {
+        "schema_version": "2.0",
+        "company_query": "AMD",
+        "market": "US",
+        "document_kind": "annual_report",
+        "fiscal_year": 2025,
+        "as_of_date": "2026-07-18",
+        "filing_intent": "reuse_only"
+      },
+      "exit_code": 0,
+      "business": {
+        "status": "source_candidate",
+        "calls": 2,
+        "downloads": 0,
+        "filing": {
+          "status": "source_candidate",
+          "source_ref": {
+            "schema_version": "2.0",
+            "document_id": "urn:company-wiki:document:sha256:37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "source_id": "urn:company-wiki:source:sha256:37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "content_sha256": "37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "byte_size": 42,
+            "mime_type": "application/pdf"
+          },
+          "byte_verification": "pending_verified_open",
+          "document_kind": "annual_report",
+          "fiscal_year": 2025,
+          "fiscal_period": null,
+          "resolution_outcome": "reused_existing",
+          "download_events": 0
+        },
+        "transcript": {
+          "status": "not_requested",
+          "retryable": false
+        }
+      },
+      "stub_operations": [
+        "catalog",
+        "query"
+      ],
+      "stub_ensure_calls": 0,
+      "stub_et_calls": 0,
+      "row_count": 5,
+      "checks": [
+        "action-started",
+        "request-outcome",
+        "provider-start",
+        "provider-usage",
+        "download-receipt"
+      ],
+      "identities": [
+        "ff-short/1/c0cff2e6b0014c1d8a1c3cdb5e2ac10e"
+      ],
+      "child_env_clean": true
+    },
+    {
+      "sample": "docs/plans/f2-ff-short/samples/sample-2-missing-limits.jsonl",
+      "scenario": "reuse_hit",
+      "request": {
+        "schema_version": "2.0",
+        "company_query": "AMD",
+        "market": "US",
+        "document_kind": "annual_report",
+        "fiscal_year": 2025,
+        "as_of_date": "2026-07-18",
+        "filing_intent": "fetch_if_missing"
+      },
+      "exit_code": 2,
+      "business": {
+        "status": "request_error",
+        "calls": 0,
+        "downloads": 0,
+        "filing": {
+          "status": "request_error",
+          "reason": "fetch_if_missing requires max_bytes, timeout_seconds and max_cost_usd",
+          "retryable": false,
+          "request_diagnostic": {
+            "schema_version": "filing-request-diagnostic/1",
+            "reason": "acquisition_limits_invalid",
+            "field_path": "acquisition_limits"
+          }
+        },
+        "transcript": {
+          "status": "not_requested",
+          "retryable": false
+        }
+      },
+      "stub_operations": [],
+      "stub_ensure_calls": 0,
+      "stub_et_calls": 0,
+      "row_count": 5,
+      "checks": [
+        "action-started",
+        "request-outcome",
+        "provider-start",
+        "provider-usage",
+        "download-receipt"
+      ],
+      "identities": [
+        "ff-short/1/fd8fb8bdef7e4cf788f06f08dea003c2"
+      ],
+      "child_env_clean": true
+    },
+    {
+      "sample": "docs/plans/f2-ff-short/samples/sample-3-latest-unknown-usage.jsonl",
+      "scenario": "latest_reuse",
+      "request": {
+        "schema_version": "2.0",
+        "company_query": "AMD",
+        "market": "US",
+        "document_kind": "annual_report",
+        "mode": "latest_as_of",
+        "as_of_date": "2026-07-18",
+        "filing_intent": "reuse_only",
+        "acquisition_limits": {
+          "max_bytes": 5000000,
+          "timeout_seconds": 60,
+          "max_cost_usd": "1.00"
+        }
+      },
+      "exit_code": 0,
+      "business": {
+        "status": "source_candidate",
+        "calls": 2,
+        "downloads": 0,
+        "filing": {
+          "status": "source_candidate",
+          "source_ref": {
+            "schema_version": "2.0",
+            "document_id": "urn:company-wiki:document:sha256:37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "source_id": "urn:company-wiki:source:sha256:37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "content_sha256": "37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "byte_size": 42,
+            "mime_type": "application/pdf"
+          },
+          "byte_verification": "pending_verified_open",
+          "document_kind": "annual_report",
+          "fiscal_year": 2025,
+          "fiscal_period": null,
+          "resolution_outcome": "reused_after_discovery",
+          "download_events": 0
+        },
+        "transcript": {
+          "status": "not_requested",
+          "retryable": false
+        }
+      },
+      "stub_operations": [
+        "catalog",
+        "catalog"
+      ],
+      "stub_ensure_calls": 1,
+      "stub_et_calls": 0,
+      "row_count": 4,
+      "checks": [
+        "action-started",
+        "request-outcome",
+        "provider-usage",
+        "download-receipt"
+      ],
+      "identities": [
+        "ff-short/1/fa2c837d295540928186a0fc8844a307"
+      ],
+      "child_env_clean": true
+    },
+    {
+      "sample": "docs/plans/f2-ff-short/samples/sample-4-download.jsonl",
+      "scenario": "download",
+      "request": {
+        "schema_version": "2.0",
+        "company_query": "AMD",
+        "market": "US",
+        "document_kind": "annual_report",
+        "fiscal_year": 2025,
+        "as_of_date": "2026-07-18",
+        "filing_intent": "fetch_if_missing",
+        "acquisition_limits": {
+          "max_bytes": 5000000,
+          "timeout_seconds": 60,
+          "max_cost_usd": "1.00"
+        }
+      },
+      "exit_code": 0,
+      "business": {
+        "status": "source_candidate",
+        "calls": 2,
+        "downloads": 1,
+        "filing": {
+          "status": "source_candidate",
+          "source_ref": {
+            "schema_version": "2.0",
+            "document_id": "urn:company-wiki:document:sha256:37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "source_id": "urn:company-wiki:source:sha256:37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "content_sha256": "37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "byte_size": 42,
+            "mime_type": "application/pdf"
+          },
+          "byte_verification": "pending_verified_open",
+          "document_kind": "annual_report",
+          "fiscal_year": 2025,
+          "fiscal_period": null,
+          "resolution_outcome": "downloaded_new",
+          "download_events": 1
+        },
+        "transcript": {
+          "status": "not_requested",
+          "retryable": false
+        }
+      },
+      "stub_operations": [
+        "catalog",
+        "catalog"
+      ],
+      "stub_ensure_calls": 1,
+      "stub_et_calls": 0,
+      "row_count": 4,
+      "checks": [
+        "action-started",
+        "request-outcome",
+        "provider-usage",
+        "download-receipt"
+      ],
+      "identities": [
+        "ff-short/1/4c43e4f401784378864a74df4186e8c2"
+      ],
+      "child_env_clean": true
+    },
+    {
+      "sample": "docs/plans/f2-ff-short/samples/sample-5-corrupt-rejection.jsonl",
+      "scenario": "corrupt",
+      "request": {
+        "schema_version": "2.0",
+        "company_query": "AMD",
+        "market": "US",
+        "document_kind": "annual_report",
+        "fiscal_year": 2025,
+        "as_of_date": "2026-07-18",
+        "filing_intent": "fetch_if_missing",
+        "acquisition_limits": {
+          "max_bytes": 5000000,
+          "timeout_seconds": 60,
+          "max_cost_usd": "1.00"
+        }
+      },
+      "exit_code": 2,
+      "business": {
+        "status": "upstream_error",
+        "calls": 2,
+        "downloads": 0,
+        "filing": {
+          "status": "upstream_error",
+          "reason": "company-wiki ensure unavailable",
+          "retryable": true,
+          "upstream_cause": {
+            "schema_version": "filing-upstream-cause/1",
+            "operation": "ensure",
+            "code": "canonical_import_failed",
+            "provider_started": false,
+            "usage_complete": true,
+            "retry_scope": "none"
+          },
+          "acquisition_failure": {
+            "schema_version": "acquisition-failure/1",
+            "code": "canonical_import_failed",
+            "retryable": false,
+            "provider_started": false,
+            "usage_complete": true,
+            "usage_scope": "operation",
+            "acquisition_usage": {
+              "schema_version": "1.0",
+              "response_bytes": 8192,
+              "cost_usd": "0.00"
+            }
+          },
+          "stage": "upstream_error"
+        },
+        "transcript": {
+          "status": "not_requested",
+          "retryable": false
+        }
+      },
+      "stub_operations": [
+        "catalog",
+        "catalog"
+      ],
+      "stub_ensure_calls": 1,
+      "stub_et_calls": 0,
+      "row_count": 4,
+      "checks": [
+        "action-started",
+        "request-outcome",
+        "provider-usage",
+        "download-receipt"
+      ],
+      "identities": [
+        "ff-short/1/129eea0e276c4bb39ac1b133b0cbe301"
+      ],
+      "child_env_clean": true
+    },
+    {
+      "sample": "docs/plans/f2-ff-short/samples/sample-6-companion-scopes.jsonl",
+      "scenario": "zero_companion",
+      "request": {
+        "schema_version": "2.0",
+        "company_query": "AMD",
+        "market": "US",
+        "document_kind": "annual_report",
+        "fiscal_year": 2025,
+        "as_of_date": "2026-07-18",
+        "filing_intent": "fetch_if_missing",
+        "acquisition_limits": {
+          "max_bytes": 5000000,
+          "timeout_seconds": 60,
+          "max_cost_usd": "1.00"
+        },
+        "companion_transcript": {
+          "intent": "fetch_if_missing",
+          "fiscal_year": 2026,
+          "fiscal_quarter": 3,
+          "acquisition_limits": {
+            "max_bytes": 1000000,
+            "timeout_seconds": 10,
+            "max_cost_usd": "0.00"
+          }
+        }
+      },
+      "exit_code": 0,
+      "business": {
+        "status": "source_candidate",
+        "calls": 5,
+        "downloads": 0,
+        "filing": {
+          "status": "source_candidate",
+          "source_ref": {
+            "schema_version": "2.0",
+            "document_id": "urn:company-wiki:document:sha256:37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "source_id": "urn:company-wiki:source:sha256:37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "content_sha256": "37f4f6df43d42853cf14fff90584f2f034b58948bf9bdea993b01d1d6345e2ab",
+            "byte_size": 42,
+            "mime_type": "application/pdf"
+          },
+          "byte_verification": "pending_verified_open",
+          "document_kind": "annual_report",
+          "fiscal_year": 2025,
+          "fiscal_period": null,
+          "resolution_outcome": "reused_existing",
+          "download_events": 0
+        },
+        "transcript": {
+          "status": "downloaded",
+          "retryable": false,
+          "source_ref": {
+            "schema_version": "2.0",
+            "document_id": "urn:company-wiki:document:sha256:93c89a8219dc527a58386cf3c4f75e6caa11cb2347a18c7382828e308ee161f9",
+            "source_id": "urn:company-wiki:source:sha256:93c89a8219dc527a58386cf3c4f75e6caa11cb2347a18c7382828e308ee161f9",
+            "content_sha256": "93c89a8219dc527a58386cf3c4f75e6caa11cb2347a18c7382828e308ee161f9",
+            "byte_size": 78,
+            "mime_type": "application/json"
+          },
+          "provider": "fmp",
+          "fiscal_year": 2026,
+          "fiscal_quarter": 3,
+          "provider_document_id": "fmp:AMD:2026:Q3",
+          "call_date": "2026-07-22",
+          "publication_date": null,
+          "as_of_cutoff_verified": false,
+          "provider_calls": 1,
+          "provider_requests": 1,
+          "provider_response_bytes": 78,
+          "provider_usage_complete": true
+        }
+      },
+      "stub_operations": [
+        "catalog",
+        "catalog",
+        "query",
+        "et_tool",
+        "transcript_import",
+        "open"
+      ],
+      "stub_ensure_calls": 1,
+      "stub_et_calls": 1,
+      "row_count": 5,
+      "checks": [
+        "action-started",
+        "request-outcome",
+        "provider-usage",
+        "download-receipt",
+        "transcript-provider-usage"
+      ],
+      "identities": [
+        "ff-short/1/6a15469e201b4fc2949b43eefcaf7736"
+      ],
+      "child_env_clean": true
+    }
+  ],
+  "reimport_zero_new": true
+}
