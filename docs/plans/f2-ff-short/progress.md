@@ -13,8 +13,9 @@
 python -B -m pytest -q -p no:cacheprovider --basetemp=C:/tmp/ff-f2-short-final tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py
 ```
 
-## 待办
+## 独审与交接
 
-- 独立 agent 审查生产入口、异常分支、v1/v2 兼容、诊断写失败、未知费用、合法拒绝与下载计数、测试隔离及发布闭包；逐项关闭后在最终实现 SHA 复验。
-- 写 `handoff.md`（正文 + 尾部 JSON）。
-- 正常 hooks 提交；ROOT 负责跨仓组合与并入主线。
+- 独立 agent 在 `5575791` 审查生产入口、异常分支、v1/v2 兼容、诊断写失败、未知费用、合法拒绝与下载计数、测试隔离及发布闭包；结论“可合入，无阻断项”，提出 5 项次要问题（重复导入断言空转、环境 docstring、证据口径注释、三处覆盖缺口、`begin_observation` 理论抛出）。
+- 逐项修复后提交 `09eadf0`；审查者在最终 SHA 复验，5 项全部关闭并确认可合入。
+- `handoff.md` 已写（正文 + 尾部机器摘要 JSON）。本地分支未推送，ROOT 负责组合与并入主线。
+- 剩余：ROOT 跨仓组合（RF 周跑 / FF 侧车 / CWP 计量 / ET 用量）；F4 作业路径子进程继承 OUT 的边界观察属 F4 范围。
