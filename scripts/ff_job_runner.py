@@ -30,15 +30,18 @@ from typing import Any
 
 from ff_job_contracts import (
     FFJobError,
+    FILING_SPEND_CONTRACT,
     build_cost_view,
     build_result_view,
     companion_may_acquire,
     cost_for_pending,
     error_view_from_exception,
+    filing_may_contact_provider,
     job_spend_intent,
     retry_eligible,
     validate_action,
 )
+from ff_job_feedback import publish_job_observation
 from ff_job_store import JobStore, now_iso
 from filing_contracts import FilingFetchError
 
@@ -132,10 +135,10 @@ def run_job(
         })
         store.append_log(owner_job_id, {"event": "run_started", "pid": record["owner_pid"]})
         record = store.write_locked(record)
-        return (
-            _execute(store, record, config_path=config_path, timeout_seconds=timeout_seconds),
-            True,
-        )
+        publish_job_observation(record, started=True)
+        landed = _execute(store, record, config_path=config_path, timeout_seconds=timeout_seconds)
+        publish_job_observation(landed, started=False)
+        return landed, True
     finally:
         lock.release()
 
@@ -249,7 +252,7 @@ def _envelope_observation(
     filing = envelope.get("filing") or {}
     observation = (envelope.get("acquisition_observation") or filing.get("acquisition_failure")
                    or filing.get("upstream_cause"))
-    if request["filing_intent"] == "reuse_only":
+    if not filing_may_contact_provider(request):
         observation = _NO_PROVIDER
     if not companion_may_acquire(request):
         return observation
@@ -315,6 +318,8 @@ def _land_terminal(
         "cost_usd": observation.get("cost_usd"),
         "download_events": downloads if receipt_complete or downloads > 0 else None,
     }
+    if record["kind"] == "filing.acquire":
+        evidence["contract"] = FILING_SPEND_CONTRACT
     cost, cost_state = terminal_cost(spend_intent, evidence)
     unknown = error is not None and spend_intent != "reuse_only" and not receipt_complete
     record["status"] = "unknown" if unknown else ("succeeded" if error is None else "failed")
@@ -355,6 +360,7 @@ def act(
     idempotency_key: str,
     config_path: Path | None = None,
     timeout_seconds: float = 300.0,
+    expected_attempt: int | None = None,
 ) -> tuple[dict, bool]:
     """Apply one declared action; returns (record, replayed).
 
@@ -364,7 +370,10 @@ def act(
     validate_action(action)
     if action == "reconcile":
         return reconcile(store, owner_job_id, idempotency_key=idempotency_key,
-                         config_path=config_path, timeout_seconds=timeout_seconds)
+                         config_path=config_path, timeout_seconds=timeout_seconds,
+                         expected_attempt=expected_attempt)
+    if expected_attempt is not None:
+        raise FFJobError("expected attempt only applies to reconcile", code="request_error")
     lock = store.acquire_lock(owner_job_id, timeout_seconds=5.0)
     try:
         record = store.load(owner_job_id)
@@ -439,6 +448,7 @@ def reconcile(
     idempotency_key: str,
     config_path: Path | None,
     timeout_seconds: float,
+    expected_attempt: int | None = None,
 ) -> tuple[dict, bool]:
     """Re-check the owner's actual state for an unknown job (never re-sends).
 
@@ -447,6 +457,8 @@ def reconcile(
     lands as succeeded/failed with the prior spend evidence carried forward.
     """
     record, _ = store.load_checked(owner_job_id, fix=True)
+    if expected_attempt is not None and record.get("attempts") != expected_attempt:
+        raise FFJobError("reconcile attempt changed", code="request_error")
     # The action receipt is checked BEFORE the status gate: a replayed
     # reconcile must return the landed state, not a refusal.
     for entry in record.get("actions", []):
@@ -462,6 +474,8 @@ def reconcile(
         current = store.load(owner_job_id)
         if current is None:
             raise FFJobError(f"unknown owner_job_id: {owner_job_id}", code="request_error")
+        if expected_attempt is not None and current.get("attempts") != expected_attempt:
+            raise FFJobError("reconcile attempt changed", code="request_error")
         if current.get("status") != "unknown":
             # Another process reconciled first: replay idempotently.
             return current, True
@@ -541,15 +555,19 @@ def _reconcile_filing(
     from fetch_filing import resolve_filing
     from ff_v2_envelope import success_envelope
 
-    read_only = {key: value for key, value in request.items()
-                 if key not in {"acquisition_limits", "companion_transcript"}}
-    read_only["filing_intent"] = "reuse_only"
-    handle = resolve_filing(
-        request=read_only, config_path=config_path, timeout_seconds=timeout_seconds,
-        stats=stats, source_ref_v2=True,
-    )
+    try:
+        handle = resolve_filing(
+            request=request, config_path=config_path, timeout_seconds=timeout_seconds,
+            stats=stats, source_ref_v2=True, catalog_only=True,
+        )
+    except FilingFetchError as exc:
+        if exc.code != "not_found" or (exc.upstream_cause or {}).get("operation") != "query":
+            raise
+        # This proves absence from the local catalog, not absence at the
+        # provider. A missing candidate does not authorize another run.
+        return {"status": "gap", "filing": {"status": "gap", "reason": "local_catalog_not_found"}}, stats
     envelope = success_envelope(
-        read_only, handle, {"status": "not_requested", "retryable": False}, stats,
+        request, handle, {"status": "not_requested", "retryable": False}, stats,
     )
     return envelope, stats
 

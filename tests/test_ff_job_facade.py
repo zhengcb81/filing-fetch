@@ -675,6 +675,38 @@ class UnknownReconcileTests(unittest.TestCase):
         with self.assertRaises(FFJobError):
             run_job(self.store, record["owner_job_id"], config_path=None, timeout_seconds=60)
 
+    def test_native_start_is_visible_before_engine_and_binds_known_job(self) -> None:
+        out = Path(self._tmp.name) / "observations.jsonl"
+        with patch.dict(os.environ, {"RESEARCH_FEEDBACK_OUT": str(out),
+                                     "RESEARCH_FEEDBACK_RUN_ID": "test-parent",
+                                     "RESEARCH_FEEDBACK_ATTEMPT_ID": "try-1"}):
+            record = self._crashed_fetch_job()
+        rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["check_id"], "action-started")
+        self.assertEqual(rows[0]["terminal_check_id"], "job-outcome")
+        self.assertEqual(rows[0]["step_id"], record["owner_job_id"] + "/1")
+        self.assertEqual(rows[0]["evidence_ref"], "ff-job/1/" + record["owner_job_id"])
+        self.assertEqual(rows[0]["run_id"], "test-parent")
+
+    def test_completed_observations_preserve_cost_and_broken_sidecar_is_optional(self) -> None:
+        out = Path(self._tmp.name) / "observations.jsonl"
+        for key, sidecar in [("valid", out), ("bad", out.parent)]:
+            row, _ = _submit(self.store, kind="filing.acquire", request=_FETCH_REQUEST, key=key)
+            envelope = {"status": "source_candidate", "acquisition_observation": _OBS_ZERO}
+            with patch.dict(os.environ, {"RESEARCH_FEEDBACK_OUT": str(sidecar)}), patch(
+                "ff_job_runner._run_filing_engine",
+                return_value=(envelope, {"calls": 2, "downloads": 0}),
+            ):
+                final, executed = run_job(self.store, row["owner_job_id"], config_path=None, timeout_seconds=30)
+            self.assertTrue(executed)
+            self.assertEqual(final["status"], "succeeded")
+            self.assertEqual(final["cost_state"], "known")
+        rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([r["check_id"] for r in rows], ["action-started", "job-outcome", "job-usage"])
+        self.assertEqual(len({r["step_id"] for r in rows}), 1)
+        self.assertEqual(rows[-1]["actual"], "known")
+
     def test_reconcile_lands_succeeded_without_reacquisition(self) -> None:
         record = self._crashed_fetch_job()
         envelope = {
@@ -688,6 +720,7 @@ class UnknownReconcileTests(unittest.TestCase):
         def engine(**kwargs):
             seen["request"] = kwargs["request"]
             seen["stats"] = kwargs["stats"]
+            seen["catalog_only"] = kwargs["catalog_only"]
             return dict(_CANDIDATE_HANDLE)
 
         with patch("fetch_filing.resolve_filing", side_effect=engine), patch(
@@ -700,12 +733,22 @@ class UnknownReconcileTests(unittest.TestCase):
         self.assertEqual(final["status"], "succeeded")
         self.assertTrue(final["status_known"])
         self.assertEqual(final["derived_by"], "reconcile_read_only")
-        # The read-only query stripped the download intent and its limits.
-        self.assertEqual(seen["request"]["filing_intent"], "reuse_only")
-        self.assertNotIn("acquisition_limits", seen["request"])
+        # Recovery keeps the submitted selection, but uses the indexed-only operation.
+        self.assertEqual(seen["request"], _FETCH_REQUEST)
+        self.assertTrue(seen["catalog_only"])
         self.assertEqual(seen["stats"]["downloads"], 0)
         # Cost stays unknown: the interrupted run's spend cannot be certified.
         self.assertEqual(final["cost_state"], "unknown")
+
+    def test_reconcile_with_wrong_attempt_does_not_query_or_mutate(self) -> None:
+        job = self._crashed_fetch_job()
+        store_id = job["owner_job_id"]
+        with patch("fetch_filing.resolve_filing") as query:
+            with self.assertRaisesRegex(FFJobError, "attempt changed"):
+                act(self.store, store_id, action="reconcile", idempotency_key="rec",
+                    expected_attempt=2)
+        query.assert_not_called()
+        self.assertEqual(self.store.load_checked(store_id, fix=True)[0]["status"], "unknown")
 
     def test_reconcile_replay_is_idempotent(self) -> None:
         record = self._crashed_fetch_job()
@@ -742,6 +785,93 @@ class UnknownReconcileTests(unittest.TestCase):
         self.assertEqual(allowed_actions_for(final), [])
         with self.assertRaises(FFJobError):
             act(self.store, record["owner_job_id"], action="retry", idempotency_key="r")
+
+    def test_legacy_latest_metadata_zero_cannot_authorize_retry(self) -> None:
+        request = dict(_FETCH_REQUEST, mode="latest_as_of", filing_intent="reuse_only")
+        del request["fiscal_year"]
+        evidence = {"provider_started": False, "usage_complete": True, "download_events": 0}
+        for with_companion in (False, True):
+            with self.subTest(with_companion=with_companion):
+                attempt_request = dict(request)
+                if with_companion:
+                    attempt_request["companion_transcript"] = {
+                        "intent": "fetch_if_missing", "fiscal_year": 2025, "fiscal_quarter": 4,
+                        "acquisition_limits": request["acquisition_limits"],
+                    }
+                    cost, state = build_cost_view("fetch_if_missing", evidence)
+                else:
+                    cost, state = None, "not_applicable"
+                record, _ = _submit(self.store, kind="filing.acquire", request=attempt_request, key=f"legacy-{with_companion}")
+                owner_job_id = record["owner_job_id"]
+                with self.store.lock(owner_job_id):
+                    self.store.write_locked(dict(record, attempts=1, status="failed", cost=cost,
+                                                 cost_state=state, spend_evidence=evidence))
+                view = build_job_view(self.store.load(owner_job_id))
+                self.assertEqual(view["cost_state"], "unknown")
+                self.assertEqual(view["allowed_actions"], [])
+                with self.assertRaises(FFJobError):
+                    act(self.store, owner_job_id, action="retry", idempotency_key="must-not-retry")
+                self.assertEqual(self.store.load(owner_job_id)["attempts"], 1)
+
+    def test_latest_complete_no_start_can_still_retry(self) -> None:
+        request = dict(_FETCH_REQUEST, mode="latest_as_of", filing_intent="reuse_only")
+        del request["fiscal_year"]
+        record, _ = _submit(self.store, kind="filing.acquire", request=request, key="latest-no-start")
+        with patch("ff_job_runner._run_filing_engine", side_effect=_local_missing()):
+            record, _ = run_job(self.store, record["owner_job_id"], config_path=None, timeout_seconds=30)
+        self.assertEqual(record["status"], "failed")
+        self.assertEqual(record["cost_state"], "known")
+        self.assertEqual(allowed_actions_for(record), ["retry"])
+
+    def test_latest_metadata_fee_is_preserved_even_without_document_download(self) -> None:
+        request = dict(_FETCH_REQUEST, mode="latest_as_of", filing_intent="reuse_only")
+        del request["fiscal_year"]
+        record, _ = _submit(self.store, kind="filing.acquire", request=request, key="latest")
+        observation = _observation(provider_started=True, cost_usd="0.15", outcome="reused_before_download")
+        envelope = {"status": "source_candidate", "acquisition_observation": observation}
+        with patch("ff_job_runner._run_filing_engine",
+                   return_value=(envelope, {"calls": 2, "downloads": 0})):
+            final, _ = run_job(self.store, record["owner_job_id"], config_path=None, timeout_seconds=30)
+        self.assertEqual(final["cost_state"], "known")
+        self.assertEqual(final["cost"]["value"], "0.15")
+        self.assertEqual(final["intent"], "reuse_only")
+        self.assertEqual(final["result"]["downloads"], 0)
+
+    def test_reconcile_latest_uses_only_a_catalog_query_and_retains_old_cost(self) -> None:
+        request = dict(_FETCH_REQUEST, mode="latest_as_of", filing_intent="reuse_only")
+        del request["fiscal_year"]
+        record, _ = _submit(self.store, kind="filing.acquire", request=request, key="latest")
+        with self.store.lock(record["owner_job_id"]):
+            self.store.write_locked(dict(record, attempts=1, status="running", owner_pid=DEAD_PID))
+        commands = []
+
+        def cwp(**kwargs):
+            commands.append(kwargs["action"])
+            self.assertEqual(kwargs["action"], "identify")
+            return {"selected": {"canonical_name": "Apple Inc.", "security_id": "AAPL", "market": "US"}}
+
+        def query(**kwargs):
+            self.assertEqual(kwargs["normalized_request"]["mode"], "latest_as_of")
+            self.assertEqual(kwargs["normalized_request"]["as_of_date"], request["as_of_date"])
+            self.assertNotIn("fiscal_year", kwargs["normalized_request"])
+            raise _local_missing()
+
+        with patch("fetch_filing.load_company_wiki_root", return_value=SKILL_ROOT), patch(
+            "fetch_filing._run_company_wiki_json_retry", side_effect=cwp,
+        ), patch("fetch_filing._resolved_company_identity",
+                 return_value={"canonical_name": "Apple Inc.", "security_id": "AAPL", "market": "US"}), patch(
+            "fetch_filing._run_source_query", side_effect=query,
+        ) as database, patch("ff_local_source_prepare.prepare_existing_local_source") as prepare:
+            final, _ = reconcile(self.store, record["owner_job_id"], idempotency_key="recovered",
+                                 config_path=None, timeout_seconds=30)
+        self.assertEqual(commands, ["identify"])
+        database.assert_called_once()
+        prepare.assert_not_called()
+        self.assertEqual(final["status"], "failed")
+        self.assertEqual(final["error"]["code"], "not_found")
+        self.assertEqual(final["cost_state"], "unknown")
+        self.assertIsNone(final["cost"])
+        self.assertEqual(final["attempts"], 1)
 
     def test_reconcile_refused_on_terminal(self) -> None:
         record, _ = _submit(self.store, kind="filing.acquire", request=_FILING_REQUEST)

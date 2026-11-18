@@ -58,6 +58,7 @@ RECOVERY_CAPABILITY = "durable_owner_job"
 
 # Cost states (G-m8-FF-03 / G-m8-COMMON-03).
 COST_STATES = ("known", "unknown", "not_applicable")
+FILING_SPEND_CONTRACT = "ff-filing-provider/1"
 
 # A run that has gone silent past its own declared deadline plus this grace
 # is reported as unknown by the store's lazily-evaluated liveness check.
@@ -216,9 +217,14 @@ def companion_may_acquire(request: dict[str, Any]) -> bool:
     return isinstance(option, dict) and option.get("intent") == "fetch_if_missing"
 
 
+def filing_may_contact_provider(request: dict[str, Any]) -> bool:
+    """Even metadata lookup for latest_as_of requires a provider allocation."""
+    return request["filing_intent"] == "fetch_if_missing" or request.get("mode") == "latest_as_of"
+
+
 def job_spend_intent(kind: str, request: dict[str, Any]) -> str:
     """Include all acquiring phases while preserving the submitted filing intent."""
-    if kind == "filing.acquire" and companion_may_acquire(request):
+    if kind == "filing.acquire" and (filing_may_contact_provider(request) or companion_may_acquire(request)):
         return "fetch_if_missing"
     return job_intent(kind, request)
 
@@ -306,6 +312,19 @@ def _known_cost(value: str, basis: str) -> tuple[dict[str, Any], str]:
     return cost, "known"
 
 
+def _legacy_unaccounted_provider(record: dict[str, Any]) -> bool:
+    request = record.get("request")
+    if record.get("attempts", 0) <= 0 or record.get("kind") != "filing.acquire" or not isinstance(request, dict):
+        return False
+    if record.get("cost_state") == "not_applicable":
+        return job_spend_intent("filing.acquire", request) != "reuse_only"
+    evidence = record.get("spend_evidence") or {}
+    # Older latest/reuse jobs could be marked known zero if a companion
+    # enabled spending, even though the filing made a metadata query.
+    return (request.get("mode") == "latest_as_of" and request.get("filing_intent") == "reuse_only"
+            and evidence.get("contract") != FILING_SPEND_CONTRACT and _complete_zero_spend(evidence))
+
+
 def retry_eligible(record: dict[str, Any]) -> bool:
     """True when re-running the job cannot double-spend.
 
@@ -313,7 +332,8 @@ def retry_eligible(record: dict[str, Any]) -> bool:
     exists, only its complete zero-spend evidence authorizes another run.
     """
     return (record.get("attempts", 0) == 0
-            or _complete_zero_spend(record.get("spend_evidence") or {}))
+            or (not _legacy_unaccounted_provider(record)
+                and _complete_zero_spend(record.get("spend_evidence") or {})))
 
 
 def allowed_actions_for(record: dict[str, Any]) -> list[str]:
@@ -376,17 +396,12 @@ def build_job_view(record: dict[str, Any], *, fresh_actions: list[str] | None = 
         raise FFJobError("stored cost shape is invalid", code="fatal")
     if record.get("attempts", 0) > 0:
         evidence = record.get("spend_evidence") or {}
-        request = record.get("request")
         legacy_zero_without_evidence = (
             isinstance(cost, dict) and cost.get("basis") == "engine_zero_evidence"
             and not _complete_zero_spend(evidence)
         )
-        legacy_companion_not_counted = (
-            view["status"] in {"succeeded", "failed", "unknown"}
-            and view["cost_state"] == "not_applicable" and view["kind"] == "filing.acquire"
-            and isinstance(request, dict) and companion_may_acquire(request)
-        )
-        if legacy_zero_without_evidence or legacy_companion_not_counted:
+        if legacy_zero_without_evidence or (view["status"] in {"succeeded", "failed", "unknown"}
+                                            and _legacy_unaccounted_provider(record)):
             view["cost"], view["cost_state"] = None, "unknown"
     error = view.get("error")
     if error is not None:

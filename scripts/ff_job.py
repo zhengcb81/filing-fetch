@@ -155,6 +155,7 @@ def _cmd_act(args: argparse.Namespace) -> int:
         idempotency_key=args.idempotency_key,
         config_path=Path(args.config).expanduser().resolve() if args.config else None,
         timeout_seconds=args.timeout_seconds,
+        expected_attempt=args.expected_attempt,
     )
     _emit(_view_payload("act", record, action=args.action, idempotent_replay=replayed),
           pretty=args.pretty)
@@ -270,6 +271,8 @@ def _add_act_parser(subparsers) -> None:
                             help="path to company_wiki.json (reconcile owner query)")
     act_parser.add_argument("--timeout-seconds", type=float, default=300.0,
                             help="budget for the reconcile owner query (default: 300)")
+    act_parser.add_argument("--expected-attempt", type=int,
+                            help="reconcile only: owner attempt bound by the original observation")
     act_parser.set_defaults(handler=_cmd_act)
 
 

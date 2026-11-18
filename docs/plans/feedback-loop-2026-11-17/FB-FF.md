@@ -2,6 +2,13 @@
 
 施工状态：已规划，ROOT 保留此项的复杂接线，并与 FF owner 对接业务入口、未知用量及只读恢复。采集侧两张独立卡由 ET 和 SID 并行施工；全局另有 industry-research（IR）独立研究报告卡。唯一工作目录为 `C:/Users/郑曾波/Projects/filing-fetch`，主线 `main`，本次计划基线 `4c7f501b`。本仓 canonical PWF 是 [PLANNING_STATUS.md](../../../PLANNING_STATUS.md)。
 
+## 2026-11-18 · 已实现的 F4 作业部分
+
+- 启用专用旁路时，真实 FF owner 在运行前写 `action-started` 及匹配终态检查名，完成后分别写 `job-outcome` 和 `job-usage`。费用未知独立于业务结果；坏旁路不影响业务作业。
+- `get_status` 加当前原作业的 `act reconcile --expected-attempt` 是总控唯一恢复链。恢复只查本地已入索引记录，保留原公司、市场、截至日和模式；不会再次发现、下载或调用伴随电话会。`latest_as_of` 的本地恢复不声称外部最新。原历史费用未知继续保留；当前未启动供应商的真实零费用仍按原重试合同。
+- `scripts/ff_job_feedback.py --reports-dir … report|get-report` 在本仓记录原发现方复验和版本。重复按 action ID 读回同一收据。没有另建下载数据库。
+- 作业、跨进程、公开隔离及消费回归 188 项与 8 个子例通过。总控另做 exact/latest 强制终止与真实宿主组合。工程反馈短请求的更多偏差分类依原卡后续处理。
+
 ## 交付范围和现有依据
 
 缺陷可能在上游提出请求时出现，最终在另一层得到具名拒绝。FF 只修自己的路由、限额透传、复用/下载分支、重试行为和结果信封。CWP 的验真与 provider 的实际计量继续由原 owner 提供。保留现有 `.ff_jobs/`、工具状态、生产配置和密钥文件；新用例使用 pytest tmp_path 与专用测试配置。

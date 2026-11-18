@@ -750,6 +750,7 @@ def _source_query_candidate(
     source_identity: dict[str, Any],
     deadline: float,
     stats: dict[str, int],
+    prepare_missing: bool,
 ) -> dict[str, Any]:
     """Get a provisional pathless candidate from CWP's DB-only query CLI.
 
@@ -761,7 +762,7 @@ def _source_query_candidate(
             root=root, normalized_request=normalized_request, deadline=deadline, stats=stats,
         )
     except FilingFetchError as exc:
-        if (exc.code != "not_found"
+        if (not prepare_missing or exc.code != "not_found"
                 or request.get("schema_version") != FILING_V2_REQUEST_SCHEMA_VERSION
                 or request.get("filing_intent") != "reuse_only"):
             raise
@@ -1215,6 +1216,7 @@ def _has_acquisition_identity(request: dict[str, Any]) -> bool:
 def _resolve_source_ref_v2(
     *,
     source_query_route: bool,
+    catalog_only: bool,
     root: WikiEndpoint,
     command_prefix: list[str],
     normalized_request: dict[str, Any],
@@ -1225,7 +1227,7 @@ def _resolve_source_ref_v2(
     allow_download: bool,
     stats: dict[str, int],
 ) -> dict[str, Any]:
-    # Own every opt-in SourceRef route behind one isolated dispatcher.
+    # Recovery only observes indexed state: no local preparation or ensure.
     if source_query_route:
         return _source_query_candidate(
             root=root,
@@ -1235,6 +1237,7 @@ def _resolve_source_ref_v2(
             source_identity=source_identity,
             deadline=deadline,
             stats=stats,
+            prepare_missing=not catalog_only,
         )
 
     command = [
@@ -1391,6 +1394,7 @@ def resolve_filing(
     deadline: float | None = None,
     request_context: RequestContext | None = None,
     context_out: dict[str, RequestContext] | None = None,
+    catalog_only: bool = False,
 ) -> dict[str, Any]:
     """Identify an optional company query, then resolve or explicitly ensure a filing.
 
@@ -1424,6 +1428,10 @@ def resolve_filing(
     deployment config once and hand the same connection to the companion
     stage.  Passing neither keeps the historical per-stage loading behaviour;
     ``context_out["context"]`` receives the snapshot actually used.
+    ``catalog_only`` is for the owner recovering a submitted v2 job. It keeps the
+    original selection (including latest_as_of) and only queries indexed local
+    records. It cannot prove external freshness, initiate a provider, or add
+    previously unindexed documents to the catalog.
     """
     stats = _normalize_stats(stats)
 
@@ -1438,14 +1446,20 @@ def resolve_filing(
     if timeout_seconds <= 0 or not math.isfinite(timeout_seconds):
         raise ValueError("timeout_seconds must be positive and finite")
     validate_request(request)
-    allow_download = _download_intent(request, allow_download)
-    source_query_route = _use_source_query(source_ref_v2, allow_download, request)
+    if catalog_only:
+        if not source_ref_v2 or allow_download is True:
+            raise ValueError("catalog_only requires a pathless, non-acquiring query")
+        allow_download = False
+    else:
+        allow_download = _download_intent(request, allow_download)
+    source_query_route = catalog_only or _use_source_query(source_ref_v2, allow_download, request)
     if request.get("schema_version") == FILING_V2_REQUEST_SCHEMA_VERSION and not source_ref_v2:
         raise FilingFetchError(
             "v2 requests require the pathless SourceRef route",
             code="request_error",
         )
-    deadline = filing_operation_deadline(request, deadline=deadline, timeout_seconds=timeout_seconds)
+    deadline = filing_operation_deadline({} if catalog_only else request,
+                                         deadline=deadline, timeout_seconds=timeout_seconds)
     if request_context is not None:
         root = request_context.connection
     else:
@@ -1562,6 +1576,7 @@ def resolve_filing(
     if source_ref_v2:
         return _resolve_source_ref_v2(
             source_query_route=source_query_route,
+            catalog_only=catalog_only,
             root=root,
             command_prefix=command_prefix,
             normalized_request=normalized_request,

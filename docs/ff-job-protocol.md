@@ -147,15 +147,16 @@ A budget ceiling is never reported as a cost.
 
 | evidence | cost | cost_state |
 |---|---|---|
-| all stages `reuse_only` (any state) | null | `not_applicable` |
+| all phases stay local (any state) | null | `not_applicable` |
 | queued fetch job | null | `not_applicable` (not spent, may still spend) |
 | running fetch job | null | `unknown` |
 | complete no-start evidence and no committed download | `0.00` USD | `known` (`engine_zero_evidence`) |
 | complete reported cost (filing `acquisition_observation.cost_usd`, statements `usage.cost_usd`) | that value | `known` (`provider_reported`) |
 | missing fee evidence, incomplete usage, or lost run | null | `unknown` |
 
-A companion with its own acquisition intent can spend even when the filing
-is reuse-only. The job keeps the submitted filing intent in its view. A
+A normal `latest_as_of` operation may spend on metadata under its limits even
+when `filing_intent=reuse_only`. A companion with its own acquisition intent can
+also spend when the filing is reused. The job keeps the submitted filing intent in its view. A
 companion that might have spent without a complete fee account keeps total
 cost unknown, even when the filing's cost is known. Both stages share the
 earliest effective filing deadline. The companion can impose a shorter cap.
@@ -169,13 +170,23 @@ reader that finds a running job whose pid is dead, or whose deadline plus a
 usage receipt also lands unknown, since the process may already have
 committed data or incurred a fee.
 
-`reconcile` re-checks the owner's actual state through the **read-only reuse
-path** of the same engine: the stored request is stripped of its download
-intent and its `acquisition_limits`, so the query can never acquire anything.
-The answer lands as `succeeded` (data present) or `failed` (data absent) with
-`derived_by: "reconcile_read_only"`; the interrupted run's spend stays
-`unknown` because a read-only query cannot certify it. Reconcile never
-re-sends a download. An absent result does not authorize retry.
+For filings, `reconcile` uses the **indexed local query** under the original
+company, market, period, mode and cutoff selection. It cannot prepare another
+file, contact a provider, or run a companion. `latest_as_of` can only recover
+the current local candidate, with no proof of provider freshness. The result
+lands as `succeeded` (data present) or `failed` (indexed data absent),
+with `derived_by: "reconcile_read_only"` on successful recovery. The previous
+run's fee remains as recorded; read-only recovery cannot certify unknown
+spend. `act --action reconcile --expected-attempt N` optionally binds the
+attempt as well as the job ID; the store rechecks it under the job lock. An absent result does not authorize retry.
+
+A caller can set `RESEARCH_FEEDBACK_OUT` to an exclusive JSONL path. The
+runner emits a start after its native claim and before the engine, with
+`terminal_check_id=job-outcome` and `ff-job/1/<owner_job_id>`. Normal completion
+adds outcome and fee-availability separately. The optional projection changes
+neither the stdout envelope nor the durable native result. Owner replay
+reports can be stored and read by action ID through
+`scripts/ff_job_feedback.py --reports-dir <owned-dir> report|get-report`.
 
 ## Durable store layout (`--jobs-dir`, default `<skill_root>/.ff_jobs`)
 
