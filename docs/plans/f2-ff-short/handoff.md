@@ -10,7 +10,7 @@
 | 卡面基线 | `d5fa32c635c2d7d3690d90ea32f39964f2460e22`（`origin/main`） |
 | 计划提交 | `92e52b5`（本卡 PWF 开卡） |
 | 首个实现提交 | `5575791e5f33915c91cf76890397efdd07b5b83f` |
-| 最终受审提交 | `09eadf04b6a139ffef03d0c87414626e31dbaefb` |
+| 最终受审提交 | `eb2ee5c`（实现；此前 `09eadf0`、`321c455`） |
 | 提交位置 | 本地分支，未推送；ROOT 负责组合与并入主线 |
 
 改动文件：`scripts/fetch_filing.py`（CLI 接线与 locals 预初始化）、`scripts/ff_short_feedback.py`（新适配器）、`tests/test_feedback_observation.py`、`tests/fixtures/short_feedback/connector.py`、`skills/repair-filing-fetch-issue/SKILL.md`、本卡 `findings.md` / `progress.md` / `samples/`。
@@ -21,9 +21,9 @@
 
 | 命令 | 结果 |
 |---|---|
-| `python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py` | **30 passed**，51.98 秒 |
-| 计划指定五文件（新测试 + `test_ff1_envelope_candidates` + `test_failure_usage_continuity` + `test_m3_acquisition_usage_ff` + `test_ff_job_facade`） | **204 passed, 8 subtests passed**，70.95 秒 |
-| 相邻回归（五文件 + `test_fetch_filing` + `test_public_operation_isolation` + `test_s3_install_surface` + `test_architecture_quality`） | **392 passed, 1 skipped, 46 subtests passed**，135.15 秒 |
+| `python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py` | **30 passed**，54.09 秒 |
+| 计划指定五文件（新测试 + `test_ff1_envelope_candidates` + `test_failure_usage_continuity` + `test_m3_acquisition_usage_ff` + `test_ff_job_facade`） | **204 passed, 8 subtests passed**，58.01 秒 |
+| 相邻回归（五文件 + `test_fetch_filing` + `test_public_operation_isolation` + `test_s3_install_surface` + `test_architecture_quality`） | **392 passed, 1 skipped, 46 subtests passed**，110.21 秒 |
 | `ruff check scripts tests/test_feedback_observation.py tests/fixtures/short_feedback/connector.py` | All checks passed |
 | `mypy scripts/filing_contracts.py scripts/fetch_filing.py scripts/ff_short_feedback.py` | Success: no issues found in 3 source files |
 | `tools/host_assumption_guard.py --roots tests tools scripts e2e` | `new=0` |
@@ -34,15 +34,30 @@
 
 ## 独审与逐项关闭
 
-独立 agent（未参与实现）在 `5575791` 审查完整生产入口、异常分支、v1/v2 兼容、诊断写失败、未知费用、合法拒绝与下载计数、测试隔离及发布闭包，结论“可合入，无阻断项”，提出 5 项次要问题；修复后在 `09eadf0` 复验，全部关闭并确认可合入。
+独立 agent（未参与实现）分两轮审查。
+
+**第一轮**在 `5575791` 审查完整生产入口、异常分支、v1/v2 兼容、诊断写失败、未知费用、合法拒绝与下载计数、测试隔离及发布闭包，结论“可合入，无阻断项”，提出 5 项次要问题；修复后在 `09eadf0` 复验，全部关闭。
 
 | # | 发现 | 关闭方式 | 复验 |
 |---|---|---|---|
 | 1 | “重复导入零新增”只比对文件字节，断言空转 | 测试改为按 `(run_id, attempt_id, step_id, check_id)` 导入两次；manifest 记录 `first_import_rows=27`、`second_import_rows=0` | 已关闭 |
 | 2 | `OUT` 为空时提前返回，`RUN_ID`/`ATTEMPT_ID` 仍被继承，与 docstring 不符 | 模块与函数 docstring 改为“启用时清除三个变量、无路径时不动环境” | 已关闭 |
-| 3 | v1 `reuse_only` 的 `not_started`/`not_applicable` 与 v1 gap 的 `downloads=0` 未区分合同与证据 | 在 `_usage_state`、`_v1_facts`、`_start_state` 补注释 | 已关闭 |
+| 3 | v1 `reuse_only` 的 `not_started`/`not_applicable` 与 v1 gap 的下载字段未区分合同与证据 | 补注释；后续将 v1 gap 改为不合成下载字段 | 已关闭 |
 | 4 | 缺坏 JSON、v2 gap、v1 错误携带 observation 的覆盖 | 新增 3 例并通过 | 已关闭 |
 | 5 | `begin_observation` 理论抛出会落入业务 fatal | `fetch_filing.main` 用局部 `try/except Exception` 兜住并置 `None` | 已关闭 |
+
+**第二轮**由另一位未获知前轮结论的独立审计者，在 `321c455` 对照卡面逐条找遗漏：
+
+| # | 发现 | 关闭方式 | 复验 |
+|---|---|---|---|
+| 6 | v1 gap 无 `downloads` 字段却合成 0，违反“未提供字段记 unknown” | `_v1_facts` 不再合成，记 `unknown`；v1 gap 用例同步 | 已关闭 |
+| 7 | 启用/禁用只对照 reuse/gap，未覆盖 latest/download/corrupt/companion | 参数化五场景逐字节对照 stdout/stderr/退出码 | 已关闭 |
+| 8 | handoff 的受审 SHA 落后于代码，计数/路径声明不一致 | 更新为 `eb2ee5c`、30/204+8/392+1 skip+46、路径占位符 | 已关闭 |
+| 9 | 精确 reuse 的 `not_started` 来自意图而非 producer 字段 | 保留 owner 合同判定，findings 说明“producer 显式 started 覆盖合同” | 已关闭 |
+| 10 | `request-outcome` 对所有已知失败记 `expected`，语义未说明 | 技能明确：终态检查成立即 `expected`，终态未知才 `unknown`，与 F4 `job-outcome` 一致 | 已关闭 |
+| 11 | RED 仅有叙述 | findings 补可复验命令：在 `92e52b5` 的 scripts 上运行同一测试即得 `ModuleNotFoundError` | 已关闭 |
+
+最终在 `eb2ee5c` 复验：侧车 30 passed、五文件 204 passed + 8 subtests、九文件 392 passed + 1 skipped + 46 subtests、ruff 通过；确认可合入。测试根未删除一项已如实记入清理段（环境批量删除保护）。
 
 ## 真实 CLI 样本
 
@@ -89,5 +104,5 @@
 3. 本卡未发现须修复的新缺陷，未开 `issues/` 卡。
 
 ```json
-{"lane":"F2-FF-SHORT","owner":"filing-fetch","base":"d5fa32c635c2d7d3690d90ea32f39964f2460e22","implementation":"09eadf04b6a139ffef03d0c87414626e31dbaefb","reviewed_commit":"09eadf04b6a139ffef03d0c87414626e31dbaefb","branch":"codex/f2-ff-short","review_ref":"docs/plans/f2-ff-short/handoff.md","tests":[{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py","result":"30 passed"},{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py","result":"204 passed, 8 subtests passed"},{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py tests/test_fetch_filing.py tests/test_public_operation_isolation.py tests/test_s3_install_surface.py tests/test_architecture_quality.py","result":"392 passed, 1 skipped, 46 subtests passed"}],"sample_refs":["docs/plans/f2-ff-short/samples/sample-1-reuse-hit.jsonl","docs/plans/f2-ff-short/samples/sample-2-missing-limits.jsonl","docs/plans/f2-ff-short/samples/sample-3-latest-unknown-usage.jsonl","docs/plans/f2-ff-short/samples/sample-4-download.jsonl","docs/plans/f2-ff-short/samples/sample-5-corrupt-rejection.jsonl","docs/plans/f2-ff-short/samples/sample-6-companion-scopes.jsonl"],"cleanup":"repo clean: no run directory, cache or debug copy; this round's test roots under <short-temp-root> remain because the environment's bulk-delete guard required confirmation; main worktree, production config, keys, originals and .ff_jobs untouched","remaining":["ROOT cross-repo composition with RF weekly run, CWP provider_started/usage and ET usage","F4 job lane child-process RESEARCH_FEEDBACK_OUT inheritance is outside this card"]}
+{"lane":"F2-FF-SHORT","owner":"filing-fetch","base":"d5fa32c635c2d7d3690d90ea32f39964f2460e22","implementation":"eb2ee5c","reviewed_commit":"eb2ee5c","branch":"codex/f2-ff-short","review_ref":"docs/plans/f2-ff-short/handoff.md","tests":[{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py","result":"30 passed"},{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py","result":"204 passed, 8 subtests passed"},{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py tests/test_fetch_filing.py tests/test_public_operation_isolation.py tests/test_s3_install_surface.py tests/test_architecture_quality.py","result":"392 passed, 1 skipped, 46 subtests passed"}],"sample_refs":["docs/plans/f2-ff-short/samples/sample-1-reuse-hit.jsonl","docs/plans/f2-ff-short/samples/sample-2-missing-limits.jsonl","docs/plans/f2-ff-short/samples/sample-3-latest-unknown-usage.jsonl","docs/plans/f2-ff-short/samples/sample-4-download.jsonl","docs/plans/f2-ff-short/samples/sample-5-corrupt-rejection.jsonl","docs/plans/f2-ff-short/samples/sample-6-companion-scopes.jsonl"],"cleanup":"repo clean: no run directory, cache or debug copy; this round's test roots under <short-temp-root> remain because the environment's bulk-delete guard required confirmation; main worktree, production config, keys, originals and .ff_jobs untouched","remaining":["ROOT cross-repo composition with RF weekly run, CWP provider_started/usage and ET usage","F4 job lane child-process RESEARCH_FEEDBACK_OUT inheritance is outside this card"]}
 ```
