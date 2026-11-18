@@ -30,7 +30,7 @@
 
 - 跳过：`tests/test_fetch_filing.py:2020` 的既有 “production security-master snapshots not present”。
 - 基线差异（未改代码同样失败，与本卡无关）：`tests/test_provider_diagnostics_cli.py::test_real_cli_config_error_has_no_upstream_cause` 期望 `config_error`、本机实得 `fatal`。
-- RED：未接线时新测试收集失败 `ModuleNotFoundError: ff_short_feedback`；接线后 24 项通过。
+- RED：未接线时新测试收集失败 `ModuleNotFoundError: ff_short_feedback`；接线后 30 项通过。
 
 ## 独审与逐项关闭
 
@@ -78,7 +78,7 @@
 
 ## 清理与未触碰边界
 
-- 测试只用 `--basetemp=C:/tmp/ff-f2-*` 与 pytest `tmp_path`。环境的安全删除策略对批量目录要求确认，`C:/tmp/ff-f2-*` 测试根未执行删除，原样留在系统临时目录；仓库内无运行目录、`.pytest_cache`、`__pycache__` 或调试副本（`git status` 干净）。
+- 测试只用 `--basetemp=<short-temp-root>` 与 pytest `tmp_path`。环境的安全删除策略对批量目录要求确认，`<short-temp-root>` 下的本轮测试根未执行删除，原样留在系统临时目录；仓库内无运行目录、`.pytest_cache`、`__pycache__` 或调试副本（`git status` 干净）。
 - 未触碰主工区 `C:/Users/郑曾波/Projects/filing-fetch`、生产 `config/company_wiki.json`、`FMP_API_KEY.txt`、`.ff_jobs/`、CWP/ET 仓库或任何原件。
 - 样本与提交不含本机绝对路径、凭据、财报正文；只含闭集状态词、`urn:` 与 `ff-short/1/...` 引用。
 
@@ -89,5 +89,5 @@
 3. 本卡未发现须修复的新缺陷，未开 `issues/` 卡。
 
 ```json
-{"lane":"F2-FF-SHORT","owner":"filing-fetch","base":"d5fa32c635c2d7d3690d90ea32f39964f2460e22","implementation":"09eadf04b6a139ffef03d0c87414626e31dbaefb","reviewed_commit":"09eadf04b6a139ffef03d0c87414626e31dbaefb","branch":"codex/f2-ff-short","review_ref":"docs/plans/f2-ff-short/handoff.md","tests":[{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py","result":"30 passed"},{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py","result":"204 passed, 8 subtests passed"},{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py tests/test_fetch_filing.py tests/test_public_operation_isolation.py tests/test_s3_install_surface.py tests/test_architecture_quality.py","result":"392 passed, 1 skipped, 46 subtests passed"}],"sample_refs":["docs/plans/f2-ff-short/samples/sample-1-reuse-hit.jsonl","docs/plans/f2-ff-short/samples/sample-2-missing-limits.jsonl","docs/plans/f2-ff-short/samples/sample-3-latest-unknown-usage.jsonl","docs/plans/f2-ff-short/samples/sample-4-download.jsonl","docs/plans/f2-ff-short/samples/sample-5-corrupt-rejection.jsonl","docs/plans/f2-ff-short/samples/sample-6-companion-scopes.jsonl"],"cleanup":"repo clean: no run directory, cache or debug copy; C:/tmp/ff-f2-* test roots remain because the environment's bulk-delete guard required confirmation; main worktree, production config, keys, originals and .ff_jobs untouched","remaining":["ROOT cross-repo composition with RF weekly run, CWP provider_started/usage and ET usage","F4 job lane child-process RESEARCH_FEEDBACK_OUT inheritance is outside this card"]}
+{"lane":"F2-FF-SHORT","owner":"filing-fetch","base":"d5fa32c635c2d7d3690d90ea32f39964f2460e22","implementation":"09eadf04b6a139ffef03d0c87414626e31dbaefb","reviewed_commit":"09eadf04b6a139ffef03d0c87414626e31dbaefb","branch":"codex/f2-ff-short","review_ref":"docs/plans/f2-ff-short/handoff.md","tests":[{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py","result":"30 passed"},{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py","result":"204 passed, 8 subtests passed"},{"command":"python -B -m pytest -q -p no:cacheprovider tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py tests/test_fetch_filing.py tests/test_public_operation_isolation.py tests/test_s3_install_surface.py tests/test_architecture_quality.py","result":"392 passed, 1 skipped, 46 subtests passed"}],"sample_refs":["docs/plans/f2-ff-short/samples/sample-1-reuse-hit.jsonl","docs/plans/f2-ff-short/samples/sample-2-missing-limits.jsonl","docs/plans/f2-ff-short/samples/sample-3-latest-unknown-usage.jsonl","docs/plans/f2-ff-short/samples/sample-4-download.jsonl","docs/plans/f2-ff-short/samples/sample-5-corrupt-rejection.jsonl","docs/plans/f2-ff-short/samples/sample-6-companion-scopes.jsonl"],"cleanup":"repo clean: no run directory, cache or debug copy; this round's test roots under <short-temp-root> remain because the environment's bulk-delete guard required confirmation; main worktree, production config, keys, originals and .ff_jobs untouched","remaining":["ROOT cross-repo composition with RF weekly run, CWP provider_started/usage and ET usage","F4 job lane child-process RESEARCH_FEEDBACK_OUT inheritance is outside this card"]}
 ```

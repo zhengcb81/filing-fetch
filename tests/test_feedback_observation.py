@@ -438,7 +438,8 @@ def test_legacy_gap_keeps_missing_fields_unknown(tmp_path):
     assert "provider-start" not in {row["check_id"] for row in rows}
     usage = _single(rows, "provider-usage")
     assert (usage["actual"], usage["disposition"]) == ("unknown", "unknown")
-    assert _single(rows, "download-receipt")["actual"] == "0"
+    download = _single(rows, "download-receipt")
+    assert (download["actual"], download["disposition"]) == ("unknown", "unknown")
 
 
 def test_companion_fee_is_a_separate_unknown_scope(tmp_path):

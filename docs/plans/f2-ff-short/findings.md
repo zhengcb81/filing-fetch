@@ -2,8 +2,8 @@
 
 ## 基线与 RED
 
-- ROOT 预检与本轮复跑：`tests/test_ff1_envelope_candidates.py`、`tests/test_failure_usage_continuity.py`、`tests/test_m3_acquisition_usage_ff.py`、`tests/test_ff_job_facade.py` 共 **174 passed, 8 subtests passed**，22.92 秒（`--basetemp=C:/tmp/ff-f2-short-baseline`）。
-- RED：先提交 `tests/test_feedback_observation.py` 与受控夹具，移除 `scripts/ff_short_feedback.py` 和 `scripts/fetch_filing.py` 的接线后，收集阶段即 `ModuleNotFoundError: No module named 'ff_short_feedback'`。实现接线后同一文件 **30 passed**（独审后补坏 JSON、v2 gap、v1 错误携带 observation、五场景启用/禁用逐字节对照、v1 拒绝请求的电话会范围）。RED 证明侧车不是测试自证；业务信封对照另有逐字节断言。
+- ROOT 预检与本轮复跑：`tests/test_ff1_envelope_candidates.py`、`tests/test_failure_usage_continuity.py`、`tests/test_m3_acquisition_usage_ff.py`、`tests/test_ff_job_facade.py` 共 **174 passed, 8 subtests passed**，22.92 秒（`--basetemp=<short-temp-root>`）。
+- RED：先提交 `tests/test_feedback_observation.py` 与受控夹具，移除 `scripts/ff_short_feedback.py` 和 `scripts/fetch_filing.py` 的接线后，收集阶段即 `ModuleNotFoundError: No module named 'ff_short_feedback'`。实现接线后同一文件 **30 passed**（独审后补坏 JSON、v2 gap、v1 错误携带 observation、五场景启用/禁用逐字节对照、v1 拒绝请求的电话会范围）。RED 证明侧车不是测试自证；业务信封对照另有逐字节断言。RED 复验：在 `92e52b5` 的 `scripts/` 上放入本测试与夹具，运行同一 pytest 命令即得 `ModuleNotFoundError: ff_short_feedback`。
 
 ## 证据来源（只读现有 owner 投影）
 
@@ -23,7 +23,8 @@
 - **两范围**：主财报 `provider-usage=known` 与电话会 `transcript-provider-usage=unknown` 分行保留，`step_id` 分别为 `short-filing/<op>` 与 `short-filing/<op>/transcript`，整笔不可读成零。
 - **身份**：`operation_id` 每次真实执行新生成；同一 run/attempt 的两次执行靠 `evidence_ref` / `step_id` 区分，run/attempt 继承调用方。重复读取侧车零新增；未重写已写行。
 - **单写者**：CLI 读取三个环境量后从自身环境移除，随后启动的 CWP/ET 子进程在夹具中实测 `RESEARCH_FEEDBACK_OUT/RUN_ID/ATTEMPT_ID` 均为空。
-- **v1 兼容**：v1 错误/缺口缺少用量字段时记 `unknown`；v1 `gap` 信封本就没有 `calls/downloads`，侧车不补造，下载按缺口合同记 0。
+- **精确 reuse 的启动判定**：`provider-start=not_started` 是 owner 合同（精确 reuse 只走只读 resolve/query）加意图判定，不是 producer 字段；命令序列另由 `test_public_operation_isolation` 证明。若 producer 显式报告 `started=True`，该证据覆盖合同并记 `deviation`。
+- **v1 兼容**：v1 错误/缺口缺少用量字段时记 `unknown`；v1 `gap` 信封本就没有 `calls/downloads`，侧车不补造，下载记 `unknown`。
 - **写失败**：路径不可写时静默保留业务 stdout/stderr/退出码；测试用目录和不存在父目录两种坏路径对照，均与禁用侧车逐字节一致。
 
 ## 真实 CLI 样本
@@ -39,5 +40,5 @@
 
 ## 清理
 
-- 测试只用 `--basetemp=C:/tmp/ff-f2-*` 与 pytest `tmp_path`；本轮测试根在收尾时删除。
+- 测试只用 `--basetemp=<short-temp-root>` 与 pytest `tmp_path`；本轮测试根因环境批量删除保护未删除，原样留在系统临时目录。
 - 未触碰主工区运行目录、生产配置、密钥、原件和 `.ff_jobs/`。

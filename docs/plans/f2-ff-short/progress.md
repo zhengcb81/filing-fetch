@@ -10,7 +10,7 @@
 6. **已知基线差异**：`tests/test_provider_diagnostics_cli.py::test_real_cli_config_error_has_no_upstream_cause` 在本机基线上同样失败（期望 `config_error`，实得 `fatal`），与本卡改动无关，未计入定向集。
 
 ```powershell
-python -B -m pytest -q -p no:cacheprovider --basetemp=C:/tmp/ff-f2-short-final tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py
+python -B -m pytest -q -p no:cacheprovider --basetemp=<short-temp-root> tests/test_feedback_observation.py tests/test_ff1_envelope_candidates.py tests/test_failure_usage_continuity.py tests/test_m3_acquisition_usage_ff.py tests/test_ff_job_facade.py
 ```
 
 ## 独审与交接

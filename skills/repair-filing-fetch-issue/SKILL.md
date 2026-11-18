@@ -32,6 +32,8 @@ description: 从本仓问题卡或 feedback-observation/1 运行引用出发，�
 | `download-receipt` | `accounted` | `0` / `1` / `unknown` | 下载结果，和费用分开；`0` 不证明未访问供应商 |
 | `transcript-provider-usage` | `accounted` | `known` / `unknown` | 伴随电话会自己的范围，`step_id` 以 `/transcript` 结尾 |
 
+`request-outcome` 的 `disposition` 只表示“终态检查是否成立”：已知终态（包括 `upstream_error` / `fatal`）记 `expected`，终态本身未知才记 `unknown`。失败由 `actual` 的具名原因表达，不在这里重复判责。
+
 判定规则：
 
 - 只有 `action-started`、没有 `request-outcome`：终态未知。先查同一请求的本地复用结果，不要直接重跑下载。

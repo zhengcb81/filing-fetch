@@ -347,10 +347,9 @@ def _v1_facts(facts: _Facts, output: dict[str, Any]) -> None:
         return
     if status == "gap":
         facts.outcome = "gap"
-        # The legacy gap envelope carries no counter. Zero is the gap contract
-        # (a metadata-only plan), not a producer download count.
-        if facts.downloads is None:
-            facts.downloads = 0
+        # The legacy gap envelope carries no download counter. The v1
+        # compatibility rule is explicit: a missing field stays unknown, so
+        # the gap contract is not turned into a synthetic zero here.
     facts.receipt = validated_acquisition_failure(output.get("acquisition_failure"))
     facts.cause = validated_cause(output.get("upstream_cause"))
     diagnostic = validated_request_diagnostic(output.get("request_diagnostic"))
