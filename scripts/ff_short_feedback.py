@@ -370,7 +370,7 @@ def _spend_intent(
     if allow_download is True or request.get("mode") == "latest_as_of":
         return "fetch_if_missing"
     intent = request.get("filing_intent")
-    if intent in {"reuse_only", "fetch_if_missing"}:
+    if isinstance(intent, str) and intent in {"reuse_only", "fetch_if_missing"}:
         return intent
     if allow_download is False:
         return "reuse_only"

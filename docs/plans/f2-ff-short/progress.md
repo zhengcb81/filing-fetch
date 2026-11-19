@@ -19,3 +19,7 @@ python -B -m pytest -q -p no:cacheprovider --basetemp=<short-temp-root> tests/te
 - 第二轮由另一位未获知前轮结论的独立审计者对照卡面逐条找遗漏，提出 v1 gap 下载字段、五场景启用/禁用逐字节对照、受审 SHA 落后、精确 reuse 启动判定、RED 可复验性等项。修复后提交 `321c455`、`eb2ee5c`，并在 `eb2ee5c` 复验：侧车 30 passed、五文件 204 passed + 8 subtests、九文件 392 passed + 1 skipped + 46 subtests、ruff 通过。
 - `handoff.md` 已写（正文 + 尾部机器摘要 JSON），`implementation` / `reviewed_commit` 均为 `eb2ee5c`。本地分支未推送，ROOT 负责组合与并入主线。
 - 剩余：ROOT 跨仓组合（RF 周跑 / FF 侧车 / CWP 计量 / ET 用量）；F4 作业路径子进程继承 OUT 的边界观察属 F4 范围；测试根因环境批量删除保护未删除，已在交接中如实记录。
+
+## ROOT 验收（2026-11-19）
+
+- 已复跑作者定向五文件基线，204 项及 8 子例通过。ROOT 独审发现非法数组或对象请求在旁路丢终态，隔离真实 CLI 两例先红后绿。修复保留原回执、退出码与零原生调用。最终组合与发布状态关联 company-wiki 总控 F4 收据。

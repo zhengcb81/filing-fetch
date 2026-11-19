@@ -841,6 +841,26 @@ def test_sidecar_is_off_without_a_path(out, monkeypatch):
     assert ff_short_feedback.begin_observation() is None
 
 
+@pytest.mark.parametrize("bad_intent", [[], {}])
+def test_invalid_intent_type_keeps_native_error_and_terminal_observation(tmp_path, bad_intent):
+    harness = Harness(tmp_path)
+    out = tmp_path / "observations.jsonl"
+    request = _v2_request(filing_intent=bad_intent)
+    baseline = harness.run(request)
+    observed = harness.run(request, out=out)
+
+    assert (observed.returncode, observed.stdout, observed.stderr) == (
+        baseline.returncode, baseline.stdout, baseline.stderr,
+    )
+    assert observed.returncode != 0
+    rows = _rows(out)
+    _assert_protocol(rows)
+    outcome = _single(rows, "request-outcome")
+    assert outcome["disposition"] == "expected"
+    assert outcome["actual"].split("/", 1)[0] == json.loads(baseline.stdout)["status"]
+    assert harness.calls() == []
+
+
 def test_install_manifest_publishes_the_short_adapter():
     sys.path.insert(0, str(ROOT / "tools"))
     import sync_installs_b3
