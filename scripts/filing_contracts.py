@@ -606,8 +606,6 @@ def validate_handle_metadata(
             raise FilingFetchError(
                 f"handle {name} must be non-empty trimmed text", code="upstream_error"
             )
-    if "capture_ready" in handle and type(handle["capture_ready"]) is not bool:
-        raise FilingFetchError("handle capture_ready must be boolean", code="upstream_error")
     digest = handle.get("snapshot_sha256")
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise FilingFetchError("handle snapshot_sha256 is invalid", code="upstream_error")

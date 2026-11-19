@@ -32,3 +32,7 @@
 - 已删除经 handoff 明确归属本 lane 的 mb11-ff-scratch 测试安装目录：5,030 files / 18,119,347 bytes。
 - 本轮 FF delivery/integration 两个 clean worktree 已回收；分支保留。
 - .ff_jobs、.mimosa、.workbuddy-ai 与 API key 文件路径保留，未读取密钥内容。
+
+## 2026-11-19 公开来源兼容复验
+
+正常来源 query 和 ensure 共用一处候选字段投影，未知捕获诊断按缺省处理。ensure 按既有公开字段取值，可选策略摘要未知时记录 null。六项回归先复现误拒，修复后连同真实非零拒绝的保真对照和既有契约测试共 368 项通过。独审通过，旧本地文件入口、当前来源身份、期次、原文验真与资源预算分别由已有责任入口核对。

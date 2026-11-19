@@ -298,6 +298,7 @@ def test_real_nonzero_ensure_retains_business_failure_and_request_binding(tmp_pa
     }
     payload = _operation_v2(status="unavailable", outcome=None)
     payload["request_id"] = source_request_id(current)
+    payload["producer_build"] = "2026.11.1"
     payload["local_preparation"] = {
         "status": "unavailable",
         "reason": "local_candidate_limit",
@@ -332,7 +333,6 @@ def test_real_nonzero_ensure_retains_business_failure_and_request_binding(tmp_pa
     [
         {"operation": "close-gap"},
         {"path": "raw.pdf"},
-        {"extra": "unknown"},
         {"status": "completed"},
     ],
 )

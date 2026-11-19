@@ -509,6 +509,47 @@ def _latest_request() -> dict:
     }
 
 
+@pytest.mark.parametrize("capture_ready", [None, "unknown"])
+@pytest.mark.parametrize("route", ["query", "ensure"])
+def test_pathless_reuse_accepts_unknown_capture_diagnostic(tmp_path, capture_ready, route):
+    candidate = {**_candidate(), "capture_ready": capture_ready}
+    request = _request() if route == "query" else _latest_request()
+    payload = _query(candidate=candidate) if route == "query" else {
+        **_operation_v2(), "candidate": candidate,
+    }
+    stats = {"calls": 0, "downloads": 0}
+    with patch(
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(payload)]),
+    ):
+        handle = fetch_filing.resolve_filing(
+            request=request, company_wiki_root=_wiki(tmp_path), source_ref_v2=True, stats=stats,
+        )
+    assert handle["source_ref"] == _ref()
+    assert "capture_ready" not in handle
+    assert handle["byte_verified"] is False
+    assert stats == {"calls": 2, "downloads": 0}
+
+
+@pytest.mark.parametrize(
+    ("extra", "policy_hash"),
+    [({"producer_build": "2026.11.1"}, "b" * 64), ({"policy_hash": "unknown"}, None)],
+)
+def test_pathless_ensure_omits_additive_or_unknown_operation_metadata(tmp_path, extra, policy_hash):
+    payload = {**_operation_v2(), **extra}
+    with patch(
+        "fetch_filing._run_bounded_json",
+        side_effect=bounded_side_effect([_completed(_identity()), _completed(payload)]),
+    ):
+        handle = fetch_filing.resolve_filing(
+            request=_latest_request(), company_wiki_root=_wiki(tmp_path), source_ref_v2=True,
+        )
+    assert handle["source_ref"] == _ref()
+    assert handle["download_events"] == 0
+    assert handle["operation_receipt"]["policy_hash"] == policy_hash
+    assert "producer_build" not in json.dumps(handle)
+
+
 def test_latest_as_of_uses_pathless_provider_ensure_without_download(tmp_path: Path) -> None:
     stats = {"calls": 0, "downloads": 0}
     with patch(

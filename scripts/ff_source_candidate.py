@@ -156,6 +156,14 @@ def projected_error_candidates(value: object) -> list[dict[str, Any]] | None:
     return projected
 
 
+def project_source_candidate_fields(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Project known source fields and omit unknown capture diagnostics."""
+    return {
+        key: value for key, value in candidate.items()
+        if key in SOURCE_CANDIDATE_FIELDS and (key != "capture_ready" or type(value) is bool)
+    }
+
+
 def validate_source_candidate(
     candidate: object,
     source_ref: object,
@@ -174,7 +182,7 @@ def validate_source_candidate(
         raise FilingFetchError(
             f"company-wiki {context} leaked a physical location", code="upstream_error"
         )
-    handle = {key: value for key, value in candidate.items() if key in SOURCE_CANDIDATE_FIELDS}
+    handle = project_source_candidate_fields(candidate)
     handle["source_ref"] = ref
     handle["request_id"] = request_id
     # Unknown publication is metadata, not availability authority. Keep it

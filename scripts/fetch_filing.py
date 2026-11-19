@@ -66,7 +66,7 @@ from ff_source_candidate import (
     CANDIDATE_DETAIL_FIELDS as _CANDIDATE_DETAIL_FIELDS,
     CANDIDATE_DETAIL_LIMIT as _CANDIDATE_DETAIL_LIMIT,
     COMPANY_IDENTITY_FIELDS as _COMPANY_IDENTITY_FIELDS,
-    SOURCE_CANDIDATE_FIELDS as _SOURCE_CANDIDATE_FIELDS,
+    project_source_candidate_fields,
     contains_physical_field as _contains_physical_field,
     validate_source_candidate,
 )
@@ -598,7 +598,7 @@ def _record_download_events(stats: dict[str, int] | None, handle: dict) -> None:
 
 def _source_candidate(handle: dict[str, Any], envelope: dict[str, Any]) -> dict[str, Any]:
     """Project one source reference without physical storage or bundle fields."""
-    candidate = {key: value for key, value in handle.items() if key in _SOURCE_CANDIDATE_FIELDS}
+    candidate = project_source_candidate_fields(handle)
     candidate["source_ref"] = {
         "schema_version": "2.0",
         "document_id": handle["document_id"],
@@ -955,7 +955,6 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
     if (
         payload.get("operation_schema_version") != _SOURCE_OPERATION_VERSION
         or payload.get("operation") != operation
-        or not set(payload) <= _SOURCE_OPERATION_FIELDS
     ):
         raise FilingFetchError(
             "company-wiki operation contract is unsupported", code="upstream_error",
@@ -998,7 +997,9 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
     }):
         raise FilingFetchError(
             "company-wiki operation result leaked a physical location", code="upstream_error",
-            upstream_cause=upstream_cause,
+            upstream_cause=upstream_cause or ff_provider_cause.source_condition(
+                operation, "invalid_producer_schema",
+            ),
             acquisition_failure=receipt,
             acquisition_observation=observation,
         )
@@ -1014,17 +1015,14 @@ def _validated_operation(payload: dict[str, Any], operation: str) -> dict[str, A
             acquisition_failure=receipt,
             acquisition_observation=observation,
         )
-    policy_hash = payload.get("policy_hash")
+    result = {key: value for key, value in payload.items() if key in _SOURCE_OPERATION_FIELDS}
+    policy_hash = result.get("policy_hash")
     if policy_hash is not None and (
         not isinstance(policy_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", policy_hash)
     ):
-        raise FilingFetchError(
-            "company-wiki operation policy_hash is invalid", code="upstream_error",
-            upstream_cause=upstream_cause,
-            acquisition_failure=receipt,
-            acquisition_observation=observation,
-        )
-    return payload
+        # Current physical read policy is enforced by company-wiki on open.
+        result["policy_hash"] = None
+    return result
 
 
 def _local_preparation_observation_from_operation(
