@@ -24,7 +24,7 @@ import tempfile
 
 import pytest
 
-CWP_COMMIT = "34a7dd71aaa49d18c13fcdd300ce79581114ca5b"
+CWP_COMMIT = "c27efdffb9b357bd12b78162448cc5138bf59ba5"
 FF_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CWP_REPO = FF_ROOT.parent / "company-wiki"
 
