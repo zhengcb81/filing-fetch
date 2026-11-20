@@ -617,6 +617,13 @@ def _candidate_company_identity(identity: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in identity.items() if key in _COMPANY_IDENTITY_FIELDS}
 
 
+def _source_query_request(normalized_request: dict[str, Any]) -> dict[str, Any]:
+    query = {key: value for key, value in normalized_request.items() if key in _QUERY_REQUEST_FIELDS}
+    query["schema_version"] = "1.1" if query.get("issuer_link_id") else "1.0"
+    query["allow_download"] = False
+    return query
+
+
 def _run_source_query(
     *,
     root: WikiEndpoint,
@@ -637,11 +644,7 @@ def _run_source_query(
                 usage_complete=True,
             )[1],
         )
-    query = {
-        key: value for key, value in normalized_request.items() if key in _QUERY_REQUEST_FIELDS
-    }
-    query["schema_version"] = "1.1" if query.get("issuer_link_id") else "1.0"
-    query["allow_download"] = False
+    query = _source_query_request(normalized_request)
     command = command_for(root, "query")
     environment = connection_environment(root)
     stats["calls"] += 1
@@ -771,8 +774,7 @@ def _source_query_candidate(
 
         prepare_existing_local_source(
             root=root,
-            source_request={key: value for key, value in normalized_request.items()
-                            if key in _QUERY_REQUEST_FIELDS},
+            source_request=_source_query_request(normalized_request),
             deadline=deadline, stats=stats, transport=_run_bounded_json,
             physical_fields=_contains_physical_field,
         )

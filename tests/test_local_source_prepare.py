@@ -63,6 +63,28 @@ def test_active_reuse_only_hit_has_no_extra_local_preparation(tmp_path):
     assert len(run.call_args_list) == 2
 
 
+@pytest.mark.parametrize("with_issuer", [False, True])
+def test_local_prepare_reuses_exact_source_query_contract_and_public_reason(tmp_path, with_issuer):
+    identity = _identity()
+    if with_issuer:
+        identity["resolved"]["issuer_link_id"] = "issuer-link-v1:" + "a" * 64
+    with patch("fetch_filing._run_bounded_json", side_effect=bounded_side_effect([
+        _completed(identity), _completed(_query("not_found")),
+        _completed(_prepared("not_found", reason="no_matching_local_period")),
+    ])) as run, pytest.raises(FilingFetchError) as caught:
+        fetch_filing.resolve_filing(request=_reuse_request(),
+                                   company_wiki_root=_wiki(tmp_path), source_ref_v2=True)
+    assert len(run.call_args_list) == 3
+    query = json.loads(run.call_args_list[1].kwargs["input_bytes"])
+    prepared = json.loads(run.call_args_list[2].kwargs["input_bytes"])["source_request"]
+    assert query == prepared
+    assert query["schema_version"] == ("1.1" if with_issuer else "1.0")
+    cause = caught.value.upstream_cause
+    assert cause["code"] == "no_matching_local_period"
+    assert cause["retry_scope"] == "none"
+    assert cause["provider_started"] is False
+
+
 @pytest.mark.parametrize("status,code", [
     ("not_found", "not_found"), ("blocked", "source_blocked"),
     ("unavailable", "upstream_error"), ("ambiguous", "ambiguous"),

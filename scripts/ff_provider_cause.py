@@ -11,7 +11,7 @@ turns it into a fixed six-key ``filing-upstream-cause/1`` diagnostic:
 
 Safety rules (card ff_provider_diagnostics.md):
 
-- The emitted object is built from closed vocabularies only.  Raw stderr,
+- Local read/prepare may carry the owner's pathless machine reason. Raw stderr,
   exception text, commands, physical directories, URL queries and credentials
   never cross this boundary — an unmapped or malformed payload stays
   ``unknown`` and the pre-existing fatal semantics are untouched.
@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal, InvalidOperation
+import re
 from typing import Any
 
 UPSTREAM_CAUSE_SCHEMA_VERSION = "filing-upstream-cause/1"
@@ -175,6 +176,13 @@ _KNOWN_CAUSE_CODES = (
     | ACQUISITION_FAILURE_CODES
     | {"unknown"} | LOCAL_SOURCE_CODES
 )
+_LOCAL_READ_OPERATIONS = frozenset({"query", "local_prepare"})
+_OWNER_REASON = re.compile(r"[a-z][a-z0-9_]{0,127}")
+
+
+def _local_owner_reason(operation: str, code: Any) -> bool:
+    return (operation in _LOCAL_READ_OPERATIONS and isinstance(code, str)
+            and _OWNER_REASON.fullmatch(code) is not None)
 
 # Defense-in-depth on top of the transport layer's own stderr cap: payloads
 # beyond this stay unparsed (unknown) so a pathological stderr cannot turn
@@ -201,10 +209,11 @@ def build_cause(
     provider_started: bool | None = None,
     usage_complete: bool | None = None,
 ) -> dict[str, Any]:
-    """Build the fixed six-key diagnostic from closed vocabularies only."""
+    """Build the fixed diagnostic, including pathless local owner reasons."""
     if not isinstance(operation, str) or operation not in OPERATIONS:
         raise ValueError(f"unknown upstream operation: {operation!r}")
-    if not isinstance(code, str) or code not in _KNOWN_CAUSE_CODES:
+    if not isinstance(code, str) or (code not in _KNOWN_CAUSE_CODES and not (
+            provider_started is False and usage_complete is True and _local_owner_reason(operation, code))):
         raise ValueError(f"unknown upstream cause code: {code!r}")
     if not _optional_bool(provider_started) or not _optional_bool(usage_complete):
         raise ValueError("upstream evidence flags must be bool or null")
@@ -368,11 +377,15 @@ def validated_acquisition_observation(value: Any) -> dict[str, Any] | None:
 
 
 def source_condition(operation: str, reason: Any) -> dict[str, Any]:
-    """Finite source condition, independent of provider acquisition failures."""
-    code = reason if isinstance(reason, str) and reason in LOCAL_SOURCE_CODES | {"budget_exceeded"} else "unknown"
-    local_only = operation in {"query", "local_prepare"} and code != "invalid_producer_schema"
-    return build_cause(operation, code, provider_started=False if local_only else None,
-                       usage_complete=True if local_only else None)
+    """Preserve the local owner's reason without assigning a retry action."""
+    supported = isinstance(reason, str) and reason in LOCAL_SOURCE_CODES | {"budget_exceeded"}
+    code = reason if supported or _local_owner_reason(operation, reason) else "unknown"
+    local_only = operation in _LOCAL_READ_OPERATIONS and code != "invalid_producer_schema"
+    cause = build_cause(operation, code, provider_started=False if local_only else None,
+                        usage_complete=True if local_only else None)
+    if local_only:
+        cause["retry_scope"] = "none"
+    return cause
 
 
 def classify_stderr(stderr_text: str) -> str:
@@ -451,7 +464,10 @@ def _valid_cause_header(value: dict[str, Any]) -> bool:
         return False
     if value["operation"] not in OPERATIONS or value["retry_scope"] not in RETRY_SCOPES:
         return False
-    return value["code"] in _KNOWN_CAUSE_CODES
+    return value["code"] in _KNOWN_CAUSE_CODES or (
+        value["retry_scope"] == "none" and value["provider_started"] is False
+        and value["usage_complete"] is True and _local_owner_reason(value["operation"], value["code"])
+    )
 
 
 def validated_cause(value: Any) -> dict[str, Any] | None:

@@ -61,7 +61,7 @@ def prepare_existing_local_source(
                                code="upstream_error", stage="local_prepare")
     request: dict[str, Any] = {
         "schema_version": "local-source-prepare-request/1",
-        "source_request": {**source_request, "schema_version": "1.0", "allow_download": False},
+        "source_request": source_request,
         "limits": {"max_candidates": 64, "max_bytes": 128 * 1024 * 1024,
                    "timeout_seconds": min(remaining, 600)},
     }
