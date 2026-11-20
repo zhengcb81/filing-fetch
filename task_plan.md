@@ -246,3 +246,9 @@ The v1.3.0 scope above remains a historical completed task. This addendum record
 - [x] Committed the CWP/ET integration in `cf05f7e` and the lookup complexity split in `492f5d4`; focused lookup/E2E/complexity tests: **18 passed**.
 - [x] Fixed plan-claim scope: a new level-2 section ends the preceding completed phase; regression tests **3 passed**, `python tools/verify_plan_claims.py --plan-dir .` is green.
 - [ ] Finish the required full pre-push gate and fast-forward to `origin/main`; do not stage FMP credentials. RF consumer G-A E2E remains outside this branch.
+
+## 2026-11-20 F4 原作业与用量恢复
+
+- [x] 原作业按 FF 公开反馈入口读取同一作业及尝试，可在配置既有连接后从 CWP 本地索引核对失联结果。
+- [x] 复验原作业和原使用限额、exact/latest_as_of 中断、重复恢复、旧费用未知、ET 原用量；记录本机 7 份只读与真实宿主结果。
+- [ ] ROOT 在 main 接收候选、接入生产宿主的 actions.reconcile 并组合复验。[部署和验收](docs/plans/f2-ff-short/f4-native-reconcile.md)

@@ -50,3 +50,7 @@
 - FF commit `cf05f7e` passed its required full push gate through the hermetic suite but was blocked by the new-file complexity ratchet: `transcript_companion.py` lookup complexity 14 > 10. Split lookup result normalization into focused helpers; lookup/transport E2E plus complexity tests: **18 passed**; Ruff and mypy passed. Fix committed as `492f5d4`.
 - The next required full gate passed hermetic tests but exposed a plan-verifier boundary bug: an unchecked task in the following `## Cross-project integration addendum` was attributed to the historical completed Phase 6. Updated `verify_plan_claims.py` to end completed-phase scope at the next equal-or-higher Markdown heading and added a regression test. Targeted regression + complexity tests: **3 passed**; `python tools/verify_plan_claims.py --plan-dir .` reports all completed claims evidence-backed.
 - Final full pre-push gate and remote fast-forward are pending; no hook was bypassed. No FMP credential or source document was read or staged.
+
+## 2026-11-20 F4 原作业核对交付
+
+隔离候选源码 bf92ec1677f8a7aa316c64c44a927727f778acac。FF 定向 115 项、8 个子例和 CI 清单 15 项通过。实际宿主 3 项通过，包含 exact/latest_as_of 原进程强退后找回同一作业，及 report 落盘丢回复。重复恢复新增下载、外部请求、费用和作业均为零。7 份现场作业完成只读交叉核查。7 个隔离测试目录已清理。[源码、入口及实测收据](docs/plans/f2-ff-short/f4-native-reconcile.md)

@@ -1,0 +1,192 @@
+{
+  "actual_job_root": "filing-fetch/.ff_jobs",
+  "native_jobs_seen": 7,
+  "verified_native_outcomes": [
+    {
+      "owner_job_id": "ffjob-97f11a3cee53",
+      "native_attempt": 1,
+      "execution_count": 1,
+      "job_status": "failed",
+      "cost_state": "known",
+      "recorded_usage": {
+        "provider_started": false,
+        "usage_complete": true,
+        "download_events": 0
+      }
+    },
+    {
+      "owner_job_id": "ffjob-9c2debdbb724",
+      "native_attempt": 1,
+      "execution_count": 1,
+      "job_status": "failed",
+      "cost_state": "unknown",
+      "recorded_usage": {
+        "provider_started": null,
+        "usage_complete": null,
+        "download_events": 0
+      }
+    },
+    {
+      "owner_job_id": "ffjob-afc0a768c12e",
+      "native_attempt": 2,
+      "execution_count": 2,
+      "job_status": "succeeded",
+      "cost_state": "known",
+      "recorded_usage": {
+        "provider_started": false,
+        "usage_complete": true,
+        "download_events": 0
+      }
+    },
+    {
+      "owner_job_id": "ffjob-cc944cfeeb53",
+      "native_attempt": 1,
+      "execution_count": 1,
+      "job_status": "failed",
+      "cost_state": "known",
+      "recorded_usage": {
+        "provider_started": false,
+        "usage_complete": true,
+        "download_events": 0
+      }
+    },
+    {
+      "owner_job_id": "ffjob-da2ab6bee5d6",
+      "native_attempt": 1,
+      "execution_count": 1,
+      "job_status": "succeeded",
+      "cost_state": "known",
+      "recorded_usage": {
+        "provider_started": false,
+        "usage_complete": true,
+        "download_events": 0
+      }
+    },
+    {
+      "owner_job_id": "ffjob-ecb15cc60550",
+      "native_attempt": 1,
+      "execution_count": 1,
+      "job_status": "failed",
+      "cost_state": "known",
+      "recorded_usage": {
+        "provider_started": false,
+        "usage_complete": true,
+        "download_events": 0
+      }
+    },
+    {
+      "owner_job_id": "ffjob-ffd724de0bf5",
+      "native_attempt": 1,
+      "execution_count": 1,
+      "job_status": "succeeded",
+      "cost_state": "known",
+      "recorded_usage": {
+        "provider_started": false,
+        "usage_complete": true,
+        "download_events": 0
+      }
+    }
+  ],
+  "original_job_files_unchanged": 26,
+  "et_receipts": {
+    "zero_receipt_archived": {
+      "action_id": "ba156f9c25b3ca654ed3512670c84ffaa8775737ae8259e408dca4267b1a79c4",
+      "ff_parsed_usage": {
+        "provider_requests": 0,
+        "provider_response_bytes": 0,
+        "provider_usage_complete": true
+      },
+      "mismatched_request_preserved_unknown": true,
+      "publication_wrapper_is_different": true
+    },
+    "metered_offline_fixture": {
+      "action_id": "9bb7ec387d1f5fc52f0ea90527b306aa044cfd3864798f0b187fb313e8ae0098",
+      "ff_parsed_usage": {
+        "provider_requests": 1,
+        "provider_response_bytes": 812,
+        "provider_usage_complete": true
+      },
+      "mismatched_request_preserved_unknown": true,
+      "publication_wrapper_is_different": true
+    }
+  },
+  "external_network_events": 0,
+  "schema_version": "ff-f4-native-acceptance/1",
+  "source_commit": "bf92ec1677f8a7aa316c64c44a927727f778acac",
+  "et_contract_source_commit": "61fe94e201eee0f253a1084b9876d023820ea01c",
+  "cwp_local_host_source_sha256": "754c1385a8c763a852dbd622ecdedc45287b894064dbd6bfdf48339311897b68",
+  "cwp_gateway": "actions.reconcile owner-json only",
+  "cwp_cases": [
+    {
+      "mode": "exact",
+      "owner_job_id": "ffjob-1f2fa13f17a7",
+      "attempt": 1,
+      "execution_count": 0,
+      "owner_actions": [
+        "reconcile"
+      ],
+      "read_only_outcome": "succeeded",
+      "native_starts": 1,
+      "native_reconciliations": 1,
+      "new_jobs": 0,
+      "new_provider_requests": 0,
+      "new_downloads": 0,
+      "new_mock_fee_usd": "0",
+      "prior_mock_fee_observed_by_fixture_usd": "0.0009",
+      "ff_prior_cost_state_after_recovery": "unknown",
+      "original_source_sha256": "00d23755dabb6e6b2861f221da9695414db0bf1ee762aea4e2eea023c468bd9d",
+      "recovered_source_sha256": "00d23755dabb6e6b2861f221da9695414db0bf1ee762aea4e2eea023c468bd9d",
+      "original_request_limits": {
+        "max_bytes": 20000,
+        "max_cost_usd": "1",
+        "timeout_seconds": 90
+      }
+    },
+    {
+      "mode": "latest_as_of",
+      "owner_job_id": "ffjob-da26bf65b625",
+      "attempt": 1,
+      "execution_count": 0,
+      "owner_actions": [
+        "reconcile"
+      ],
+      "read_only_outcome": "succeeded",
+      "native_starts": 1,
+      "native_reconciliations": 1,
+      "new_jobs": 0,
+      "new_provider_requests": 0,
+      "new_downloads": 0,
+      "new_mock_fee_usd": "0",
+      "prior_mock_fee_observed_by_fixture_usd": "0.0009",
+      "ff_prior_cost_state_after_recovery": "unknown",
+      "original_source_sha256": "00d23755dabb6e6b2861f221da9695414db0bf1ee762aea4e2eea023c468bd9d",
+      "recovered_source_sha256": "00d23755dabb6e6b2861f221da9695414db0bf1ee762aea4e2eea023c468bd9d",
+      "original_request_limits": {
+        "max_bytes": 20000,
+        "max_cost_usd": "1",
+        "timeout_seconds": 90
+      }
+    }
+  ],
+  "report_hard_kill_recovery_verified": true,
+  "tests": {
+    "ff": {
+      "passed": 115,
+      "subtests_passed": 8,
+      "elapsed_seconds": 71.52
+    },
+    "cwp_owner_route": {
+      "passed": 3,
+      "deselected": 1,
+      "elapsed_seconds": 50
+    },
+    "ci_inventory": {
+      "passed": 15,
+      "elapsed_seconds": 2.37
+    }
+  },
+  "cleanup": {
+    "removed_isolated_test_roots": 7,
+    "remaining": 0
+  }
+}

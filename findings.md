@@ -79,3 +79,7 @@
 - The FF push hook runs the complete hermetic suite and policy checks (roughly three minutes); it is repository-enforced and was not bypassed. The first run surfaced a real complexity regression; helper extraction restored the <=10 new-file limit without relaxing the ratchet.
 - `verify_plan_claims.parse_plan` previously kept a completed phase active across subsequent Markdown sections, so the new integration addendum's pending push item was falsely counted inside Phase 6. The parser now closes scope at a peer or parent heading while retaining nested subsection scope; a regression test covers both boundaries.
 - Current status remains pending until the final full hook succeeds and `origin/main` advances.
+
+## 2026-11-20 F4 原作业核对的根因与边界
+
+现有 FF runner 已有原地再查与费用保护。原宿主需知道 FF 私有步骤含义和旧费用状态，本仓现在提供统一 lookup 并复用同一成本投影。允许核对已登记结果，保留真实旧费用未知时防止再发请求的边界。原作业 ffjob-9c2debdbb724 已失败且旧费用未知，正例与原 attempt=2 的作业都用公开口核对。ET 补发内嵌的原请求计量可由既有解析器读取。[证据](docs/plans/f2-ff-short/f4-native-reconcile.md)
