@@ -188,6 +188,16 @@ neither the stdout envelope nor the durable native result. Owner replay
 reports can be stored and read by action ID through
 `scripts/ff_job_feedback.py --reports-dir <owned-dir> report|get-report`.
 
+The feedback coordinator can send a `feedback-action/1` lookup to
+`scripts/ff_job_feedback.py reconcile --jobs-dir JOBS`. The observation's
+`ff-job/1/<owner_job_id>` reference and `<owner_job_id>/<attempt>` step bind
+the original attempt. The response reports that attempt's outcome and stored
+usage. Without `--config`, the command reads the native job without changing
+the store. With the same FF connection configuration in `--config`, it may
+land a local-catalog result for a lost attempt through the existing owner
+reconciliation operation. The original spending record stays authoritative.
+Missing evidence remains unknown. A running matched attempt remains pending.
+
 ## Durable store layout (`--jobs-dir`, default `<skill_root>/.ff_jobs`)
 
 ```

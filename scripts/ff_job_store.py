@@ -144,14 +144,15 @@ class _JobLock:
 class JobStore:
     """All durable job state access; the only module that touches job files."""
 
-    def __init__(self, jobs_dir: Path) -> None:
+    def __init__(self, jobs_dir: Path, *, initialize: bool = True) -> None:
         self.jobs_dir = jobs_dir
         self.jobs = jobs_dir / "jobs"
         self.idem_index = jobs_dir / "index" / "idem"
         self.locks = jobs_dir / "locks"
         self.logs_dir = jobs_dir / "logs"
-        for directory in (self.jobs, self.idem_index, self.locks, self.logs_dir):
-            directory.mkdir(parents=True, exist_ok=True)
+        if initialize:
+            for directory in (self.jobs, self.idem_index, self.locks, self.logs_dir):
+                directory.mkdir(parents=True, exist_ok=True)
 
     # -- paths --------------------------------------------------------------
 

@@ -355,6 +355,24 @@ def allowed_actions_for(record: dict[str, Any]) -> list[str]:
     return []
 
 
+def project_job_cost(record: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    """Return the cost of this attempt after applying the native legacy rules."""
+    cost = record.get("cost")
+    state = record.get("cost_state")
+    if cost is not None and set(cost) != _COST_FIELDS:
+        raise FFJobError("stored cost shape is invalid", code="fatal")
+    if record.get("attempts", 0) > 0:
+        evidence = record.get("spend_evidence") or {}
+        legacy_zero_without_evidence = (
+            isinstance(cost, dict) and cost.get("basis") == "engine_zero_evidence"
+            and not _complete_zero_spend(evidence)
+        )
+        if legacy_zero_without_evidence or (record.get("status") in {"succeeded", "failed", "unknown"}
+                                            and _legacy_unaccounted_provider(record)):
+            return None, "unknown"
+    return cost, state
+
+
 def build_job_view(record: dict[str, Any], *, fresh_actions: list[str] | None = None) -> dict[str, Any]:
     """Project the durable record into the Dashboard JobView field set.
 
@@ -391,18 +409,7 @@ def build_job_view(record: dict[str, Any], *, fresh_actions: list[str] | None = 
     result = view.get("result")
     if result is not None:
         _assert_pathless(result, "result")
-    cost = view.get("cost")
-    if cost is not None and set(cost) != _COST_FIELDS:
-        raise FFJobError("stored cost shape is invalid", code="fatal")
-    if record.get("attempts", 0) > 0:
-        evidence = record.get("spend_evidence") or {}
-        legacy_zero_without_evidence = (
-            isinstance(cost, dict) and cost.get("basis") == "engine_zero_evidence"
-            and not _complete_zero_spend(evidence)
-        )
-        if legacy_zero_without_evidence or (view["status"] in {"succeeded", "failed", "unknown"}
-                                            and _legacy_unaccounted_provider(record)):
-            view["cost"], view["cost_state"] = None, "unknown"
+    view["cost"], view["cost_state"] = project_job_cost(record)
     error = view.get("error")
     if error is not None:
         # FF-1: a stored error is valid only as the exact six-key legacy
@@ -489,6 +496,7 @@ __all__ = [
     "cost_for_pending",
     "error_view_from_exception",
     "job_intent",
+    "project_job_cost",
     "retry_eligible",
     "validate_action",
     "validate_idempotency_key",
