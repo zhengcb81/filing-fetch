@@ -67,7 +67,7 @@ def _write(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
 
 
-def test_two_real_cli_ticks_share_one_scope_and_owner_batch(tmp_path):
+def test_two_real_cli_ticks_share_one_scope_and_read_each_source_once(tmp_path):
     cwp = tmp_path / "owner"
     cwp.mkdir()
     fake = cwp / "public_owner.py"
@@ -117,7 +117,12 @@ def test_two_real_cli_ticks_share_one_scope_and_owner_batch(tmp_path):
     assert after["last_run"]["usage"]["metadata_requests"] == 3
     assert len(run("runs")["items"]) == 1
     calls = [json.loads(line) for line in (cwp / "calls.jsonl").read_text().splitlines()]
-    assert [row["operation"] for row in calls] == ["discover", "discover", "discover", "read"]
+    assert [row["operation"] for row in calls] == ["discover"] * 3 + ["read"] * 3
+    reads = [row["request"] for row in calls if row["operation"] == "read"]
+    assert len({request["run_id"] for request in reads}) == 3
+    assert {request["sources"][0]["document_id"] for request in reads if len(request["sources"]) == 1} == {
+        "public-source-CN", "public-source-HK", "public-source-US",
+    }
     assert not (store / "jobs").exists()
 
 

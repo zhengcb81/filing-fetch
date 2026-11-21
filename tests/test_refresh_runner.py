@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -8,7 +9,7 @@ from ff_refresh_owners import Deployment, OwnerUnavailable
 from ff_refresh_runner import run_tick
 from ff_refresh_store import RefreshStore
 from test_scheduled_refresh import configure_body
-from ff_refresh_policy import validate_settings
+from ff_refresh_policy import due_slot, validate_settings, work_scope
 
 
 TIME = datetime(2026, 11, 23, 9, tzinfo=timezone.utc)
@@ -111,8 +112,10 @@ def test_restart_reuses_frozen_roster_native_job_and_read_request(tmp_path):
     assert {job["kind"] for job in owners.jobs.values()} == {"filing.acquire", "transcript.acquire"}
     assert len(owners.discovery_calls) == 1 and len(owners.jobs) == 2
     assert owners.read_calls[0] == owners.read_calls[1]
+    assert owners.status_calls == [owners.read_calls[0]["run_id"]]
+    assert len({request["run_id"] for request in owners.read_calls}) == 3
     run_tick(store, owners, Deployment(), now=TIME)
-    assert len(owners.jobs) == 2 and len(owners.read_calls) == 2
+    assert len(owners.jobs) == 2 and len(owners.read_calls) == 4
 
 
 def test_partial_discovery_does_not_advance_coverage_watermark(tmp_path):
@@ -265,7 +268,7 @@ def test_paid_read_group_does_not_receive_new_id_or_include_removed_company(tmp_
     owners.members = [extra, IDENTITY]
     owners.lose_reply = False
     run_tick(store, owners, Deployment(), now=TIME + timedelta(days=1))
-    assert owners.status_calls == [original["run_id"]]
+    assert owners.status_calls == [original["run_id"], original["run_id"]]
     assert len(owners.read_calls) == 2
     assert [ref["document_id"] for ref in owners.read_calls[-1]["sources"]] == ["issuer-3"]
 
@@ -292,7 +295,7 @@ def test_enabled_transcripts_are_read_from_backlog_without_a_guess_at_the_annual
     owners = ReadingOwners()
     run_tick(store, owners, Deployment(), now=TIME)
     assert not owners.jobs
-    assert owners.read_calls[0]["sources"] == [SOURCE, call]
+    assert [request["sources"] for request in owners.read_calls] == [[SOURCE], [call]]
     assert store.load()["last_run"]["counts"]["reused"] == 2
 
 
@@ -321,6 +324,109 @@ def test_reading_limits_and_cumulative_owner_usage_follow_the_frozen_run(tmp_pat
     run_tick(store, owners, next_limits, now=TIME + timedelta(days=1))
     assert owners.read_calls[2] == original
     assert store.load()["last_run"]["usage"]["reading_runs"][original["run_id"]] == usage
+
+
+def test_slow_local_document_cannot_consume_the_other_documents_time(tmp_path, monkeypatch):
+    store = RefreshStore(tmp_path)
+    store.configure(_settings(transcripts_enabled=False), None)
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr("ff_refresh_runner.time", SimpleNamespace(monotonic=lambda: clock.now))
+    siblings = [{**SOURCE, "document_id": name} for name in ("fast-transcript", "fast-filing")]
+
+    class MixedFormats(Owners):
+        def discover(self, request, *, timeout):
+            page = super().discover(request, timeout=timeout)
+            page["candidates"] = page["candidates"][:1]
+            return page
+
+        def backlog(self, request, *, timeout):
+            return {"sources": siblings, "next_cursor": None, "coverage": "complete"}
+
+        def read(self, request, *, timeout):
+            if SOURCE in request["sources"]:
+                self.read_calls.append(request)
+                assert timeout < 48
+                clock.now += timeout
+                raise OwnerUnavailable("incremental_read_unavailable")
+            clock.now += 1
+            return super().read(request, timeout=timeout)
+
+    owners = MixedFormats()
+    run_tick(store, owners, Deployment(tick_seconds=48, reading={"timeout_seconds": 48}), now=TIME)
+    assert [request["sources"] for request in owners.read_calls] == [[SOURCE], *[[ref] for ref in siblings]]
+    assert owners.status_calls == [owners.read_calls[0]["run_id"]]
+    assert store.load()["last_run"]["counts"]["read"] == 2
+    assert store.load()["last_run"]["counts"]["pending"] == 1
+
+
+@pytest.mark.parametrize("interruption", [OwnerUnavailable("incremental_read_unavailable"), LostOwnerReceipt()])
+def test_local_result_is_read_back_by_id_without_rerunning_after_lost_reply(tmp_path, interruption):
+    store = RefreshStore(tmp_path)
+    store.configure(_settings(transcripts_enabled=False, backlog_enabled=False), None)
+    receipts = {}
+
+    class DurableLocal(Owners):
+        def read(self, request, *, timeout):
+            payload = super().read(request, timeout=timeout)
+            key = request["run_id"]
+            receipts[key] = {**payload, "usage": {"model_requests": 0, "cost_state": "settled", "cost_usd": "0"}}
+            if len(self.read_calls) == 1:
+                raise interruption
+            return receipts[key]
+
+        def read_status(self, run_id, *, timeout):
+            self.status_calls.append(run_id)
+            assert timeout > 0
+            return receipts[run_id]
+
+    owners = DurableLocal()
+    if isinstance(interruption, LostOwnerReceipt):
+        with pytest.raises(LostOwnerReceipt):
+            run_tick(store, owners, Deployment(), now=TIME)
+        assert store.load()["current"]["active_action"]["reference"] == owners.read_calls[0]["run_id"]
+    run_tick(store, owners, Deployment(), now=TIME)
+    first = owners.read_calls[0]
+    assert first["sources"] == [SOURCE]
+    assert len(owners.read_calls) == 2  # second source, never a second read of SOURCE
+    assert owners.status_calls == [first["run_id"]]
+    done = store.load()["last_run"]
+    assert done["state"] == "completed" and done["counts"]["read"] == 2
+    assert done["usage"]["reading_runs"][first["run_id"]] == receipts[first["run_id"]]["usage"]
+
+
+def test_existing_local_batch_reconciles_then_splits_only_undone_sources(tmp_path):
+    store = RefreshStore(tmp_path)
+    settings = _settings(transcripts_enabled=False, backlog_enabled=False)
+    store.configure(settings, None)
+    run = store.begin(due_slot(settings["cadence"], TIME), store.load()["revision"], TIME)
+    second = {**SOURCE, "document_id": "pending-second-document"}
+    listing = (IDENTITY["entity_id"], IDENTITY["listing_id"])
+    frozen = {"request": {"run_id": "sr-read-legacy", "reading_level": "local", "sources": [SOURCE, second],
+                          "limits": {"timeout_seconds": 120, "max_sources": 2}},
+              "listing_scopes": [listing], "scope": work_scope(settings)}
+    run.update(reading_batch=frozen, members=[IDENTITY], state="reading", work={
+        ref["document_id"]: {"source_ref": ref, "listing_scope": listing,
+                             "acquire_state": "ready", "reading_batch": frozen}
+        for ref in (SOURCE, second)
+    })
+    store.checkpoint(run)
+
+    class ExistingBatch(Owners):
+        def read_status(self, run_id, *, timeout):
+            self.status_calls.append(run_id)
+            return {"items": [
+                {"source_ref": SOURCE, "state": "read", "result_ref": "prior-artifact"},
+                {"source_ref": second, "state": "deferred"},
+            ], "usage": {"model_requests": 0, "cost_state": "settled"}}
+
+    owners = ExistingBatch()
+    run_tick(store, owners, Deployment(reading_documents=1), now=TIME)
+    assert owners.status_calls == ["sr-read-legacy"]
+    singleton, = owners.read_calls
+    assert singleton["sources"] == [second] and singleton["run_id"] != "sr-read-legacy"
+    done = store.load()["last_run"]
+    assert done["state"] == "completed" and done["counts"]["read"] == 2
+    assert done["usage"]["reading_runs"]["sr-read-legacy"]["model_requests"] == 0
 
 
 @pytest.mark.parametrize("coverage,expected", [("complete", "completed"), ("partial", "partial")])

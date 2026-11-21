@@ -28,6 +28,9 @@ class _AdmissionStopped(Exception):
     pass
 
 
+_READ_FINISHED = {"read", "summarized", "failed", "skipped"}
+
+
 def _reference(value: Any) -> dict | None:
     if value is None:
         return None
@@ -472,16 +475,20 @@ class _Refresh:
     def _read(self) -> bool:
         run = self.run
         eligible = [work for work in run["work"].values() if work["acquire_state"] == "ready"
-                    and work.get("read_state") not in {"read", "summarized", "failed", "skipped"}
+                    and work.get("read_state") not in _READ_FINISHED
                     and work.get("read_attempt") != run["run_id"]]
         if not eligible:
             return self._advance("finalizing")
         if self.reads_left == 0:
             return False
+        # A suspended paid group must retain its original ID. A suspended
+        # local group cannot bind a new alias back into an obsolete batch.
         saved_groups = {
-            _reference_key(work["source_ref"]): work["reading_batch"]
-            for work in [*run["suspended"].values(), *eligible] if work.get("reading_batch") is not None
+            _reference_key(work["source_ref"]): batch for work in run["suspended"].values()
+            if (batch := work.get("reading_batch")) is not None and batch["request"]["reading_level"] == "summary"
         }
+        saved_groups.update({_reference_key(work["source_ref"]): batch for work in eligible
+                             if (batch := work.get("reading_batch")) is not None})
         for work in eligible:
             if work.get("reading_batch") is None:
                 batch = saved_groups.get(_reference_key(work["source_ref"]))
@@ -501,39 +508,38 @@ class _Refresh:
             self._save()
         request = active["request"]
         keys = {_reference_key(source) for source in request["sources"]}
-        self.reads_left = max(0, self.reads_left - len(keys))
+        local = request["reading_level"] == "local"
+        legacy_local_batch = local and len(keys) > 1
+        same_scope = self._same_read_range(active)
+        if not same_scope:
+            self._record("reading_scope_changed")
+        group = [work for work in eligible if work.get("reading_batch") == active
+                 and _reference_key(work["source_ref"]) in keys]
+        interrupted = (run.get("active_action") or {}).get("reference") == request["run_id"]
+        local_retry = local and any(work.get("read_attempt") for work in group)
+        share = min(self.reads_left, len({_reference_key(work["source_ref"]) for work in eligible})) if local else 1
         try:
-            if self._same_read_range(active):
-                self._admit("reading", request["run_id"])
-                response = self.ports.read(request, timeout=self._timeout(self.options.reading["timeout_seconds"]))
-            else:
-                self._record("reading_scope_changed")
-                response = self.ports.read_status(
-                    request["run_id"], timeout=self._timeout(self.options.reading["timeout_seconds"]),
-                )
-            self._observe_usage("reading_runs", request["run_id"], response.get("usage"))
-            items = {}
-            for item in response["items"]:
-                if not isinstance(item, dict):
-                    continue
-                ref = _reference(item.get("source_ref"))
-                if ref is not None and _reference_key(ref) in keys:
-                    items[_reference_key(ref)] = item
-            self._record(*self._owner_reasons(response))
+            items = self._read_owner_receipt(
+                request, keys, share=share, status_only=legacy_local_batch or not same_scope,
+                check_status=interrupted or local_retry,
+            )
         except OwnerUnavailable as exc:
-            self._record(exc.reason, partial=True)
+            self._record(exc.reason)
+            if time.monotonic() >= self.deadline:
+                # A later tick must read back the same admitted owner run.
+                # Discarding it here could delay recovery until the next slot.
+                self.store.checkpoint(run)
+                return False
             items = {}
-        for work in eligible:
-            key = _reference_key(work["source_ref"])
-            if key not in keys or work.get("reading_batch") != active:
+        for work in group:
+            item = items.get(_reference_key(work["source_ref"]), {})
+            status = self._read_state(item)
+            if status is None and legacy_local_batch and run["settings"]["reading_level"] == "local":
+                work["reading_batch"] = None
+                work.pop("read_attempt", None)
                 continue
-            item = items.get(key, {})
-            status = item.get("state")
-            work.update(read_attempt=run["run_id"], reading_batch=active)
-            if status in ("read", "summarized") and not item.get("result_ref"):
-                self._record("reading_result_reference_missing")
-                status = "deferred"
-            if status in ("read", "summarized", "skipped", "failed"):
+            work["read_attempt"] = run["run_id"]
+            if status is not None:
                 work.update(read_state=status, result_ref=item.get("result_ref"))
                 run["counts"][status] += 1
                 self._record(*self._owner_reasons(item), partial=status == "failed")
@@ -544,13 +550,67 @@ class _Refresh:
         self._save()
         return True
 
+    def _read_owner_receipt(self, request, keys, *, share, status_only, check_status):
+        def timeout() -> float:
+            # Divide the remaining tick among waiting local sources. A slow
+            # source cannot spend the time needed to admit its siblings.
+            return min(self.options.reading["timeout_seconds"], self._timeout(self.options.tick_seconds) / share)
+
+        def items_of(response: dict) -> dict:
+            self._observe_usage("reading_runs", request["run_id"], response.get("usage"))
+            self._record(*self._owner_reasons(response))
+            items = {}
+            for item in response["items"]:
+                ref = _reference(item.get("source_ref")) if isinstance(item, dict) else None
+                if ref is not None and _reference_key(ref) in keys:
+                    items[_reference_key(ref)] = item
+            return items
+
+        def read_status() -> dict:
+            return items_of(self.ports.read_status(request["run_id"], timeout=timeout()))
+
+        if status_only:
+            return read_status()
+        recovered = {}
+        if check_status:
+            try:
+                recovered = read_status()
+            except OwnerUnavailable as exc:
+                self._record(exc.reason)
+            else:
+                if all(self._read_state(recovered.get(key, {})) is not None for key in keys):
+                    return recovered
+        timeout()
+        self._admit("reading", request["run_id"])
+        self.reads_left = max(0, self.reads_left - len(keys))
+        try:
+            return {**recovered, **items_of(self.ports.read(request, timeout=timeout()))}
+        except OwnerUnavailable as exc:
+            self._record(exc.reason)
+            try:
+                return {**recovered, **read_status()}
+            except OwnerUnavailable as status_error:
+                if not recovered or time.monotonic() >= self.deadline:
+                    raise
+                self._record(status_error.reason)
+                return recovered
+
+    def _read_state(self, item: dict) -> str | None:
+        status = item.get("state")
+        if status in ("read", "summarized") and not item.get("result_ref"):
+            self._record("reading_result_reference_missing")
+            return None
+        return status if isinstance(status, str) and status in _READ_FINISHED else None
+
     def _new_read_batch(self, eligible: list[dict]) -> dict:
         pending = [work for work in eligible if work.get("reading_batch") is None]
         unique = {_reference_key(work["source_ref"]): work["source_ref"] for work in pending}
-        max_sources = min(self.reads_left, self.options.reading.get("max_sources", self.reads_left))
+        level = self.run["settings"]["reading_level"]
+        max_sources = 1 if level == "local" else min(
+            self.reads_left, self.options.reading.get("max_sources", self.reads_left),
+        )
         sources = list(unique.values())[:max_sources]
         keys = {_reference_key(ref) for ref in sources}
-        level = self.run["settings"]["reading_level"]
         return {
             "request": {
                 "schema_version": "cwp-incremental-read-request/1",
