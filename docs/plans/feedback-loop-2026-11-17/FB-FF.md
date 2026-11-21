@@ -65,3 +65,20 @@ FF 与 ROOT 在原版与修复版分别取一份 job 和短请求的脱敏样本
 ~~~json
 {"lane":"FB-FF","owner":"<owner>","base":"<开工 SHA>","reviewed_commit":"<最终受审源码 SHA>","published_commit":"<实际发布 SHA 或本地说明>","status":"<完成或具体缺口>","tests":[{"command":"<定向命令>","result":"<通过数/失败/跳过及原因>"}],"native_refs":["<原生收据或测试标识>"],"sample_refs":["<可重放的观察样本>"],"review":"<独审范围/版本/复验和余项>","cleanup":"<仅本轮临时目录及结果>","remaining":["<组合验收归属>"]}
 ~~~
+
+
+## 2026-11-21 日常运行失败覆盖整改
+
+总控负责实施本仓的日常下载、作业与定时器。故障调查基线为 006725a0。
+
+| 原失败清单中的步骤与根因签名 | 普通入口实测 |
+|---|---|
+| public-start / native-failure-not-forwarded；failed-job / business-failure-classified-expected | 普通 fetch 与短请求在建立日志前做日期、输入及限额判断，故障探针八例中六例没有条目。原生 failed/config_error 作业只执行一次，F4 却出现三条 expected。Windows 登录补跑直接启动 tick，标准流被重定向，原 slot 曾保存 partial。 |
+
+1. 从本仓普通入口先复现。总控仓 company-wiki 的 `docs/plans/feedback-loop-2026-11-17/probes/filing_fetch.py` 提供原探针。
+2. 从 fetch_filing、ff_job_cli、ff_scheduled_refresh 的命令入口使用同一运行上下文。解析错误留原生原因，保持 CLI 返回协议。在作业和 slot 完成时分别投递逐项业务终态与尝试，短请求的费用、拒绝是否合理、下载/复用分别保存。定时任务先以原 slot/job 查回，取不到用量也能登记已知业务失败。
+3. 隔离日期无效、配置错误、部分成功，各与合法复用和预期限额拒绝对照。关闭反馈环境变量，从同一公司/期次/slot 原生记录和新进程 F4 对账。第二次恢复执行次数、HTTP 下载、费用均不增长。Windows 定时 CLI 使用临时时钟/数据根，不触发正式任务。
+
+普通运行先保留 owner/run/attempt/step，原生账本负责已发送、已付、未发送决策。每个步骤只记录复现所需的输入引用、版本、原因码、脱敏异常层次及代码位置。可选日志不能改变业务退出或结算。每次拒绝先记录，区分合理拒绝、可删的门禁与执行错误。
+
+走现有 feedback-observation/1。显式 RESEARCH_FEEDBACK_OUT 保留；独立启动在所属模块已配置状态目录的 observations 自动落盘，可用 RESEARCH_FEEDBACK_DIR 指定测试目录。先发布完整 feedback-<32位uuidhex>.jsonl，再发布同名 .ready（包括 owner、run_id、attempt_id、step_id）。重复冷读按原发生身份去重。原生失败作分母，逐个对照 F4；登记和分诊不重新执行业务。上报实际部署入口、可用 outbox 位置、版本、独立测试结果和临时目录清理情况。
