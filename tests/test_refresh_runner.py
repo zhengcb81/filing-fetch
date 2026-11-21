@@ -429,6 +429,45 @@ def test_existing_local_batch_reconciles_then_splits_only_undone_sources(tmp_pat
     assert done["usage"]["reading_runs"]["sr-read-legacy"]["model_requests"] == 0
 
 
+@pytest.mark.parametrize(("outcome", "persisted_alias"), [
+    ("read", False), ("read", True), ("summarized", False), ("skipped", False), ("failed", False),
+])
+def test_reading_tallies_exact_source_once_but_updates_every_work_alias(tmp_path, outcome, persisted_alias):
+    store = RefreshStore(tmp_path)
+    level = "summary" if outcome == "summarized" else "local"
+    settings = _settings(reading_level=level, transcripts_enabled=False, backlog_enabled=False)
+    store.configure(settings, None)
+    run = store.begin(due_slot(settings["cadence"], TIME), store.load()["revision"], TIME)
+    entry = {"source_ref": SOURCE, "listing_scope": [IDENTITY["entity_id"], IDENTITY["listing_id"]],
+             "acquire_state": "ready"}
+    result_ref = "verified-reading-artifact" if outcome in {"read", "summarized"} else None
+    run.update(members=[IDENTITY], state="reading", work={"discovery": dict(entry), "backlog": dict(entry)})
+    run["counts"].update(downloaded=1, reused=1, failed=1)
+    if persisted_alias:
+        run["work"]["discovery"].update(read_state=outcome, result_ref=result_ref, read_attempt=run["run_id"])
+        run["counts"][outcome] += 1
+    store.checkpoint(run)
+
+    class Receipt(Owners):
+        def read(self, request, *, timeout):
+            self.read_calls.append(request)
+            assert request["sources"] == [SOURCE]
+            # Preserve the durable rows for inspection at the next tick.
+            store.configure({**settings, "enabled": False}, None)
+            return {"items": [{"source_ref": SOURCE, "state": outcome, "result_ref": result_ref}],
+                    "usage": {"model_requests": int(level == "summary"), "cost_state": "settled"}}
+
+    owners = Receipt()
+    run_tick(store, owners, Deployment(), now=TIME)
+    saved = store.load()["current"]
+    assert len(owners.read_calls) == 1
+    assert all(item["read_state"] == outcome and item["result_ref"] == result_ref
+               for item in saved["work"].values())
+    assert saved["counts"][outcome] == (2 if outcome == "failed" else 1)
+    assert saved["counts"]["downloaded"] == saved["counts"]["reused"] == 1
+    assert saved["usage"]["reading_runs"][owners.read_calls[0]["run_id"]]["model_requests"] == int(level == "summary")
+
+
 @pytest.mark.parametrize("coverage,expected", [("complete", "completed"), ("partial", "partial")])
 def test_empty_backlog_preserves_native_coverage(tmp_path, coverage, expected):
     store = RefreshStore(tmp_path)

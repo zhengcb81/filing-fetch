@@ -531,8 +531,15 @@ class _Refresh:
                 self.store.checkpoint(run)
                 return False
             items = {}
+        # Discovery and backlog can hold different work rows for one exact
+        # original. Keep every row's result while counting the source once,
+        # including when an alias was already completed before a restart.
+        counted = {_reference_key(work["source_ref"])
+                   for work in (*run["work"].values(), *run["suspended"].values())
+                   if work.get("read_attempt") == run["run_id"] and work.get("read_state") in _READ_FINISHED}
         for work in group:
-            item = items.get(_reference_key(work["source_ref"]), {})
+            key = _reference_key(work["source_ref"])
+            item = items.get(key, {})
             status = self._read_state(item)
             if status is None and legacy_local_batch and run["settings"]["reading_level"] == "local":
                 work["reading_batch"] = None
@@ -541,7 +548,9 @@ class _Refresh:
             work["read_attempt"] = run["run_id"]
             if status is not None:
                 work.update(read_state=status, result_ref=item.get("result_ref"))
-                run["counts"][status] += 1
+                if key not in counted:
+                    run["counts"][status] += 1
+                    counted.add(key)
                 self._record(*self._owner_reasons(item), partial=status == "failed")
             else:
                 work["read_state"] = "deferred"
