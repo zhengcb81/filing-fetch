@@ -17,3 +17,6 @@ e2e/.runs/
 
 # W20 frozen dependency code views (rebuilt from frozen commits; see plan receipts)
 .w20-deps/
+
+# Generated filing-fetch-native feedback, outside the installable code.
+/.ff_jobs/observations/

@@ -42,6 +42,7 @@ from ff_job_contracts import (
     validate_action,
 )
 from ff_job_feedback import publish_job_observation
+from ff_runtime_feedback import RUN_ENV, ATTEMPT_ENV, cause_details
 from ff_job_store import JobStore, now_iso
 from filing_contracts import FilingFetchError
 
@@ -119,6 +120,9 @@ def run_job(
                 code="request_error",
             )
         record["attempts"] = record.get("attempts", 0) + 1
+        record.pop("failure_detail", None)
+        record["feedback_identity"] = {"run_id": os.environ.get(RUN_ENV) or owner_job_id,
+                                       "attempt_id": os.environ.get(ATTEMPT_ENV) or str(record["attempts"])}
         record["status"] = "running"
         record["status_known"] = True
         record["started_at"] = record.get("started_at") or now_iso()
@@ -135,9 +139,9 @@ def run_job(
         })
         store.append_log(owner_job_id, {"event": "run_started", "pid": record["owner_pid"]})
         record = store.write_locked(record)
-        publish_job_observation(record, started=True)
+        publish_job_observation(record, started=True, jobs_dir=store.jobs_dir)
         landed = _execute(store, record, config_path=config_path, timeout_seconds=timeout_seconds)
-        publish_job_observation(landed, started=False)
+        publish_job_observation(landed, started=False, jobs_dir=store.jobs_dir)
         return landed, True
     finally:
         lock.release()
@@ -171,11 +175,13 @@ def _execute(
                 stats=stats,
             )
     except FilingFetchError as exc:
+        record["failure_detail"] = cause_details(exc, reason=exc.code)
         return _land_terminal(
             store, record, stats=stats, observation=_observation_of(exc),
             error=error_view_from_exception(exc, owner_job_id),
         )
     except Exception as exc:  # noqa: BLE001 - an honest terminal failure envelope
+        record["failure_detail"] = cause_details(exc, reason="fatal")
         error = {
             "code": "fatal",
             "message": f"{type(exc).__name__}: {exc}",

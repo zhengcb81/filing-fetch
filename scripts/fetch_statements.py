@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from ff_financial_statements import fetch_statements
+from ff_runtime_feedback import cli_failure, parse_arguments
 from filing_contracts import FilingFetchError
 
 STATEMENTS_RESPONSE_SCHEMA_VERSION = "financial-statements-response/1"
@@ -43,9 +44,10 @@ def main(argv: list[str] | None = None) -> int:
         help="overall deadline for the entire request (default: 300)",
     )
     parser.add_argument("--pretty", action="store_true", help="indent the output")
-    args = parser.parse_args(argv)
+    args = parse_arguments(parser, argv, "statements")
 
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
+        cli_failure("statements", "invalid_timeout", no_dispatch=True)
         print("error: timeout-seconds must be positive and finite", file=sys.stderr)
         return 2
     try:
@@ -57,7 +59,8 @@ def main(argv: list[str] | None = None) -> int:
             request = json.loads(args.request_file.read_text(encoding="utf-8"))
         else:
             request = json.loads(sys.stdin.read())
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        cli_failure("statements", "request_error", exc, no_dispatch=True)
         json.dump(
             {
                 "schema_version": STATEMENTS_RESPONSE_SCHEMA_VERSION,
@@ -77,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout_seconds,
         )
     except FilingFetchError as exc:
+        cli_failure("statements", exc.code, exc)
         error_envelope = {
             "schema_version": STATEMENTS_RESPONSE_SCHEMA_VERSION,
             "status": exc.code,
@@ -94,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 2 if exc.code != "fatal" else 1
     except Exception as exc:  # noqa: BLE001 - surfaced as an honest envelope
+        cli_failure("statements", "fatal", exc)
         json.dump(
             {
                 "schema_version": STATEMENTS_RESPONSE_SCHEMA_VERSION,
@@ -111,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdout.write("\n")
     # W19-R3: a structured CWP error status maps to its own exit code.
     status = envelope.get("status")
+    if status in {"partial", "unavailable", "request_error", "config_error", "fatal"}:
+        cli_failure("statements", status)
     if status in ("request_error", "config_error"):
         return 2
     if status == "fatal":

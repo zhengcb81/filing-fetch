@@ -7,6 +7,7 @@ import csv
 from datetime import datetime, timedelta, timezone
 import json
 import os
+from ff_runtime_feedback import cli_failure, parse_arguments
 from pathlib import Path
 import shutil
 import subprocess
@@ -131,7 +132,19 @@ def run(argv=None) -> int:
     parser.add_argument("--jobs-dir", type=Path, default=ROOT / ".ff_jobs")
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--task-name")
-    args = _normalized(parser.parse_args(argv))
+    args = _normalized(parse_arguments(parser, argv, "windows-task"))
+    try:
+        return _run_action(parser, args)
+    except SystemExit as exc:
+        if exc.code:
+            cli_failure("windows-" + args.action, "task_control_failed", exc, jobs_dir=args.jobs_dir)
+        raise
+    except Exception as exc:
+        cli_failure("windows-" + args.action, "task_launch_failed", exc, jobs_dir=args.jobs_dir)
+        raise
+
+
+def _run_action(parser, args):
     if os.name != "nt":
         parser.error("Windows Task Scheduler requires Windows")
     if args.action == "run":
@@ -142,6 +155,8 @@ def run(argv=None) -> int:
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
+        if result.returncode:
+            cli_failure("windows-tick", "tick_exit_" + str(result.returncode), jobs_dir=args.jobs_dir)
         return result.returncode
     name, sid = _identity()
     task_name = args.task_name or f"FilingFetch-ScheduledRefresh-{sid}"

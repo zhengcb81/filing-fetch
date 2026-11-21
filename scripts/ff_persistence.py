@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import errno
 import json
 import os
 from pathlib import Path
 import secrets
+import sys
 import time
 from typing import BinaryIO
 
@@ -49,7 +51,7 @@ def acquire_file_lock(path: Path, timeout_seconds: float) -> FileLock:
     try:
         while True:
             try:
-                if os.name == "nt":
+                if sys.platform == "win32":
                     import msvcrt
 
                     stream.seek(0)
@@ -72,13 +74,24 @@ def acquire_file_lock(path: Path, timeout_seconds: float) -> FileLock:
 
 
 def atomic_write_json(path: Path, payload: dict) -> None:
+    with _atomic_text_stream(path) as stream:
+        json.dump(payload, stream, ensure_ascii=False, sort_keys=True, indent=1)
+        stream.write("\n")
+
+
+def atomic_write_text(path: Path, value: str) -> None:
+    with _atomic_text_stream(path) as stream:
+        stream.write(value)
+
+
+@contextmanager
+def _atomic_text_stream(path: Path):
     path = owner_io_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".write-{secrets.token_hex(12)}.tmp")
     try:
         with tmp.open("w", encoding="utf-8", newline="\n") as stream:
-            json.dump(payload, stream, ensure_ascii=False, sort_keys=True, indent=1)
-            stream.write("\n")
+            yield stream
             stream.flush()
             os.fsync(stream.fileno())
         _replace_record(tmp, path)

@@ -82,3 +82,17 @@ FF 与 ROOT 在原版与修复版分别取一份 job 和短请求的脱敏样本
 普通运行先保留 owner/run/attempt/step，原生账本负责已发送、已付、未发送决策。每个步骤只记录复现所需的输入引用、版本、原因码、脱敏异常层次及代码位置。可选日志不能改变业务退出或结算。每次拒绝先记录，区分合理拒绝、可删的门禁与执行错误。
 
 走现有 feedback-observation/1。显式 RESEARCH_FEEDBACK_OUT 保留；独立启动在所属模块已配置状态目录的 observations 自动落盘，可用 RESEARCH_FEEDBACK_DIR 指定测试目录。先发布完整 feedback-<32位uuidhex>.jsonl，再发布同名 .ready（包括 owner、run_id、attempt_id、step_id）。重复冷读按原发生身份去重。原生失败作分母，逐个对照 F4；登记和分诊不重新执行业务。上报实际部署入口、可用 outbox 位置、版本、独立测试结果和临时目录清理情况。
+
+
+### 日常公开入口验收记录
+
+责任范围为 FF 的短报表、短原文、持久作业、定时扫描与 Windows 登录启动器。原测试覆盖受监督的显式日志，正常直启在参数解析和费用准备阶段可以完全没有日志。旧 job 投影把“函数正常返回一次”当成“业务符合预期”，丢失了原生 `failed/config_error`。定时器只打整个 slot 的总标记，除非遇到相同问题重跑，很难定位具体失败文档。
+
+实现时保留原 CLI 的 JSON、标准流和退出语义，按原尝试分别投递业务终态、明确限额拒绝和费用状态。校验门先审视其用途。本轮保留真实采集额度、原作业幂等、明确的输入结构校验。普通代码错误、无配置、读取失败和进程失联进入修复队列。来源缺失与可证明的零发送或费用未知分别保留。下游只收到业务请求，在自己的状态根发布反馈。未启动生产定时任务。
+
+- 默认 outbox 为对应 FF 运行副本下的 `.ff_jobs/observations`，作业、定时器优先使用调用的 `--jobs-dir/observations`。显式 `RESEARCH_FEEDBACK_OUT` 继续支持。可用 `RESEARCH_FEEDBACK_DIR` 隔离临时目录。给 F4 的 `.ready` 最后发布；独立的开始与终态文件避免旧 ACK 抹掉同时落盘的新终态。
+- 作业在执行前持久保存原 run、attempt；原生终态和异常保存在相同 ledger。冷读 `get_status` 可从原状态补投，已 ACK 的相同作业不再投递。费用不确定的失败同时保留原失败，不自动再采集。每日运行逐项摘要保留 stage、业务原因和同一文档的引用摘要。
+- 脱敏诊断不含输入正文、任意异常消息或绝对来源路径。普通 CLI 可以从另一进程还原类型、异常链、代码位置、对应源码字节 SHA 和 JSON 解析位置。专用读口为 `python scripts/ff_job_feedback.py get-diagnostic <details_ref> --jobs-dir <既有状态根>`，也可用 `--observations-dir <独立outbox>`。已有 job 原错误仍可从 `ff_job.py get_status` 读回。
+- 基线 5126876e 的 10 例均是 RED；实现后 16 个新增测试通过。独立进程覆盖非法参数/JSON、真实 CLI 启动、坏传输、作业配置失败、强制终止后两次冷读、预期费用拒绝、合法数据未下载、三市场一时段两项失败/一项成功及重复 tick 零新增调用。相邻六套旧、新联合回归 90 例通过，Ruff 全仓通过。全部使用临时目录／离线 owner；未访问外部服务或产生费用。历史上只有总体 partial 的旧 slot 不追写伪造的单项原因。
+- 定向复验 `python -B -m pytest -q tests/test_feedback_ordinary_failures.py`。总控探针 `company-wiki/docs/plans/feedback-loop-2026-11-17/probes/filing_fetch.py <FF checkout>` 仍按原格式检查显式 sidecar，独立启动的无 OUT 用例依据本仓原生 outbox 实测。
+- 下一节点为绑定源码独审、正式主线和现用运行副本验真；实际部署 SHA 及原生目录在本节补记。

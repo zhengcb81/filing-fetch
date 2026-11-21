@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 
 from ff_persistence import LockBusy
+from ff_runtime_feedback import DEFAULT_JOBS_DIR, cli_failure, parse_arguments
 from ff_refresh_policy import RUNS_SCHEMA, STATUS_SCHEMA, due_slot, parse_config_request, slot_consumed, utc_text
 from ff_refresh_store import ConfigConflict, RefreshStateError, RefreshStore, summarize_run
 
@@ -56,7 +57,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=SKILL_ROOT / "config/company_wiki.json")
     parser.add_argument("--refresh-config", type=Path, help="default: scheduled_refresh.json next to --config")
-    parser.add_argument("--jobs-dir", type=Path, default=SKILL_ROOT / ".ff_jobs")
+    parser.add_argument("--jobs-dir", type=Path, default=DEFAULT_JOBS_DIR)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("status")
     configure = sub.add_parser("configure")
@@ -93,11 +94,14 @@ def run_command(args: argparse.Namespace) -> dict:
                 **_status(store, deployment, clock),
                 "tick_result": "already_running",
             }
-    return _status(store, deployment, clock)
+    result = _status(store, deployment, clock)
+    if args.command == "tick" and "schedule_deployment_missing" in result.get("reason_codes", ()):
+        cli_failure("refresh-tick", "schedule_deployment_missing", jobs_dir=args.jobs_dir, no_dispatch=True)
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    args = parse_arguments(_parser(), argv, "scheduled-refresh")
     if hasattr(sys.stdin, "reconfigure"):
         sys.stdin.reconfigure(encoding="utf-8")
     if hasattr(sys.stdout, "reconfigure"):
@@ -114,8 +118,12 @@ def main(argv: list[str] | None = None) -> int:
             reason = "schedule_state_unavailable"
         else:
             reason = "request_error"
+        cli_failure("refresh-" + args.command, reason, exc, jobs_dir=args.jobs_dir)
         result = {"schema_version": STATUS_SCHEMA, "error": {"code": reason, "owner": "filing-fetch"}}
         code = 2
+    except Exception as exc:
+        cli_failure("refresh-" + args.command, "fatal", exc, jobs_dir=args.jobs_dir)
+        raise
     print(json.dumps(result, ensure_ascii=False))
     return code
 

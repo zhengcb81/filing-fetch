@@ -1845,6 +1845,7 @@ def main(argv: list[str] | None = None) -> int:
     2 = filing not reusable / not found (or config/identity problem).
     """
     import argparse
+    from ff_runtime_feedback import cli_failure, parse_arguments
 
     parser = argparse.ArgumentParser(
         prog="filing-fetch",
@@ -1901,7 +1902,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="return a pathless source reference for a later company-wiki read",
     )
-    args = parser.parse_args(argv)
+    args = parse_arguments(parser, argv, "short-filing")
     v2_response = False
     request: dict[str, Any] | None = None
     stats: dict[str, int] | None = None
@@ -1909,6 +1910,7 @@ def main(argv: list[str] | None = None) -> int:
     observation: ff_short_feedback.ShortObservation | None = None
 
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
+        cli_failure("short-filing", "invalid_timeout", no_dispatch=True)
         print("error: timeout-seconds must be positive and finite", file=sys.stderr)
         return 2
 
@@ -1934,7 +1936,7 @@ def main(argv: list[str] | None = None) -> int:
                 parsed = json.loads(args.request_file.read_text(encoding="utf-8"))
             else:
                 parsed = json.loads(sys.stdin.read())
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise FilingFetchError(f"invalid request: {exc}", code="request_error") from exc
         if not isinstance(parsed, dict):
             raise FilingFetchError("request must be a JSON object", code="request_error")

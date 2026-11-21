@@ -30,6 +30,8 @@ def summarize_run(run: dict) -> dict:
         "run_id", "slot_id", "roster_snapshot_id", "started_at", "updated_at", "state",
         "counts", "usage", "reason_codes",
     )}
+    if run.get("failures"):
+        summary["failures"] = run["failures"]
     if run.get("active_action") is not None:
         summary["active_action"] = run["active_action"]
     return summary

@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 import time
 from typing import Any, Protocol
 
-from ff_job_feedback import publish_refresh_observation
+from ff_job_feedback import publish_refresh_failure, publish_refresh_observation
 from ff_refresh_owners import Deployment, OwnerUnavailable, stable_key
 from ff_refresh_policy import due_slot, slot_consumed, utc_text, work_scope
 from ff_refresh_store import RefreshStore
@@ -93,7 +93,14 @@ class _Refresh:
         self.acquires_left = options.acquisitions
         self.reads_left = options.reading_documents
 
-    def _record(self, *reasons: str, partial: bool = False) -> None:
+    def _record(self, *reasons: str, partial: bool = False, error=None, item=None, stage=None) -> None:
+        if partial or error is not None:
+            action = self.run.get("active_action") or {}
+            reference = item or action.get("reference") or self.run["run_id"]
+            phase = stage or action.get("stage") or self.run["state"]
+            for reason in reasons:
+                publish_refresh_failure(self.run, jobs_dir=self.store.root.parent, reason=reason,
+                                        reference=reference, stage=phase, error=error)
         self.run["reason_codes"] = list(dict.fromkeys([*self.run["reason_codes"], *reasons]))
         self.run["partial"] |= partial
 
@@ -163,7 +170,7 @@ class _Refresh:
             except _AdmissionStopped:
                 break
             except OwnerUnavailable as exc:
-                self._record(exc.reason)
+                self._record(exc.reason, error=exc)
                 self._save()
                 break
             if not again:
@@ -254,7 +261,7 @@ class _Refresh:
             page = self.ports.discover(request, timeout=self._timeout(self.options.discovery["timeout_seconds"]))
         except OwnerUnavailable as exc:
             # Other companies and already-present originals can still progress.
-            self._record(exc.reason, partial=True)
+            self._record(exc.reason, partial=True, error=exc)
             self._next_member()
             self._save()
             return True
@@ -412,7 +419,7 @@ class _Refresh:
                     self._queue("backlog-" + _reference_key(ref), None, None, ref, _member_scope(member), kinds)
             next_cursor = result.get("next_cursor")
         except OwnerUnavailable as exc:
-            self._record(exc.reason, partial=True)
+            self._record(exc.reason, partial=True, error=exc)
             next_cursor = None
         if next_cursor is None or next_cursor in run["backlog_cursors"]:
             if next_cursor is not None:
@@ -446,7 +453,7 @@ class _Refresh:
                                      run_id=run["run_id"])
         except OwnerUnavailable as exc:
             work["acquire_run"] = run["run_id"]
-            self._record(exc.reason, partial=True)
+            self._record(exc.reason, partial=True, error=exc)
             self._save()
             return True
         work["owner_job_id"] = job["owner_job_id"]
@@ -466,7 +473,7 @@ class _Refresh:
             run["counts"]["failed"] += 1
             work["acquire_state"] = "pending" if job.get("safe_retry") else "failed"
             reason = (job.get("error") or {}).get("code") or result.get("reason") or "acquisition_failed"
-            self._record(reason, partial=True)
+            self._record(reason, partial=True, item=key, stage="acquisition")
         else:
             self._record("acquisition_pending" if ref is None else "acquisition_unconfirmed", partial=True)
         self._save()
@@ -524,7 +531,7 @@ class _Refresh:
                 check_status=interrupted or local_retry,
             )
         except OwnerUnavailable as exc:
-            self._record(exc.reason)
+            self._record(exc.reason, error=exc)
             if time.monotonic() >= self.deadline:
                 # A later tick must read back the same admitted owner run.
                 # Discarding it here could delay recovery until the next slot.
@@ -551,10 +558,11 @@ class _Refresh:
                 if key not in counted:
                     run["counts"][status] += 1
                     counted.add(key)
-                self._record(*self._owner_reasons(item), partial=status == "failed")
+                self._record(*(self._owner_reasons(item) or (["reading_failed"] if status == "failed" else [])),
+                             partial=status == "failed", item=key, stage="reading")
             else:
                 work["read_state"] = "deferred"
-                self._record(*self._owner_reasons(item), "reading_pending", partial=True)
+                self._record(*self._owner_reasons(item), "reading_pending", partial=True, item=key, stage="reading")
         run["reading_batch"] = None
         self._save()
         return True
@@ -585,7 +593,7 @@ class _Refresh:
             try:
                 recovered = read_status()
             except OwnerUnavailable as exc:
-                self._record(exc.reason)
+                self._record(exc.reason, error=exc)
             else:
                 if all(self._read_state(recovered.get(key, {})) is not None for key in keys):
                     return recovered
@@ -595,13 +603,13 @@ class _Refresh:
         try:
             return {**recovered, **items_of(self.ports.read(request, timeout=timeout()))}
         except OwnerUnavailable as exc:
-            self._record(exc.reason)
+            self._record(exc.reason, error=exc)
             try:
                 return {**recovered, **read_status()}
             except OwnerUnavailable as status_error:
                 if not recovered or time.monotonic() >= self.deadline:
                     raise
-                self._record(status_error.reason)
+                self._record(status_error.reason, error=status_error)
                 return recovered
 
     def _read_state(self, item: dict) -> str | None:
@@ -638,7 +646,7 @@ class _Refresh:
 
     def _supersede(self) -> None:
         run = self.run
-        self._record("settings_scope_changed", partial=True)
+        self._record("settings_scope_changed")
         run["state"] = "superseded"
         remaining = {key: work for key, work in run["work"].items() if work["acquire_state"] == "pending"
                      or work["acquire_state"] == "ready" and work.get("read_state") not in {
@@ -646,7 +654,7 @@ class _Refresh:
                      }}
         run["counts"]["pending"] = len(remaining) + len(run["suspended"])
         self.store.finish(run, {**run["suspended"], **remaining})
-        publish_refresh_observation(run)
+        publish_refresh_observation(run, jobs_dir=self.store.root.parent)
 
     def _finish(self) -> bool:
         run = self.run
@@ -657,7 +665,7 @@ class _Refresh:
         run["counts"]["pending"] = len(pending)
         run["state"] = "partial" if pending or run["partial"] else "completed"
         self.store.finish(run, {**run["suspended"], **pending})
-        publish_refresh_observation(run)
+        publish_refresh_observation(run, jobs_dir=self.store.root.parent)
         return False
 
 

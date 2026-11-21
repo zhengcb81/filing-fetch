@@ -125,6 +125,7 @@ class Harness:
             self.env.pop(name, None)
         self.env.update({
             "PYTHONUTF8": "1",
+            "RESEARCH_FEEDBACK_DIR": str(self.base / "native-observations"),
             "FF_SHORT_CALL_LOG": str(self.log),
             "FF_SHORT_SCENARIO": scenario,
             "FF_SHORT_EMPTY_CWD": str(self.empty_cwd),
@@ -373,7 +374,7 @@ def test_missing_limits_rejection_is_a_known_not_started_call(tmp_path):
     assert _single(rows, "download-receipt")["actual"] == "0"
 
 
-def test_corrupt_item_is_an_expected_rejection_with_known_zero_usage(tmp_path):
+def test_corrupt_item_surfaces_failed_import_with_known_zero_usage(tmp_path):
     harness = Harness(tmp_path, scenario="corrupt")
     out = tmp_path / "observations.jsonl"
     completed = harness.run(_v2_request("fetch_if_missing"), out=out)
@@ -394,7 +395,8 @@ def test_corrupt_item_is_an_expected_rejection_with_known_zero_usage(tmp_path):
     usage = _single(rows, "provider-usage")
     assert (usage["actual"], usage["disposition"]) == ("known", "expected")
     assert _single(rows, "download-receipt")["actual"] == "0"
-    assert {row["disposition"] for row in rows} == {"expected"}
+    assert _single(rows, "request-outcome")["disposition"] == "deviation"
+    assert all(r["disposition"] == "expected" for r in rows if r["check_id"] != "request-outcome")
 
 
 def test_v2_gap_keeps_missing_metering_unknown(tmp_path):
@@ -833,12 +835,16 @@ def test_unit_request_rejection_before_dispatch_is_known_zero():
 
 
 @pytest.mark.parametrize("out", [None, ""])
-def test_sidecar_is_off_without_a_path(out, monkeypatch):
+def test_missing_explicit_sidecar_uses_native_outbox(out, tmp_path, monkeypatch):
+    monkeypatch.setenv("RESEARCH_FEEDBACK_DIR", str(tmp_path))
     if out is None:
         monkeypatch.delenv(ff_short_feedback.OUT_ENV, raising=False)
     else:
         monkeypatch.setenv(ff_short_feedback.OUT_ENV, out)
-    assert ff_short_feedback.begin_observation() is None
+    observation = ff_short_feedback.begin_observation()
+    assert observation is not None
+    observation.finished(output={"status":"request_error"})
+    assert list(tmp_path.glob("feedback-*.ready"))
 
 
 @pytest.mark.parametrize("bad_intent", [[], {}])
@@ -856,7 +862,8 @@ def test_invalid_intent_type_keeps_native_error_and_terminal_observation(tmp_pat
     rows = _rows(out)
     _assert_protocol(rows)
     outcome = _single(rows, "request-outcome")
-    assert outcome["disposition"] == "expected"
+    assert outcome["disposition"] == "deviation"
+    assert outcome["issue_key"]
     assert outcome["actual"].split("/", 1)[0] == json.loads(baseline.stdout)["status"]
     assert harness.calls() == []
 

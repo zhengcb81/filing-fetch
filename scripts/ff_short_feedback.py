@@ -1,37 +1,19 @@
-"""Optional feedback observation for one short ``fetch_filing.py`` call.
+"""Project short filing outcomes, native usage evidence and named refusals.
 
-The durable ``ff-job/1`` lane owns its own sidecar (``ff_job_feedback``). This
-module is the short-request sibling: one CLI invocation appends a start row and
-its terminal rows to an exclusive UTF-8 JSONL chosen by the caller through
-``RESEARCH_FEEDBACK_OUT``. It never changes the business stdout/stderr, the exit
-code, or the request's provider work; a missing or broken sidecar is a
-diagnostic gap, never a business failure.
-
-Contract notes (``feedback-observation/1``, shared with the feedback-loop plan):
-
-* One writer per file. When a sidecar is enabled, the CLI reads the inherited
-  run context and removes the three variables from its own environment before
-  it launches any producer, so a child process cannot append to the same file.
-  Without a path nothing is owned and the environment is left untouched.
-* ``owner`` is always ``filing-fetch``. This lane never infers another repo's
-  responsibility from a company name, a command line or request wording.
-* A short call may only cite ``ff-short/1/<operation-id>``; ``ff-job/1`` is
-  reserved for the durable job owner.
-* Metering is observed separately from the business result and the download
-  receipt. Missing producer evidence stays ``unknown``; a proven no-dispatch
-  call accounts at zero; ``downloads=0`` alone never proves that no provider
-  was contacted.
+The native outbox and its optional caller-owned JSONL share an occurrence identity.
+External document providers inherit their own delivery configuration; short requests
+never refer to a durable ff-job/1 or invent spend from the download count.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import os
 from pathlib import Path
 import uuid
 from typing import Any
 
+from ff_runtime_feedback import ATTEMPT_ENV, OUT_ENV, RULE_CODES, RUN_ENV, cause_details, publish
 from ff_local_preparation_observation import validated_local_preparation_observation
 from ff_provider_cause import (
     validated_acquisition_failure,
@@ -42,9 +24,6 @@ from ff_provider_cause import (
 
 SCHEMA_VERSION = "feedback-observation/1"
 OWNER = "filing-fetch"
-OUT_ENV = "RESEARCH_FEEDBACK_OUT"
-RUN_ENV = "RESEARCH_FEEDBACK_RUN_ID"
-ATTEMPT_ENV = "RESEARCH_FEEDBACK_ATTEMPT_ID"
 
 # The start row names its terminal check so a reader pairs the two without
 # guessing which check ends this scope.
@@ -95,21 +74,23 @@ class _Facts:
 class ShortObservation:
     """Append-only writer for one process-exclusive sidecar."""
 
-    def __init__(self, path: Path, *, run_id: str, attempt_id: str, operation_id: str) -> None:
+    def __init__(self, path: Path | None, *, run_id: str, attempt_id: str, operation_id: str) -> None:
         self._path = path
+        self._start_rows: list[dict] = []
         self._run_id = run_id
         self._attempt_id = attempt_id
         self._operation_id = operation_id
 
     def started(self) -> None:
         """Write the start row before any business work runs."""
-        self._append([_base_row(self._identity()) | {
+        self._start_rows = [_base_row(self._identity()) | {
             "check_id": START_CHECK,
             "expected": "started",
             "actual": "started",
             "disposition": "expected",
             "terminal_check_id": OUTCOME_CHECK,
-        }])
+        }]
+        publish(self._start_rows, file=self._path)
 
     def finished(
         self,
@@ -126,7 +107,9 @@ class ShortObservation:
                 output=output, error=error, stats=stats, request=request,
                 allow_download=allow_download, identity=self._identity(),
             )
-            self._append(rows)
+            reason = rows[0]["actual"]
+            detail = cause_details(error, reason=reason) if error is not None else None
+            publish(rows, file=self._path, context=self._start_rows, detail=detail)
         except Exception:  # noqa: BLE001 - diagnostics must never change the result
             return
 
@@ -140,41 +123,16 @@ class ShortObservation:
             "evidence_ref": f"ff-short/1/{self._operation_id}",
         }
 
-    def _append(self, rows: list[dict[str, Any]]) -> None:
-        if not rows:
-            return
-        try:
-            payload = "".join(
-                json.dumps(row, ensure_ascii=True) + "\n" for row in rows
-            ).encode("ascii")
-            with self._path.open("ab") as stream:
-                stream.write(payload)
-                stream.flush()
-                os.fsync(stream.fileno())
-        except Exception:  # noqa: BLE001 - an optional sidecar never fails business
-            # The caller owns the path. An unwritable sidecar is a diagnostic
-            # gap; the business envelope, stderr and exit code stay untouched.
-            pass
-
-
-def begin_observation() -> ShortObservation | None:
-    """Start one observation when the caller supplied an exclusive path.
-
-    When a path is present, the inherited run/attempt labels are read first and
-    the three variables are removed from this process so every producer
-    launched later inherits a clean environment (one writer per sidecar).
-    Without a path this process owns nothing, so the environment is untouched.
-    """
+def begin_observation() -> ShortObservation:
+    """Claim the parent sidecar if supplied; standalone execution uses the native outbox."""
     path = os.environ.get(OUT_ENV)
-    if not path:
-        return None
     run_id = (os.environ.get(RUN_ENV) or "").strip()
     attempt_id = (os.environ.get(ATTEMPT_ENV) or "").strip()
     for name in (OUT_ENV, RUN_ENV, ATTEMPT_ENV):
         os.environ.pop(name, None)
     operation_id = uuid.uuid4().hex
     observation = ShortObservation(
-        Path(path),
+        Path(path) if path else None,
         run_id=run_id or operation_id,
         attempt_id=attempt_id or "1",
         operation_id=operation_id,
@@ -201,8 +159,18 @@ def observation_rows(
     base = _base_row(identity)
 
     token = _outcome_token(facts)
-    rows = [_check(base, OUTCOME_CHECK, "terminal", token,
-                   "unknown" if token == "unknown" else "expected")]
+    reason = facts.reason or _named_failure_code(facts)
+    status = facts.status
+    if status == "unknown":
+        disposition = "unknown"
+    elif reason in RULE_CODES or status in {"capture_ready", "source_candidate", "gap", "not_found", "ambiguous"}:
+        disposition = "expected"
+    else:
+        disposition = "deviation"
+    metadata = {"refusal_code": reason} if reason in RULE_CODES or (status == "request_error" and facts.reason) else {}
+    if disposition == "deviation":
+        metadata["issue_key"] = reason or status
+    rows = [_check(base, OUTCOME_CHECK, "terminal", token, disposition, **metadata)]
 
     start_expected = _start_expectation(intent, facts)
     if start_expected is not None:

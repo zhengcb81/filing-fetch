@@ -303,6 +303,8 @@ class JobStore:
                 if reason is not None:
                     current = self._mark_unknown(current, reason)
                     _atomic_write_json(self._job_path(owner_job_id), current)
+                    from ff_job_feedback import publish_job_observation
+                    publish_job_observation(current, started=False, jobs_dir=self.jobs_dir)
                     return current, True
                 return current, False
         except FFJobError:

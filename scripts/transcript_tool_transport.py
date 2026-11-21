@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+from ff_runtime_feedback import owner_child_environment
 from pathlib import Path
 import subprocess
 import sys
@@ -267,7 +268,7 @@ class EarningsTranscriptsTransport:
         return known if known.exists() else None
 
     def _et_environment(self) -> tuple[dict[str, str], str | None]:
-        env = dict(os.environ)
+        env = owner_child_environment()
         credential_file = self._credential_file()
         env.pop("FMP_API_KEY_FILE", None)
         if credential_file is not None:

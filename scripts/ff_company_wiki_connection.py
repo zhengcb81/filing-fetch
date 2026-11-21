@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from ff_runtime_feedback import owner_child_environment
 from pathlib import Path
 import sys
 from types import MappingProxyType
@@ -83,7 +84,7 @@ def acquisition_arguments(endpoint: Path | WikiConnection) -> list[str]:
 
 
 def connection_environment(endpoint: Path | WikiConnection) -> dict[str, str]:
-    environment = dict(os.environ)
+    environment = owner_child_environment()
     environment["PYTHONUTF8"] = "1"
     if not isinstance(endpoint, WikiConnection):
         src = str(endpoint / "src")

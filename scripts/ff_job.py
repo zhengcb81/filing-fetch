@@ -42,9 +42,9 @@ from ff_job_contracts import (
 )
 from ff_job_runner import act, run_job
 from ff_job_store import JobStore
+from ff_runtime_feedback import DEFAULT_JOBS_DIR, cli_failure, parse_arguments
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_JOBS_DIR = SKILL_ROOT / ".ff_jobs"
 
 
 def _store(args: argparse.Namespace) -> JobStore:
@@ -125,7 +125,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
 def _cmd_get_status(args: argparse.Namespace) -> int:
     validate_owner_job_id(args.owner_job_id)
     store = _store(args)
-    record, _ = store.load_checked(args.owner_job_id, fix=True)
+    record, changed = store.load_checked(args.owner_job_id, fix=True)
+    if not changed and record.get("attempts"):
+        from ff_job_feedback import publish_job_observation
+        publish_job_observation(record, started=False, jobs_dir=store.jobs_dir, recover_only=True)
     _emit(_view_payload("get_status", record), pretty=args.pretty)
     return 0
 
@@ -288,17 +291,20 @@ def _add_list_parser(subparsers) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parse_arguments(parser, argv, "ff-job")
     if getattr(args, "timeout_seconds", None) is not None:
         if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
+            cli_failure(args.command, "invalid_timeout", jobs_dir=args.jobs_dir, no_dispatch=True)
             print("error: timeout-seconds must be positive and finite", file=sys.stderr)
             return 2
     try:
         return args.handler(args)
     except FFJobError as exc:
+        cli_failure(args.command, exc.code, exc, jobs_dir=args.jobs_dir)
         _emit(_error_payload(args.command, exc), pretty=args.pretty)
         return 2
     except Exception as exc:  # noqa: BLE001 - fatal exits 1 per house convention
+        cli_failure(args.command, "fatal", exc, jobs_dir=args.jobs_dir)
         _emit({
             "schema_version": FF_JOB_SCHEMA_VERSION,
             "command": getattr(args, "command", "unknown"),

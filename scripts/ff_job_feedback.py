@@ -10,69 +10,86 @@ import re
 import sys
 import tempfile
 
+from ff_runtime_feedback import DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, identity, publish, terminal_was_offered
+
 OUTCOME = "job-outcome"
 
 
-def _append_observations(path: str, rows: list[dict]) -> None:
-    try:
-        with Path(path).open("ab") as stream:
-            stream.write(b"".join((json.dumps(row, ensure_ascii=True) + "\n").encode("ascii") for row in rows))
-            stream.flush()
-            os.fsync(stream.fileno())
-    except OSError:
-        # Diagnostics remain optional; the native owner record is authoritative.
-        pass
-
-
-def publish_refresh_observation(run: dict) -> None:
-    path = os.environ.get("RESEARCH_FEEDBACK_OUT")
-    if not path:
-        return
+def publish_refresh_observation(run: dict, *, jobs_dir=None) -> None:
     run_id = run["run_id"]
-    _append_observations(path, [{
-        "schema_version": "feedback-observation/1",
-        "owner": "filing-fetch",
-        "run_id": os.environ.get("RESEARCH_FEEDBACK_RUN_ID") or run_id,
-        "attempt_id": os.environ.get("RESEARCH_FEEDBACK_ATTEMPT_ID") or "scheduled",
-        "step_id": run_id,
-        "evidence_ref": f"ff-scheduled-refresh/1/{run_id}",
-        "version": "ff-scheduled-refresh/1",
-        "check_id": "refresh-outcome",
-        "expected": "completed",
-        "actual": run["state"],
-        "disposition": "deviation" if run["state"] == "partial" else "expected",
-    }])
+    base = identity(run_id, "scheduled", run_id, f"ff-scheduled-refresh/1/{run_id}", "ff-scheduled-refresh/1")
+    outcome = run["state"]
+    rows = [dict(base, check_id="refresh-outcome", expected="completed", actual=outcome,
+                 disposition="deviation" if outcome == "partial" else "expected")]
+    # A failed business step and missing usage are independent dimensions.
+    usage = run.get("usage", {})
+    snapshots = [value for key in ("reading_runs", "acquisition_jobs")
+                 for value in usage.get(key, {}).values()]
+    if snapshots or outcome == "partial":
+        known = (snapshots and all(item.get("cost_state") in {"settled", "known", "not_applicable"}
+                                   for item in snapshots) and not usage.get("metadata_usage_incomplete"))
+        rows.append(dict(base, check_id="refresh-usage", expected="accounted", actual="known" if known else "unknown",
+                         disposition="expected" if known else "unknown"))
+    publish(rows, jobs_dir=jobs_dir, file=os.environ.get(OUT_ENV))
 
 
-def publish_job_observation(record: dict, *, started: bool) -> None:
-    file = os.environ.get("RESEARCH_FEEDBACK_OUT")
-    if not file:
+def publish_refresh_failure(run, *, jobs_dir, reason, reference, stage, error=None):
+    from ff_runtime_feedback import cause_details
+
+    reason = reason if isinstance(reason, str) and re.fullmatch(r"[a-z][a-z0-9_.-]*", reason) else "owner_failure"
+    key = _digest([stage, reference, reason])
+    saved = run.setdefault("failures", {})
+    if key in saved:
         return
-    job_id, attempt = record["owner_job_id"], record["attempts"]
-    base = {
-        "schema_version": "feedback-observation/1",
-        "owner": "filing-fetch",
-        "run_id": os.environ.get("RESEARCH_FEEDBACK_RUN_ID") or job_id,
-        "attempt_id": os.environ.get("RESEARCH_FEEDBACK_ATTEMPT_ID") or str(attempt),
-        "step_id": f"{job_id}/{attempt}",
-        "evidence_ref": f"ff-job/1/{job_id}",
-        "version": "ff-job/1",
-    }
+    saved[key] = {"stage": stage, "reason": reason, "reference_hash": _digest(reference)}
+    rid = run["run_id"]
+    base = identity(rid, "scheduled", f"{rid}/{key}", f"ff-scheduled-refresh/1/{rid}", "ff-scheduled-refresh/1")
+    rule = reason in RULE_CODES
+    row = dict(base, check_id="refresh-item-outcome", expected="completed", actual=reason,
+               issue_key=reason, disposition="expected" if rule else "deviation")
+    if rule:
+        row["refusal_code"] = reason
+    publish([row], jobs_dir=jobs_dir, file=os.environ.get(OUT_ENV),
+            detail={**cause_details(error, reason=reason), **saved[key]})
+
+
+def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recover_only=False) -> None:
+    jid, attempt = record["owner_job_id"], record["attempts"]
+    base = identity(jid, attempt, f"{jid}/{attempt}", f"ff-job/1/{jid}", "ff-job/1")
+    # Bind the native original even if a new, independently labelled cold process discovers the loss.
+    base.update(record.get("feedback_identity", {}))
+    if recover_only and (record["status"] not in {"failed", "unknown"} or terminal_was_offered(base, jobs_dir)):
+        return
+    start = [dict(base, check_id="action-started", expected="started", actual="started",
+                  disposition="expected", terminal_check_id=OUTCOME)]
+    file = None if recover_only else os.environ.get(OUT_ENV)
     if started:
-        rows = [dict(base, check_id="action-started", expected="started", actual="started",
-                     disposition="expected", terminal_check_id=OUTCOME)]
-    else:
-        outcome = record["status"] if record["status_known"] else "unknown"
-        cost = record["cost_state"]
-        rows = [
-            dict(base, check_id=OUTCOME, expected="terminal", actual=outcome,
-                 disposition="unknown" if outcome == "unknown" else "expected"),
-            dict(base, check_id="job-usage", expected="accounted", actual=cost,
-                 disposition="unknown" if cost == "unknown" else "expected"),
-        ]
-    # One caller supplies one exclusive file. When the process dies after
-    # starting, the original reference has already reached the sidecar.
-    _append_observations(file, rows)
+        publish(start, file=file, jobs_dir=jobs_dir)
+        return
+    outcome = record["status"] if record["status_known"] else "unknown"
+    cost = record["cost_state"]
+    error = record.get("error") or {}
+    code = error.get("code")
+    cause = error.get("upstream_cause") or {}
+    diagnostic = record.get("failure_detail") or {}
+    rule = diagnostic.get("owner_reason") or cause.get("code") or code
+    refusal = rule if rule in RULE_CODES else None
+    disposition = "unknown" if outcome == "unknown" else "deviation" if outcome == "failed" else "expected"
+    business = dict(base, check_id=OUTCOME, expected="terminal", actual=outcome, disposition=disposition)
+    rows = [business, dict(base, check_id="job-usage", expected="accounted", actual=cost,
+                          disposition="unknown" if cost == "unknown" else "expected")]
+    if code:
+        if outcome == "unknown":
+            business = dict(base, check_id="job-failure", expected="completed", actual=code, disposition="deviation")
+            rows.append(business)
+        business["issue_key"] = code
+        if refusal:
+            business.update(disposition="expected", refusal_code=refusal)
+    result_status = (record.get("result") or {}).get("status")
+    if not code and result_status in {"unavailable", "partial", "config_error", "request_error", "fatal", "upstream_error"}:
+        rows.append(dict(base, check_id="job-failure", expected="completed", actual=result_status,
+                         disposition="deviation", issue_key=result_status))
+    publish(rows, file=file, jobs_dir=jobs_dir, context=start, detail=record.get("failure_detail"))
 
 
 def _digest(value) -> str:
@@ -195,6 +212,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Filing-fetch owner feedback receipts")
     parser.add_argument("--reports-dir", type=Path)
     sub = parser.add_subparsers(dest="command", required=True)
+    diagnostic = sub.add_parser("get-diagnostic", help="read the original sanitized exception and source identity")
+    diagnostic.add_argument("reference")
+    diagnostic.add_argument("--observations-dir", type=Path)
+    diagnostic.add_argument("--jobs-dir", type=Path, default=DEFAULT_JOBS_DIR)
     sub.add_parser("report")
     sub.add_parser("get-report").add_argument("action_id")
     lookup = sub.add_parser("reconcile", help="query the original job and recorded usage without reacquisition")
@@ -202,6 +223,24 @@ def main() -> int:
     lookup.add_argument("--config", type=Path, help="owner configuration for catalog-only recovery of a lost job")
     lookup.add_argument("--timeout-seconds", type=float, default=10.0)
     args = parser.parse_args()
+    if args.command == "get-diagnostic":
+        match = re.fullmatch(r"ff-diagnostic/1/(feedback-[a-f0-9]{32})", args.reference)
+        if not match:
+            parser.error("invalid diagnostic reference")
+        root = args.observations_dir or (Path(os.environ[DIR_ENV]) if os.environ.get(DIR_ENV) else None)
+        for directory in dict.fromkeys([root, args.jobs_dir / "observations"]):
+            if directory is None:
+                continue
+            try:
+                value = json.loads((directory / (match[1] + ".cause.json")).read_bytes())
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError):
+                break
+            print(json.dumps(value, ensure_ascii=True))
+            return 0
+        print(json.dumps({"status": "unavailable"}))
+        return 1
     if args.command == "reconcile":
         if not math.isfinite(args.timeout_seconds) or args.timeout_seconds <= 0:
             parser.error("reconcile timeout must be finite and positive")
