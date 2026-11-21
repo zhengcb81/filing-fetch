@@ -76,6 +76,8 @@ def _limits(value: object, defaults: dict) -> dict:
     _positive(result["timeout_seconds"], "timeout_seconds", integer=False)
     if "max_requests" in result:
         _positive(result["max_requests"], "max_requests")
+    if "max_sources" in result:
+        _positive(result["max_sources"], "max_sources")
     if "max_cost_usd" in defaults:
         native = {field: result[field] for field in ("max_bytes", "timeout_seconds", "max_cost_usd")}
         try:
@@ -194,11 +196,15 @@ def _read_loopback(origin: str, path: str, query: dict, timeout: float) -> dict:
 def _listing(entity_id: str, row: dict) -> dict | None:
     market, listing_id, ticker = (row.get(name) for name in ("market", "listing_id", "ticker"))
     exchange = row.get("exchange_raw") or row.get("exchange") or row.get("exchange_mic")
+    issuer_link_id = row.get("issuer_link_id")
     if (row.get("entity_id", entity_id) != entity_id or market not in ("CN", "HK", "US")
             or any(not isinstance(value, str) or not value.strip() for value in (listing_id, ticker))):
         return None
-    return {"entity_id": entity_id, "listing_id": listing_id, "market": market, "ticker": ticker,
-            **({"exchange": exchange} if isinstance(exchange, str) and exchange else {})}
+    scope = {"entity_id": entity_id, "listing_id": listing_id, "market": market, "ticker": ticker}
+    for name, value in (("exchange", exchange), ("issuer_link_id", issuer_link_id)):
+        if isinstance(value, str) and value.strip():
+            scope[name] = value
+    return scope
 
 
 class OwnerPorts:
@@ -308,12 +314,12 @@ class OwnerPorts:
     def _cwp(self, operation: str, schema: str, request: dict, timeout: float) -> dict:
         try:
             endpoint = load_connection_root(self.config_path, skill_root=Path(__file__).resolve().parents[1])
-            stdout, _, code = run_bounded_json(
+            stdout, stderr, code = run_bounded_json(
                 command_for(endpoint, operation), timeout_seconds=timeout, cwd=str(connection_cwd(endpoint)),
                 input_bytes=json.dumps(request, ensure_ascii=False).encode("utf-8"),
                 env=connection_environment(endpoint), allow_nonzero_exit=True,
             )
-            result = json.loads(stdout)
+            result = json.loads(stdout if code == 0 or stdout.strip() else stderr)
         except (TransportError, FilingFetchError, OSError, UnicodeError, ValueError) as exc:
             raise OwnerUnavailable(f"{operation}_unavailable") from exc
         if not isinstance(result, dict):
@@ -344,8 +350,11 @@ class OwnerPorts:
         return result
 
     def backlog(self, request: dict, *, timeout: float) -> dict:
-        return self._cwp("incremental_backlog", "cwp-incremental-backlog/1",
-                         request, timeout)
+        result = self._cwp("incremental_backlog", "cwp-incremental-backlog/1", request, timeout)
+        cursor = result.get("next_cursor")
+        if not isinstance(result.get("sources"), list) or (cursor is not None and not isinstance(cursor, str)):
+            raise OwnerUnavailable("incremental_backlog_incompatible")
+        return result
 
     def read(self, request: dict, *, timeout: float) -> dict:
         result = self._cwp("incremental_read", "cwp-incremental-read/1", request, timeout)

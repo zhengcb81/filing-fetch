@@ -53,6 +53,8 @@ SUPPORTED_COMPANY_WIKI_CONTRACTS = {
     "config_schema_version": COMPANY_WIKI_CONFIG_SCHEMA_VERSION,
 }
 
+CWP_TRANSCRIPT_DOCUMENT_KIND = "investor_call_transcript"
+
 
 # ---------------------------------------------------------------------------
 # Errors

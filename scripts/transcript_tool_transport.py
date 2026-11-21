@@ -17,7 +17,7 @@ from typing import Any
 from et_v2_contract import ET_NOT_FOUND_DIAGNOSTICS
 from ff_configuration import expand_config_path, read_json_object
 from ff_company_wiki_connection import WikiEndpoint, command_for, connection_cwd, connection_environment
-from filing_contracts import FilingFetchError, _validate_date
+from filing_contracts import CWP_TRANSCRIPT_DOCUMENT_KIND, FilingFetchError, _validate_date
 from ff_source_ref import validate_source_ref
 from transcript_reuse_selection import (
     LocalQueryContractError,
@@ -203,7 +203,7 @@ class EarningsTranscriptsTransport:
         # separately (FMP only) and is never written back into this request.
         return {
             "entity": identity["canonical_name"],
-            "document_kind": "investor_call_transcript",
+            "document_kind": CWP_TRANSCRIPT_DOCUMENT_KIND,
             "as_of_date": as_of_date,
             "market": identity["market"],
             "security_id": identity["security_id"],
@@ -844,7 +844,7 @@ class EarningsTranscriptsTransport:
             "entity": request["entity"],
             "title": result.get("title") or provider_document_id,
             "source_url": source_url,
-            "document_kind": "investor_call_transcript",
+            "document_kind": CWP_TRANSCRIPT_DOCUMENT_KIND,
             "filing_date": result.get("publication_date"),
             "fiscal_year": request["fiscal_year"],
             "form_type": None,

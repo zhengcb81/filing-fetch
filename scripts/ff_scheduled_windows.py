@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 from xml.etree import ElementTree as xml
+from xml.parsers.expat import errors as xml_errors
 
 from ff_refresh_policy import utc_text
 from ff_refresh_store import RefreshStore
@@ -79,7 +80,24 @@ def _query_task(task_name: str) -> xml.Element | None:
     )
     if result.returncode != 0:
         return None
-    return xml.fromstring(result.stdout)
+    try:
+        return xml.fromstring(result.stdout)
+    except xml.ParseError as exc:
+        if exc.code != xml_errors.codes[xml_errors.XML_ERROR_INCORRECT_ENCODING]:
+            raise
+    # Redirected schtasks may write OEM console bytes while leaving the
+    # task definition's UTF-16 declaration intact.
+    return xml.fromstring(result.stdout.decode("oem"))
+
+
+def _change_task(parser: argparse.ArgumentParser, arguments: list[str], *, timeout: float) -> None:
+    result = subprocess.run(
+        ["schtasks.exe", *arguments], stdin=subprocess.DEVNULL, capture_output=True,
+        timeout=timeout, creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    if result.returncode:
+        message = (result.stderr or result.stdout).decode("oem", errors="replace").strip()
+        parser.error(f"schtasks {arguments[0]} failed (exit {result.returncode}) {message}".rstrip())
 
 
 def _find(task: xml.Element, field: str) -> str | None:
@@ -146,8 +164,7 @@ def run(argv=None) -> int:
     if args.action == "remove":
         if existing is None:
             parser.error("scheduled task state could not be confirmed; no registration receipt changed")
-        subprocess.run(["schtasks.exe", "/Delete", "/TN", task_name, "/F"], check=True,
-                       timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
+        _change_task(parser, ["/Delete", "/TN", task_name, "/F"], timeout=15)
     else:
         target = xml.fromstring(definition)
         action = "t:Actions/t:Exec/"
@@ -161,12 +178,10 @@ def run(argv=None) -> int:
             with tempfile.TemporaryDirectory(prefix="sr-task-") as directory:
                 path = Path(directory) / "task.xml"
                 path.write_text('<?xml version="1.0" encoding="UTF-16"?>\n' + definition, encoding="utf-16")
-                subprocess.run(
-                    ["schtasks.exe", "/Create", "/TN", task_name, "/XML", str(path),
-                     *(["/F"] if existing is not None else [])],
-                    stdin=subprocess.DEVNULL, check=True, timeout=20,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
-                )
+                arguments = ["/Create", "/TN", task_name, "/XML", str(path)]
+                if existing is not None:
+                    arguments.append("/F")
+                _change_task(parser, arguments, timeout=20)
             observed = _query_task(task_name)
             if observed is None or not _registered_task(observed, task_name, name, sid):
                 parser.error("newly created task could not be confirmed")

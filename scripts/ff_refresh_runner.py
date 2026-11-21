@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 import time
 from typing import Any, Protocol
 
@@ -11,7 +12,7 @@ from ff_refresh_owners import Deployment, OwnerUnavailable, stable_key
 from ff_refresh_policy import due_slot, slot_consumed, utc_text, work_scope
 from ff_refresh_store import RefreshStore
 from ff_source_ref import validate_source_ref
-from filing_contracts import FilingFetchError
+from filing_contracts import CWP_TRANSCRIPT_DOCUMENT_KIND, FilingFetchError
 
 
 class Ports(Protocol):
@@ -42,6 +43,20 @@ def _reference_key(ref: dict) -> str:
 
 def _member_scope(identity: dict) -> tuple[str, str]:
     return identity["entity_id"], identity["listing_id"]
+
+
+def _filing_kinds(settings: dict) -> list[str]:
+    return [
+        kind for kind in settings["document_kinds"]
+        if kind not in (CWP_TRANSCRIPT_DOCUMENT_KIND, "earnings_transcript")
+    ]
+
+
+def _reading_kinds(settings: dict) -> list[str]:
+    kinds = _filing_kinds(settings)
+    if settings["transcripts_enabled"]:
+        kinds.append(CWP_TRANSCRIPT_DOCUMENT_KIND)
+    return kinds
 
 
 def _period(candidate: dict) -> tuple[int | None, int | None]:
@@ -80,7 +95,39 @@ class _Refresh:
         self.run["partial"] |= partial
 
     def _owner_reasons(self, result: dict) -> list[str]:
-        return [str(value) for value in result.get("reason_codes", []) if isinstance(value, str)]
+        reasons = result.get("reason_codes")
+        return [value for value in reasons if isinstance(value, str)] if isinstance(reasons, list) else []
+
+    def _observe_usage(self, kind: str, owner_id: str, reported: object) -> None:
+        if not isinstance(reported, dict):
+            return
+        counts = ("model_requests", "model_attempts", "tokens", "estimated_micro_usd",
+                  "unknown_reservations", "unsettled_reservations")
+        snapshot: dict[str, int | str] = {
+            name: reported[name] for name in counts
+            if type(reported.get(name)) is int and reported[name] >= 0
+        }
+        state = reported.get("cost_state")
+        if state in ("known", "settled", "unknown", "not_applicable"):
+            snapshot["cost_state"] = state
+        amount = reported.get("cost_usd")
+        if isinstance(amount, str):
+            try:
+                dollars = Decimal(amount)
+            except InvalidOperation:
+                pass
+            else:
+                if dollars.is_finite() and dollars >= 0:
+                    snapshot["cost_usd"] = amount
+        if snapshot:
+            usage = self.run["usage"]
+            # Native values are cumulative snapshots of the same owner run/job.
+            usage.setdefault(kind, {}).setdefault(owner_id, {}).update(snapshot)
+            usage["owner_cost_unknown"] = sum(
+                value.get("cost_state") == "unknown"
+                for group in ("acquisition_jobs", "reading_runs")
+                for value in usage.get(group, {}).values()
+            )
 
     def _save(self, **kwargs) -> None:
         self.run["updated_at"] = utc_text(self.now)
@@ -169,7 +216,7 @@ class _Refresh:
         settings = self.run["settings"]
         if work["kind"] == "transcript.acquire":
             return settings["transcripts_enabled"]
-        return set(work["document_kinds"]) <= set(settings["document_kinds"])
+        return set(work["document_kinds"]) <= set(_reading_kinds(settings))
 
     def _discover(self) -> bool:
         run = self.run
@@ -184,9 +231,7 @@ class _Refresh:
         self.pages_left -= 1
         member = run["members"][run["discovery_index"]]
         settings = run["settings"]
-        kinds = settings["document_kinds"].copy()
-        if settings["transcripts_enabled"] and "earnings_transcript" not in kinds:
-            kinds.append("earnings_transcript")
+        kinds = _filing_kinds(settings)
         if not kinds:
             run["discovery_index"] += 1
             self._save()
@@ -278,13 +323,11 @@ class _Refresh:
         year, quarter = _period(candidate)
         ref = _reference(candidate.get("source_ref"))
         scope = [*_member_scope(identity), identity["market"]]
-        if kind != "earnings_transcript":
-            request = self._filing_request(identity, candidate, year, quarter)
-            key = stable_key(["filing", *scope, provider, accession, candidate.get("revision_id")])
-            self._queue(key, "filing.acquire", request, ref, _member_scope(identity), [kind])
-        call_period = kind in ("earnings_transcript", "quarterly_report") or (
-            candidate.get("transcript_period_verified") is True
-        )
+        request = self._filing_request(identity, candidate, year, quarter)
+        revision = candidate.get("revision_id") if ref is not None else None
+        key = stable_key(["filing", *scope, provider, accession, revision])
+        self._queue(key, "filing.acquire", request, ref, _member_scope(identity), [kind])
+        call_period = kind == "quarterly_report" or candidate.get("transcript_period_verified") is True
         if (self.run["settings"]["transcripts_enabled"] and call_period
                 and year is not None and quarter in (1, 2, 3, 4)):
             key = stable_key(["transcript", *scope, year, quarter])
@@ -293,10 +336,7 @@ class _Refresh:
                 "as_of_date": self.run["as_of_date"], "fiscal_year": year, "fiscal_quarter": quarter,
                 "intent": "fetch_if_missing", "acquisition_limits": self.options.acquisition,
             }
-            self._queue(key, "transcript.acquire", request, ref if kind == "earnings_transcript" else None,
-                        _member_scope(identity), [])
-        elif kind == "earnings_transcript":
-            self._record("exact_fy_q_required", partial=True)
+            self._queue(key, "transcript.acquire", request, None, _member_scope(identity), [])
         return True
 
     def _filing_request(self, identity: dict, candidate: dict, year: int | None,
@@ -319,19 +359,28 @@ class _Refresh:
     def _queue(self, key: str, kind: str | None, request: dict | None, ref: dict | None,
                scope: tuple[str, str], document_kinds: list[str]) -> None:
         work = self.run["work"]
-        if key in work:
+        existing = work.get(key)
+        if existing is not None:
+            # A later discovered verified ref can satisfy unloaded work. An
+            # already attempted acquisition still reconciles its native job.
+            if ref is not None and not existing.get("acquire_run") and existing["acquire_state"] == "pending":
+                existing.update(source_ref=ref, acquire_state="ready")
+                self.run["counts"]["reused"] += 1
             return
         work[key] = {"kind": kind, "request": request, "source_ref": ref, "listing_scope": list(scope),
                      "document_kinds": document_kinds,
                      "acquire_state": "ready" if ref is not None else "pending"}
         if kind is not None:
             self.run["counts"]["candidates"] += 1
-            if ref is not None:
-                self.run["counts"]["reused"] += 1
+        if ref is not None:
+            self.run["counts"]["reused"] += 1
 
     def _backlog(self) -> bool:
         run = self.run
         if run["backlog_index"] == len(run["members"]):
+            return self._advance("acquiring")
+        kinds = _reading_kinds(run["settings"])
+        if not kinds:
             return self._advance("acquiring")
         if self.pages_left == 0:
             return False
@@ -342,13 +391,14 @@ class _Refresh:
             result = self.ports.backlog({
                 "schema_version": "cwp-incremental-backlog-request/1",
                 "identity": member, "reading_level": run["settings"]["reading_level"],
-                "document_kinds": run["settings"]["document_kinds"],
+                "document_kinds": kinds,
                 "since_date": (date.fromisoformat(run["as_of_date"])
                                - timedelta(days=self.options.lookback_days)).isoformat(),
                 "as_of_date": run["as_of_date"], "cursor": cursor,
                 "limits": self.options.reading,
             }, timeout=self._timeout(self.options.reading["timeout_seconds"]))
-            self._record(*self._owner_reasons(result))
+            incomplete = result.get("coverage") in ("partial", "unavailable")
+            self._record(*self._owner_reasons(result), partial=incomplete)
             refs_in_work = {_reference_key(work["source_ref"]) for work in run["work"].values()
                             if work["source_ref"] is not None}
             for value in result["sources"]:
@@ -356,8 +406,7 @@ class _Refresh:
                 if ref is None:
                     self._record("backlog_source_unverified", partial=True)
                 elif _reference_key(ref) not in refs_in_work:
-                    self._queue("backlog-" + _reference_key(ref), None, None, ref, _member_scope(member),
-                                run["settings"]["document_kinds"])
+                    self._queue("backlog-" + _reference_key(ref), None, None, ref, _member_scope(member), kinds)
             next_cursor = result.get("next_cursor")
         except OwnerUnavailable as exc:
             self._record(exc.reason, partial=True)
@@ -399,8 +448,11 @@ class _Refresh:
             return True
         work["owner_job_id"] = job["owner_job_id"]
         work["acquire_run"] = run["run_id"]
-        if job.get("cost_state") == "unknown":
-            run["usage"]["owner_cost_unknown"] += 1
+        cost = job.get("cost")
+        self._observe_usage("acquisition_jobs", job["owner_job_id"], {
+            "cost_state": job.get("cost_state"),
+            "cost_usd": cost.get("value") if isinstance(cost, dict) else None,
+        })
         result = job.get("result") or {}
         ref = _reference(result.get("source_ref"))
         if job["status"] == "succeeded" and ref is not None:
@@ -428,7 +480,7 @@ class _Refresh:
             return False
         saved_groups = {
             _reference_key(work["source_ref"]): work["reading_batch"]
-            for work in eligible if work.get("reading_batch") is not None
+            for work in [*run["suspended"].values(), *eligible] if work.get("reading_batch") is not None
         }
         for work in eligible:
             if work.get("reading_batch") is None:
@@ -459,8 +511,11 @@ class _Refresh:
                 response = self.ports.read_status(
                     request["run_id"], timeout=self._timeout(self.options.reading["timeout_seconds"]),
                 )
+            self._observe_usage("reading_runs", request["run_id"], response.get("usage"))
             items = {}
             for item in response["items"]:
+                if not isinstance(item, dict):
+                    continue
                 ref = _reference(item.get("source_ref"))
                 if ref is not None and _reference_key(ref) in keys:
                     items[_reference_key(ref)] = item
@@ -492,14 +547,16 @@ class _Refresh:
     def _new_read_batch(self, eligible: list[dict]) -> dict:
         pending = [work for work in eligible if work.get("reading_batch") is None]
         unique = {_reference_key(work["source_ref"]): work["source_ref"] for work in pending}
-        sources = list(unique.values())[:self.reads_left]
+        max_sources = min(self.reads_left, self.options.reading.get("max_sources", self.reads_left))
+        sources = list(unique.values())[:max_sources]
         keys = {_reference_key(ref) for ref in sources}
         level = self.run["settings"]["reading_level"]
         return {
             "request": {
                 "schema_version": "cwp-incremental-read-request/1",
                 "run_id": "sr-read-" + stable_key([self.run["run_id"], level, sources])[:24],
-                "reading_level": level, "sources": sources, "limits": self.options.reading,
+                "reading_level": level, "sources": sources,
+                "limits": {**self.options.reading, "max_sources": len(sources)},
             },
             "listing_scopes": [work["listing_scope"] for work in pending if _reference_key(work["source_ref"]) in keys],
             "scope": work_scope(self.run["settings"]),

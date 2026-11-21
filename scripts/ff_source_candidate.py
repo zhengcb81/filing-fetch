@@ -210,7 +210,7 @@ def validate_source_candidate(
         raise FilingFetchError(
             f"company-wiki {context} fiscal_year mismatch", code="upstream_error"
         )
-    for field in ("form_type", "fiscal_period"):
+    for field in ("form_type", "fiscal_period", "provider", "provider_document_id"):
         expected = request.get(field)
         if expected is not None and handle.get(field) != expected:
             raise FilingFetchError(

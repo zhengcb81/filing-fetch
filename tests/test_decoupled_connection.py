@@ -34,6 +34,19 @@ def test_missing_operation_never_falls_back_to_an_unconfigured_producer(tmp_path
         command_for(endpoint, "transcript_import")
 
 
+def test_discovery_uses_the_configured_provider_routes_without_download_intent(tmp_path):
+    from ff_company_wiki_connection import WikiConnection
+
+    config = tmp_path / "custom acquisition.yaml"
+    endpoint = WikiConnection(tmp_path, {"catalog": ("catalog-command",)}, config)
+    assert command_for(endpoint, "incremental_discover") == [
+        "catalog-command", "discover-incremental", "--request-stdin", "--acquisition-config", str(config),
+    ]
+    assert command_for(endpoint, "incremental_read") == ["catalog-command", "read-incremental", "--request-stdin"]
+    explicit = WikiConnection(tmp_path, {"incremental_discover": ("explicit-owner",)}, config)
+    assert command_for(explicit, "incremental_discover") == ["explicit-owner"]
+
+
 def test_transcript_and_statements_use_same_connection(tmp_path, monkeypatch):
     from ff_company_wiki_connection import WikiConnection
     from transcript_tool_transport import EarningsTranscriptsTransport

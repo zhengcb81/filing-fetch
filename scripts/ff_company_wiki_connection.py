@@ -51,6 +51,13 @@ def connection_cwd(endpoint: Path | WikiConnection) -> Path:
     return endpoint.workdir if isinstance(endpoint, WikiConnection) else endpoint
 
 
+def _incremental_args(operation: str, acquisition_config: Path | None = None) -> list[str]:
+    command = [_CATALOG_REQUESTS[operation], "--request-stdin"]
+    if operation == "incremental_discover" and acquisition_config is not None:
+        command.extend(("--acquisition-config", str(acquisition_config)))
+    return command
+
+
 def command_for(endpoint: Path | WikiConnection, operation: str) -> list[str]:
     if operation not in OPERATIONS:
         raise ValueError("unknown connection operation")
@@ -58,7 +65,7 @@ def command_for(endpoint: Path | WikiConnection, operation: str) -> list[str]:
         if operation in endpoint.commands:
             return list(endpoint.commands[operation])
         if operation in _CATALOG_REQUESTS and "catalog" in endpoint.commands:
-            return [*endpoint.commands["catalog"], _CATALOG_REQUESTS[operation], "--request-stdin"]
+            return [*endpoint.commands["catalog"], *_incremental_args(operation, endpoint.acquisition_config)]
         raise ValueError("connection operation is not configured: " + operation)
     module = "cli" if operation in _CATALOG_REQUESTS else _MODULES[operation]
     command = [sys.executable, "-m", "company_wiki.source_catalog." + module]
@@ -66,7 +73,7 @@ def command_for(endpoint: Path | WikiConnection, operation: str) -> list[str]:
         return [*command, "--wiki-root", str(endpoint)]
     command.extend(["--config", str(endpoint / "config/source_catalog.yaml")])
     if operation in _CATALOG_REQUESTS:
-        command.extend([_CATALOG_REQUESTS[operation], "--request-stdin"])
+        command.extend(_incremental_args(operation))
     return command
 
 

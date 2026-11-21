@@ -73,6 +73,18 @@ def test_transcript_job_downloads_a_call_without_a_filing(tmp_path, monkeypatch)
     assert transport.acquired == 1
 
 
+def test_transcript_job_reuses_existing_txt_without_contacting_provider(tmp_path, monkeypatch):
+    transport = fake_transport(monkeypatch, tmp_path)
+    transport.found = True
+    store = JobStore(tmp_path / "jobs")
+    record, _ = store.create_job(validate_submit_body(body()), command_id="schedule-run")
+    job, executed = run_job(store, record["owner_job_id"], config_path=None, timeout_seconds=12)
+    assert executed and job["status"] == "succeeded"
+    assert job["result"]["source_ref"] == _REF and job["result"]["downloads"] == 0
+    assert job["cost_state"] == "known" and job["cost"]["value"] == "0.00"
+    assert transport.acquired == 0
+
+
 def test_transcript_timeout_recovers_by_lookup_without_retry(tmp_path, monkeypatch):
     transport = fake_transport(monkeypatch, tmp_path, lose_reply=True)
     store = JobStore(tmp_path / "jobs")

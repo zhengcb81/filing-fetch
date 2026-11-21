@@ -268,3 +268,69 @@ def test_paid_read_group_does_not_receive_new_id_or_include_removed_company(tmp_
     assert owners.status_calls == [original["run_id"]]
     assert len(owners.read_calls) == 2
     assert [ref["document_id"] for ref in owners.read_calls[-1]["sources"]] == ["issuer-3"]
+
+
+def test_enabled_transcripts_are_read_from_backlog_without_a_guess_at_the_annual_call(tmp_path):
+    store = RefreshStore(tmp_path)
+    store.configure(_settings(document_kinds=["annual_report"]), None)
+    call = {**SOURCE, "document_id": "call-doc", "source_id": "call-3", "mime_type": "text/plain"}
+
+    class ReadingOwners(Owners):
+        def discover(self, request, *, timeout):
+            assert request["document_kinds"] == ["annual_report"]
+            page = super().discover(request, timeout=timeout)
+            annual = page["candidates"][0]
+            annual.pop("transcript_period_verified")
+            page["candidates"] = [annual]
+            return page
+
+        def backlog(self, request, *, timeout):
+            assert request["identity"] == IDENTITY
+            assert request["document_kinds"] == ["annual_report", "investor_call_transcript"]
+            return {"sources": [call], "next_cursor": None}
+
+    owners = ReadingOwners()
+    run_tick(store, owners, Deployment(), now=TIME)
+    assert not owners.jobs
+    assert owners.read_calls[0]["sources"] == [SOURCE, call]
+    assert store.load()["last_run"]["counts"]["reused"] == 2
+
+
+def test_reading_limits_and_cumulative_owner_usage_follow_the_frozen_run(tmp_path):
+    store = RefreshStore(tmp_path)
+    store.configure(_settings(transcripts_enabled=False, backlog_enabled=False), None)
+    usage = {"model_requests": 1, "model_attempts": 1, "tokens": 80, "cost_usd": "0.02",
+             "cost_state": "unknown", "unknown_reservations": 1, "unsettled_reservations": 0}
+
+    class ReadingOwners(Owners):
+        def read(self, request, *, timeout):
+            response = super().read(request, timeout=timeout)
+            response.update(run_id=request["run_id"], usage=usage)
+            if len(self.read_calls) == 1:
+                response["items"][0].update(state="uncertain", result_ref=None)
+            return response
+
+    owners = ReadingOwners()
+    limits = Deployment(reading={"max_sources": 1, "timeout_seconds": 90, "max_tokens": 1000})
+    run_tick(store, owners, limits, now=TIME)
+    original = owners.read_calls[0]
+    assert original["limits"] == {"max_sources": 1, "timeout_seconds": 90, "max_tokens": 1000}
+    assert all(len(request["sources"]) == 1 for request in owners.read_calls)
+    assert store.load()["last_run"]["usage"]["reading_runs"][original["run_id"]] == usage
+    next_limits = Deployment(reading={"max_sources": 1, "timeout_seconds": 60, "max_tokens": 500})
+    run_tick(store, owners, next_limits, now=TIME + timedelta(days=1))
+    assert owners.read_calls[2] == original
+    assert store.load()["last_run"]["usage"]["reading_runs"][original["run_id"]] == usage
+
+
+@pytest.mark.parametrize("coverage,expected", [("complete", "completed"), ("partial", "partial")])
+def test_empty_backlog_preserves_native_coverage(tmp_path, coverage, expected):
+    store = RefreshStore(tmp_path)
+    store.configure(_settings(transcripts_enabled=False, backlog_enabled=True), None)
+
+    class ReadingOwners(Owners):
+        def backlog(self, request, *, timeout):
+            return {"sources": [], "next_cursor": None, "coverage": coverage, "reason_codes": []}
+
+    run_tick(store, ReadingOwners(), Deployment(), now=TIME)
+    assert store.load()["last_run"]["state"] == expected

@@ -121,6 +121,93 @@ def test_two_real_cli_ticks_share_one_scope_and_owner_batch(tmp_path):
     assert not (store / "jobs").exists()
 
 
+@pytest.mark.parametrize("accession", ["amd-2025-10k", "different-revision"])
+def test_native_scheduled_job_requires_the_requested_accession(accession, tmp_path, monkeypatch):
+    fixture = Path(__file__).parent / "fixtures" / "short_feedback" / "connector.py"
+    connection = tmp_path / "connection.json"
+    log = tmp_path / "catalog-calls.jsonl"
+    monkeypatch.setenv("FF_SHORT_SCENARIO", "download")
+    monkeypatch.setenv("FF_SHORT_CALL_LOG", str(log))
+    _write(connection, {
+        "schema_version": "1.0",
+        "connection": {"cwd": str(tmp_path), "commands": {
+            "catalog": [sys.executable, "-B", str(fixture), "catalog"],
+        }},
+    })
+    ports = owners.OwnerPorts(connection, tmp_path / "jobs", owners.Deployment())
+    request = {
+        "schema_version": "2.0", "company_query": "AMD", "market": "US", "mode": "exact",
+        "document_kind": "annual_report", "fiscal_year": 2025, "as_of_date": "2026-11-23",
+        "provider": "sec", "provider_document_id": accession, "filing_intent": "fetch_if_missing",
+        "acquisition_limits": {"max_bytes": 16384, "timeout_seconds": 9, "max_cost_usd": "0.01"},
+    }
+    job = ports.acquire("sr-exact-accession", "filing.acquire", request, timeout=15, run_id="sr-first")
+    calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    capture = calls[-1]["argv"]
+    assert "ensure" in capture
+    assert capture[capture.index("--provider-document-id") + 1] == accession
+    assert capture[capture.index("--max-download-bytes") + 1] == "16384"
+    assert float(capture[capture.index("--max-download-seconds") + 1]) == 9
+    assert capture[capture.index("--max-download-cost-usd") + 1] == "0.01"
+    if accession == "different-revision":
+        assert job["status"] == "unknown"
+        assert job["cost_state"] == "unknown" and job["result"] is None
+        return
+    assert job["status"] == "succeeded" and job["result"]["downloads"] == 1
+    assert job["cost_state"] == "known" and job["cost"]["value"] == "0.0004"
+    observed = ports.acquire("sr-exact-accession", "filing.acquire", request, timeout=15, run_id="sr-restart")
+    assert observed["owner_job_id"] == job["owner_job_id"] and observed["reused_job"]
+    assert len(log.read_text(encoding="utf-8").splitlines()) == 2
+
+
+@pytest.mark.skipif(os.name != "nt", reason="schtasks uses the Windows OEM code page")
+@pytest.mark.parametrize("encoding", ["oem", "utf-16"])
+def test_windows_query_accepts_task_xml_from_redirected_native_command(tmp_path, monkeypatch, encoding):
+    import ff_scheduled_windows as launcher
+
+    name = "FilingRefresh résumé 财报".encode(encoding, errors="replace").decode(encoding)
+    definition = launcher.task_definition(
+        sid="S-1-5-21-123", task_name=name, launcher=Path(sys.executable),
+        arguments=["-B", str(tmp_path / name / "refresh.py")],
+    )
+    payload = ('<?xml version="1.0" encoding="UTF-16"?>\r\n' + definition).encode(encoding)
+
+    def query(args, **kwargs):
+        assert args == ["schtasks.exe", "/Query", "/TN", name, "/XML"]
+        return subprocess.CompletedProcess(args, 0, stdout=payload)
+
+    monkeypatch.setattr(launcher.subprocess, "run", query)
+    observed = launcher._query_task(name)
+    assert launcher._registered_task(observed, name, "ignored-alias", "S-1-5-21-123")
+    assert name in launcher._find(observed, "t:Actions/t:Exec/t:Arguments")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="native Windows task installation protocol")
+@pytest.mark.parametrize("operation,registered", [("install", True), ("remove", False)])
+def test_windows_task_mutation_keeps_its_stdout_for_the_json_receipt(
+    tmp_path, monkeypatch, capsys, operation, registered,
+):
+    import ff_scheduled_windows as launcher
+
+    name, sid = "FilingRefresh-fixture", "S-1-5-21-123"
+    task = ElementTree.fromstring(launcher.task_definition(
+        sid=sid, task_name=name, launcher=Path(sys.executable), arguments=[],
+    ))
+    observations = iter([None, task] if registered else [task])
+    monkeypatch.setattr(launcher, "_identity", lambda: ("user", sid))
+    monkeypatch.setattr(launcher, "_query_task", lambda _: next(observations))
+
+    def mutate(args, **kwargs):
+        assert args[1] == ("/Create" if registered else "/Delete")
+        assert kwargs["capture_output"] is True
+        return subprocess.CompletedProcess(args, 0, stdout=b"localized scheduler success")
+
+    monkeypatch.setattr(launcher.subprocess, "run", mutate)
+    assert launcher.run([operation, "--task-name", name, "--jobs-dir", str(tmp_path)]) == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["task_name"] == name and receipt["registered"] is registered
+
+
 @pytest.mark.skipif(os.name != "nt", reason="native Windows Task Scheduler inputs")
 def test_windows_preview_produces_hidden_user_task_without_installing(tmp_path):
     helper = SCRIPT.with_name("ff_scheduled_windows.py")
