@@ -1,5 +1,9 @@
 # filing-fetch 当前规划状态
 
+## 2026-11-21 · 公司文档定期更新
+
+FF 已新增日／周到期、原生作业协调、独立精确期电话会、读取批次恢复与 Windows 当前用户入口。已验收的发布包仍需与 CWP 和 Dashboard 的独立施工交付组合复验。正式 Windows 任务需在真实小批验收阶段登记。入口、部署样例与停用方法见 [定期更新](docs/scheduled-refresh.md)。总控 PWF 入口为 `company-wiki/docs/plans/scheduled-filing-refresh-2026-11-21/task_plan.md`。
+
 ## 2026-11-18 · F4 原生作业恢复
 
 [本仓反馈计划](docs/plans/feedback-loop-2026-11-17/FB-FF.md) 的持久作业部分已实现：可选观察绑定原作业和尝试；中断恢复保持原 scope，仅查 CWP 已索引记录。latest 的外部元数据可能计费，即使没取文档；旧账的错误零证据不能授权重试。回告由 FF 公开入口按动作 ID 落盘，独立复验附实际采用版本。短请求扩展与其他 owner 的自动路由仍按各自工作。

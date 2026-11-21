@@ -152,15 +152,23 @@ def _execute(
 ) -> dict:
     owner_job_id = record["owner_job_id"]
     stats: dict[str, int] = {"calls": 0, "downloads": 0}
+    kind = record["kind"]
     try:
-        if record["kind"] == "filing.acquire":
+        if kind == "filing.acquire":
             envelope, stats = _run_filing_engine(
                 record["request"], config_path=config_path,
                 timeout_seconds=timeout_seconds, stats=stats,
             )
-        else:
+        elif kind == "statements.acquire":
             envelope, stats = _run_statements_engine(
                 record["request"], config_path=config_path, timeout_seconds=timeout_seconds,
+            )
+        else:
+            from transcript_companion import fetch_standalone_transcript
+
+            envelope = fetch_standalone_transcript(
+                record["request"], config_path=config_path, timeout_seconds=timeout_seconds,
+                stats=stats,
             )
     except FilingFetchError as exc:
         return _land_terminal(
@@ -177,11 +185,21 @@ def _execute(
             "correlation_id": owner_job_id,
         }
         return _land_terminal(store, record, stats=stats, observation=None, error=error)
-    result = build_result_view(record["kind"], envelope, stats)
+    result = build_result_view(kind, envelope, stats)
+    error = None
+    if kind == "transcript.acquire" and envelope.get("status") not in {"reused", "downloaded"}:
+        error = error_view_from_exception(
+            FilingFetchError(
+                str(envelope.get("reason") or "transcript_unavailable"),
+                code="not_found" if envelope.get("status") == "not_found" else "upstream_error",
+            ),
+            owner_job_id,
+        )
+        error["retryable"] = envelope.get("retryable") is True
     return _land_terminal(
         store, record, stats=stats,
-        observation=_envelope_observation(record["kind"], record["request"], envelope),
-        error=None, result=result, envelope=envelope,
+        observation=_envelope_observation(kind, record["request"], envelope),
+        error=error, result=result, envelope=envelope,
     )
 
 
@@ -236,6 +254,13 @@ def _envelope_observation(
     kind: str, request: dict[str, Any], envelope: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Use producer usage for each stage that can spend."""
+    if kind == "transcript.acquire":
+        if envelope.get("status") in ("reused", "unknown_publication", "ambiguous"):
+            return _NO_PROVIDER
+        return {
+            "provider_started": envelope.get("provider_started"),
+            "usage_complete": envelope.get("provider_usage_complete"),
+        }
     if kind == "statements.acquire":
         usage = envelope.get("usage")
         if not isinstance(usage, dict):
@@ -520,13 +545,25 @@ def _reconcile_query(
             status = "succeeded" if envelope.get("status") == "source_candidate" else "failed"
             code = "not_found" if envelope.get("status") == "gap" else "upstream_error"
             reason = (envelope.get("filing") or {}).get("reason") or envelope.get("status")
-        else:
+        elif kind == "statements.acquire":
             envelope, stats = _reconcile_statements(request, config_path=config_path,
                                                     timeout_seconds=timeout_seconds)
             landed = envelope.get("status")
             status = "succeeded" if landed in {"complete", "partial"} else "failed"
             code = "not_found" if landed == "not_found" else "upstream_error"
             reason = landed
+        else:
+            from transcript_companion import fetch_standalone_transcript
+
+            read_only = {key: value for key, value in request.items() if key != "acquisition_limits"}
+            read_only["intent"] = "reuse_only"
+            envelope = fetch_standalone_transcript(
+                read_only, config_path=config_path, timeout_seconds=timeout_seconds, stats=stats,
+            )
+            landed = envelope.get("status")
+            status = "succeeded" if landed == "reused" else "failed"
+            code = "not_found" if landed == "not_found" else "upstream_error"
+            reason = envelope.get("reason") or landed
     except FilingFetchError as exc:
         # Even the read-only check failed: the job stays unknown, fail closed.
         raise FFJobError(f"reconcile query failed: {exc}", code=exc.code) from exc

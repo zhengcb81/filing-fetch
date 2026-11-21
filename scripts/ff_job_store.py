@@ -27,16 +27,13 @@ even when pid reuse or stale metadata obscures that observation.
 
 from __future__ import annotations
 
-import errno
 import hashlib
 import json
-import os
-import secrets
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO, Callable, Iterator
+from typing import Callable, Iterator
 
 from ff_job_contracts import (
     FFJobError,
@@ -45,45 +42,28 @@ from ff_job_contracts import (
     RUN_STALENESS_GRACE_SECONDS,
     job_intent,
     job_spend_intent,
+    validate_idempotency_key,
     validate_owner_job_id,
 )
 from ff_process_tree import pid_is_alive
+from ff_persistence import (
+    FileLock as _JobLock,
+    LockBusy,
+    acquire_file_lock,
+    atomic_write_json as _atomic_write_json,
+    owner_io_path,
+)
 
-_LOCK_POLL_SECONDS = 0.05
 _MAX_EVENTS = 50
 # Bound contention for the short owner-local submission transaction.
 _IDEM_BUSY_TIMEOUT_SECONDS = 5.0
 
 
 def _acquire_file_lock(path: Path, timeout_seconds: float, busy: str) -> "_JobLock":
-    """Lock a stable file without unlinking an active or crashed owner's path."""
-    deadline = time.monotonic() + timeout_seconds
-    stream = path.open("a+b")
     try:
-        while True:
-            try:
-                if os.name == "nt":
-                    import msvcrt
-
-                    stream.seek(0)
-                    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except OSError as exc:
-                if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
-                    raise
-                if time.monotonic() >= deadline:
-                    raise FFJobError(
-                        busy, code="request_error",
-                    ) from exc
-                time.sleep(_LOCK_POLL_SECONDS)
-            else:
-                return _JobLock(stream)
-    except BaseException:
-        stream.close()
-        raise
+        return acquire_file_lock(path, timeout_seconds)
+    except LockBusy as exc:
+        raise FFJobError(busy, code="request_error") from exc
 
 
 def now_iso() -> str:
@@ -93,24 +73,6 @@ def now_iso() -> str:
 def _canonical_hash(payload: dict) -> str:
     canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _atomic_write_json(path: Path, payload: dict) -> None:
-    """One durable record write: temp file in the same directory + fsync + replace."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
-    try:
-        with tmp.open("w", encoding="utf-8", newline="\n") as stream:
-            json.dump(payload, stream, ensure_ascii=False, sort_keys=True, indent=1)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(tmp, path)
-    finally:
-        try:
-            tmp.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 def _read_json(path: Path) -> dict | None:
@@ -125,31 +87,16 @@ def _read_json(path: Path) -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
-class _JobLock:
-    """An OS lock held for the life of its open file."""
-
-    def __init__(self, stream: BinaryIO) -> None:
-        self._stream = stream
-
-    def release(self) -> None:
-        self._stream.close()
-
-    def __enter__(self) -> "_JobLock":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        self.release()
-
-
 class JobStore:
     """All durable job state access; the only module that touches job files."""
 
     def __init__(self, jobs_dir: Path, *, initialize: bool = True) -> None:
         self.jobs_dir = jobs_dir
-        self.jobs = jobs_dir / "jobs"
-        self.idem_index = jobs_dir / "index" / "idem"
-        self.locks = jobs_dir / "locks"
-        self.logs_dir = jobs_dir / "logs"
+        storage = owner_io_path(jobs_dir)
+        self.jobs = storage / "jobs"
+        self.idem_index = storage / "index" / "idem"
+        self.locks = storage / "locks"
+        self.logs_dir = storage / "logs"
         if initialize:
             for directory in (self.jobs, self.idem_index, self.locks, self.logs_dir):
                 directory.mkdir(parents=True, exist_ok=True)
@@ -230,7 +177,14 @@ class JobStore:
             _atomic_write_json(self._job_path(owner_job_id), record)
             return record, False
 
-    def _idempotency_lookup(self, key: str, request_hash: str) -> dict | None:
+    def find_submission(self, key: str) -> dict | None:
+        """Return an existing owner job under the same submission lock."""
+        validate_idempotency_key(key)
+        with _acquire_file_lock(self.idem_index / ".submit.lock", _IDEM_BUSY_TIMEOUT_SECONDS,
+                                "job submission is busy; retry the lookup"):
+            return self._idempotency_lookup(key, None)
+
+    def _idempotency_lookup(self, key: str, request_hash: str | None) -> dict | None:
         """Read or repair a key under the submission lock."""
         pointer_path = self._idem_path(key)
         pointer = _read_json(pointer_path)
@@ -249,7 +203,7 @@ class JobStore:
                 _atomic_write_json(pointer_path, {
                     "owner_job_id": prior["owner_job_id"], "request_hash": prior["request_hash"],
                 })
-        if prior is not None and prior.get("request_hash") != request_hash:
+        if prior is not None and request_hash is not None and prior.get("request_hash") != request_hash:
             raise FFJobError(
                 "idempotency_key already bound to a different request", code="request_error",
             )

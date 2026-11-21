@@ -13,6 +13,37 @@ import tempfile
 OUTCOME = "job-outcome"
 
 
+def _append_observations(path: str, rows: list[dict]) -> None:
+    try:
+        with Path(path).open("ab") as stream:
+            stream.write(b"".join((json.dumps(row, ensure_ascii=True) + "\n").encode("ascii") for row in rows))
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError:
+        # Diagnostics remain optional; the native owner record is authoritative.
+        pass
+
+
+def publish_refresh_observation(run: dict) -> None:
+    path = os.environ.get("RESEARCH_FEEDBACK_OUT")
+    if not path:
+        return
+    run_id = run["run_id"]
+    _append_observations(path, [{
+        "schema_version": "feedback-observation/1",
+        "owner": "filing-fetch",
+        "run_id": os.environ.get("RESEARCH_FEEDBACK_RUN_ID") or run_id,
+        "attempt_id": os.environ.get("RESEARCH_FEEDBACK_ATTEMPT_ID") or "scheduled",
+        "step_id": run_id,
+        "evidence_ref": f"ff-scheduled-refresh/1/{run_id}",
+        "version": "ff-scheduled-refresh/1",
+        "check_id": "refresh-outcome",
+        "expected": "completed",
+        "actual": run["state"],
+        "disposition": "deviation" if run["state"] == "partial" else "expected",
+    }])
+
+
 def publish_job_observation(record: dict, *, started: bool) -> None:
     file = os.environ.get("RESEARCH_FEEDBACK_OUT")
     if not file:
@@ -39,16 +70,9 @@ def publish_job_observation(record: dict, *, started: bool) -> None:
             dict(base, check_id="job-usage", expected="accounted", actual=cost,
                  disposition="unknown" if cost == "unknown" else "expected"),
         ]
-    try:
-        # One caller supplies one exclusive file. When the process dies after
-        # starting, the original reference has already reached the sidecar.
-        with Path(file).open("ab") as stream:
-            stream.write(b"".join((json.dumps(row, ensure_ascii=True) + "\n").encode("ascii") for row in rows))
-            stream.flush()
-            os.fsync(stream.fileno())
-    except OSError:
-        # Diagnostics remain optional; the native owner record is authoritative.
-        pass
+    # One caller supplies one exclusive file. When the process dies after
+    # starting, the original reference has already reached the sidecar.
+    _append_observations(file, rows)
 
 
 def _digest(value) -> str:

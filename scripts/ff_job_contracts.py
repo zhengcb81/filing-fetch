@@ -41,6 +41,7 @@ from typing import Any
 
 from filing_contracts import FilingFetchError, FILING_V2_REQUEST_SCHEMA_VERSION, validate_request
 from ff_financial_statements import validate_request as validate_statements_request
+from transcript_companion import validate_standalone_transcript_request
 from ff_source_candidate import (
     ERROR_CANDIDATE_CODES,
     contains_physical_field as _contains_physical_field,
@@ -50,7 +51,7 @@ from ff_source_candidate import (
 FF_JOB_SCHEMA_VERSION = "ff-job/1"
 JOB_OWNER_NAME = "filing-fetch"
 
-JOB_KINDS = ("filing.acquire", "statements.acquire")
+JOB_KINDS = ("filing.acquire", "statements.acquire", "transcript.acquire")
 JOB_STATUSES = ("queued", "running", "succeeded", "failed", "cancelled", "unknown")
 JOB_ACTIONS = ("cancel", "retry", "reconcile")
 # resume is deliberately absent; see module docstring.
@@ -91,6 +92,11 @@ _RESULT_KIND_FIELDS = {
     "statements.acquire": frozenset(
         {"kind", "status", "statement_count", "usage", "calls"}
     ),
+    "transcript.acquire": frozenset({
+        "kind", "status", "source_ref", "reason", "fiscal_year", "fiscal_quarter",
+        "provider", "provider_requests", "provider_response_bytes", "provider_usage_complete",
+        "publication_date", "calls", "downloads",
+    }),
 }
 # The statements envelope carries its usage account as one nested block.
 _STATEMENTS_USAGE_FIELDS = ("http_requests", "response_bytes", "cost_usd")
@@ -176,12 +182,17 @@ def validate_submit_body(payload: Any) -> dict[str, Any]:
             validate_request(request)
         except FilingFetchError as exc:
             raise FFJobError(str(exc), code=exc.code) from exc
-    else:
+    elif kind == "statements.acquire":
         try:
             validate_statements_request(request)
         except FilingFetchError as exc:
             raise FFJobError(str(exc), code=exc.code) from exc
         _validate_statements_fee_ceiling(request)
+    else:
+        try:
+            validate_standalone_transcript_request(request)
+        except FilingFetchError as exc:
+            raise FFJobError(str(exc), code=exc.code) from exc
     return {
         "schema_version": FF_JOB_SCHEMA_VERSION,
         "command_id": command_id,

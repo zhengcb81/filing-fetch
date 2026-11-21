@@ -560,6 +560,31 @@ def _resolved_source_identity(
         }
 
 
+def identify_company(
+    *, request: dict[str, Any], root: WikiEndpoint, deadline: float,
+    stats: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """Resolve the requested listing through CWP without source discovery."""
+    issuer_scope = request.get("market") is None and request.get("source_market") is not None
+    identity_request = {**request, "market": request["source_market"]} if issuer_scope else request
+    identity_payload = _run_company_wiki_json_retry(
+        command=[*command_for(root, "catalog"), "identify", *_identity_arguments(identity_request)],
+        root=root, action="identify", deadline=deadline, stats=stats,
+    )
+    try:
+        identity = (_resolved_source_identity(identity_payload, market=request["source_market"])
+                    if issuer_scope else _resolved_company_identity(identity_payload))
+    except FilingFetchError as exc:
+        exc.stage = "identify"
+        raise
+    if identity_request.get("market") is not None and identity["market"] != identity_request["market"]:
+        raise FilingFetchError(
+            "company-wiki identity market does not match the selected listing market",
+            code="identity_error", stage="identify",
+        )
+    return identity
+
+
 def _same_issuer_identity(left: dict[str, Any], right: dict[str, Any]) -> bool:
     """Require the owner-provided cross-market link when listings differ.
 
@@ -1478,40 +1503,7 @@ def resolve_filing(
     command_prefix = command_for(root, "catalog")
     # Every request passes through verified/active identity before source
     # resolution; validate_request guarantees company_query is present.
-    identity_request = request
-    if request.get("market") is None and request.get("source_market") is not None:
-        identity_request = {**request, "market": request["source_market"]}
-    identity_payload = _run_company_wiki_json_retry(
-        command=[
-            *command_prefix,
-            "identify",
-            *_identity_arguments(identity_request),
-        ],
-        root=root,
-        action="identify",
-        deadline=deadline,
-        stats=stats,
-    )
-    try:
-        if request.get("market") is None and request.get("source_market") is not None:
-            company_identity = _resolved_source_identity(
-                identity_payload, market=request["source_market"],
-            )
-        else:
-            company_identity = _resolved_company_identity(identity_payload)
-    except FilingFetchError as exc:
-        # This local validation precedes every acquiring operation.
-        exc.stage = "identify"
-        raise
-    selected_listing_market = identity_request.get("market")
-    if (
-        selected_listing_market is not None
-        and company_identity["market"] != selected_listing_market
-    ):
-        raise FilingFetchError(
-            "company-wiki identity market does not match the selected listing market",
-            code="identity_error", stage="identify",
-        )
+    company_identity = identify_company(request=request, root=root, deadline=deadline, stats=stats)
     source_market = request.get("source_market") or company_identity["market"]
     source_identity = company_identity
     if source_market != company_identity["market"]:

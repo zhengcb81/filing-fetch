@@ -4,7 +4,8 @@ Owner: filing-fetch. Protocol: ff-job/1.
 
 `ff-job/1` is the public job surface Dashboard's MODULE-m8-FF-executor binds to.
 It wraps the existing short-request engine (`scripts/fetch_filing.py` v2 and
-`scripts/fetch_statements.py` semantics) in a durable, cross-process job layer.
+`scripts/fetch_statements.py` semantics) and the standalone exact-period
+transcript engine in a durable, cross-process job layer.
 The filing job and the short-request CLI use the same public v2 result
 completion operation and deadline for the filing and its optional transcript.
 Both short-request CLIs retain their request/response contracts, exit codes
@@ -59,7 +60,7 @@ job store location only through `--jobs-dir`.
 {
   "schema_version": "ff-job/1",
   "command_id": "dash-command-id (echoed back in every JobView)",
-  "kind": "filing.acquire | statements.acquire",
+  "kind": "filing.acquire | statements.acquire | transcript.acquire",
   "idempotency_key": "[A-Za-z0-9._:~/-]{1,256}",
   "request": { ...native engine request... }
 }
@@ -76,6 +77,13 @@ job store location only through `--jobs-dir`.
   `ff_financial_statements.validate_request`); the job layer additionally
   enforces the same ≤2-decimal `max_cost_usd` fee string the filing contract
   uses.
+- `kind=transcript.acquire`: `request` uses `ff-transcript-request/1` with the
+  selected `identity` (entity, listing, market and ticker), `as_of_date`,
+  explicit `fiscal_year` and `fiscal_quarter`, and `intent`. It looks up the
+  exact transcript before calling the configured ET tool. It has its own
+  acquisition limits and can run when a corresponding filing is missing.
+  Reconciliation looks up the original transcript through CWP and retains
+  the original job's spend state.
 - `limits_ref` is materialized as the request's own `acquisition_limits`
   (`max_bytes` positive int / `timeout_seconds` finite positive /
   `max_cost_usd` decimal string ≤2dp) — the same three ceilings the legacy

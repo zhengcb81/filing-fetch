@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date
+from pathlib import Path
 from typing import Any, NamedTuple, Protocol, cast
 
 from ff_source_ref import validate_source_ref
-from filing_contracts import FilingFetchError, _validate_acquisition_limits
+from filing_contracts import FilingFetchError, validate_acquisition_limits
 
 
 class TranscriptTransport(Protocol):
@@ -50,7 +52,7 @@ def _option_error(option: dict[str, Any]) -> dict[str, Any] | None:
     if provider not in (None, "fmp"):
         return _result("request_error", reason="unsupported_transcript_provider")
     try:
-        _validate_acquisition_limits(intent, option.get("acquisition_limits"))
+        validate_acquisition_limits(intent, option.get("acquisition_limits"))
     except FilingFetchError:
         return _result("request_error", reason="invalid_acquisition_limits")
     return None
@@ -199,19 +201,104 @@ def resolve_companion_transcript(
         return prepared
     if transport is None:
         return _result("contract_pending", reason="cwp_fmp_import_contract_pending")
+    return _resolve_exact(
+        prepared, request.get("as_of_date"), transport, filing_handle.get("source_ref"),
+    )
+
+
+def _resolve_exact(
+    prepared: _Ready, as_of_date: str | None, transport: TranscriptTransport,
+    filing_source_ref: dict | None, *, track_local_usage: bool = False,
+) -> dict[str, Any]:
     arguments = {
         "identity": prepared.identity,
-        "filing_source_ref": filing_handle.get("source_ref"),
+        "filing_source_ref": filing_source_ref,
         "fiscal_year": prepared.year,
         "fiscal_quarter": prepared.quarter,
-        "as_of_date": request.get("as_of_date"),
+        "as_of_date": as_of_date,
         # Omitted stays omitted: reuse is source-neutral locally, and the
         # acquisition provider is the transport's separate FMP decision.
         "provider": prepared.option.get("provider"),
     }
     existing = _lookup(transport, arguments, prepared.year, prepared.quarter)
     if existing is not None:
+        if track_local_usage:
+            existing.update(provider_started=False, provider_usage_complete=True,
+                            provider_requests=0, provider_response_bytes=0)
         return existing
     if prepared.option["intent"] == "reuse_only":
-        return _result("not_found", reason="exact_transcript_missing")
+        result = _result("not_found", reason="exact_transcript_missing")
+        if track_local_usage:
+            result.update(provider_started=False, provider_usage_complete=True,
+                          provider_requests=0, provider_response_bytes=0)
+        return result
     return _acquire(transport, arguments, prepared)
+
+
+def validate_standalone_transcript_request(request: dict) -> None:
+    fields = {"schema_version", "identity", "fiscal_year", "fiscal_quarter", "as_of_date",
+              "intent", "provider", "acquisition_limits"}
+    if request.get("schema_version") != "ff-transcript-request/1" or set(request) - fields:
+        raise FilingFetchError("invalid exact transcript request", code="request_error")
+    if _valid_period(request) is None:
+        raise FilingFetchError("transcripts require an exact fiscal_year and fiscal_quarter",
+                               code="request_error")
+    identity = request.get("identity")
+    if (
+        not isinstance(identity, dict)
+        or set(identity) - {"entity_id", "listing_id", "ticker", "market", "exchange"}
+        or identity.get("market") not in ("CN", "HK", "US")
+        or any(
+            not isinstance(identity.get(key), str) or not identity[key] or identity[key].strip() != identity[key]
+            for key in ("entity_id", "listing_id", "ticker")
+        )
+        or "exchange" in identity and (not isinstance(identity["exchange"], str) or not identity["exchange"])
+    ):
+        raise FilingFetchError("transcript request needs an explicit listing", code="request_error")
+    as_of = request.get("as_of_date")
+    try:
+        if not isinstance(as_of, str) or date.fromisoformat(as_of).isoformat() != as_of:
+            raise ValueError
+    except ValueError as exc:
+        raise FilingFetchError("transcript as_of_date must be YYYY-MM-DD", code="request_error") from exc
+    option_error = _option_error(request)
+    if option_error is not None:
+        raise FilingFetchError(option_error["reason"], code="request_error")
+
+
+def fetch_standalone_transcript(
+    request: dict, *, config_path: Path | None, timeout_seconds: float, stats: dict[str, int],
+) -> dict:
+    """Use the original transcript transport after verified listing lookup."""
+    from fetch_filing import (
+        DEFAULT_COMPANY_WIKI_CONFIG, filing_operation_deadline, identify_company, load_company_wiki_root,
+    )
+    from transcript_tool_transport import EarningsTranscriptsTransport
+
+    validate_standalone_transcript_request(request)
+    deadline = filing_operation_deadline(request, timeout_seconds=timeout_seconds)
+    selected = request["identity"]
+    try:
+        root = load_company_wiki_root(config_path=config_path)
+        query = {
+            "company_query": selected["ticker"], "market": selected["market"],
+            "exchange": selected.get("exchange"), "document_kind": "earnings_transcript",
+            "as_of_date": request["as_of_date"],
+        }
+        identity = identify_company(request=query, root=root, deadline=deadline, stats=stats)
+        if identity["ticker"].casefold() != selected["ticker"].casefold():
+            raise FilingFetchError("transcript listing ticker differs from resolved ticker",
+                                   code="identity_error")
+        transport = EarningsTranscriptsTransport(
+            wiki_root=root, config_path=config_path or DEFAULT_COMPANY_WIKI_CONFIG, deadline=deadline,
+        )
+    except FilingFetchError as exc:
+        exc.stage = "identify"
+        raise
+    result = _resolve_exact(
+        _Ready(request, identity, request["fiscal_year"], request["fiscal_quarter"]),
+        request["as_of_date"], transport, None, track_local_usage=True,
+    )
+    stats["calls"] += transport.company_wiki_calls
+    stats["downloads"] += int(result["status"] == "downloaded")
+    return result

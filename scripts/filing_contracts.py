@@ -191,7 +191,7 @@ def _validate_v2_request(request: dict[str, Any]) -> None:
             "filing_intent must be reuse_only or fetch_if_missing",
             code="request_error",
         )
-    _validate_acquisition_limits(
+    validate_acquisition_limits(
         request.get("filing_intent"),
         request.get("acquisition_limits"),
         required_for_reuse_only=request.get("mode") == "latest_as_of",
@@ -260,7 +260,7 @@ def validate_request(request: dict[str, Any]) -> None:
     if version == FILING_V2_REQUEST_SCHEMA_VERSION:
         _validate_v2_request(request)
     elif "acquisition_limits" in request:
-        _validate_acquisition_limits("fetch_if_missing", request["acquisition_limits"])
+        validate_acquisition_limits("fetch_if_missing", request["acquisition_limits"])
     authorization = request.get("authorization")
     if authorization is not None:
         # Legacy scope preserves provider/accessions/caps. Expiry and
@@ -324,7 +324,7 @@ def validate_request(request: dict[str, Any]) -> None:
 
 
 
-def _validate_acquisition_limits(
+def validate_acquisition_limits(
     intent: Any, value: Any, *, required_for_reuse_only: bool = False,
     request_diagnostics: bool = True,
 ) -> None:
@@ -397,11 +397,11 @@ def _validate_companion_request(value: Any) -> None:
     intent = value["intent"]
     limits = value.get("acquisition_limits")
     if intent == "reuse_only":
-        _validate_acquisition_limits(intent, limits, request_diagnostics=False)
+        validate_acquisition_limits(intent, limits, request_diagnostics=False)
     elif year is not None and quarter is not None:
-        _validate_acquisition_limits(intent, limits, request_diagnostics=False)
+        validate_acquisition_limits(intent, limits, request_diagnostics=False)
     elif limits is not None:
-        _validate_acquisition_limits(intent, limits, request_diagnostics=False)
+        validate_acquisition_limits(intent, limits, request_diagnostics=False)
     provider = value.get("provider")
     if provider is not None and (
         not isinstance(provider, str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", provider)

@@ -19,6 +19,11 @@ New callers use `2.0`. The older schemas keep working for existing callers and
 retain their result shapes. Legacy acquisition requests may provide the same
 validated `acquisition_limits` object; existing read-only reuse does not need it.
 
+For scheduled company-roster refresh, use the separate FF control and tick
+entry point. It shares the native job store, with standalone exact-period
+transcripts and CWP-owned reading. The deployment and opt-in Windows task
+are described in [Scheduled document refresh](docs/scheduled-refresh.md).
+
 ## Routing: filings vs historical statement values
 
 | The task needs | Entry point |

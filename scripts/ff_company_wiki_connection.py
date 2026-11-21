@@ -9,10 +9,19 @@ from types import MappingProxyType
 from typing import Mapping
 
 
-OPERATIONS = frozenset({"catalog", "query", "local_prepare", "open", "transcript_import", "financial_statements"})
+OPERATIONS = frozenset({
+    "catalog", "query", "local_prepare", "open", "transcript_import", "financial_statements",
+    "incremental_discover", "incremental_backlog", "incremental_read", "incremental_read_status",
+})
 _MODULES = {"catalog": "cli", "query": "source_query_cli", "local_prepare": "local_prepare_cli",
             "open": "source_reader_cli", "transcript_import": "transcript_import_cli",
             "financial_statements": "financial_statements.cli"}
+_CATALOG_REQUESTS = {
+    "incremental_discover": "discover-incremental",
+    "incremental_backlog": "incremental-backlog",
+    "incremental_read": "read-incremental",
+    "incremental_read_status": "read-incremental-status",
+}
 
 
 @dataclass(frozen=True)
@@ -46,13 +55,19 @@ def command_for(endpoint: Path | WikiConnection, operation: str) -> list[str]:
     if operation not in OPERATIONS:
         raise ValueError("unknown connection operation")
     if isinstance(endpoint, WikiConnection):
-        if operation not in endpoint.commands:
-            raise ValueError("connection operation is not configured: " + operation)
-        return list(endpoint.commands[operation])
-    command = [sys.executable, "-m", "company_wiki.source_catalog." + _MODULES[operation]]
+        if operation in endpoint.commands:
+            return list(endpoint.commands[operation])
+        if operation in _CATALOG_REQUESTS and "catalog" in endpoint.commands:
+            return [*endpoint.commands["catalog"], _CATALOG_REQUESTS[operation], "--request-stdin"]
+        raise ValueError("connection operation is not configured: " + operation)
+    module = "cli" if operation in _CATALOG_REQUESTS else _MODULES[operation]
+    command = [sys.executable, "-m", "company_wiki.source_catalog." + module]
     if operation in {"transcript_import", "financial_statements"}:
         return [*command, "--wiki-root", str(endpoint)]
-    return [*command, "--config", str(endpoint / "config/source_catalog.yaml")]
+    command.extend(["--config", str(endpoint / "config/source_catalog.yaml")])
+    if operation in _CATALOG_REQUESTS:
+        command.extend([_CATALOG_REQUESTS[operation], "--request-stdin"])
+    return command
 
 
 def acquisition_arguments(endpoint: Path | WikiConnection) -> list[str]:
