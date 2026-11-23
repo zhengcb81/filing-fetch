@@ -105,4 +105,16 @@ FF 与 ROOT 在原版与修复版分别取一份 job 和短请求的脱敏样本
 - 三表短命令与持久作业共用 financial-statements-response/1 的原因投影。读取原表名、状态、来源提供的错误码、覆盖终止原因、可核对的用量。正文和报表数据保留在业务输出，由原始来源提供。部分返回里的缺表、来源失败和用量未知各自记录。已有实际零美元收据时保留原金额，缺用量写 unknown。
 - 精确反例在 tests/test_feedback_ordinary_failures.py 的 mixed_document、multiple_outstanding 以及 tests/financial_statements/test_fetch_statements_subprocess.py 的 diagnostics_recover、durable_statement。旧版异常期定时回执冷读 0/2，三表四种反例均缺逐表记录。修复版 8 项本地端到端通过，涵盖两次新进程查看同一份资料、已有回执 ACK、不可写收件箱恢复、对应子进程只执行一次。所有公司服务使用独立临时目录内的公开协议替身。
 
-待独审绑定本次源码，之后记录主线发布、正式安装的代码校验与无外部请求直启结果。
+11 月 23 日源码 `32cf33e6553b797231f54d0df142115d57a33b8c` 已经独审并快进推送 GitHub main。独立审查从 Git 归档在独立临时根重放 CN/HK/US 定时扫描，两个失败恢复原 run/attempt，同一轮的六次实际子调用在反复 status、runs、tick 和 ACK 之后仍为六次。新浪夹具中资产负债表的 provider_unavailable、315 响应字节、1 次请求、原始零美元费用与其他缺表记录可区分，缺用量保留未知。七组回归共 135 项通过，总控原始探针 12 个场景复现 8 类失败，原生直启的失败也可以读回。Ruff、mypy、本机宿主检查和 pre-push 固定冒烟通过。
+
+部署预演发现两个较早的全局安装仅有 19 个脚本。仅同步本次变更的 16 个运行文件会使四个入口缺少依赖。导入图查得 12 个所属依赖也需要同步，组合预演通过后，仅定点同步这 28 个本仓源码文件。两个物理目标选定文件均为零漂移。四个实际位置分别启动五个正常入口，各产生三次预期失败，每次使用新进程读回三份诊断。正式运行中原文件、配置、作业和费用均保留。安装器的全包比较另报一份既存 SKILL.md 文案差异。
+
+| 实际运行入口 | 原生 outbox |
+|---|---|
+| 项目 main，Windows 任务 FilingFetch-ScheduledRefresh-Pilot 的显式 jobs-dir | `C:/Users/郑曾波/Projects/filing-fetch/.ff_jobs/observations` |
+| Agents 与 Claude 技能，两个路径指向同一物理目录 | `C:/Users/郑曾波/.agents/skills/filing-fetch/.ff_jobs/observations` |
+| Codex 技能 | `C:/Users/郑曾波/.codex/skills/filing-fetch/.ff_jobs/observations` |
+
+FF 下游子进程各写自己的业务账和 outbox。父步骤只在自己的原始发生记录里冻结 RESEARCH_FEEDBACK_RUN_ID 和 RESEARCH_FEEDBACK_ATTEMPT_ID。定时调用通过原 slot 的 usage.acquisition_jobs、usage.reading_runs 原始 ID 归属子作业；下载作业公开结果可按 owner_job_id 与 source_ref 定位。上游未返回子作业或来源 ID 的早期短拒绝，只能按 FF 记录的原 cause、stage 与本地证据查询；不同进程的发生身份各自保留。额外关系需要由公开协议提供。本轮只用离线公开替身及正式 CLI 的无网络错误和读口验收，生产定时任务按原配置运行。
+
+远端 32cf33e 的 quality 检查报错，ROOT 正在检查 [GitHub Actions 记录](https://github.com/zhengcb81/filing-fetch/actions/runs/45269509430)。
