@@ -7,9 +7,11 @@ from contextlib import contextmanager
 from datetime import datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from ff_runtime_feedback import ATTEMPT_ENV, RUN_ENV
 from ff_persistence import acquire_file_lock, atomic_write_json, owner_io_path
 from ff_refresh_policy import Slot, default_settings, slot_consumed, utc_text, work_scope
 
@@ -30,6 +32,8 @@ def summarize_run(run: dict) -> dict:
         "run_id", "slot_id", "roster_snapshot_id", "started_at", "updated_at", "state",
         "counts", "usage", "reason_codes",
     )}
+    if run.get("feedback_identity"):
+        summary["feedback_identity"] = run["feedback_identity"]
     if run.get("failures"):
         summary["failures"] = run["failures"]
     if run.get("active_action") is not None:
@@ -106,8 +110,11 @@ class RefreshStore:
                 return False
             stamp = slot.due_at.strftime("%Y%m%dT%H%M%SZ")
             digest = hashlib.sha256(f"{slot.slot_id}:{revision}".encode()).hexdigest()[:10]
+            run_id = f"sr-{stamp}-{digest}"
             state["current"] = {
-                "run_id": f"sr-{stamp}-{digest}", "slot_id": slot.slot_id,
+                "feedback_identity": {"run_id": os.environ.get(RUN_ENV) or run_id,
+                                      "attempt_id": os.environ.get(ATTEMPT_ENV) or "scheduled"},
+                "run_id": run_id, "slot_id": slot.slot_id,
                 "due_at": utc_text(slot.due_at),
                 "as_of_date": now.astimezone(ZoneInfo(state["settings"]["cadence"]["time_zone"])).date().isoformat(),
                 "started_at": utc_text(now), "updated_at": utc_text(now),
@@ -158,6 +165,9 @@ class RefreshStore:
             self._require_active(state, run)
             receipt = summarize_run(run)
             atomic_write_json(self._history / f"{run['run_id']}.json", receipt)
+            feedback_pending = state.setdefault("feedback_pending", [])
+            if run["run_id"] not in feedback_pending:
+                feedback_pending.append(run["run_id"])
             state.update(
                 current=None, last_run=receipt, pending=pending,
                 last_slot={"slot_id": run["slot_id"], "due_at": run["due_at"],
@@ -166,6 +176,35 @@ class RefreshStore:
             return True
 
         self._update(close)
+
+    def feedback_receipts(self, visible):
+        """Read only the outstanding native slots and the receipts already requested by this caller."""
+        state = self.load()
+        waiting = set(state.get("feedback_pending", []))
+        runs = {run["run_id"]: run for run in (*visible, state.get("last_run"), state.get("current"))
+                if isinstance(run, dict) and (run.get("feedback_identity") or run.get("failures")
+                                              or run.get("state") == "partial")}
+        for rid in waiting - runs.keys():
+            if not isinstance(rid, str) or Path(rid).name != rid or not rid.startswith("sr-"):
+                continue
+            try:
+                run = json.loads((self._history / f"{rid}.json").read_bytes())
+            except (OSError, ValueError):
+                continue
+            if isinstance(run, dict) and run.get("run_id") == rid:
+                runs[rid] = run
+        return waiting, runs
+
+    def acknowledge_feedback(self, offered):
+        def acknowledge(state):
+            before = state.get("feedback_pending", [])
+            after = [rid for rid in before if rid not in offered]
+            if after == before:
+                return False
+            state["feedback_pending"] = after
+            return True
+
+        self._update(acknowledge)
 
     @staticmethod
     def _require_active(state: dict, run: dict) -> None:

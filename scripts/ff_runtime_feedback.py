@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 import hashlib
 import json
 import os
@@ -10,7 +11,7 @@ from pathlib import Path
 import sys
 import uuid
 
-from ff_persistence import atomic_write_json, atomic_write_text, owner_io_path
+from ff_persistence import acquire_file_lock, atomic_write_json, atomic_write_text, owner_io_path
 
 DEFAULT_JOBS_DIR = Path(__file__).resolve().parents[1] / ".ff_jobs"
 OUT_ENV = "RESEARCH_FEEDBACK_OUT"
@@ -134,7 +135,26 @@ def terminal_was_offered(row, jobs_dir):
     )
 
 
-def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None):
+def _write_packet(root, name, marker_key, marker, content, frozen, closes_start):
+    root = owner_io_path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    packet = root / (name + ".jsonl")
+    sent = packet.with_suffix(".sent")
+    # Serialize only native publication. A releasing consumer cannot resurrect an old ACK.
+    with acquire_file_lock(root / ".delivery.lock", 0) if frozen else nullcontext():
+        if sent.exists() and (not packet.is_file() or packet.read_text(encoding="utf-8") == content):
+            return
+        atomic_write_text(packet, content)
+        atomic_write_json(packet.with_suffix(".ready"), marker)
+        if frozen:
+            atomic_write_text(sent, "")
+        if closes_start:
+            initial = root / (_packet_name(marker_key, "started") + ".ready")
+            initial.unlink(missing_ok=True)
+            initial.with_suffix(".jsonl").unlink(missing_ok=True)
+
+
+def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recoverable=False, detail_for_all=False):
     """Explicit sidecars keep append semantics. Native packets use one immutable occurrence identity.
 
     The .ready signal follows a complete same-directory atomic write. On a cold revisit an
@@ -142,6 +162,7 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None):
     the registered owner state, even when an additional outbox path is unavailable.
     """
     try:
+        delivered = True
         groups = {}
         for row in rows:
             groups.setdefault(tuple(row[k] for k in _HEADER), []).append(row)
@@ -153,7 +174,7 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None):
             local_detail = detail is not None and group[0] is rows[0]
             if local_detail:
                 for item in group:
-                    if item.get("disposition") == "deviation" or "refusal_code" in item:
+                    if detail_for_all or item.get("disposition") == "deviation" or "refusal_code" in item:
                         item["details_ref"] = "ff-diagnostic/1/" + name
             # Prefer a published native detail, and never point to a missing diagnostic.
             if local_detail:
@@ -167,33 +188,29 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None):
                     for item in group:
                         item.pop("details_ref", None)
             if file and _explicit(file, group):
+                if recoverable:
+                    for root in directories:
+                        try:
+                            atomic_write_text(root / (name + ".sent"), "")
+                            break
+                        except OSError:
+                            continue
                 continue
             prefix = [r for r in context if all(r[k] == marker[k] for k in _HEADER)]
             content = _text([*prefix, *group])
             for root in directories:
                 try:
-                    packet = owner_io_path(root / (name + ".jsonl"))
-                    if packet.exists() and packet.read_text(encoding="utf8") == content:
-                        # Identical source occurrence has already been offered or acknowledged.
-                        # The delivery witness also distinguishes a crash before first .ready.
-                        if packet.with_suffix(".sent").exists():
-                            break
-                    atomic_write_text(packet, content)
-                    atomic_write_json(packet.with_suffix(".ready"), marker)
-                    if not only_start and any(r["check_id"] == "job-outcome" for r in group):
-                        # Only the durable job port can replay a terminal native record.
-                        atomic_write_text(packet.with_suffix(".sent"), "")
-                    if prefix:
-                        # A drain acknowledging the start can only unlink its own marker.
-                        initial = owner_io_path(root / (_packet_name(marker_key, "started") + ".ready"))
-                        initial.unlink(missing_ok=True)
-                        initial.with_suffix(".jsonl").unlink(missing_ok=True)
+                    frozen = recoverable or (not only_start and any(r["check_id"] == "job-outcome" for r in group))
+                    _write_packet(root, name, marker_key, marker, content, frozen, bool(prefix))
                     break
                 except OSError:
                     continue
+            else:
+                delivered = False
+        return delivered
     except Exception:
         # The owner result and fee record take precedence over optional diagnostics.
-        return
+        return False
 
 
 def cli_failure(surface, reason, error=None, *, jobs_dir=None, no_dispatch=False):

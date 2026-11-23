@@ -121,6 +121,7 @@ def run_job(
             )
         record["attempts"] = record.get("attempts", 0) + 1
         record.pop("failure_detail", None)
+        record.pop("statement_feedback", None)
         record["feedback_identity"] = {"run_id": os.environ.get(RUN_ENV) or owner_job_id,
                                        "attempt_id": os.environ.get(ATTEMPT_ENV) or str(record["attempts"])}
         record["status"] = "running"
@@ -191,6 +192,12 @@ def _execute(
             "correlation_id": owner_job_id,
         }
         return _land_terminal(store, record, stats=stats, observation=None, error=error)
+    if kind == "statements.acquire":
+        from ff_statement_feedback import statement_snapshot
+
+        snapshot = statement_snapshot(envelope)
+        if snapshot is not None:
+            record["statement_feedback"] = snapshot
     result = build_result_view(kind, envelope, stats)
     error = None
     if kind == "transcript.acquire" and envelope.get("status") not in {"reused", "downloaded"}:

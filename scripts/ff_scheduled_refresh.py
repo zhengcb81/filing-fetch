@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import sys
 
+from ff_job_feedback import redeliver_refresh
 from ff_persistence import LockBusy
 from ff_runtime_feedback import DEFAULT_JOBS_DIR, cli_failure, parse_arguments
 from ff_refresh_policy import RUNS_SCHEMA, STATUS_SCHEMA, due_slot, parse_config_request, slot_consumed, utc_text
@@ -78,7 +79,9 @@ def run_command(args: argparse.Namespace) -> dict:
         if args.limit < 1:
             raise ValueError("limit must be positive")
         rows, cursor = store.history(args.cursor, args.limit)
+        redeliver_refresh(store, rows)
         return {"schema_version": RUNS_SCHEMA, "items": rows, "next_cursor": cursor}
+    redeliver_refresh(store)
     if args.command == "configure":
         settings, revision = parse_config_request(json.load(sys.stdin))
         store.configure(settings, revision)

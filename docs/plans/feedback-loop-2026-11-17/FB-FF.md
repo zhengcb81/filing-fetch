@@ -95,4 +95,14 @@ FF 与 ROOT 在原版与修复版分别取一份 job 和短请求的脱敏样本
 - 脱敏诊断不含输入正文、任意异常消息或绝对来源路径。普通 CLI 可以从另一进程还原类型、异常链、代码位置、对应源码字节 SHA 和 JSON 解析位置。专用读口为 `python scripts/ff_job_feedback.py get-diagnostic <details_ref> --jobs-dir <既有状态根>`，也可用 `--observations-dir <独立outbox>`。已有 job 原错误仍可从 `ff_job.py get_status` 读回。
 - 基线 5126876e 的 10 例均是 RED；实现后 16 个新增测试通过。独立进程覆盖非法参数/JSON、真实 CLI 启动、坏传输、作业配置失败、强制终止后两次冷读、预期费用拒绝、合法数据未下载、三市场一时段两项失败/一项成功及重复 tick 零新增调用。相邻六套旧、新联合回归 90 例通过，Ruff 全仓通过。全部使用临时目录／离线 owner；未访问外部服务或产生费用。历史上只有总体 partial 的旧 slot 不追写伪造的单项原因。
 - 定向复验 `python -B -m pytest -q tests/test_feedback_ordinary_failures.py`。总控探针 `company-wiki/docs/plans/feedback-loop-2026-11-17/probes/filing_fetch.py <FF checkout>` 仍按原格式检查显式 sidecar，独立启动的无 OUT 用例依据本仓原生 outbox 实测。
-- 下一节点为绑定源码独审、正式主线和现用运行副本验真；实际部署 SHA 及原生目录在本节补记。
+- 479a06c1 为初次独审候选。复核反例以及对应的修复进度见下节。
+
+### 2026-11-23 复核修复
+
+独审在 479a06c1 的真实进程入口查出两种漏报。两个市场的定时发现失败写进了原始 slot，但收件箱当时不可写。恢复后读取历史也收不到任何一项。新浪三表接口正确返回 HTTP 用量与各表结果，反馈端只记了顶层 unavailable。
+
+- 定时运行在结算同一次状态更新中保存尚待反馈的 slot ID、原 run/attempt 和各项原因。status、runs 或 tick 恢复时从原收据补投，有消费回执的项保持已交付。覆盖三市场两项失败一项成功，以及跨两个日期同时积压、原费用未知、修好收件箱后冷读和消费后的重复访问。复读复用了冻结运行，采集次数保持原值。
+- 三表短命令与持久作业共用 financial-statements-response/1 的原因投影。读取原表名、状态、来源提供的错误码、覆盖终止原因、可核对的用量。正文和报表数据保留在业务输出，由原始来源提供。部分返回里的缺表、来源失败和用量未知各自记录。已有实际零美元收据时保留原金额，缺用量写 unknown。
+- 精确反例在 tests/test_feedback_ordinary_failures.py 的 mixed_document、multiple_outstanding 以及 tests/financial_statements/test_fetch_statements_subprocess.py 的 diagnostics_recover、durable_statement。旧版异常期定时回执冷读 0/2，三表四种反例均缺逐表记录。修复版 8 项本地端到端通过，涵盖两次新进程查看同一份资料、已有回执 ACK、不可写收件箱恢复、对应子进程只执行一次。所有公司服务使用独立临时目录内的公开协议替身。
+
+待独审绑定本次源码，之后记录主线发布、正式安装的代码校验与无外部请求直启结果。

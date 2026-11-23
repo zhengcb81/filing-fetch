@@ -15,13 +15,24 @@ from ff_runtime_feedback import DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, 
 OUTCOME = "job-outcome"
 
 
-def publish_refresh_observation(run: dict, *, jobs_dir=None) -> None:
-    run_id = run["run_id"]
-    base = identity(run_id, "scheduled", run_id, f"ff-scheduled-refresh/1/{run_id}", "ff-scheduled-refresh/1")
+def _refresh_identity(run, step):
+    rid = run["run_id"]
+    original = run.get("feedback_identity") or {}
+    return {
+        "schema_version": "feedback-observation/1", "owner": "filing-fetch",
+        "run_id": original.get("run_id", rid), "attempt_id": original.get("attempt_id", "scheduled"),
+        "step_id": step, "evidence_ref": f"ff-scheduled-refresh/1/{rid}", "version": "ff-scheduled-refresh/1",
+    }
+
+
+def _refresh_summary(run, jobs_dir, file):
+    rid = run["run_id"]
+    base = _refresh_identity(run, rid)
+    if terminal_was_offered(base, jobs_dir):
+        return True
     outcome = run["state"]
     rows = [dict(base, check_id="refresh-outcome", expected="completed", actual=outcome,
                  disposition="deviation" if outcome == "partial" else "expected")]
-    # A failed business step and missing usage are independent dimensions.
     usage = run.get("usage", {})
     snapshots = [value for key in ("reading_runs", "acquisition_jobs")
                  for value in usage.get(key, {}).values()]
@@ -30,7 +41,21 @@ def publish_refresh_observation(run: dict, *, jobs_dir=None) -> None:
                                    for item in snapshots) and not usage.get("metadata_usage_incomplete"))
         rows.append(dict(base, check_id="refresh-usage", expected="accounted", actual="known" if known else "unknown",
                          disposition="expected" if known else "unknown"))
-    publish(rows, jobs_dir=jobs_dir, file=os.environ.get(OUT_ENV))
+    return publish(rows, jobs_dir=jobs_dir, file=file, recoverable=True)
+
+
+def _refresh_item(run, key, failure, jobs_dir, file):
+    base = _refresh_identity(run, f"{run['run_id']}/{key}")
+    if terminal_was_offered(base, jobs_dir):
+        return True
+    reason = failure["reason"]
+    row = dict(base, check_id="refresh-item-outcome", expected="completed", actual=reason,
+               issue_key=reason, disposition="deviation")
+    if reason in RULE_CODES:
+        row.update(disposition="expected", refusal_code=reason)
+    # Historical receipts may carry only the actual stage, reason and reference.
+    detail = {"schema_version": "ff-failure-detail/1", **failure}
+    return publish([row], jobs_dir=jobs_dir, file=file, detail=detail, recoverable=True)
 
 
 def publish_refresh_failure(run, *, jobs_dir, reason, reference, stage, error=None):
@@ -38,19 +63,31 @@ def publish_refresh_failure(run, *, jobs_dir, reason, reference, stage, error=No
 
     reason = reason if isinstance(reason, str) and re.fullmatch(r"[a-z][a-z0-9_.-]*", reason) else "owner_failure"
     key = _digest([stage, reference, reason])
-    saved = run.setdefault("failures", {})
-    if key in saved:
+    failures = run.setdefault("failures", {})
+    if key in failures:
         return
-    saved[key] = {"stage": stage, "reason": reason, "reference_hash": _digest(reference)}
-    rid = run["run_id"]
-    base = identity(rid, "scheduled", f"{rid}/{key}", f"ff-scheduled-refresh/1/{rid}", "ff-scheduled-refresh/1")
-    rule = reason in RULE_CODES
-    row = dict(base, check_id="refresh-item-outcome", expected="completed", actual=reason,
-               issue_key=reason, disposition="expected" if rule else "deviation")
-    if rule:
-        row["refusal_code"] = reason
-    publish([row], jobs_dir=jobs_dir, file=os.environ.get(OUT_ENV),
-            detail={**cause_details(error, reason=reason), **saved[key]})
+    failures[key] = {**cause_details(error, reason=reason), "stage": stage, "reference_hash": _digest(reference)}
+    _refresh_item(run, key, failures[key], jobs_dir, os.environ.get(OUT_ENV))
+
+
+def redeliver_refresh(store, visible=(), *, active_run=None):
+    """Offer original native receipts; this path has no acquisition or reading port."""
+    try:
+        waiting, runs = store.feedback_receipts(visible)
+        offered = set()
+        for rid, run in runs.items():
+            file = os.environ.get(OUT_ENV) if rid == active_run else None
+            delivered = [_refresh_item(run, key, failure, store.root.parent, file)
+                         for key, failure in (run.get("failures") or {}).items()]
+            if run.get("state") in {"partial", "completed", "superseded"}:
+                delivered.append(_refresh_summary(run, store.root.parent, file))
+                if all(delivered) and rid in waiting:
+                    offered.add(rid)
+        if offered:
+            store.acknowledge_feedback(offered)
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+        # Directory repair and later cold reads can resume. Diagnostics cannot change the slot.
+        return
 
 
 def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recover_only=False) -> None:
@@ -58,7 +95,9 @@ def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recov
     base = identity(jid, attempt, f"{jid}/{attempt}", f"ff-job/1/{jid}", "ff-job/1")
     # Bind the native original even if a new, independently labelled cold process discovers the loss.
     base.update(record.get("feedback_identity", {}))
-    if recover_only and (record["status"] not in {"failed", "unknown"} or terminal_was_offered(base, jobs_dir)):
+    statements = record.get("statement_feedback")
+    recoverable = record["status"] in {"failed", "unknown"} or bool(statements)
+    if recover_only and (not recoverable or terminal_was_offered(base, jobs_dir)):
         return
     start = [dict(base, check_id="action-started", expected="started", actual="started",
                   disposition="expected", terminal_check_id=OUTCOME)]
@@ -86,10 +125,15 @@ def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recov
         if refusal:
             business.update(disposition="expected", refusal_code=refusal)
     result_status = (record.get("result") or {}).get("status")
-    if not code and result_status in {"unavailable", "partial", "config_error", "request_error", "fatal", "upstream_error"}:
+    if statements:
+        from ff_statement_feedback import statement_rows
+
+        rows.extend(statement_rows(base, statements, summarize=True))
+    elif not code and result_status in {"unavailable", "partial", "config_error", "request_error", "fatal", "upstream_error"}:
         rows.append(dict(base, check_id="job-failure", expected="completed", actual=result_status,
                          disposition="deviation", issue_key=result_status))
-    publish(rows, file=file, jobs_dir=jobs_dir, context=start, detail=record.get("failure_detail"))
+    publish(rows, file=file, jobs_dir=jobs_dir, context=start, detail=statements or record.get("failure_detail"),
+            detail_for_all=bool(statements))
 
 
 def _digest(value) -> str:

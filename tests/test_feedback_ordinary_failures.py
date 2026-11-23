@@ -180,7 +180,8 @@ def test_typed_budget_refusal_is_visible_without_mislabeling_unknown_provider_co
     assert check["refusal_code"] == "cost_budget_exceeded" and check["disposition"] == "expected"
 
 
-def test_public_schedule_mixed_document_results_have_individual_cold_references(tmp_path):
+@pytest.mark.parametrize("blocked_at_run", [False, True], ids=["ordinary", "recover-outbox"])
+def test_public_schedule_mixed_document_results_have_individual_cold_references(tmp_path, blocked_at_run):
     from test_scheduled_refresh import configure_body
     from test_scheduled_refresh_public_e2e import _PUBLIC_OWNER
 
@@ -233,8 +234,8 @@ def test_public_schedule_mixed_document_results_have_individual_cold_references(
     )
     jobs = tmp_path / "state"
 
-    def refresh(*args, body=""):
-        p = cli(tmp_path, "ff_scheduled_refresh", ["--jobs-dir", jobs, "--config", config, *args], body)
+    def refresh(*args, body="", **labels):
+        p = cli(tmp_path, "ff_scheduled_refresh", ["--jobs-dir", jobs, "--config", config, *args], body, **labels)
         assert p.returncode == 0, (p.stdout, p.stderr)
         return json.loads(p.stdout)
 
@@ -249,20 +250,36 @@ def test_public_schedule_mixed_document_results_have_individual_cold_references(
             )
         ),
     )
-    refresh("tick")
+    inbox = jobs / "observations"
+    if blocked_at_run:
+        inbox.write_text("this fixture temporarily occupies the owner outbox", encoding="utf8")
+    refresh("tick", RESEARCH_FEEDBACK_RUN_ID="original-run", RESEARCH_FEEDBACK_ATTEMPT_ID="original-attempt")
     original = refresh("runs")["items"][0]
+    calls_at_finish = (owner / "calls.jsonl").read_bytes()
+    if blocked_at_run:
+        assert not packets(inbox)
+        inbox.unlink()
+        refresh("status")
     assert original["state"] == "partial" and original["counts"]["failed"] == 2
     assert len(original["failures"]) == 2
     native = packets(jobs / "observations")
     failures = [r for r in native if r["check_id"] == "refresh-item-outcome"]
     assert len(failures) == 2 and len({r["step_id"] for r in failures}) == 2
     assert all(r["actual"] == "parse_failed" for r in failures)
+    assert {(r["run_id"], r["attempt_id"]) for r in native} == {("original-run", "original-attempt")}
     assert all(r["evidence_ref"].endswith(original["run_id"]) for r in failures)
     assert any(r["check_id"] == "refresh-usage" and r["actual"] == "unknown" for r in native)
     n = (owner / "calls.jsonl").read_bytes()
     refresh("tick")
     assert (owner / "calls.jsonl").read_bytes() == n
     assert packets(jobs / "observations") == native
+    assert (owner / "calls.jsonl").read_bytes() == calls_at_finish
+    for marker in inbox.glob("*.ready"):
+        marker.unlink()
+    for command in ("status", "runs", "tick", "status", "runs", "tick"):
+        refresh(command)
+    assert not list(inbox.glob("*.ready"))
+    assert (owner / "calls.jsonl").read_bytes() == calls_at_finish
 
 
 def test_killed_native_job_is_recovered_by_cold_status_without_another_execution(tmp_path):
@@ -402,3 +419,36 @@ def test_unavailable_transport_is_repaired_from_existing_native_job_on_cold_read
         signal.unlink()  # consumer ACK
     assert json.loads(cli(tmp_path, "ff_job", args).stdout)["job"] == job
     assert not list(native.glob("*.ready"))
+
+def test_multiple_outstanding_slots_survive_restart_and_replay_independently(tmp_path, monkeypatch):
+    from datetime import timedelta
+    from ff_refresh_owners import Deployment
+    from ff_refresh_runner import run_tick
+    from ff_refresh_store import RefreshStore
+    from test_refresh_runner import Owners, TIME, _settings
+
+    jobs = tmp_path / "jobs"
+    store = RefreshStore(jobs)
+    owners = Owners()
+    owners.partial = True
+    store.configure(_settings(reading_level="off"), None)
+    out = jobs / "observations"
+    out.write_text("synthetic publication outage", encoding="utf8")
+    snapshot_ids = set()
+    for day in range(2):
+        monkeypatch.setenv("RESEARCH_FEEDBACK_DIR", str(out))
+        monkeypatch.setenv("RESEARCH_FEEDBACK_RUN_ID", f"original-day-{day}")
+        run_tick(store, owners, Deployment(), now=TIME+timedelta(days=day))
+        snapshot_ids.add(store.load()["last_run"]["run_id"])
+    assert set(store.load()["feedback_pending"]) == snapshot_ids and len(snapshot_ids) == 2
+    out.unlink()
+    p = cli(tmp_path, "ff_scheduled_refresh", ["--jobs-dir", jobs, "status"])
+    assert p.returncode == 0 and store.load()["feedback_pending"] == []
+    recovered = [r for r in packets(out) if r["check_id"] == "refresh-item-outcome"]
+    assert {r["run_id"] for r in recovered} == {"original-day-0","original-day-1"}
+    assert {r["evidence_ref"].split("/")[-1] for r in recovered} == snapshot_ids
+    for marker in out.glob("*.ready"):
+        marker.unlink()
+    for command in ("status","runs"):
+        assert cli(tmp_path, "ff_scheduled_refresh", ["--jobs-dir",jobs,command]).returncode == 0
+    assert not list(out.glob("*.ready"))

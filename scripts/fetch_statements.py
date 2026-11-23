@@ -18,6 +18,7 @@ from pathlib import Path
 
 from ff_financial_statements import fetch_statements
 from ff_runtime_feedback import cli_failure, parse_arguments
+from ff_statement_feedback import publish_statement_response
 from filing_contracts import FilingFetchError
 
 STATEMENTS_RESPONSE_SCHEMA_VERSION = "financial-statements-response/1"
@@ -116,8 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdout.write("\n")
     # W19-R3: a structured CWP error status maps to its own exit code.
     status = envelope.get("status")
-    if status in {"partial", "unavailable", "request_error", "config_error", "fatal"}:
-        cli_failure("statements", status)
+    publish_statement_response(envelope)
     if status in ("request_error", "config_error"):
         return 2
     if status == "fatal":

@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 import time
 from typing import Any, Protocol
 
-from ff_job_feedback import publish_refresh_failure, publish_refresh_observation
+from ff_job_feedback import publish_refresh_failure, redeliver_refresh
 from ff_refresh_owners import Deployment, OwnerUnavailable, stable_key
 from ff_refresh_policy import due_slot, slot_consumed, utc_text, work_scope
 from ff_refresh_store import RefreshStore
@@ -654,7 +654,7 @@ class _Refresh:
                      }}
         run["counts"]["pending"] = len(remaining) + len(run["suspended"])
         self.store.finish(run, {**run["suspended"], **remaining})
-        publish_refresh_observation(run, jobs_dir=self.store.root.parent)
+        redeliver_refresh(self.store, (run,), active_run=run["run_id"])
 
     def _finish(self) -> bool:
         run = self.run
@@ -665,7 +665,7 @@ class _Refresh:
         run["counts"]["pending"] = len(pending)
         run["state"] = "partial" if pending or run["partial"] else "completed"
         self.store.finish(run, {**run["suspended"], **pending})
-        publish_refresh_observation(run, jobs_dir=self.store.root.parent)
+        redeliver_refresh(self.store, (run,), active_run=run["run_id"])
         return False
 
 
