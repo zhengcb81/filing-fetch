@@ -252,6 +252,173 @@ def _lookup_job(args: argparse.Namespace, request: dict) -> dict:
     }}
 
 
+_REFRESH_REFERENCE = "ff-scheduled-refresh/1/"
+_SLOT_RUN = re.compile(r"sr-\d{8}T\d{6}Z-[0-9a-f]{10}")
+_FINISHED_REFRESH = {"partial", "completed", "superseded"}
+_ACCOUNTED = {"settled", "known", "not_applicable"}
+
+
+def _slot_binding(run: dict, observation: dict) -> str | None:
+    """Return "" for the slot, a recorded failure key for one sub-item, or None for any other original."""
+    identity = run.get("feedback_identity")
+    original = identity if isinstance(identity, dict) else {}
+    if (observation["run_id"] != original.get("run_id", run["run_id"])
+            or observation["attempt_id"] != original.get("attempt_id", "scheduled")):
+        return None
+    step = observation["step_id"]
+    if step == run["run_id"]:
+        return ""
+    item = step.removeprefix(run["run_id"] + "/")
+    return item if item != step and item and "/" not in item else None
+
+
+def _dispatched_job(store, owner_id: object, run_id: str) -> tuple[str, dict] | None:
+    """Bind one recorded acquisition job to a scheduled dispatch of this slot."""
+    from ff_job_contracts import FFJobError
+
+    if not isinstance(owner_id, str):
+        return None
+    try:
+        job = store.load(owner_id)
+    except (FFJobError, OSError):
+        return None
+    if not isinstance(job, dict) or job.get("owner_job_id") != owner_id:
+        return None
+    actions, command = job.get("actions"), job.get("command_id")
+    if command == run_id:
+        dispatched = "original"
+    elif isinstance(actions, list) and any(
+        isinstance(action, dict) and action.get("action") == "retry"
+        and action.get("idempotency_key") == f"{run_id}-retry-{owner_id}" for action in actions
+    ):
+        dispatched = "retry"
+    elif isinstance(command, str) and _SLOT_RUN.fullmatch(command):
+        # Another slot's job reused as-is; its cost was accounted at that slot and is only read here.
+        dispatched = "reused"
+    else:
+        return None
+    return dispatched, job
+
+
+def _refresh_usage(run: dict, jobs_dir: Path) -> tuple[bool, list[dict]]:
+    """Account a slot from the sub-calls it recorded itself; one unknown or unbound call keeps it unknown."""
+    from ff_job_contracts import FFJobError, project_job_cost
+    from ff_job_store import JobStore
+
+    usage = run.get("usage")
+    if not isinstance(usage, dict):
+        return False, []
+    store = JobStore(jobs_dir, initialize=False)
+    items: list[dict] = []
+    known = True
+    for group in ("acquisition_jobs", "reading_runs"):
+        snapshots = usage.get(group, {})
+        if not isinstance(snapshots, dict):
+            return False, items
+        for owner_id, snapshot in snapshots.items():
+            recorded = snapshot.get("cost_state") if isinstance(snapshot, dict) else None
+            item: dict = {"kind": group[:-1], "id": owner_id,
+                    "cost_state": recorded if recorded in _ACCOUNTED else "unknown"}
+            if group == "acquisition_jobs":
+                bound = _dispatched_job(store, owner_id, run["run_id"])
+                item["dispatch"] = "unbound" if bound is None else bound[0]
+                if bound is None:
+                    item["cost_state"] = None
+                else:
+                    job = bound[1]
+                    evidence = job.get("spend_evidence")
+                    evidence = evidence if isinstance(evidence, dict) else {}
+                    status = job.get("status")
+                    item["job_status"] = status if job.get("status_known") is True and isinstance(status, str) else "unknown"
+                    item["recorded_usage"] = {key: evidence[key] if type(evidence.get(key)) is bool else None
+                                              for key in ("provider_started", "usage_complete")}
+                    downloads = evidence.get("download_events")
+                    item["recorded_usage"]["download_events"] = (
+                        downloads if type(downloads) is int and downloads >= 0 else None)
+                    if item["cost_state"] != "unknown":
+                        # Native job rules decide; a zero copied into the slot cannot settle a later unknown.
+                        try:
+                            native = project_job_cost(job)[1]
+                        except FFJobError:
+                            native = None
+                        item["cost_state"] = native if native in ("known", "not_applicable") else "unknown"
+            known &= item["cost_state"] in _ACCOUNTED
+            items.append(item)
+    # The same native rule as the offered refresh-usage row, plus every dispatched call accounted.
+    if not items or usage.get("metadata_usage_incomplete"):
+        known = False
+    return known, items
+
+
+def _refresh_outcome(run: dict, counts: dict, failures: dict, item: str) -> str | None:
+    """Native ``partial`` has no cross-repository value: report the proven end of the asked sub-item."""
+    if item:
+        failure = failures.get(item)
+        reason = failure.get("reason") if isinstance(failure, dict) else None
+        return "failed" if isinstance(reason, str) and reason else None
+    if counts["pending"] or run.get("active_action") is not None:
+        # A sub-item was never settled; the slot's zero elsewhere cannot stand in for it.
+        return "unconfirmed"
+    if run["state"] == "superseded":
+        return "cancelled"
+    if run["state"] == "completed":
+        return "failed" if counts["failed"] or failures else "succeeded"
+    return "failed" if counts["failed"] or failures else "unconfirmed"
+
+
+def _lookup_refresh(args: argparse.Namespace, observation: dict) -> dict:
+    """Cold-read one original scheduled slot. A readable receipt is evidence, never business success."""
+    from ff_job_contracts import FFJobError
+    from ff_refresh_store import COUNTS, RefreshStateError, RefreshStore
+
+    run_id = observation["evidence_ref"].removeprefix(_REFRESH_REFERENCE)
+    if not _SLOT_RUN.fullmatch(run_id):
+        return {"state": "unknown"}
+    try:
+        store = RefreshStore(args.jobs_dir.expanduser().resolve())
+        run = store.receipt(run_id)
+        if run is None:
+            return {"state": "pending"} if store.current(run_id) is not None else {"state": "unknown"}
+        item = _slot_binding(run, observation)
+        raw_counts = run.get("counts")
+        failures = run.get("failures")
+        failures = failures if isinstance(failures, dict) else {}
+        if (item is None or run.get("state") not in _FINISHED_REFRESH or not isinstance(raw_counts, dict)
+                or any(type(raw_counts.get(name)) is not int or raw_counts[name] < 0 for name in COUNTS)):
+            return {"state": "unknown"}
+        counts = {name: raw_counts[name] for name in COUNTS}
+        known, items = _refresh_usage(run, args.jobs_dir.expanduser().resolve())
+        outcome = _refresh_outcome(run, counts, failures, item)
+        if outcome is None:
+            return {"state": "unknown"}
+        known &= counts["pending"] == 0
+        codes = run.get("reason_codes")
+        result = {
+            "status": "known" if known else "cost_unknown", "job_status": outcome,
+            "cost_state": ("not_applicable" if all(row["cost_state"] == "not_applicable" for row in items)
+                           else "known") if known else "unknown",
+            "evidence_ref": observation["evidence_ref"], "native_attempt": observation["attempt_id"],
+            "native_status": run["state"], "counts": counts, "items": items,
+            "reason_codes": [code for code in codes if isinstance(code, str)] if isinstance(codes, list) else [],
+        }
+        if item:
+            stage = failures[item].get("stage")
+            result["item"] = {"key": item, "reason": failures[item]["reason"],
+                              "stage": stage if isinstance(stage, str) else None}
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, FFJobError, RefreshStateError):
+        # An unreadable original stays unknown; nothing here repairs it or starts work.
+        return {"state": "unknown"}
+    return {"state": "done", "result": result}
+
+
+def _lookup(args: argparse.Namespace, request: dict) -> dict:
+    observation = _job_observation(request)
+    reference = observation.get("evidence_ref")
+    if isinstance(reference, str) and reference.startswith(_REFRESH_REFERENCE):
+        return _lookup_refresh(args, observation)
+    return _lookup_job(args, request)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Filing-fetch owner feedback receipts")
     parser.add_argument("--reports-dir", type=Path)
@@ -262,7 +429,7 @@ def main() -> int:
     diagnostic.add_argument("--jobs-dir", type=Path, default=DEFAULT_JOBS_DIR)
     sub.add_parser("report")
     sub.add_parser("get-report").add_argument("action_id")
-    lookup = sub.add_parser("reconcile", help="query the original job and recorded usage without reacquisition")
+    lookup = sub.add_parser("reconcile", help="query the original job or scheduled slot without reacquisition")
     lookup.add_argument("--jobs-dir", type=Path, required=True)
     lookup.add_argument("--config", type=Path, help="owner configuration for catalog-only recovery of a lost job")
     lookup.add_argument("--timeout-seconds", type=float, default=10.0)
@@ -289,7 +456,7 @@ def main() -> int:
         if not math.isfinite(args.timeout_seconds) or args.timeout_seconds <= 0:
             parser.error("reconcile timeout must be finite and positive")
         try:
-            reply = _lookup_job(args, json.load(sys.stdin))
+            reply = _lookup(args, json.load(sys.stdin))
         except (OSError, ValueError, RecursionError) as error:
             print(json.dumps({"error": type(error).__name__}))
             return 1

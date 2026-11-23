@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 from zoneinfo import ZoneInfo
 
 from ff_runtime_feedback import ATTEMPT_ENV, RUN_ENV
@@ -210,6 +211,21 @@ class RefreshStore:
     def _require_active(state: dict, run: dict) -> None:
         if state["current"] is None or state["current"]["run_id"] != run["run_id"]:
             raise RefreshStateError("scheduled refresh run changed during execution")
+
+    def receipt(self, run_id: str) -> dict | None:
+        """Read one finished slot by its native ID; no lock, repair, paging or directory is involved."""
+        if not re.fullmatch(r"sr-\d{8}T\d{6}Z-[0-9a-f]{10}", run_id):
+            return None
+        try:
+            run = json.loads((self._history / f"{run_id}.json").read_bytes())
+        except (OSError, ValueError):
+            return None
+        return run if isinstance(run, dict) and run.get("run_id") == run_id else None
+
+    def current(self, run_id: str) -> dict | None:
+        """Read the unfinished run of the same ID only while the owner still holds it as current."""
+        active = self.load()["current"]
+        return active if isinstance(active, dict) and active.get("run_id") == run_id else None
 
     def history(self, cursor: str | None, limit: int) -> tuple[list[dict], str | None]:
         paths = sorted(self._history.glob("sr-*.json"), reverse=True)
