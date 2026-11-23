@@ -194,7 +194,8 @@ class FilingFetchTests(unittest.TestCase):
             self.assertEqual(run.call_count, 2)
             source_command = run.call_args_list[1].args[0]
             self.assertEqual(Path(run.call_args_list[1].kwargs["cwd"]), root)
-            self.assertIn(str(root / "config" / "source_catalog.yaml"), source_command)
+            supplied_config = Path(source_command[source_command.index("--config") + 1])
+            self.assertEqual(supplied_config, root / "config" / "source_catalog.yaml")
             self.assertEqual(handle["request_id"], source_response["request_id"])
 
     def test_company_query_is_identified_before_read_only_resolve(self) -> None:
