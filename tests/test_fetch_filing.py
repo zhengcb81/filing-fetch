@@ -32,7 +32,7 @@ from fetch_filing import (  # noqa: E402
     main,
     resolve_filing,
 )
-from support import bounded_response, bounded_side_effect  # noqa: E402
+from support import bounded_response, bounded_side_effect, patch_filing_clock  # noqa: E402
 
 
 class FilingFetchTests(unittest.TestCase):
@@ -2350,7 +2350,7 @@ class FilingFetchTests(unittest.TestCase):
             ) as run:
                 with patch("fetch_filing.time.sleep") as sleep:
                     with patch("fetch_filing.random.uniform", return_value=0.0):
-                        with patch("fetch_filing.time.monotonic", return_value=100.0):
+                        with patch_filing_clock(return_value=100.0):
                             resolve_filing(
                                 request=self._request(),
                                 company_wiki_root=root,
@@ -2716,7 +2716,7 @@ class FilingFetchTests(unittest.TestCase):
             with patch(
                 "fetch_filing._run_bounded_json", side_effect=bounded_side_effect(completed)
             ) as run:
-                with patch("fetch_filing.time.monotonic", side_effect=[100.0, 100.0, 100.0]):
+                with patch_filing_clock(side_effect=[100.0, 100.0, 100.0]):
                     resolve_filing(
                         request=self._request(), company_wiki_root=root, timeout_seconds=30
                     )
@@ -2728,7 +2728,7 @@ class FilingFetchTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             root = self._wiki_root(Path(temporary), "company-wiki")
             with patch("fetch_filing._run_bounded_json") as run:
-                with patch("fetch_filing.time.monotonic", side_effect=[100.0, 131.0]):
+                with patch_filing_clock(side_effect=[100.0, 131.0]):
                     with self.assertRaises(FilingFetchError) as ctx:
                         resolve_filing(
                             request=self._request(), company_wiki_root=root, timeout_seconds=30
@@ -2759,8 +2759,7 @@ class FilingFetchTests(unittest.TestCase):
             ) as run:
                 with patch("fetch_filing.time.sleep") as sleep:
                     with patch("fetch_filing.random.uniform", return_value=0.0):
-                        with patch(
-                            "fetch_filing.time.monotonic", side_effect=[100.0, 100.0, 105.0, 108.0]
+                        with patch_filing_clock(side_effect=[100.0, 100.0, 105.0, 108.0]
                         ):
                             with self.assertRaises(FilingFetchError) as ctx:
                                 resolve_filing(
@@ -2948,9 +2947,7 @@ class FilingFetchTests(unittest.TestCase):
             try:
                 with patch("fetch_filing._run_bounded_json", return_value=bounded_response(locked)):
                     with patch("fetch_filing.random.uniform", return_value=0.0):
-                        with patch(
-                            "fetch_filing.time.monotonic",
-                            side_effect=[100.0, 100.0, 100.0, 105.0, 108.0],
+                        with patch_filing_clock(side_effect=[100.0, 100.0, 100.0, 105.0, 108.0],
                         ):
                             exit_code = __import__("fetch_filing").main(
                                 ["--config", str(config_path), "--timeout-seconds", "8"]

@@ -31,7 +31,7 @@ from fetch_filing import (  # noqa: E402
     _run_company_wiki_json,
     _run_company_wiki_json_retry,
 )
-from support import bounded_response  # noqa: E402
+from support import bounded_response, patch_filing_clock  # noqa: E402
 
 
 def _wiki_root(parent: Path, name: str = "company-wiki") -> Path:
@@ -319,8 +319,7 @@ def test_contention_retry_exhaustion_keeps_last_catalog_cause() -> None:
         root = _wiki_root(Path(temporary))
         with patch(
             "fetch_filing._run_bounded_json", return_value=bounded_response(locked)
-        ) as run, patch(
-            "fetch_filing.time.monotonic", side_effect=lambda: next(clock)
+        ) as run, patch_filing_clock(side_effect=lambda: next(clock)
         ), patch(
             "fetch_filing.time.sleep"
         ) as sleep, patch(

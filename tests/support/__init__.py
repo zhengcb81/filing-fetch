@@ -10,6 +10,8 @@ list of stubs to a list of tuples 1:1.
 from __future__ import annotations
 
 import subprocess
+import time
+from unittest.mock import Mock, patch
 
 
 def bounded_response(stub):
@@ -30,3 +32,11 @@ def bounded_response(stub):
 def bounded_side_effect(stubs):
     """List of stubs -> sequence the bounded mock returns one per call."""
     return [bounded_response(s) for s in stubs]
+
+
+
+def patch_filing_clock(**monotonic):
+    """Control only filing retry time. Owner diagnostics keep their own clock."""
+    clock = Mock(wraps=time)
+    clock.monotonic.configure_mock(**monotonic)
+    return patch("fetch_filing.time", clock)

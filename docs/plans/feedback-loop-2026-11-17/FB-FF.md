@@ -118,3 +118,7 @@ FF 与 ROOT 在原版与修复版分别取一份 job 和短请求的脱敏样本
 FF 下游子进程各写自己的业务账和 outbox。父步骤只在自己的原始发生记录里冻结 RESEARCH_FEEDBACK_RUN_ID 和 RESEARCH_FEEDBACK_ATTEMPT_ID。定时调用通过原 slot 的 usage.acquisition_jobs、usage.reading_runs 原始 ID 归属子作业；下载作业公开结果可按 owner_job_id 与 source_ref 定位。上游未返回子作业或来源 ID 的早期短拒绝，只能按 FF 记录的原 cause、stage 与本地证据查询；不同进程的发生身份各自保留。额外关系需要由公开协议提供。本轮只用离线公开替身及正式 CLI 的无网络错误和读口验收，生产定时任务按原配置运行。
 
 远端 32cf33e 的 quality 检查报错，ROOT 正在检查 [GitHub Actions 记录](https://github.com/zhengcb81/filing-fetch/actions/runs/45269509430)。
+
+### 2026-11-23 Linux CI 复验
+
+远端 `45269509430` 唯一失败用例在 Ubuntu Python 3.12 复现，原带重试的错误响应显示 0 次尝试，测试期望 2。原因是旧测试替换了全进程的 `time.monotonic`，新的原生反馈在业务开始前写盘时也消费了测试预设的时钟值。三组下载与来源测试统一将时钟替身限定在 `fetch_filing` 模块。CI 和日常 smoke 都使用自有的隔离收件目录和临时测试目录，清理时一起删除。原重试、调用次数、下载次数继续逐一断言。本机 Ubuntu 3.12 重测 209 项通过、1 项旧平台跳过、46 个子检查通过。配置与业务文件使用原有契约。

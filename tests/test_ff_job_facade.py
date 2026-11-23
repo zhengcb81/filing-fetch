@@ -23,6 +23,8 @@ from threading import Event
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from support import patch_filing_clock
+
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
@@ -559,7 +561,7 @@ def test_job_and_v2_cli_share_one_effective_deadline(tmp_path, capsys) -> None:
     with patch("fetch_filing.resolve_filing", return_value=dict(_CANDIDATE_HANDLE)) as filing, \
             patch("fetch_filing._resolve_v2_companion",
                   return_value={"status": "not_requested", "retryable": False}) as companion, \
-            patch("fetch_filing.time.monotonic", return_value=100.0):
+            patch_filing_clock(return_value=100.0):
         _run_filing_engine(request, config_path=None, timeout_seconds=60,
                            stats={"calls": 0, "downloads": 0})
         assert fetch_filing.main(["--request-file", str(payload), "--timeout-seconds", "60"]) == 0

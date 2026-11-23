@@ -97,6 +97,12 @@ def test_failure_keeps_full_node_output_exit_code_and_cleans_scratch(
         (owned / "child-proof.txt").write_text("owned", encoding="utf-8")
         assert not any(key in kwargs["env"] for key in runner.GIT_REPOSITORY_CONTEXT)
         assert kwargs["env"]["GIT_CONFIG_PARAMETERS"] == "safe-context-must-remain"
+        feedback = Path(kwargs["env"]["RESEARCH_FEEDBACK_DIR"])
+        assert feedback.parent == owned.parent and feedback != owned
+        assert "RESEARCH_FEEDBACK_OUT" not in kwargs["env"]
+        feedback.mkdir()
+        (feedback / "fixture.jsonl").write_text("{}\\n", encoding="utf8")
+        scratch.append(feedback)
         return subprocess.CompletedProcess(command, 7, "first_failure_node\n" + "x" * 5000,
                                            "last_failure_node\n")
 

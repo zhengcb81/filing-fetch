@@ -113,8 +113,14 @@ def _annotate_failures(report: Path) -> None:
 def _run_tests(tests, *, scratch_prefix: str, timeout_seconds: int) -> int:
     environment = subprocess_environment()
     with tempfile.TemporaryDirectory(prefix=scratch_prefix) as scratch:
+        root = Path(scratch)
+        test_tmp = root / "pytest"
+        test_tmp.mkdir()
+        for name in ("RESEARCH_FEEDBACK_OUT", "RESEARCH_FEEDBACK_RUN_ID", "RESEARCH_FEEDBACK_ATTEMPT_ID"):
+            environment.pop(name, None)
+        environment["RESEARCH_FEEDBACK_DIR"] = str(root / "observations")
         command = [sys.executable, "-B", "-m", "pytest", *tests,
-                   "-q", "-rs", "--tb=short", "-p", "no:cacheprovider", "--basetemp", scratch]
+                   "-q", "-rs", "--tb=short", "-p", "no:cacheprovider", "--basetemp", str(test_tmp)]
         report = Path(scratch) / "junit.xml"
         annotated = environment.get("GITHUB_ACTIONS") == "true"
         if annotated:
