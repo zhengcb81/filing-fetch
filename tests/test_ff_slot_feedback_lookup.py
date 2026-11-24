@@ -176,7 +176,8 @@ def _assert_untouched(root, before):
 )
 def test_original_slot_is_cold_read_twice_without_new_work(tmp_path, monkeypatch, run, expected, items):
     root = tmp_path / "state"
-    _ledger(root, [run], _original_jobs())
+    ledger_jobs = [_original_jobs()[0]] if run["run_id"] == FIRST else _original_jobs()
+    _ledger(root, [run], ledger_jobs)
     observation = _offered(run, root, tmp_path, monkeypatch, "refresh-usage")
     recorder = tmp_path / "owner-was-called"
     config = tmp_path / "owner.json"
@@ -186,7 +187,7 @@ def test_original_slot_is_cold_read_twice_without_new_work(tmp_path, monkeypatch
             str(recorder)]},
     }}), encoding="utf-8")
     before = _snapshot(root)
-    assert [attempts for _, attempts in _attempts(before)] == [3, 1]
+    assert [attempts for _, attempts in _attempts(before)] == ([3] if run["run_id"] == FIRST else [3, 1])
 
     first = _reconcile(root, observation, config=config)
     second = _reconcile(root, observation)
@@ -219,7 +220,8 @@ def test_missing_other_round_running_skip_and_corrupt_records_do_not_shadow_each
                     reasons=["reading_skipped_by_owner"], state="completed",
                     readings={"sr-read-fixture": {"cost_state": "not_applicable"}})
     root = tmp_path / "state"
-    _ledger(root, [undispatched, unknown, other, skipped], _original_jobs(), current=running, last=skipped,
+    _ledger(root, [undispatched, unknown, other, skipped], [_original_jobs()[0],
+            _job(STARTED, OTHER_ROUND, kind="transcript.acquire", started=True)], current=running, last=skipped,
             corrupt=(CORRUPT,))
 
     def row(run, check_id="refresh-usage"):
@@ -267,7 +269,7 @@ def test_missing_other_round_running_skip_and_corrupt_records_do_not_shadow_each
 def test_unbound_attempts_and_unmapped_items_stay_unknown(tmp_path, monkeypatch):
     run = _undispatched()
     root = tmp_path / "state"
-    _ledger(root, [run], _original_jobs())
+    _ledger(root, [run], [_original_jobs()[0]])
     summary = _offered(run, root, tmp_path, monkeypatch, "refresh-outcome")
     before = _snapshot(root)
 
@@ -287,6 +289,28 @@ def test_unbound_attempts_and_unmapped_items_stay_unknown(tmp_path, monkeypatch)
     _ledger(missing, [run])
     assert _reconcile(missing, summary)["result"] == {
         **result, "items": result["items"]}
+
+
+def test_dispatch_bound_to_this_slot_but_absent_from_usage_stays_unknown(tmp_path, monkeypatch):
+    run = _undispatched()
+    root = tmp_path / "state"
+    ghost = _job(STARTED, FIRST, kind="transcript.acquire", started=True)
+    _ledger(root, [run], [_original_jobs()[0], ghost])
+    summary = _offered(run, root, tmp_path, monkeypatch, "refresh-usage")
+    before = _snapshot(root)
+
+    result = _reconcile(root, summary)["result"]
+    assert (result["status"], result["cost_state"]) == ("cost_unknown", "unknown")
+    assert result["items"][-1] == {"kind": "acquisition_job", "id": STARTED,
+                                   "dispatch": "unlisted", "cost_state": None}
+    _assert_untouched(root, before)
+
+    # A job belonging to another run is not evidence for this slot and cannot make it unknown.
+    foreign = tmp_path / "foreign"
+    _ledger(foreign, [run], _original_jobs() + [_job(STARTED, LATER, kind="transcript.acquire", started=True)])
+    settled = _reconcile(foreign, summary)["result"]
+    assert (settled["status"], settled["cost_state"]) == ("known", "known")
+    assert [row["dispatch"] for row in settled["items"]] == ["original"]
 
 
 def test_recorded_item_failure_is_bound_to_its_original_attempt_and_reason(tmp_path, monkeypatch):

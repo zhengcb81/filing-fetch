@@ -344,6 +344,25 @@ def _refresh_usage(run: dict, jobs_dir: Path) -> tuple[bool, list[dict]]:
                         item["cost_state"] = native if native in ("known", "not_applicable") else "unknown"
             known &= item["cost_state"] in _ACCOUNTED
             items.append(item)
+    # A job dispatched by this very slot but missing from its usage is an unaccounted sub-item.
+    # The reverse check is bound by the original run identity, never by date or company.
+    listed = usage.get("acquisition_jobs")
+    listed = set(listed) if isinstance(listed, dict) else set()
+    for job_id in store.iter_job_ids():
+        job = store.load(job_id)
+        if not isinstance(job, dict) or job.get("owner_job_id") != job_id or job_id in listed:
+            continue
+        actions = job.get("actions")
+        attached = job.get("command_id") == run["run_id"] or (
+            isinstance(actions, list) and any(
+                isinstance(action, dict) and action.get("action") == "retry"
+                and action.get("idempotency_key") == f"{run['run_id']}-retry-{job_id}"
+                for action in actions
+            )
+        )
+        if attached:
+            items.append({"kind": "acquisition_job", "id": job_id, "dispatch": "unlisted", "cost_state": None})
+            known = False
     # The same native rule as the offered refresh-usage row, plus every dispatched call accounted.
     if not items or usage.get("metadata_usage_incomplete"):
         known = False
