@@ -26,7 +26,8 @@
 - 红测先写：`tests/test_ff_slot_feedback_lookup.py` 用原结构的脱敏 slot 与作业账本。实现前 7 例中 6 例返回 `unknown` 而失败，`ff-job/1` 对照 1 例通过；两主场景分别为「部分完成、原调用未到供应商、零费用可证」和「部分完成、原费用未知、一个子项待续」。每例都走真实公开 CLI 两次，前后逐文件字节与尝试次数一致，配置 canary 未被执行，未产生 observations 目录。
 - 当前 8 例覆盖：上述两场景、缺原 slot / 期次相同但另一轮 / 仍在运行 / 合法跳过 / 另一条损坏收据 / 契约 ID 不是 run id、尝试与子项错绑、历史记录没有单项映射、派发但缺 usage、外部 run 的作业不串账、单项原因绑定、`superseded` 与中途派发、`ff-job/1` 兼容对照（与父提交逐字节同答）。
 - `"C:/Miniconda/python.exe" -B -m pytest -q -p no:cacheprovider --basetemp <独立目录> tests/test_ff_slot_feedback_lookup.py tests/test_ff_job_feedback_lookup.py tests/test_feedback_ordinary_failures.py tests/test_feedback_observation.py tests/test_scheduled_refresh.py tests/test_scheduled_refresh_public_e2e.py tests/test_refresh_runner.py tests/test_ff_job_facade.py tests/test_ff_job_cross_process.py tests/test_failure_usage_continuity.py tests/test_ff1_envelope_candidates.py tests/test_ci_tests.py`：修复前 **276 passed、8 subtests passed**；修复后对相邻六文件复跑 **68 passed**。全量聚焦 CI 清单见机器收据。
-- 聚焦 CI 清单 `tools/ci_tests.py` 本地执行 1054 项：**1012 passed、2 skipped（平台/快照）、46 subtests passed；40 failed**。失败样本全部是会话沙箱 `safe-delete` 守卫在单轮累计删除达到 50 后拒绝测试夹具清理 `.ready` 的 `SystemExit`，不是产品断言；本机日常门禁 `tools/pre_push_gate.py --push-checks` 为 ruff ok、固定 11 项冒烟通过。远端 GitHub Actions 无此守卫，推送后须继续盯实际结果。
+- 聚焦 CI 清单 `tools/ci_tests.py` 本地执行 1054 项：**1012 passed、2 skipped（平台/快照）、46 subtests passed；40 failed**。失败样本全部是会话沙箱 `safe-delete` 守卫在单轮累计删除达到 50 后拒绝测试夹具清理 `.ready` 的 `SystemExit`，不是产品断言；本机日常门禁 `tools/pre_push_gate.py --push-checks` 为 ruff ok、固定 11 项冒烟通过。
+- 推送后的远端 [quality #155](https://github.com/zhengcb81/filing-fetch/actions/runs/45341270881)（`def4277`）全部步骤成功，`verify` 于 2026-11-24T06:34:22Z 完成，结论 success；无本地沙箱守卫，聚焦回归在 Ubuntu Python 3.12 通过。
 - `ruff check scripts tests tools` 通过；提交的 pre-commit 三项（ruff / 公共契约 mypy / host-assumption guard）通过；新测试已登记 `tools/ci_tests.py:CI_TESTS`。
 
 ## 两个历史 slot 的只读实测
