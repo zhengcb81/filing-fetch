@@ -1,5 +1,9 @@
 # filing-fetch 当前规划状态
 
+## 2026-11-24 · F4 定时 slot 原批次冷查
+
+[FB-FF](docs/plans/feedback-loop-2026-11-17/FB-FF.md) 的 [F4-FF-SLOT-LOOKUP 子计划](docs/plans/f2-ff-short/f4-slot-lookup.md)已交付：`reconcile` 只读查回 `ff-scheduled-refresh/1/<run_id>` 的原尝试、派发与用量，不建第二账本、不启动新采集；`partial` 按已证实子项投影，`unknown` 与未知费用保留。两个真实历史 slot 与 `ff-job/1` 对照均通过，独立审查发现已修复。短请求 ET 用量归属和旧包停止重复扫描由 ROOT 单独确认。
+
 ## 2026-11-21 · 公司文档定期更新
 
 FF 已新增日／周到期、原生作业协调、独立精确期电话会、读取批次恢复与 Windows 当前用户入口。已验收的发布包仍需与 CWP 和 Dashboard 的独立施工交付组合复验。正式 Windows 任务需在真实小批验收阶段登记。入口、部署样例与停用方法见 [定期更新](docs/scheduled-refresh.md)。总控 PWF 入口为 `company-wiki/docs/plans/scheduled-filing-refresh-2026-11-21/task_plan.md`。

@@ -1,0 +1,46 @@
+{
+  "lane": "F4-FF-SLOT-LOOKUP",
+  "owner": "filing-fetch",
+  "base": "15c4614",
+  "reviewed_commit": "0ba5aa9",
+  "published_commit": "0ba5aa9",
+  "status": "完成本仓只读对账；组合 ACK 与旧包停止重复扫描由 ROOT 单独确认",
+  "tests": [
+    {
+      "command": "C:/Miniconda/python.exe -B -m pytest -q -p no:cacheprovider --basetemp <independent-temp> tests/test_ff_slot_feedback_lookup.py",
+      "result": "8 passed；实现前同文件 6 failed / 1 passed（RED）"
+    },
+    {
+      "command": "C:/Miniconda/python.exe -B -m pytest -q -p no:cacheprovider --basetemp <independent-temp> tests/test_ff_slot_feedback_lookup.py tests/test_ff_job_feedback_lookup.py tests/test_feedback_ordinary_failures.py tests/test_feedback_observation.py tests/test_scheduled_refresh.py tests/test_scheduled_refresh_public_e2e.py tests/test_refresh_runner.py tests/test_ff_job_facade.py tests/test_ff_job_cross_process.py tests/test_failure_usage_continuity.py tests/test_ff1_envelope_candidates.py tests/test_ci_tests.py",
+      "result": "修复前 276 passed / 8 subtests passed；修复后相邻六文件复跑 68 passed"
+    },
+    {
+      "command": "C:/Miniconda/python.exe -B tools/ci_tests.py",
+      "result": "本地 1054 项：1012 passed、2 skipped（平台/快照）、46 subtests passed；40 failed 均为本会话沙箱 safe-delete 守卫在累计 50 次删除后拒绝夹具清理 .ready 的 SystemExit（样本见 ff-ci-bb6jdl_n），非产品断言失败；推送后须继续看远端 GitHub Actions"
+    },
+    {
+      "command": "C:/Miniconda/python.exe -m ruff check scripts tests tools；git commit 的 pre-commit 三项",
+      "result": "All checks passed；ruff / mypy public contracts / host-assumption guard 全部 Passed"
+    }
+  ],
+  "native_refs": [
+    "ff-scheduled-refresh/1/sr-20261116T073000Z-34da10ccbe",
+    "ff-scheduled-refresh/1/sr-20261123T073000Z-e74674c4b5",
+    "ffjob-0572be84bca9",
+    "ffjob-0dd330d80fad"
+  ],
+  "sample_refs": [
+    "tests/test_ff_slot_feedback_lookup.py:partial-undispatched-zero",
+    "tests/test_ff_slot_feedback_lookup.py:partial-pending-unknown-cost",
+    "C:/Users/郑曾波/AppData/Local/Temp/ff-slot-review/r2/probe-results.json",
+    "C:/Users/郑曾波/AppData/Local/Temp/ff-slot-review/r2/trace-results.json"
+  ],
+  "review": "独立审查 agent-245281db-fdb2-492b-83a7-539f3c594312 对 4190c03 结论 PASS：141 对抗探针零不变量违规、真实 packet 协议追踪、父提交 ff-job/1 逐字节对照、生产账本 20 文件哈希不变量。Medium 发现 F1（同一 run 已派发但不在 usage 的作业未标未知）在 0ba5aa9 修复并有回归；修复后真实两批答案不变。F2 为审阅草稿统计脚本缺陷，F3 为 ROOT ACK 语义，均非产品问题。报告见 C:/Users/郑曾波/AppData/Local/Temp/ff-slot-review/review.md",
+  "cleanup": "临时状态根、探针和审阅产物仅在 C:/Users/郑曾波/AppData/Local/Temp/ff-slot-lookup-tests 与 ff-slot-review；生产 .ff_jobs 的 scheduled/** 与 jobs/*.json 共 18 文件前后 SHA-256 一致，observations 无新增写入；无新发现、下载、供应商调用或费用；凭据与未跟踪文件原样保留",
+  "remaining": [
+    "两条旧短请求缺 ET 用量绑定，由 ROOT 协调，不能按同日或同公司补入旧包",
+    "ROOT 对照实际证据单独确认旧包是否停止重复扫描以及观察包 ACK",
+    "历史 slot 无单项失败映射，单项引用继续 unknown，不伪造原因",
+    "发现阶段失败的元数据用量沿用原生 refresh-usage 规则；metadata_usage_incomplete 才标未知"
+  ]
+}

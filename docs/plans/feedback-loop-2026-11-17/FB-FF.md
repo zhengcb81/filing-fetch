@@ -1,6 +1,6 @@
 # FB-FF　下载、复用和作业反馈接线
 
-施工状态：F4 持久作业和回告已验收并发布；短请求和其他偏差接入按余项继续。采集侧两张独立卡由 ET 和 SID 并行施工；全局另有 industry-research（IR）独立研究报告卡。唯一工作目录为 `C:/Users/郑曾波/Projects/filing-fetch`，主线 `main`，本次计划基线 `4c7f501b`。本仓 canonical PWF 是 [PLANNING_STATUS.md](../../../PLANNING_STATUS.md)。
+施工状态：F4 持久作业和回告已验收并发布；后续定时 slot 的原批次只读冷查已在本仓交付（见 2026-11-24 节），短请求和其他偏差接入按余项继续。采集侧两张独立卡由 ET 和 SID 并行施工；全局另有 industry-research（IR）独立研究报告卡。唯一工作目录为 `C:/Users/郑曾波/Projects/filing-fetch`，主线 `main`，本次计划基线 `4c7f501b`。本仓 canonical PWF 是 [PLANNING_STATUS.md](../../../PLANNING_STATUS.md)。
 
 ## 2026-11-18 · 已实现的 F4 作业部分
 
@@ -66,6 +66,14 @@ FF 与 ROOT 在原版与修复版分别取一份 job 和短请求的脱敏样本
 {"lane":"FB-FF","owner":"<owner>","base":"<开工 SHA>","reviewed_commit":"<最终受审源码 SHA>","published_commit":"<实际发布 SHA 或本地说明>","status":"<完成或具体缺口>","tests":[{"command":"<定向命令>","result":"<通过数/失败/跳过及原因>"}],"native_refs":["<原生收据或测试标识>"],"sample_refs":["<可重放的观察样本>"],"review":"<独审范围/版本/复验和余项>","cleanup":"<仅本轮临时目录及结果>","remaining":["<组合验收归属>"]}
 ~~~
 
+
+### 2026-11-24 定时 slot 原批次冷查
+
+总控派发 [F4-FF-SLOT-LOOKUP](../../../../company-wiki/docs/plans/feedback-loop-2026-11-17/owner-cards/F4-FF-SLOT-LOOKUP.md) 已在本仓完成。基线 `15c4614`，`4190c03` 实现、`0ba5aa9` 修复独审发现。本仓子计划、接口映射、边界与清理见 [f4-slot-lookup.md](../f2-ff-short/f4-slot-lookup.md)，机器收据见 [f4-slot-lookup.json](../f2-ff-short/evidence/f4-slot-lookup.json)。
+
+`ff_job_feedback.py reconcile` 扩展 `ff-scheduled-refresh/1/<run_id>` 引用：从 `--jobs-dir` 原状态根只读查同一次 run 的收据、原尝试、派发与逐项用量；把原生 `partial` 投影为合同支持的 `failed` / `unconfirmed` / `cancelled` / `succeeded`，未知或待续保持 `cost_unknown`。`ff-job/1` 回答逐字节不变；没有第二套定时账本、下载、供应商调用或费用。两个真实历史 slot 均查回 `done` / `cost_unknown` / `unconfirmed` / `cost_state=unknown`，原生 `partial` 与聚合原因仍可查；生产账本 18 文件哈希前后一致。
+
+新增 8 例公开 CLI 红/绿测（含原结构脱敏两场景、缺原 slot、另一轮、运行中、合法跳过、损坏邻居、单项绑定、`ff-job/1` 对照与独审 F1 回归）已登记 CI 清单。独立审查 141 对抗探针零违规，唯一 Medium 发现已修复复验。剩余短请求 ET 用量归属、观察 ACK 与是否停止旧包重复扫描由 ROOT 对照实际证据确认。
 
 ## 2026-11-21 日常运行失败覆盖整改
 
