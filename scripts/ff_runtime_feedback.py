@@ -213,7 +213,7 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recovera
         return False
 
 
-def cli_failure(surface, reason, error=None, *, jobs_dir=None, no_dispatch=False):
+def cli_failure(surface, reason, error=None, *, jobs_dir=None, no_dispatch=False, child_process=None):
     op = uuid.uuid4().hex
     base = identity(op, 1, f"{surface}/{op}", f"ff-cli/1/{op}", "ff-cli/1")
     row = dict(
@@ -244,7 +244,11 @@ def cli_failure(surface, reason, error=None, *, jobs_dir=None, no_dispatch=False
                 disposition="expected",
             )
         )
-    publish(rows, file=os.environ.get(OUT_ENV), jobs_dir=jobs_dir, detail=cause_details(error, reason=reason))
+    detail = cause_details(error, reason=reason)
+    if child_process is not None:
+        detail["child_process"] = child_process
+    publish(rows, file=os.environ.get(OUT_ENV), jobs_dir=jobs_dir, detail=detail)
+    return base["evidence_ref"]
 
 
 def parse_arguments(parser: argparse.ArgumentParser, argv, surface):

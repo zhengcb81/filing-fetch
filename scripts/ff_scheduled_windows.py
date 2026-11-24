@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import csv
 from datetime import datetime, timedelta, timezone
 import json
 import os
-from ff_runtime_feedback import cli_failure, parse_arguments
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import sys
@@ -17,8 +16,10 @@ import tempfile
 from xml.etree import ElementTree as xml
 from xml.parsers.expat import errors as xml_errors
 
+from ff_persistence import owner_io_path
 from ff_refresh_policy import utc_text
 from ff_refresh_store import RefreshStore
+from ff_runtime_feedback import cli_failure, parse_arguments
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -145,42 +146,48 @@ def run(argv=None) -> int:
         raise
 
 
-_SECRET_REDACT_RE = re.compile(
-    r"(?i)(api[_-]?key|token|secret|authorization|password)(\s*[:=]\s*)([^\s,;\"']+)"
-)
 _FAILURE_LOG_MAX_BYTES = 2 * 1024 * 1024
-_FAILURE_TAIL_CHARS = 8 * 1024
+_STDERR_TAIL_BYTES = 8 * 1024
+_TRACEBACK_HEADER = b"Traceback (most recent call last):"
+_BUILTIN_EXCEPTIONS = frozenset(
+    name.encode("ascii")
+    for name, value in vars(builtins).items()
+    if isinstance(value, type) and value.__module__ == "builtins" and issubclass(value, BaseException)
+)
 
 
-def _redact_text(text: str) -> str:
-    return _SECRET_REDACT_RE.sub(r"\1\2[REDACTED]", text)
+def _tick_failure(returncode: int, stderr: bytes) -> dict[str, int | str]:
+    """Project known diagnostic shapes without retaining any child stream text."""
+    if not stderr:
+        return {"exit_code": returncode, "stderr_form": "empty"}
+    if _TRACEBACK_HEADER in stderr:
+        facts: dict[str, int | str] = {"exit_code": returncode, "stderr_form": "python_traceback"}
+        name = stderr[-_STDERR_TAIL_BYTES:].rstrip().rsplit(b"\n", 1)[-1].partition(b":")[0]
+        if name in _BUILTIN_EXCEPTIONS:
+            facts["builtin_exception"] = name.decode("ascii")
+        return facts
+    if b": can't open file " in stderr or stderr.startswith(b"Fatal Python error:"):
+        return {"exit_code": returncode, "stderr_form": "python_startup_error"}
+    return {"exit_code": returncode, "stderr_form": "unclassified"}
 
 
-def _persist_tick_failure_log(jobs_dir: Path, returncode: int, stdout_bytes: bytes, stderr_bytes: bytes) -> None:
-    log_dir = jobs_dir / "logs"
-    log_path = log_dir / "scheduled_refresh_failures.log"
+def _persist_tick_failure_log(jobs_dir: Path, facts: dict[str, int | str], reference: str) -> None:
+    log_path = owner_io_path(jobs_dir / "logs" / "scheduled_refresh_failures.log")
     try:
-        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         if log_path.is_file() and log_path.stat().st_size >= _FAILURE_LOG_MAX_BYTES:
             rotated = log_path.with_suffix(".log.1")
             try:
-                if rotated.exists():
-                    rotated.unlink()
                 log_path.replace(rotated)
             except OSError:
                 pass
-        stderr_text = _redact_text(stderr_bytes.decode("utf-8", errors="replace"))[-_FAILURE_TAIL_CHARS:]
-        stdout_text = _redact_text(stdout_bytes.decode("utf-8", errors="replace"))[-_FAILURE_TAIL_CHARS:]
-        timestamp = utc_text(datetime.now(timezone.utc))
-        entry = (
-            f"[{timestamp}] windows-tick failed exit_code={returncode}\n"
-            f"--- stderr ---\n{stderr_text.rstrip() or '<empty>'}\n"
-            f"--- stdout ---\n{stdout_text.rstrip() or '<empty>'}\n\n"
-        )
+        entry = {"observed_at": utc_text(datetime.now(timezone.utc)), "event": "windows-tick",
+                 "evidence_ref": reference, "child_process": facts}
         with log_path.open("a", encoding="utf-8") as handle:
-            handle.write(entry)
+            handle.write(json.dumps(entry) + "\n")
     except OSError as exc:
-        sys.stderr.write(f"warning: failed to persist scheduled refresh failure log: {type(exc).__name__}\n")
+        if sys.stderr is not None:
+            sys.stderr.write(f"warning: failed to persist scheduled refresh failure log: {type(exc).__name__}\n")
 
 
 def _run_action(parser, args):
@@ -191,22 +198,18 @@ def _run_action(parser, args):
         # filing-fetch's bounded child transports, with no visible console.
         result = subprocess.run(
             [str(args.python), "-B", str(ENTRY), *_action_args(args), "tick"], cwd=ROOT,
-            stdin=subprocess.DEVNULL, capture_output=True,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         if result.returncode:
-            _persist_tick_failure_log(
-                args.jobs_dir,
-                result.returncode,
-                result.stdout or b"",
-                result.stderr or b"",
-            )
-            cli_failure(
+            facts = _tick_failure(result.returncode, result.stderr or b"")
+            reference = cli_failure(
                 "windows-tick",
                 "tick_exit_" + str(result.returncode),
-                RuntimeError(f"scheduled refresh tick exited with code {result.returncode}"),
                 jobs_dir=args.jobs_dir,
+                child_process=facts,
             )
+            _persist_tick_failure_log(args.jobs_dir, facts, reference)
         return result.returncode
     name, sid = _identity()
     task_name = args.task_name or f"FilingFetch-ScheduledRefresh-{sid}"
