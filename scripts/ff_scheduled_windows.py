@@ -9,6 +9,7 @@ import json
 import os
 from ff_runtime_feedback import cli_failure, parse_arguments
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -144,6 +145,44 @@ def run(argv=None) -> int:
         raise
 
 
+_SECRET_REDACT_RE = re.compile(
+    r"(?i)(api[_-]?key|token|secret|authorization|password)(\s*[:=]\s*)([^\s,;\"']+)"
+)
+_FAILURE_LOG_MAX_BYTES = 2 * 1024 * 1024
+_FAILURE_TAIL_CHARS = 8 * 1024
+
+
+def _redact_text(text: str) -> str:
+    return _SECRET_REDACT_RE.sub(r"\1\2[REDACTED]", text)
+
+
+def _persist_tick_failure_log(jobs_dir: Path, returncode: int, stdout_bytes: bytes, stderr_bytes: bytes) -> None:
+    log_dir = jobs_dir / "logs"
+    log_path = log_dir / "scheduled_refresh_failures.log"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if log_path.is_file() and log_path.stat().st_size >= _FAILURE_LOG_MAX_BYTES:
+            rotated = log_path.with_suffix(".log.1")
+            try:
+                if rotated.exists():
+                    rotated.unlink()
+                log_path.replace(rotated)
+            except OSError:
+                pass
+        stderr_text = _redact_text(stderr_bytes.decode("utf-8", errors="replace"))[-_FAILURE_TAIL_CHARS:]
+        stdout_text = _redact_text(stdout_bytes.decode("utf-8", errors="replace"))[-_FAILURE_TAIL_CHARS:]
+        timestamp = utc_text(datetime.now(timezone.utc))
+        entry = (
+            f"[{timestamp}] windows-tick failed exit_code={returncode}\n"
+            f"--- stderr ---\n{stderr_text.rstrip() or '<empty>'}\n"
+            f"--- stdout ---\n{stdout_text.rstrip() or '<empty>'}\n\n"
+        )
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(entry)
+    except OSError as exc:
+        sys.stderr.write(f"warning: failed to persist scheduled refresh failure log: {type(exc).__name__}\n")
+
+
 def _run_action(parser, args):
     if os.name != "nt":
         parser.error("Windows Task Scheduler requires Windows")
@@ -152,11 +191,22 @@ def _run_action(parser, args):
         # filing-fetch's bounded child transports, with no visible console.
         result = subprocess.run(
             [str(args.python), "-B", str(ENTRY), *_action_args(args), "tick"], cwd=ROOT,
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, capture_output=True,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         if result.returncode:
-            cli_failure("windows-tick", "tick_exit_" + str(result.returncode), jobs_dir=args.jobs_dir)
+            _persist_tick_failure_log(
+                args.jobs_dir,
+                result.returncode,
+                result.stdout or b"",
+                result.stderr or b"",
+            )
+            cli_failure(
+                "windows-tick",
+                "tick_exit_" + str(result.returncode),
+                RuntimeError(f"scheduled refresh tick exited with code {result.returncode}"),
+                jobs_dir=args.jobs_dir,
+            )
         return result.returncode
     name, sid = _identity()
     task_name = args.task_name or f"FilingFetch-ScheduledRefresh-{sid}"
