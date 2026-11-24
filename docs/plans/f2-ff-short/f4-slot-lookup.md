@@ -43,7 +43,7 @@
 
 ## 独审与边界
 
-独立审查 agent（`agent-245281db-fdb2-492b-83a7-539f3c594312`）对 `4190c03` 做了 141 个对抗探针、消费者 trace、父提交与当前入口的逐字节对照及生产账本哈希守卫，结论 PASS。唯一 Medium 发现 F1「同一 run 派发但不在 usage 中的作业未被计入」已在 `0ba5aa9` 修复并加回归；修复后真实两批答案不变，生产账本仍逐字节一致。F2 是审阅草稿统计脚本自身的判定反转，不是产品问题；F3 是 ROOT 消费者 ACK 语义，FF 只回状态和引用。
+独立审查 agent（`agent-245281db-fdb2-492b-83a7-539f3c594312`）对 `4190c03` 做了 141 个对抗探针、消费者 trace、父提交与当前入口的逐字节对照及生产账本哈希守卫，结论 PASS。唯一 Medium 发现 F1「同一 run 派发但不在 usage 中的作业未被计入」已在 `0ba5aa9` 修复并加回归；修复后真实两批答案不变，生产账本仍逐字节一致。因首次独审针对修复前提交，交付前另由独立 agent（`agent-d2fe6ad5-2ead-4d57-b4a2-372b1a2d94ff`）对最终源码 `335f840` 补签六项核验全 PASS：8 例测试、F1 只按 run 身份绑定、真实 slot 哈希守卫、`_lookup_job` 与 `15c4614` 源码/AST 恒等、远端 CI success。报告见 `C:/Users/郑曾波/AppData/Local/Temp/ff-slot-review/review.md` 与 `review-final.md`。F2 是审阅草稿统计脚本自身的判定反转，不是产品问题；F3 是 ROOT 消费者 ACK 语义，FF 只回状态和引用。
 
 仍缺证 / 不属于本卡：`ff-job/1` 既有结果和未知费用保持不变；两条旧短请求的 ET 用量绑定由 ROOT 协调；观察包是否 ACK、旧包是否停止重复扫描由 ROOT 对照实际证据单独确认；发现阶段失败的元数据用量沿用原生 `refresh-usage` 规则，仅 `metadata_usage_incomplete` 标未知。生产定时任务没有启动、卸载或修改。
 

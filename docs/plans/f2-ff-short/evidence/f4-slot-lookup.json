@@ -35,7 +35,8 @@
     "C:/Users/郑曾波/AppData/Local/Temp/ff-slot-review/r2/probe-results.json",
     "C:/Users/郑曾波/AppData/Local/Temp/ff-slot-review/r2/trace-results.json"
   ],
-  "review": "独立审查 agent-245281db-fdb2-492b-83a7-539f3c594312 对 4190c03 结论 PASS：141 对抗探针零不变量违规、真实 packet 协议追踪、父提交 ff-job/1 逐字节对照、生产账本 20 文件哈希不变量。Medium 发现 F1（同一 run 已派发但不在 usage 的作业未标未知）在 0ba5aa9 修复并有回归；修复后真实两批答案不变。F2 为审阅草稿统计脚本缺陷，F3 为 ROOT ACK 语义，均非产品问题。报告见 C:/Users/郑曾波/AppData/Local/Temp/ff-slot-review/review.md",
+  "review": "独立审查 agent-245281db-fdb2-492b-83a7-539f3c594312 对 4190c03 结论 PASS：141 对抗探针零不变量违规、真实 packet 协议追踪、父提交 ff-job/1 逐字节对照、生产账本 20 文件哈希不变量。Medium 发现 F1（同一 run 已派发但不在 usage 的作业未标未知）在 0ba5aa9 修复并有回归；修复后真实两批答案不变。F2 为审阅草稿统计脚本缺陷，F3 为 ROOT ACK 语义，均非产品问题。修复后另由 agent-d2fe6ad5-2ead-4d57-b4a2-372b1a2d94ff 对最终源码 HEAD 335f840 补签：六项核验全 PASS（8 例测试、F1 绑定条件、生产账本哈希守卫、_lookup_job 与 15c4614 源码/AST 恒等、远端 CI success）。报告见 C:/Users/郑曾波/AppData/Local/Temp/ff-slot-review/review.md 与 review-final.md",
+  "published_line": "main@335f840（产品源码 4190c03/0ba5aa9；其余为交接与 CI 结果文档）",
   "cleanup": "临时状态根、探针和审阅产物仅在 C:/Users/郑曾波/AppData/Local/Temp/ff-slot-lookup-tests 与 ff-slot-review；生产 .ff_jobs 的 scheduled/** 与 jobs/*.json 共 18 文件前后 SHA-256 一致，observations 无新增写入；无新发现、下载、供应商调用或费用；凭据与未跟踪文件原样保留",
   "remaining": [
     "两条旧短请求缺 ET 用量绑定，由 ROOT 协调，不能按同日或同公司补入旧包",
