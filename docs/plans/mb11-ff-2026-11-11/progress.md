@@ -48,3 +48,5 @@
 The current filing-fetch matrix boundary implementation, the isolated real test
 receipts, and the remaining production seams are recorded in
 [S3/S4 filing-fetch public boundaries](S3-offline-matrix-owner-ports.md).
+
+已验收 Ubuntu 正式 FF→ET→CWP 离线全矩阵。固定代码 `4b3dd4f` 后 41/41、48.5085 秒，真实调用、费用、翻译均零，清理完整。CWP 混合文种目录的本地元数据拦截另列产品问题。[精确证据与后续](S3-offline-matrix-owner-ports.md)。
