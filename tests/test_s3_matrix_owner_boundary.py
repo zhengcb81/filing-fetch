@@ -65,6 +65,33 @@ def test_matrix_binding_probes_paths_without_executing_producer_modules(tmp_path
     assert Path(value["company_wiki"]["file"]).resolve() == (cwp_package / "__init__.py").resolve()
 
 
+def test_warm_seed_invokes_public_owner_cli_and_preserves_its_wire(tmp_path, monkeypatch):
+    from runtime import Deadline
+    from seed_batch import run_batch
+
+    package = tmp_path / "owner" / "company_wiki" / "source_catalog"
+    package.mkdir(parents=True)
+    (package.parent / "__init__.py").touch()
+    (package / "__init__.py").touch()
+    (package / "cli.py").write_text(
+        "import sys\n"
+        "assert __name__ == '__main__' and sys.argv[1:] == ['ensure', 'fixture']\n"
+        "sys.stdout.buffer.write(b'{\"status\": \"fixture\"}\\r\\n')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYTHONPATH", str(package.parents[1]))
+    monkeypatch.chdir(tmp_path)
+    artifacts = tmp_path / "artifacts"
+    batch = run_batch({"artifacts": str(artifacts), "deadline_end": Deadline(15).end, "requests": [{
+        "state_file": str(tmp_path / "state.json"), "state": {}, "tag": "seed", "argv": ["ensure", "fixture"],
+    }]})
+    row, = batch["requests"]
+    wire = (artifacts / row["response_ref"]).read_bytes()
+    assert row["exit_code"] == 0, (artifacts / row["stderr_ref"]).read_bytes()
+    assert wire == b'{"status": "fixture"}\r\n'
+    assert row["response_sha256"] == hashlib.sha256(wire).hexdigest()
+
+
 @pytest.mark.parametrize(
     ("lookup_change", "open_change", "expected"),
     [
