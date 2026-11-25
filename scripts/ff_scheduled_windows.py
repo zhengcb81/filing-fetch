@@ -18,10 +18,9 @@ import tempfile
 from xml.etree import ElementTree as xml
 from xml.parsers.expat import errors as xml_errors
 
-from ff_persistence import owner_io_path
 from ff_refresh_policy import utc_text
 from ff_refresh_store import RefreshStore
-from ff_runtime_feedback import cli_failure, parse_arguments, warn_diagnostic_unavailable
+from ff_runtime_feedback import cli_failure, parse_arguments
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -148,7 +147,6 @@ def run(argv=None) -> int:
         raise
 
 
-_FAILURE_LOG_MAX_BYTES = 2 * 1024 * 1024
 _TRACEBACK_HEADER = b"Traceback (most recent call last):"
 _TRACEBACK_FRAME = re.compile(rb'^  File "([^"]+)", line ([0-9]{1,8})(?:, in .*)?$')
 _EXCEPTION_LINE = re.compile(rb"^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?::(?=\s|$)|$)")
@@ -201,24 +199,6 @@ def _tick_failure(returncode: int, stderr: bytes) -> dict:
     return {"exit_code": returncode, "stderr_form": "unclassified"}
 
 
-def _persist_tick_failure_log(jobs_dir: Path, facts: dict, reference: str) -> None:
-    log_path = owner_io_path(jobs_dir / "logs" / "scheduled_refresh_failures.log")
-    try:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        if log_path.is_file() and log_path.stat().st_size >= _FAILURE_LOG_MAX_BYTES:
-            rotated = log_path.with_suffix(".log.1")
-            try:
-                log_path.replace(rotated)
-            except OSError:
-                pass
-        entry = {"observed_at": utc_text(datetime.now(timezone.utc)), "event": "windows-tick",
-                 "evidence_ref": reference, "child_process": facts}
-        with log_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(entry) + "\n")
-    except OSError as exc:
-        warn_diagnostic_unavailable("scheduled refresh failure log", exc)
-
-
 def _run_action(parser, args):
     if os.name != "nt":
         parser.error("Windows Task Scheduler requires Windows")
@@ -232,13 +212,12 @@ def _run_action(parser, args):
         )
         if result.returncode:
             facts = _tick_failure(result.returncode, result.stderr or b"")
-            reference = cli_failure(
+            cli_failure(
                 "windows-tick",
                 "tick_exit_" + str(result.returncode),
                 jobs_dir=args.jobs_dir,
                 child_process=facts,
             )
-            _persist_tick_failure_log(args.jobs_dir, facts, reference)
         return result.returncode
     name, sid = _identity()
     task_name = args.task_name or f"FilingFetch-ScheduledRefresh-{sid}"

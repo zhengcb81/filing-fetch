@@ -12,7 +12,8 @@ import re
 import sys
 import uuid
 
-from ff_persistence import acquire_file_lock, atomic_write_json, atomic_write_text, owner_io_path
+from ff_persistence import acquire_file_lock, atomic_write_json, atomic_write_text, owner_io_path, separate_partial_line
+from ff_runtime_log import append_runtime_issue
 
 DEFAULT_JOBS_DIR = Path(__file__).resolve().parents[1] / ".ff_jobs"
 OUT_ENV = "RESEARCH_FEEDBACK_OUT"
@@ -102,11 +103,7 @@ def _text(rows):
 def _explicit(file, rows):
     try:
         with owner_io_path(Path(file)).open("ab+") as stream:
-            stream.seek(0, os.SEEK_END)
-            if stream.tell():
-                stream.seek(-1, os.SEEK_END)
-                if stream.read(1) != b"\n":
-                    stream.write(b"\n")
+            separate_partial_line(stream)
             stream.write(_text(rows).encode("ascii"))
             stream.flush()
             os.fsync(stream.fileno())
@@ -127,10 +124,29 @@ def owner_child_environment():
     }
 
 
-def observation_directories(jobs_dir=None):
-    default = Path(jobs_dir or DEFAULT_JOBS_DIR) / "observations"
+def _feedback_targets(default):
     override = os.environ.get(DIR_ENV)
     return list(dict.fromkeys([Path(override), default] if override else [default]))
+
+
+def observation_directories(jobs_dir=None):
+    return _feedback_targets(Path(jobs_dir or DEFAULT_JOBS_DIR) / "observations")
+
+
+def _runtime_roots(jobs_dir):
+    return _feedback_targets(Path(jobs_dir or DEFAULT_JOBS_DIR))
+
+
+def record_runtime_failure(surface, reason, error=None, *, jobs_dir=None, run_id=None, detail=None):
+    """Record an owner CLI/control failure locally, without creating F4 work for itself."""
+    try:
+        occurrence = uuid.uuid4().hex
+        base = identity(run_id or occurrence, 1, f"{surface}/{occurrence}", f"ff-cli/1/{occurrence}", "ff-cli/1")
+        row = dict(base, check_id="execution-outcome", expected="completed", actual=reason,
+                   disposition="deviation", issue_key=reason)
+        append_runtime_issue(_runtime_roots(jobs_dir), [row], detail or cause_details(error, reason=reason))
+    except Exception:
+        return
 
 
 def terminal_was_offered(row, jobs_dir):
@@ -187,11 +203,13 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recovera
         for row in rows:
             groups.setdefault(tuple(row[k] for k in _HEADER), []).append(row)
         directories = observation_directories(jobs_dir)
+        runtime_roots = _runtime_roots(jobs_dir)
         for marker_key, group in groups.items():
             marker = dict(zip(_HEADER, marker_key))
             only_start = all(row["check_id"] == "action-started" for row in group)
             name = _packet_name(marker_key, "started" if only_start else "complete")
             local_detail = detail is not None and group[0] is rows[0]
+            append_runtime_issue(runtime_roots, group, detail if local_detail else None)
             if local_detail:
                 for item in group:
                     if detail_for_all or item.get("disposition") == "deviation" or "refusal_code" in item:
@@ -279,7 +297,7 @@ def cli_failure(surface, reason, error=None, *, jobs_dir=None, no_dispatch=False
     return base["evidence_ref"]
 
 
-def parse_arguments(parser: argparse.ArgumentParser, argv, surface):
+def parse_arguments(parser: argparse.ArgumentParser, argv, surface, *, local_only=False):
     try:
         return parser.parse_args(argv)
     except SystemExit as error:
@@ -293,5 +311,8 @@ def parse_arguments(parser: argparse.ArgumentParser, argv, surface):
                 if arg.startswith("--jobs-dir="):
                     root = arg.partition("=")[2]
                     break
-            cli_failure(surface, "argument_error", error, jobs_dir=root, no_dispatch=True)
+            if local_only:
+                record_runtime_failure(surface, "argument_error", error, jobs_dir=root)
+            else:
+                cli_failure(surface, "argument_error", error, jobs_dir=root, no_dispatch=True)
         raise

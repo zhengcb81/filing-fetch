@@ -67,11 +67,14 @@ def test_windows_failure_is_data_minimal_and_cold_readable(tmp_path, monkeypatch
         encoding="utf-8",
     )
     monkeypatch.setattr(launcher, "ENTRY", fake_entry)
+    legacy = jobs_dir / "logs" / "scheduled_refresh_failures.log"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("existing historical log\n", encoding="utf-8")
 
     rc = launcher.run(["run", "--python", sys.executable, "--jobs-dir", str(jobs_dir)])
 
     assert rc == 7
-    failure_log = jobs_dir / "logs" / "scheduled_refresh_failures.log"
+    failure_log = jobs_dir / "logs" / "runtime-errors.jsonl"
     assert failure_log.is_file()
     text = failure_log.read_text(encoding="utf-8")
     assert all(marker not in text for marker in (
@@ -79,7 +82,7 @@ def test_windows_failure_is_data_minimal_and_cold_readable(tmp_path, monkeypatch
     ))
     logged = json.loads(text)
     assert logged["event"] == "windows-tick"
-    assert logged["child_process"] == {
+    assert logged["diagnostic"]["child_process"] == {
         "exit_code": 7, "stderr_form": "python_traceback", "builtin_exception": "RuntimeError",
         "exception_type": "RuntimeError", "last_frame": {"file": "broken_tick.py", "line": 8},
     }
@@ -98,7 +101,7 @@ def test_windows_failure_is_data_minimal_and_cold_readable(tmp_path, monkeypatch
     for _ in range(2):
         cold = subprocess.run(command, capture_output=True, check=True, timeout=20)
         detail = json.loads(cold.stdout)
-        assert detail["child_process"] == logged["child_process"]
+        assert detail["child_process"] == logged["diagnostic"]["child_process"]
         assert detail["run_id"] == observation["run_id"]
         assert detail["causes"] == []
         assert b"fake-" not in cold.stdout + cold.stderr
@@ -113,6 +116,7 @@ def test_windows_failure_is_data_minimal_and_cold_readable(tmp_path, monkeypatch
     assert two_rows[0] == logged and two_rows[1]["evidence_ref"] != logged["evidence_ref"]
     assert packet.read_bytes() == frozen and len(list(observations.glob("*.jsonl"))) == 2
     assert calls.read_text(encoding="utf-8").splitlines() == ["called", "called"]
+    assert legacy.read_text(encoding="utf-8") == "existing historical log\n"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows scheduled tick runner")
@@ -126,8 +130,8 @@ def test_windows_failure_log_survives_unavailable_outbox(tmp_path, monkeypatch):
     monkeypatch.setattr(launcher, "ENTRY", fake_entry)
 
     assert launcher.run(["run", "--python", sys.executable, "--jobs-dir", str(jobs_dir)]) == 9
-    log = jobs_dir / "logs" / "scheduled_refresh_failures.log"
-    assert json.loads(log.read_bytes())["child_process"] == {"exit_code": 9, "stderr_form": "empty"}
+    log = jobs_dir / "logs" / "runtime-errors.jsonl"
+    assert json.loads(log.read_bytes())["diagnostic"]["child_process"] == {"exit_code": 9, "stderr_form": "empty"}
     assert (jobs_dir / "observations").read_text(encoding="utf-8") == "not a directory"
 
 

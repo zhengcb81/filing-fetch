@@ -10,7 +10,10 @@ import re
 import sys
 import tempfile
 
-from ff_runtime_feedback import DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, identity, publish, terminal_was_offered
+from ff_runtime_feedback import (
+    DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, identity, parse_arguments, publish,
+    record_runtime_failure, terminal_was_offered,
+)
 
 OUTCOME = "job-outcome"
 
@@ -452,7 +455,7 @@ def main() -> int:
     lookup.add_argument("--jobs-dir", type=Path, required=True)
     lookup.add_argument("--config", type=Path, help="owner configuration for catalog-only recovery of a lost job")
     lookup.add_argument("--timeout-seconds", type=float, default=10.0)
-    args = parser.parse_args()
+    args = parse_arguments(parser, None, "feedback", local_only=True)
     if args.command == "get-diagnostic":
         match = re.fullmatch(r"ff-diagnostic/1/(feedback-[a-f0-9]{32})", args.reference)
         if not match:
@@ -465,7 +468,8 @@ def main() -> int:
                 value = json.loads((directory / (match[1] + ".cause.json")).read_bytes())
             except FileNotFoundError:
                 continue
-            except (OSError, ValueError):
+            except (OSError, ValueError) as error:
+                record_runtime_failure("feedback-get-diagnostic", "diagnostic_unreadable", error, jobs_dir=args.jobs_dir)
                 break
             print(json.dumps(value, ensure_ascii=True))
             return 0
@@ -477,6 +481,7 @@ def main() -> int:
         try:
             reply = _lookup(args, json.load(sys.stdin))
         except (OSError, ValueError, RecursionError) as error:
+            record_runtime_failure("feedback-reconcile", "reconcile_failed", error, jobs_dir=args.jobs_dir)
             print(json.dumps({"error": type(error).__name__}))
             return 1
         print(json.dumps(reply, ensure_ascii=True))
@@ -484,7 +489,11 @@ def main() -> int:
     if args.reports_dir is None:
         parser.error("--reports-dir is required for reports")
     if args.command == "report":
-        request = json.load(sys.stdin)
+        try:
+            request = json.load(sys.stdin)
+        except (OSError, ValueError, RecursionError) as error:
+            record_runtime_failure("feedback-report", "invalid_report_request", error)
+            raise
         key = request.get("action_id") if isinstance(request, dict) else None
     else:
         key = args.action_id
@@ -494,6 +503,8 @@ def main() -> int:
         value = ({"result": _record_report(args.reports_dir, request)} if args.command == "report"
                  else {"report": json.loads((args.reports_dir / (key + ".json")).read_bytes())})
     except (OSError, ValueError) as error:
+        if args.command != "get-report" or not isinstance(error, FileNotFoundError):
+            record_runtime_failure("feedback-" + args.command, "report_io_failed", error)
         print(json.dumps({"error": type(error).__name__}))
         return 1
     print(json.dumps(value, ensure_ascii=True))

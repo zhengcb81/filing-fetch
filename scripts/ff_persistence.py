@@ -84,6 +84,14 @@ def atomic_write_text(path: Path, value: str) -> None:
         stream.write(value)
 
 
+def separate_partial_line(stream: BinaryIO) -> None:
+    """Preserve a torn last record without joining it to the next append."""
+    if stream.seek(0, os.SEEK_END):
+        stream.seek(-1, os.SEEK_END)
+        if stream.read(1) != b"\n":
+            stream.write(b"\n")
+
+
 @contextmanager
 def _atomic_text_stream(path: Path):
     path = owner_io_path(path)

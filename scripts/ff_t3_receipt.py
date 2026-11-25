@@ -20,7 +20,8 @@ import warnings
 
 from ff_persistence import acquire_file_lock, atomic_write_json, owner_io_path
 from ff_process_tree import pid_is_alive
-from ff_runtime_feedback import cause_details
+from ff_runtime_feedback import cause_details, parse_arguments, record_runtime_failure
+from ff_runtime_log import diagnostic_fields as _diagnostic_fields, diagnostic_view as _diagnostic_view
 
 SCHEMA = "ff-t3-assurance/1"
 PROJECT = Path(__file__).resolve().parents[1]
@@ -107,54 +108,6 @@ def _load(path: Path, run_id: str | None) -> dict | None:
 
 def _evidence(run_id: str, case: str) -> str:
     return f"ff-t3/{run_id}/{case}"
-
-
-def _diagnostic_fields(
-    value: object, *, labels: tuple[str, ...], numbers: tuple[str, ...] = (),
-) -> dict:
-    if not isinstance(value, dict):
-        return {}
-    projected: dict[str, str | int] = {}
-    for key in labels:
-        field = value.get(key)
-        if isinstance(field, str) and re.fullmatch(r"[\w.<>-]+", field):
-            projected[key] = field
-    for key in numbers:
-        field = value.get(key)
-        if type(field) is int:
-            projected[key] = field
-    return projected
-
-
-def _diagnostic_view(value: object) -> dict | None:
-    # Keep the existing cause vocabulary. Older free-form diagnostics must
-    # not introduce messages or physical paths into this public receipt.
-    if not isinstance(value, dict) or value.get("schema_version") != "ff-failure-detail/1":
-        return None
-    public = _diagnostic_fields(value, labels=("reason", "owner_reason", "diagnostic"))
-    public["schema_version"] = "ff-failure-detail/1"
-    causes = value.get("causes")
-    if isinstance(causes, list):
-        public["causes"] = []
-        for cause in causes:
-            row = _diagnostic_fields(
-                cause, labels=("relation", "type"),
-                numbers=("errno", "winerror", "lineno", "colno", "pos"),
-            )
-            if not isinstance(cause, dict) or not {"relation", "type"} <= row.keys():
-                continue
-            for field, labels, numbers in (
-                ("frames", ("file", "function", "source_sha256"), ("line",)),
-                ("process_cleanup", ("stage", "type"), ()),
-            ):
-                entries = cause.get(field)
-                if isinstance(entries, list):
-                    row[field] = [
-                        item for entry in entries
-                        if (item := _diagnostic_fields(entry, labels=labels, numbers=numbers))
-                    ]
-            public["causes"].append(row)
-    return public
 
 
 def _suite_output_view(value: object) -> dict | None:
@@ -318,6 +271,8 @@ def _run_once(
         if detail is not None:
             cases[case]["diagnostic"] = detail
         atomic_write_json(path, value)
+        if mode == "live" and outcome != "passed":
+            record_runtime_failure("t3-" + case, reason or outcome, run_id=run_id, detail=detail)
 
     reason: str | None
     try:
@@ -341,6 +296,8 @@ def _run_once(
             state, reason = "completed", None
     value.update(state=state, reason=reason, completed_at=_now())
     atomic_write_json(path, value)
+    if mode == "live" and state == "blocked" and reason != "case_execution_blocked":
+        record_runtime_failure("t3-run-live", reason, run_id=run_id, detail=value.get("diagnostic"))
     return _project(value)
 
 
@@ -441,21 +398,24 @@ def main(argv: list[str] | None = None) -> int:
     get.add_argument("--run-id")
     get.add_argument("--latest", action="store_true")
     commands.add_parser("run-live").add_argument("--run-id", required=True)
-    args = parser.parse_args(argv)
+    args = parse_arguments(parser, argv, "t3", local_only=True)
     try:
         if args.command == "get":
             value = (get_latest_receipt(args.receipts_dir) if args.latest
                      else get_receipt(args.receipts_dir, args.run_id))
         else:
             value = _run_once(args.receipts_dir, args.run_id, _execute_native_suite)
-    except ValueError:
+    except ValueError as error:
+        record_runtime_failure("t3-" + args.command, "invalid_run_id", error, run_id=args.run_id)
         print(json.dumps({"schema_version": SCHEMA, "state": "blocked", "reason": "invalid_run_id"}))
         return 2
     except OSError as error:
         reason = "receipt_io_failed"
+        detail = cause_details(error, reason=reason)
+        record_runtime_failure("t3-" + args.command, reason, run_id=args.run_id, detail=detail)
         print(json.dumps({"schema_version": SCHEMA, "run_id": args.run_id,
                           "state": "unknown", "reason": reason,
-                          "diagnostic": _diagnostic_view(cause_details(error, reason=reason))}))
+                          "diagnostic": _diagnostic_view(detail)}))
         return 2 if args.command == "run-live" else 1
 
     print(json.dumps(value, ensure_ascii=True))

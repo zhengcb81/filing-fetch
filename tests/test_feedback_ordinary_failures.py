@@ -1,5 +1,6 @@
 """Native feedback at the same public entry points used by direct and scheduled callers."""
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -39,6 +40,119 @@ def packets(directory):
         )
         rows += packet
     return rows
+
+
+def runtime_rows(directory):
+    log = directory / "logs" / "runtime-errors.jsonl"
+    return [json.loads(line) for line in log.read_bytes().splitlines()]
+
+
+@pytest.mark.parametrize(("script", "args", "body", "code", "reason"), [
+    ("ff_job", ("--jobs-dir", "state", "submit"), "[]", 2, "request_error"),
+    ("ff_job_feedback", ("reconcile", "--jobs-dir", "state"), "{", 1, "reconcile_failed"),
+    ("ff_t3_receipt", ("--receipts-dir", "bad-receipts", "get", "--latest"), "", 1, "receipt_io_failed"),
+])
+def test_public_cli_failure_lands_native_rotating_diagnostic_without_wire_noise(
+    tmp_path, script, args, body, code, reason,
+):
+    blocked = tmp_path / "bad-receipts"
+    blocked.write_text("test-private-path-marker", encoding="utf-8")
+    state = tmp_path / "state"
+    observed = tmp_path / "override"
+    isolate = {"RESEARCH_FEEDBACK_DIR": str(observed)} if script == "ff_t3_receipt" else {}
+    result = cli(tmp_path, script, args, body, **isolate,
+                 RESEARCH_FEEDBACK_RUN_ID="original-run", RESEARCH_FEEDBACK_ATTEMPT_ID="original-attempt")
+    assert result.returncode == code and result.stderr == ""
+    envelope = json.loads(result.stdout)
+    if script == "ff_job_feedback":
+        assert envelope == {"error": "JSONDecodeError"}
+        assert not list(observed.glob("*.ready"))  # The F4 control plane must not send itself work.
+    elif script == "ff_t3_receipt":
+        assert envelope["reason"] == reason and envelope["state"] == "unknown"
+        assert blocked.read_text(encoding="utf-8") == "test-private-path-marker"
+    else:
+        assert envelope["error"]["code"] == reason
+    row, = runtime_rows(observed if script == "ff_t3_receipt" else state)
+    assert (row["run_id"], row["attempt_id"]) == ("original-run", "original-attempt")
+    assert row["schema_version"] == "ff-runtime-log/1" and row["level"] == "warning"
+    assert any(check["actual"] == reason for check in row["checks"])
+    assert row["diagnostic"]["causes"][0]["type"]
+    assert str(tmp_path) not in json.dumps(row) and "test-private-path-marker" not in json.dumps(row)
+
+
+def test_runtime_log_fallback_keeps_the_original_job_json_and_stderr(tmp_path):
+    first = cli(tmp_path, "ff_job", ["--jobs-dir", "control", "submit"], "[]")
+    jobs = tmp_path / "jobs"
+    blocked = tmp_path / "backup-outbox"
+    blocked.write_bytes(b"untouched")
+    failed_log = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "submit"], "[]",
+                     RESEARCH_FEEDBACK_DIR=str(blocked), RESEARCH_FEEDBACK_RUN_ID="runtime-fallback")
+    assert (failed_log.returncode, failed_log.stdout, failed_log.stderr) == (2, first.stdout, "")
+    assert blocked.read_bytes() == b"untouched"
+    record, = runtime_rows(jobs)
+    assert record["run_id"] == "runtime-fallback"
+
+
+@pytest.mark.parametrize("script", ["ff_job_feedback", "ff_t3_receipt"])
+def test_control_cli_argument_refusal_uses_local_log_only(tmp_path, script):
+    outbox = tmp_path / "outbox"
+    result = cli(tmp_path, script, ["--private-marker"], "", RESEARCH_FEEDBACK_DIR=str(outbox),
+                 RESEARCH_FEEDBACK_RUN_ID="rejected-argument")
+
+    assert result.returncode == 2 and result.stdout == "" and "usage:" in result.stderr
+    assert not list(outbox.glob("*.ready"))
+    entry, = runtime_rows(outbox)
+    assert entry["run_id"] == "rejected-argument" and entry["checks"][0]["actual"] == "argument_error"
+    assert "private-marker" not in str(entry)
+
+
+def test_unwritable_native_log_has_no_wire_effect(tmp_path):
+    first = cli(tmp_path, "ff_job", ["--jobs-dir", "control", "submit"], "[]")
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    blocked = jobs / "logs"
+    blocked.write_bytes(b"untouched")
+
+    result = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "submit"], "[]")
+
+    assert (result.returncode, result.stdout, result.stderr) == (2, first.stdout, "")
+    assert blocked.read_bytes() == b"untouched"
+    assert any(row["actual"] == "request_error" for row in packets(jobs / "observations"))
+
+
+def test_two_real_cli_processes_share_one_safe_rotation(tmp_path):
+    jobs = tmp_path / "shared"
+    logs = jobs / "logs"
+    logs.mkdir(parents=True)
+    log = logs / "runtime-errors.jsonl"
+    before = json.dumps({"fixture": "x" * (2 * 1024 * 1024)}).encode("ascii") + b"\n"
+    log.write_bytes(before)
+
+    def fail(run_id):
+        return cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "submit"], "[]",
+                   RESEARCH_FEEDBACK_RUN_ID=run_id)
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = list(workers.map(fail, ("shared-a", "shared-b")))
+    assert all(result.returncode == 2 and result.stderr == "" for result in results)
+    assert {row["run_id"] for row in runtime_rows(jobs)} == {"shared-a", "shared-b"}
+    assert len(runtime_rows(jobs)) == 2
+    assert log.with_name(log.name + ".1").read_bytes() == before
+
+
+def test_torn_runtime_log_keeps_next_occurrence_independent(tmp_path):
+    jobs = tmp_path / "shared"
+    log = jobs / "logs" / "runtime-errors.jsonl"
+    log.parent.mkdir(parents=True)
+    log.write_bytes(b'{"interrupted":')
+
+    result = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "submit"], "[]",
+                 RESEARCH_FEEDBACK_RUN_ID="next-occurrence")
+
+    assert result.returncode == 2 and result.stderr == ""
+    fragment, row = log.read_bytes().splitlines()
+    assert fragment == b'{"interrupted":'
+    assert json.loads(row)["run_id"] == "next-occurrence"
 
 
 @pytest.mark.parametrize(
