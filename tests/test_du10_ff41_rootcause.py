@@ -5,14 +5,9 @@ Context whose process-launching preparation (``warm_seed_batch``/``scan``) is
 recorded instead of executed, then asserts the per-group warm-preparation
 contract:
 
-* each worker group's warm-seed submission is exactly the subset of the fixed
-  warm list that the group's own fixed cases consume or reference;
-* the union across groups is the full fixed warm list (coverage never shrinks).
-
-On the pre-change runner both groups submit the identical full 10-ensure batch,
-so the per-group assertion fails on observed behaviour — not on a missing
-import — and the historical full-batch default is separately pinned for
-single-group callers.
+* each catalog's warm-seed submission is exactly the subset of the fixed warm
+  list its cases reference, including legacy cases with a private catalog;
+* the union across catalogs is the full fixed warm list.
 """
 
 from __future__ import annotations
@@ -141,53 +136,52 @@ def _seed_key(seed_tuple):
     return (identity.market, kind, year, period)
 
 
-def test_each_group_warm_seed_batch_covers_only_its_consumed_keys(tmp_path):
-    recorded_batches, recorded_scans = [], []
-    _drive_main(tmp_path, recorded_batches, recorded_scans)
+def _expected_catalog_cases(workers):
+    # Independent test requirement. Marking an additional test as private in
+    # the registry cannot accidentally weaken the owner seed assertions.
+    private = {"local_txt_exact_reuse", "incomplete_sidecar_metadata_gap"}
+    owned = {}
+    for index, members in enumerate(_expected_groups(workers), start=1):
+        prefix = f"g{index}."
+        owned[prefix] = [cid for cid in members if cid not in private]
+        owned.update({f"{prefix}{cid}.": [cid] for cid in members if cid in private})
+    return owned
 
-    groups = _expected_groups()
-    assert len(recorded_batches) == len(groups) == 2, "both worker groups must seed once"
+
+@pytest.mark.parametrize("workers", [1, 2])
+def test_each_catalog_warm_seed_batch_covers_only_its_consumed_keys(tmp_path, workers):
+    recorded_batches, recorded_scans = [], []
+    _drive_main(tmp_path, recorded_batches, recorded_scans, workers=workers)
+
     fixed = _fixed_warm_keys()
     observed = {prefix: {_seed_key(seed) for seed in seeds}
                 for prefix, seeds in recorded_batches}
     expected = {}
-    for index, case_ids in enumerate(groups):
-        wanted = set()
-        for cid in case_ids:
-            wanted |= _referenced_warm_keys(get_spec(cid))
-        expected[f"g{index + 1}."] = {key for key in wanted if key in fixed}
-    assert observed == expected, (
-        "each group must prepare exactly the warm keys its own fixed cases "
-        f"consume or reference; observed={observed} expected={expected}"
-    )
-    # The union over groups is the full fixed warm list — coverage never shrinks.
-    union = set().union(*observed.values())
-    assert union == fixed, f"per-group subsets lost fixed warm coverage: {sorted(fixed - union)}"
+    for prefix, case_ids in _expected_catalog_cases(workers).items():
+        wanted = set().union(*(_referenced_warm_keys(get_spec(cid)) for cid in case_ids))
+        if wanted & fixed:
+            expected[prefix] = wanted & fixed
+    assert len(recorded_batches) == len(expected)
+    assert observed == expected
+    assert set().union(*observed.values()) == fixed
 
 
-def test_txt_transcript_seed_lands_only_in_the_group_that_consumes_it(tmp_path):
+def test_txt_transcript_seed_lands_only_in_its_own_catalog(tmp_path):
     recorded_batches, recorded_scans, txt_seeded = [], [], []
 
     def recording_seed_original(self, identity, *args, **kwargs):
-        # case_unverified_sidecar seeds its own PDF via the same helper; only
-        # the fixed local TXT transcript seed is the warm-preparation signal.
         if kwargs.get("document_kind") == "investor_call_transcript":
-            txt_seeded.append(str(self.scratch))
+            txt_seeded.append(self.scratch)
         return original_seed_original(self, identity, *args, **kwargs)
 
     _drive_main(tmp_path, recorded_batches, recorded_scans,
                 seed_original_recorder=recording_seed_original)
-    groups = _expected_groups()
-    txt_group = {f"g{i + 1}." for i, case_ids in enumerate(groups)
-                 if "local_txt_exact_reuse" in case_ids}
-    assert len(txt_group) == 1, "the fixed TXT-consuming case lives in exactly one group"
-    for index in range(len(groups)):
-        prefix = f"g{index + 1}."
-        segment = f"/g{index + 1}"
-        seeded = any(path.replace("\\", "/").endswith(segment) for path in txt_seeded)
-        assert seeded == (prefix in txt_group), (
-            f"{prefix}: local TXT seed present={seeded}, expected {prefix in txt_group}"
-        )
+    owning_group = next(f"g{i}" for i, case_ids in enumerate(_expected_groups(), start=1)
+                        if "local_txt_exact_reuse" in case_ids)
+    assert len(txt_seeded) == 1
+    assert txt_seeded[0].parent.name == owning_group
+    assert txt_seeded[0].name.startswith("c")
+    assert recorded_scans.count(f"{owning_group}.local_txt_exact_reuse.") == 1
 
 
 def test_gap_keys_are_never_seeded_even_when_referenced(tmp_path):
@@ -205,15 +199,6 @@ def test_gap_keys_are_never_seeded_even_when_referenced(tmp_path):
             for _prefix, seeds in recorded_batches
             for identity, kind, year, period in seeds}
     assert tags == fixed_tags, "the union of groups still prepares every fixed warm seed"
-
-
-def test_single_group_caller_keeps_the_full_historical_batch(tmp_path):
-    """--workers 1: one group owns every case, so its plan is the full batch."""
-    recorded_batches, recorded_scans = [], []
-    _drive_main(tmp_path, recorded_batches, recorded_scans, workers=1)
-    assert len(recorded_batches) == 1
-    _prefix, seeds = recorded_batches[0]
-    assert {_seed_key(seed) for seed in seeds} == _fixed_warm_keys()
 
 
 def test_seed_plan_for_rejects_unknown_case_ids():

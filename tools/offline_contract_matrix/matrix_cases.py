@@ -139,7 +139,7 @@ def seed_all(ctx: Context) -> None:
     plan = seed_plan_for(ctx.seed_cases) if getattr(ctx, "seed_cases", None) is not None else None
     seeds = _warm_seed_list() if plan is None else plan["ensure_seeds"]
     seed_txt = True if plan is None else plan["seed_txt"]
-    ctx.seed_receipts = ctx.warm_seed_batch(seeds)
+    ctx.seed_receipts = ctx.warm_seed_batch(seeds) if seeds else []
     # Group-owned evidence files carry the group prefix: the evidence dir is
     # flat and shared, so an unprefixed name would let one group's receipts
     # overwrite the other's (the seed-batch stdout files are prefixed already).
@@ -151,7 +151,8 @@ def seed_all(ctx: Context) -> None:
         ctx.env.seed_original(txt_identity, document_kind="investor_call_transcript", fiscal_year=2024,
                               fiscal_period="Q2", form_type=None, published_date="2024-07-01",
                               content=b"Synthetic original-language local TXT transcript.\n", mime_type="text/plain", filename_hint="aapl_local_2024q2")
-    ctx.scan()
+    if seeds or seed_txt:
+        ctx.scan()
 
 
 # ── cases ─────────────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -209,6 +209,22 @@ def _merge_source_proofs(target: dict, part: dict, group: str) -> None:
         target.setdefault("catalog_snapshot", []).extend(part["catalog_snapshot"])
 
 
+def _seed_context(ctx: Context, case_ids: list[str]) -> None:
+    ctx.seed_cases = case_ids
+    phases = getattr(ctx, "phases", None)
+    if phases is None:
+        seed_all(ctx)
+    else:
+        with phases.span("seed"):
+            seed_all(ctx)
+
+
+def _fixture_contexts(groups: list[Context]) -> Iterator[Context]:
+    for parent in groups:
+        yield parent
+        yield from getattr(parent, "isolated_contexts", ())
+
+
 def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]],
                    deadline: Deadline) -> tuple[list[tuple[int, CaseResult]], str | None]:
     """One concurrent worker group: own wiki/seeds/proxy/counters.
@@ -219,20 +235,10 @@ def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]]
     """
     done: list[tuple[int, CaseResult]] = []
     stop_reason = None
-    phases = getattr(ctx, "phases", None)
-    # Warm preparation is derived from THIS group's own fixed cases only; the
-    # ids travel on the context because seed_all's one-argument call shape is
-    # pinned by existing callers (DU8/W07 suites patch it as seed_all(ctx)).
-    try:
-        ctx.seed_cases = [cid for _, (cid, _runner) in entries]
-    except AttributeError:
-        pass
-    if phases is not None:
-        with phases.span("seed"):
-            seed_all(ctx)
-    else:
-        seed_all(ctx)
-    for pos, (cid, runner) in entries:
+    cases = [(pos, cid, runner, _resolve_case_spec(cid)) for pos, (cid, runner) in entries]
+    _seed_context(ctx, [cid for _, cid, _, spec in cases
+                        if not getattr(spec, "isolated_catalog", False)])
+    for pos, cid, runner, spec in cases:
         # The final fresh source proof is mandatory: case work may not spend
         # the reserved tail of the unchanged single batch deadline.
         if time.monotonic() >= deadline.end - PROOF_RESERVE_SECONDS:
@@ -241,22 +247,26 @@ def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]]
                 "batch deadline); remaining cases kept NOT_RUN instead of starving the proof")
             break
         case_start = time.monotonic()
+        case_ctx = ctx
         try:
             ctx.begin_case()
-            ctx.active_case_spec = _resolve_case_spec(cid)
-            result = runner(ctx)
-            errors = ctx.active_case_spec.metadata_errors(result.to_dict())
+            if getattr(spec, "isolated_catalog", False):
+                case_ctx = ctx.isolate_case(cid, pos)
+                _seed_context(case_ctx, [cid])
+                case_ctx.deadline.remaining()
+            case_ctx.active_case_spec = spec
+            result = runner(case_ctx)
+            errors = spec.metadata_errors(result.to_dict())
             if errors:
                 raise ValueError("case runner contract drift: " + "; ".join(errors))
         except DeadlineExceeded as exc:
             result = CaseResult(id=cid, title=cid, declared_layer="unknown", result="PARTIAL", actual={"error":str(exc)})
         except Exception as exc:
             result = CaseResult(id=cid, title=cid, declared_layer="unknown", result="FAIL", actual={"error":f"{type(exc).__name__}: {exc}"})
-        spec = _resolve_case_spec(cid)
         result.declared_layer, result.scope, result.expected = spec.declared_layer, spec.scope, spec.expected()
         elapsed = time.monotonic() - case_start
         result.actual["elapsed_seconds"] = round(elapsed, 4)
-        result.actual["runs"] = ctx.traces.get(cid, [])
+        result.actual["runs"] = case_ctx.traces.get(cid, [])
         traces = result.actual["runs"]
         result.provider_counters["fixture_requests"] = sum(t["fixture_requests"] for t in traces)
         if result.expected.get("run_twice"):
@@ -507,14 +517,17 @@ def main(argv: list[str] | None = None) -> int:
             results = [done_by_pos[pos] for pos in sorted(done_by_pos)]
             stop_reason = "; ".join(dict.fromkeys(stops)) or None
             # The final proof starts only after all groups have stopped writing.
-            # Each helper uses its group's isolated wiki and the same batch end.
-            timer.count_launch("fresh_source_proof", workers)
+            # The same worker pool also proves each case-owned wiki under the
+            # original batch deadline, with deterministic evidence merge keys.
+            proof_contexts = list(_fixture_contexts(ctxs))
+            timer.count_launch("fresh_source_proof", len(proof_contexts))
             with timer.span("fresh_source_proof"):
-                pending_proofs = [pool.submit(_fresh_proofs, ctx) for ctx in ctxs]
+                pending_proofs = [(ctx.artifact_prefix.removesuffix("."), pool.submit(_fresh_proofs, ctx))
+                                  for ctx in proof_contexts]
                 proof_failure = None
-                for index, future in enumerate(pending_proofs):
+                for scope_id, future in pending_proofs:
                     try:
-                        _merge_source_proofs(proofs, future.result(), f"g{index + 1}")
+                        _merge_source_proofs(proofs, future.result(), scope_id)
                     except Exception as exc:
                         if proof_failure is None:
                             proof_failure = exc
@@ -526,14 +539,14 @@ def main(argv: list[str] | None = None) -> int:
         error = f"{type(exc).__name__}: {exc}"
     finally:
         try:
-            for ctx in ctxs:
+            fixture_contexts = list(_fixture_contexts(ctxs))
+            for ctx in fixture_contexts:
                 phases = getattr(ctx, "phases", None)
                 if phases is not None:
                     timer.merge(phases)
             cache_info = cache_stats(attempt.cache)
             accounting = merge_launch_reports(
-                [launch_report(attempt.scratch / f"g{index + 1}" / "launches.jsonl")
-                 for index in range(workers)])
+                [launch_report(ctx.scratch / "launches.jsonl") for ctx in fixture_contexts])
             parent_calls = timer.launch_counts()
             accounting["launches"]["parent_calls"] = parent_calls
             accounting["launches"]["parent_launch_total"] = sum(parent_calls.values())
@@ -543,8 +556,8 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     timer.mark_unknown(phase, entry.get("reason") or "nested child span unobserved")
             events = []
-            for index in range(workers):
-                events.extend(guard_events(attempt.scratch / f"g{index + 1}"))
+            for ctx in fixture_contexts:
+                events.extend(guard_events(ctx.scratch))
             (attempt.output / "guard-events.json").write_text(json.dumps(events, indent=2), encoding="utf-8")
         finally:
             with timer.span("cleanup"):
@@ -572,7 +585,8 @@ def main(argv: list[str] | None = None) -> int:
             "fixture_counter_scope":"observed local fixture GETs only; producer unknown usage stays null"}
     scope = {"batch_elapsed_seconds":round(elapsed, 4), "case_limit_seconds":CASE_TIMEOUT,
              "batch_deadline_seconds":BATCH_DEADLINE, "final_proof_reserve_seconds":PROOF_RESERVE_SECONDS,
-             "workers":workers, "worker_isolation":"independent Context/wiki/proxy/counters per group; download->reuse chains stay within one group",
+             "workers":workers,
+             "worker_isolation":"independent wiki/proxy per group and case-owned fixture; case chains stay together",
              "network_guard_boots":sum(e["op"] == "guard_boot" for e in events),
              "network_attempts_denied":sum(e["op"] == "network_denied" for e in events),
              "translation_attempts":sum(e["op"] == "translation_attempt" for e in events),

@@ -127,6 +127,7 @@ class Context:
             et_proxy=HERE / "et_transcript_proxy.py",
         )
         self.scans = 0
+        self.isolated_contexts: list[Context] = []
         self._env_cache: dict[bool, dict[str, str]] = {}
 
     # -- environment -------------------------------------------------------
@@ -147,6 +148,18 @@ class Context:
         # cut off before the reserved final-proof tail (see PROOF_RESERVE_SECONDS).
         per_case = self.batch_deadline.case(CASE_TIMEOUT)
         self.deadline = Deadline(end=min(per_case.end, self.batch_deadline.end - PROOF_RESERVE_SECONDS))
+
+    def isolate_case(self, case_id: str, position: int) -> Context:
+        """Create fresh owner state in this attempt while retaining its proof scope."""
+        case = Context(
+            ff_root=self.ff_root, cwp_root=self.cwp_root, et_root=self.et_root,
+            scratch=self.scratch / f"c{position}", out_root=self.out_root,
+            deadline=self.batch_deadline, artifact_prefix=f"{self.artifact_prefix}{case_id}.",
+            pycache_root=self._pycache_root,
+        )
+        case.deadline = self.deadline
+        self.isolated_contexts.append(case)
+        return case
 
     def write_state(self, *, scenario: str, calls_file: Path, content_utf8: str = "",
                     call_date: str = "2025-12-01", response_bytes: int = 512,
@@ -202,7 +215,7 @@ class Context:
         tag = f"{self.artifact_prefix}seed_{identity.market.lower()}_{kind}_{year}_{period}"
         self.write_state(scenario="success", provider_scenario="serve", calls_file=self.env.calls_file(tag), receipt_tag=tag)
         cmd = [sys.executable, "-m", "company_wiki.source_catalog.cli"] + self._ensure_argv(identity, kind, year, period)
-        proc = run_process(cmd, env=self.child_env(), cwd=self.scratch, deadline=self.batch_deadline)
+        proc = run_process(cmd, env=self.child_env(), cwd=self.scratch, deadline=self.deadline)
         path = self.artifacts / f"{tag}.response.json"
         path.write_bytes(proc.stdout)
         (self.artifacts / f"{tag}.stderr.txt").write_bytes(proc.stderr)
@@ -233,7 +246,7 @@ class Context:
             proc = run_process(
                 [sys.executable, str(HERE / "seed_batch.py")],
                 input=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                env=self.child_env(), cwd=self.scratch, deadline=self.batch_deadline)
+                env=self.child_env(), cwd=self.scratch, deadline=self.deadline)
         (self.artifacts / f"{self.artifact_prefix}seed-batch.stdout.json").write_bytes(proc.stdout)
         (self.artifacts / f"{self.artifact_prefix}seed-batch.stderr.txt").write_bytes(proc.stderr)
         if proc.returncode != 0:

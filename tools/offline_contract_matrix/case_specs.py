@@ -5,7 +5,7 @@ definitions immutable; projections return fresh copies. No authorization or
 identity database is introduced. Fixed company inputs are synthetic fixtures.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import importlib
 import json
 from fixture_builder import CN, HK, US
@@ -40,6 +40,7 @@ class CaseSpec:
     declared_layer: str
     scope: str
     expected_json: str
+    isolated_catalog: bool = field(default=False, kw_only=True)
 
     def expected(self):
         return json.loads(self.expected_json)
@@ -314,7 +315,7 @@ def _run(request, fixture=None, key=True):
     return RunSpec(_json(request), _json(fixture), key)
 
 
-def _spec(cid, handler, args, runs):
+def _spec(cid, handler, args, runs, *, isolated_catalog=False):
     meta = _METADATA[cid]
     return CaseSpec(
         cid,
@@ -324,6 +325,7 @@ def _spec(cid, handler, args, runs):
         meta["declared_layer"],
         meta["scope"],
         _json(meta["expected"]),
+        isolated_catalog=isolated_catalog,
     )
 
 
@@ -474,6 +476,7 @@ def _build():
                         _fixture("worker_loss"),
                     )
                 ],
+                isolated_catalog=True,
             ),
             _spec(
                 "reuse_only_missing_period",
@@ -575,6 +578,7 @@ def _build():
             "extended_cases:case_unverified_sidecar",
             [],
             [_run(_request(CN, year=2032, asof="2033-12-31"))],
+            isolated_catalog=True,
         )
     )
     return tuple(rows)

@@ -328,3 +328,92 @@ def test_partial_case_keeps_its_error_and_never_becomes_a_pass(tmp_path):
     result = done[0][1]
     assert result.result == "PARTIAL"
     assert "synthetic absolute deadline" in str(result.actual.get("error"))
+
+
+
+@pytest.mark.parametrize("execution_order", ["before", "after", "private_only"])
+def test_legacy_case_fixtures_cannot_change_another_case(tmp_path, monkeypatch, execution_order):
+    from case_registry import resolve_spec
+    from run import Context, CASE_TIMEOUT, PROOF_RESERVE_SECONDS
+
+    shared_cases = ("fin_us_annual_fetch", "original_wrong_sha")
+    private_cases = ("local_txt_exact_reuse", "incomplete_sidecar_metadata_gap")
+
+    def simulated_seed(ctx):
+        if private_cases[0] in ctx.seed_cases:
+            (ctx.env.wiki / "legacy-transcript").write_text("warm TXT", encoding="utf-8")
+
+    observed = {}
+
+    def run(cid):
+        def run_one(ctx):
+            observed[cid] = ctx
+            warm = ctx.env.wiki / "legacy-transcript"
+            incomplete = ctx.env.wiki / "incomplete-sidecar"
+            if cid == private_cases[0]:
+                assert warm.read_text(encoding="utf-8") == "warm TXT"
+                assert not incomplete.exists()
+            elif cid == private_cases[1]:
+                assert not warm.exists()
+                incomplete.write_text("invalid metadata on purpose", encoding="utf-8")
+            else:
+                assert not warm.exists()
+                assert not incomplete.exists()
+            spec = resolve_spec(cid)
+            return CaseResult(id=cid, title=cid, declared_layer=spec.declared_layer,
+                              scope=spec.scope, expected=spec.expected(), result="PASS")
+        return run_one
+
+    monkeypatch.setattr(cli_main, "seed_all", simulated_seed)
+    batch = runtime.Deadline(180)
+    root = Context(ff_root=tmp_path / "ff", cwp_root=tmp_path / "cwp",
+                   et_root=tmp_path / "et", scratch=tmp_path / "g1",
+                   out_root=tmp_path / "out", artifact_prefix="g1.", deadline=batch)
+    orders = {"before": (*private_cases, *shared_cases), "after": (*shared_cases, *private_cases),
+              "private_only": private_cases}
+    ordered = orders[execution_order]
+    done, stop = cli_main.run_case_group(
+        root, list(enumerate((cid, run(cid)) for cid in ordered)), batch
+    )
+
+    assert stop is None
+    assert [(result.id, result.result) for _, result in done] == [(cid, "PASS") for cid in ordered]
+    assert all(observed[cid] is root for cid in shared_cases if cid in ordered)
+    assert len({root.scratch, *(observed[cid].scratch for cid in private_cases)}) == 3
+    assert len({root.artifact_prefix, *(observed[cid].artifact_prefix for cid in private_cases)}) == 3
+    for cid in private_cases:
+        child = observed[cid]
+        assert child.batch_deadline is batch
+        assert child.deadline.end <= min(batch.end - PROOF_RESERVE_SECONDS,
+                                         runtime.time.monotonic() + CASE_TIMEOUT)
+
+
+
+def test_expired_isolated_seed_does_not_start_its_case(tmp_path, monkeypatch):
+    from run import Context
+
+    clock = _Clock()
+    cid = "local_txt_exact_reuse"
+    launches = []
+
+    def slow_seed(ctx):
+        if cid in ctx.seed_cases:
+            clock.advance(31)
+
+    def runner(ctx):
+        launches.append(ctx)
+        return None
+
+    monkeypatch.setattr(runtime, "time", clock)
+    monkeypatch.setattr(cli_main, "time", clock)
+    monkeypatch.setattr(cli_main, "seed_all", slow_seed)
+    batch = runtime.Deadline(180)
+    root = Context(ff_root=tmp_path / "ff", cwp_root=tmp_path / "cwp",
+                   et_root=tmp_path / "et", scratch=tmp_path / "g1",
+                   out_root=tmp_path / "out", artifact_prefix="g1.", deadline=batch)
+    done, stop = cli_main.run_case_group(root, [(0, (cid, runner))], batch)
+    assert not launches
+    assert stop is None
+    assert done[0][1].result == "PARTIAL"
+    assert done[0][1].actual["runs"] == []
+    assert done[0][1].actual["error"] == "absolute deadline exhausted"

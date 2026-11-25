@@ -25,6 +25,9 @@ python -B tools/offline_contract_matrix/run.py \
 ## 调度（DU8-FF-MATRIX-COMPLETION）
 
 41 个固定 case 由 `case_scheduling.assign_groups` 分配到 ≤ `WORKERS`(=2) 个并发组。
+验证旧 TXT 复用和缺元数据 sidecar 的两个用例有独立测试资料库，由所属
+worker 串行执行。它们的种子使用原单例期限，公开原文实读使用同一批次
+期限；报告保留各资料库独立的证据和守卫记录。
 分配按**成本均衡**（最重优先贪心，全序 = cost 降序 + id 升序），不再是按位置轮转
 （`entries[index::workers]`）。位置轮转不含成本信息，实测把最重的三个 case 放进同一组，
 产生 **75.5306s / 59.8019s** 的两组负载（不平衡 15.73s = 26%），使该组成为关键路径。
