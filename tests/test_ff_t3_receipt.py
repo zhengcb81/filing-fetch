@@ -189,6 +189,53 @@ def test_native_dispatch_shape_can_be_replayed_offline(tmp_path, monkeypatch):
     assert os.environ["FILING_FETCH_E2E_DOWNLOAD"] == "0"
 
 
+def test_native_warnings_are_cold_readable_without_emitting_raw_streams(tmp_path, monkeypatch, capsys):
+    fixture = tmp_path / "tests" / "test_e2e_download.py"
+    fixture.parent.mkdir()
+    methods = "\n".join(f"    def {method}(self): pass" for method in receipt.T3_CASES.values())
+    fixture.write_text(
+        "import sys, unittest, warnings\n"
+        "print('private stdout')\n"
+        "print('private stderr', file=sys.stderr)\n"
+        "warnings.warn('private warning body', ResourceWarning)\n"
+        "class DownloadE2E(unittest.TestCase):\n" + methods + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(receipt, "PROJECT", tmp_path)
+    monkeypatch.setenv("FILING_FETCH_E2E_DOWNLOAD", "0")
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("always", ResourceWarning)
+        command = ["--receipts-dir", str(tmp_path / "receipt")]
+        assert receipt.main([*command, "run-live", "--run-id", "synthetic-native"]) == 0
+    first = capsys.readouterr()
+    assert receipt.main([*command, "get", "--latest"]) == 0
+    cold = capsys.readouterr()
+    assert cold.out == first.out and cold.err == first.err == ""
+    value = json.loads(cold.out)
+    assert value["suite_output"] == {
+        "stdout_observed": True, "stderr_observed": True,
+        "warnings": [{"type": "ResourceWarning", "file": "test_e2e_download.py", "line": 4}],
+    }
+    assert "private" not in cold.out
+
+
+def test_latest_io_error_includes_cause_without_path_or_new_receipt(tmp_path, monkeypatch, capsys):
+    def fail(_root):
+        raise PermissionError(13, "private failure text", str(tmp_path / "private-path"))
+
+    monkeypatch.setattr(receipt, "get_latest_receipt", fail)
+    assert receipt.main(["--receipts-dir", str(tmp_path), "get", "--latest"]) == 1
+    streams = capsys.readouterr()
+    value = json.loads(streams.out)
+    assert value["state"] == "unknown" and value["reason"] == "receipt_io_failed"
+    assert value["diagnostic"]["causes"][0]["type"] == "PermissionError"
+    assert value["diagnostic"]["causes"][0]["errno"] == 13
+    assert streams.err == "" and "private" not in streams.out
+    assert not list(tmp_path.iterdir())
+
+
 def test_structured_unittest_events_reflect_cleanup_and_redact_raw_failure():
     observed = {}
 

@@ -180,7 +180,7 @@ def test_seed_batch_helper_records_each_request_response_receipt_and_count(tmp_p
         served.append(list(argv))
         with calls.open("a", encoding="utf-8") as fh:
             fh.write('{"op":"get"}\n')
-        return 0, json.dumps({"status": "ok", "tag": argv[0]}), ""
+        return 0, (json.dumps({"status": "ok", "tag": argv[0]}) + "\r\n").encode(), b""
 
     payload = {
         "artifacts": str(tmp_path / "artifacts"),
@@ -201,7 +201,7 @@ def test_seed_batch_helper_records_each_request_response_receipt_and_count(tmp_p
     for index, row in enumerate(summary["requests"]):
         assert row["tag"] == f"seed_t{index}"
         assert row["response"]["status"] == "ok"
-        assert (tmp_path / "artifacts" / row["response_ref"]).is_file()
+        assert (tmp_path / "artifacts" / row["response_ref"]).read_bytes().endswith(b"\r\n")
         assert row["response_sha256"]
         assert row["counts"]["fixture_requests"] >= 1
         assert row["exit_code"] == 0

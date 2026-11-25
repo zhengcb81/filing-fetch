@@ -101,16 +101,13 @@ def _dependency(repository: str, root: Path, modules: list[dict], *, env=None, d
 
 
 def _verify_binding(cwp_src: Path, et_root: Path, env: dict[str, str], *, deadline=None, cwd=None) -> dict:
-    # The extra imports warm the shared bytecode cache for every hot producer
-    # entry point in ONE process before the worker groups start, so concurrent
-    # groups never double-compile the same trees (W07 measurement).
-    script = '''import json, hashlib, company_wiki, transcript_tool
-import company_wiki.source_catalog.cli, company_wiki.source_catalog.source_query_cli
-import matrix_et_http_fixture
-import company_wiki.source_catalog.source_reader_cli, company_wiki.source_catalog.source_export_v2_cli
-def record(m):
-    return {"file":m.__file__, "sha256":hashlib.sha256(open(m.__file__,"rb").read()).hexdigest()}
-print(json.dumps({"company_wiki":record(company_wiki), "transcript_tool":record(transcript_tool)}))'''
+    script = '''import hashlib, json
+from importlib.util import find_spec
+from pathlib import Path
+def record(name):
+    origin = Path(find_spec(name).origin)
+    return {"file": str(origin), "sha256": hashlib.sha256(origin.read_bytes()).hexdigest()}
+print(json.dumps({name: record(name) for name in ("company_wiki", "transcript_tool")}))'''
     try:
         proc = run_process([sys.executable, "-c", script], env=env, cwd=cwd or HERE,
                            deadline=deadline or Deadline(30))

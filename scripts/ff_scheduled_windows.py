@@ -6,9 +6,11 @@ import argparse
 import builtins
 import csv
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -19,7 +21,7 @@ from xml.parsers.expat import errors as xml_errors
 from ff_persistence import owner_io_path
 from ff_refresh_policy import utc_text
 from ff_refresh_store import RefreshStore
-from ff_runtime_feedback import cli_failure, parse_arguments
+from ff_runtime_feedback import cli_failure, parse_arguments, warn_diagnostic_unavailable
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -147,8 +149,10 @@ def run(argv=None) -> int:
 
 
 _FAILURE_LOG_MAX_BYTES = 2 * 1024 * 1024
-_STDERR_TAIL_BYTES = 8 * 1024
 _TRACEBACK_HEADER = b"Traceback (most recent call last):"
+_TRACEBACK_FRAME = re.compile(rb'^  File "([^"]+)", line ([0-9]{1,8})(?:, in .*)?$')
+_EXCEPTION_LINE = re.compile(rb"^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?::(?=\s|$)|$)")
+_SAFE_FILENAME = re.compile(rb"[A-Za-z0-9_.-]{1,96}")
 _BUILTIN_EXCEPTIONS = frozenset(
     name.encode("ascii")
     for name, value in vars(builtins).items()
@@ -156,22 +160,48 @@ _BUILTIN_EXCEPTIONS = frozenset(
 )
 
 
-def _tick_failure(returncode: int, stderr: bytes) -> dict[str, int | str]:
+def _tick_failure(returncode: int, stderr: bytes) -> dict:
     """Project known diagnostic shapes without retaining any child stream text."""
     if not stderr:
         return {"exit_code": returncode, "stderr_form": "empty"}
     if _TRACEBACK_HEADER in stderr:
-        facts: dict[str, int | str] = {"exit_code": returncode, "stderr_form": "python_traceback"}
-        name = stderr[-_STDERR_TAIL_BYTES:].rstrip().rsplit(b"\n", 1)[-1].partition(b":")[0]
-        if name in _BUILTIN_EXCEPTIONS:
-            facts["builtin_exception"] = name.decode("ascii")
+        facts = {"exit_code": returncode, "stderr_form": "python_traceback"}
+        last_frame = None
+        tracing = False
+        for raw in BytesIO(stderr):
+            line = raw.rstrip(b"\r\n")
+            if line == _TRACEBACK_HEADER:
+                last_frame = None
+                tracing = True
+                continue
+            if not tracing:
+                continue
+            frame = _TRACEBACK_FRAME.fullmatch(line)
+            if frame is not None:
+                filename, number = frame.groups()
+                basename = re.split(rb"[/\\]", filename)[-1]
+                last_frame = {"line": int(number)}
+                if _SAFE_FILENAME.fullmatch(basename):
+                    last_frame["file"] = basename.decode("ascii")
+                continue
+            name = _EXCEPTION_LINE.match(line)
+            if last_frame is None or name is None:
+                continue
+            tracing = False  # Continuation lines are exception text, not types.
+            if len(name[1]) > 96:
+                continue
+            facts["last_frame"] = last_frame
+            facts["exception_type"] = name[1].decode("ascii")
+            facts.pop("builtin_exception", None)
+            if name[1] in _BUILTIN_EXCEPTIONS:
+                facts["builtin_exception"] = facts["exception_type"]
         return facts
     if b": can't open file " in stderr or stderr.startswith(b"Fatal Python error:"):
         return {"exit_code": returncode, "stderr_form": "python_startup_error"}
     return {"exit_code": returncode, "stderr_form": "unclassified"}
 
 
-def _persist_tick_failure_log(jobs_dir: Path, facts: dict[str, int | str], reference: str) -> None:
+def _persist_tick_failure_log(jobs_dir: Path, facts: dict, reference: str) -> None:
     log_path = owner_io_path(jobs_dir / "logs" / "scheduled_refresh_failures.log")
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,8 +216,7 @@ def _persist_tick_failure_log(jobs_dir: Path, facts: dict[str, int | str], refer
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry) + "\n")
     except OSError as exc:
-        if sys.stderr is not None:
-            sys.stderr.write(f"warning: failed to persist scheduled refresh failure log: {type(exc).__name__}\n")
+        warn_diagnostic_unavailable("scheduled refresh failure log", exc)
 
 
 def _run_action(parser, args):

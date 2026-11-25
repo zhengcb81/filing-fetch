@@ -17,6 +17,28 @@ if str(SCRIPTS) not in sys.path:
 import ff_scheduled_windows as launcher  # noqa: E402
 
 
+def test_unhandled_custom_exception_retains_last_frame_and_ignores_multiline_body(tmp_path):
+    entry = tmp_path / "child.py"
+    entry.write_text(
+        "import sqlite3\n"
+        "class FilingFetchError(Exception): pass\n"
+        "try:\n"
+        "    raise sqlite3.OperationalError('inner private data')\n"
+        "except sqlite3.OperationalError as err:\n"
+        "    raise FilingFetchError('detail private data\\nValueError: misleading') from err\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run([sys.executable, "-B", str(entry)], capture_output=True, timeout=15)
+    facts = launcher._tick_failure(result.returncode, result.stderr)
+    assert facts == {
+        "exit_code": 1,
+        "stderr_form": "python_traceback",
+        "exception_type": "FilingFetchError",
+        "last_frame": {"file": "child.py", "line": 6},
+    }
+    assert "private" not in json.dumps(facts) and str(tmp_path) not in json.dumps(facts)
+
+
 def _isolate_feedback(monkeypatch):
     for key in os.environ:
         if key.startswith("RESEARCH_FEEDBACK_"):
@@ -59,6 +81,7 @@ def test_windows_failure_is_data_minimal_and_cold_readable(tmp_path, monkeypatch
     assert logged["event"] == "windows-tick"
     assert logged["child_process"] == {
         "exit_code": 7, "stderr_form": "python_traceback", "builtin_exception": "RuntimeError",
+        "exception_type": "RuntimeError", "last_frame": {"file": "broken_tick.py", "line": 8},
     }
 
     observations = jobs_dir / "observations"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -16,19 +17,52 @@ if str(MATRIX) not in sys.path:
 import cwp_readback_probe as proof  # noqa: E402
 
 
+def _internal_imports(tree):
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            modules = [node.module or ""]
+        else:
+            continue
+        yield from (module for module in modules if module.split(".")[0] in {"company_wiki", "sqlite3", "tests"})
+
+
 def test_matrix_readback_and_worker_do_not_import_owner_internals():
-    for name in ("cwp_readback_probe.py", "et_transcript_proxy.py", "source_proofs.py", "cli_main.py"):
-        source = (MATRIX / name).read_text(encoding="utf-8")
-        imports = [
-            module
-            for node in ast.walk(ast.parse(source))
-            for module in (
-                [alias.name for alias in node.names] if isinstance(node, ast.Import)
-                else [node.module or ""] if isinstance(node, ast.ImportFrom) else []
-            )
-        ]
-        assert not any(module.startswith(("company_wiki", "sqlite3", "tests.")) for module in imports)
-        assert "tests.test_" not in source  # ET worker launcher is an import string.
+    violations = []
+    for path in sorted(MATRIX.rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        violations.extend(f"{path.name}: {name}" for name in _internal_imports(tree))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str) or "import " not in node.value:
+                continue
+            try:
+                embedded = ast.parse(node.value)
+            except SyntaxError:
+                continue
+            violations.extend(f"{path.name}:{node.lineno} inline: {name}" for name in _internal_imports(embedded))
+        if "tests.test_" in source:  # ET worker launcher can also be an import string.
+            violations.append(f"{path.name}: test-module reference")
+    assert not violations, violations
+
+
+def test_matrix_binding_probes_paths_without_executing_producer_modules(tmp_path):
+    from cli_main import _verify_binding
+
+    source = tmp_path / "src"
+    et = tmp_path / "et"
+    cwp_package = source / "company_wiki"
+    cwp_package.mkdir(parents=True)
+    et.mkdir()
+    for path in (cwp_package / "__init__.py", et / "transcript_tool.py"):
+        path.write_text("raise RuntimeError('binding imported producer implementation')\n", encoding="utf-8")
+    environment = dict(os.environ, PYTHONPATH=os.pathsep.join(map(str, [source, et])))
+
+    value = _verify_binding(source, et, environment, cwd=tmp_path)
+
+    assert value["verified"] is True
+    assert Path(value["company_wiki"]["file"]).resolve() == (cwp_package / "__init__.py").resolve()
 
 
 @pytest.mark.parametrize(

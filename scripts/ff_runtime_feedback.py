@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import uuid
 
@@ -159,6 +160,19 @@ def _write_packet(root, name, marker_key, marker, content, frozen, closes_start)
             initial.with_suffix(".jsonl").unlink(missing_ok=True)
 
 
+def warn_diagnostic_unavailable(component: str, error: Exception) -> None:
+    """Report a failed diagnostics channel without changing the business protocol."""
+    error_type = type(error).__name__
+    if not re.fullmatch(r"[A-Za-z_]\w{0,95}", error_type, re.ASCII):
+        error_type = "Exception"
+    try:
+        if sys.stderr is not None:  # pythonw.exe has no stderr.
+            print(f"warning: filing-fetch {component} unavailable ({error_type})", file=sys.stderr)
+    except Exception:
+        # The diagnostic stream can itself be unavailable or be a host adapter.
+        pass
+
+
 def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recoverable=False, detail_for_all=False):
     """Explicit sidecars keep append semantics. Native packets use one immutable occurrence identity.
 
@@ -167,7 +181,8 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recovera
     the registered owner state, even when an additional outbox path is unavailable.
     """
     try:
-        delivered = True
+        publication_error = None
+        detail_error = None
         groups = {}
         for row in rows:
             groups.setdefault(tuple(row[k] for k in _HEADER), []).append(row)
@@ -183,13 +198,15 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recovera
                         item["details_ref"] = "ff-diagnostic/1/" + name
             # Prefer a published native detail, and never point to a missing diagnostic.
             if local_detail:
+                failed = None
                 for root in directories:
                     try:
                         atomic_write_json(root / (name + ".cause.json"), {**marker, **detail})
                         break
-                    except OSError:
-                        continue
+                    except OSError as error:
+                        failed = error
                 else:
+                    detail_error = failed
                     for item in group:
                         item.pop("details_ref", None)
             if file and _explicit(file, group):
@@ -203,18 +220,24 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recovera
                 continue
             prefix = [r for r in context if all(r[k] == marker[k] for k in _HEADER)]
             content = _text([*prefix, *group])
+            failed = None
             for root in directories:
                 try:
                     frozen = recoverable or (not only_start and any(r["check_id"] == "job-outcome" for r in group))
                     _write_packet(root, name, marker_key, marker, content, frozen, bool(prefix))
                     break
-                except OSError:
-                    continue
+                except OSError as error:
+                    failed = error
             else:
-                delivered = False
-        return delivered
-    except Exception:
+                publication_error = failed
+        if publication_error is not None:
+            warn_diagnostic_unavailable("feedback publication", publication_error)
+        elif detail_error is not None:
+            warn_diagnostic_unavailable("feedback detail", detail_error)
+        return publication_error is None
+    except Exception as error:
         # The owner result and fee record take precedence over optional diagnostics.
+        warn_diagnostic_unavailable("feedback publication", error)
         return False
 
 

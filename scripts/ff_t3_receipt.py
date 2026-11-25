@@ -8,6 +8,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime
 import hashlib
 from importlib.util import module_from_spec, spec_from_file_location
+from io import TextIOBase
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ import re
 import subprocess
 from typing import Any, Protocol
 import unittest
+import warnings
 
 from ff_persistence import acquire_file_lock, atomic_write_json, owner_io_path
 from ff_process_tree import pid_is_alive
@@ -89,8 +91,10 @@ def _load(path: Path, run_id: str | None) -> dict | None:
         value = json.loads(owner_io_path(path).read_bytes())
     except FileNotFoundError:
         return None
-    except (OSError, ValueError, RecursionError):
-        value = None
+    except (OSError, ValueError, RecursionError) as error:
+        reason = "receipt_unreadable"
+        return {"schema_version": SCHEMA, "run_id": run_id, "state": "unknown",
+                "reason": reason, "diagnostic": cause_details(error, reason=reason)}
     if isinstance(value, dict) and value.get("schema_version") == SCHEMA:
         stored_id = value.get("run_id")
         if (isinstance(stored_id, str) and _RUN_ID.fullmatch(stored_id)
@@ -153,6 +157,22 @@ def _diagnostic_view(value: object) -> dict | None:
     return public
 
 
+def _suite_output_view(value: object) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    observed = {key: value.get(key) is True for key in ("stdout_observed", "stderr_observed")}
+    notices = value.get("warnings")
+    typed_warnings = []
+    if isinstance(notices, list):
+        for item in notices:
+            warning = _diagnostic_fields(item, labels=("type", "file"), numbers=("line",))
+            if {"type", "file", "line"} <= warning.keys():
+                typed_warnings.append(warning)
+    if any(observed.values()) or typed_warnings:
+        return {**observed, "warnings": typed_warnings}
+    return None
+
+
 def _case_view(run_id: str, case: str, value: object) -> dict | None:
     if not isinstance(value, dict) or value.get("outcome") not in _CASE_RESULTS:
         return None
@@ -173,8 +193,12 @@ def _project(value: dict) -> dict:
     run_id = value["run_id"]
     state = value.get("state")
     if state == "unknown" and value.get("reason") == "receipt_unreadable":
-        return {"schema_version": SCHEMA, "run_id": run_id, "state": state,
-                "reason": "receipt_unreadable"}
+        public = {"schema_version": SCHEMA, "run_id": run_id, "state": state,
+                  "reason": "receipt_unreadable"}
+        diagnostic = _diagnostic_view(value.get("diagnostic"))
+        if diagnostic is not None:
+            public["diagnostic"] = diagnostic
+        return public
     if value.get("mode") not in ("live", "offline") or state not in (
         "running", "completed", "blocked", "unknown",
     ):
@@ -222,6 +246,9 @@ def _project(value: dict) -> dict:
     diagnostic = _diagnostic_view(value.get("diagnostic"))
     if diagnostic is not None:
         public["diagnostic"] = diagnostic
+    suite_output = _suite_output_view(value.get("suite_output"))
+    if suite_output is not None:
+        public["suite_output"] = suite_output
     if isinstance(reason, str) and reason in _RUN_REASONS:
         public["reason"] = reason
     return public
@@ -254,7 +281,7 @@ def get_latest_receipt(root: Path) -> dict:
 
 
 def _run_once(
-    root: Path, run_id: str, execute: Callable[[CaseReporter], None],
+    root: Path, run_id: str, execute: Callable[[CaseReporter], dict | None],
 ) -> dict:
     key = _key(run_id)
     # Reuse an existing claim, including an unreadable or interrupted one.
@@ -294,15 +321,18 @@ def _run_once(
 
     reason: str | None
     try:
-        execute(report)
-    except _SuiteUnavailable:
+        suite_output = execute(report)
+    except _SuiteUnavailable as error:
         state, reason = "blocked", "test_suite_unavailable"
+        value["diagnostic"] = cause_details(error, reason=reason)
     except OSError:
         raise
     except Exception as error:
         state, reason = "blocked", "executor_failed"
         value["diagnostic"] = cause_details(error, reason=reason)
     else:
+        if suite_output:
+            value["suite_output"] = suite_output
         if set(cases) != set(T3_CASES):
             state, reason = "blocked", "case_results_incomplete"
         elif any(row["outcome"] == "blocked" for row in cases.values()):
@@ -349,7 +379,18 @@ class _CaseResults(unittest.TestResult):
             self._report(case, *outcome)
 
 
-def _execute_native_suite(report: CaseReporter) -> None:
+class _ObservedOutput(TextIOBase):
+    """Recognize an incidental stream without storing messages or provider data."""
+
+    written = False
+
+    def write(self, value: str) -> int:
+        if value:
+            self.written = True
+        return len(value)
+
+
+def _execute_native_suite(report: CaseReporter) -> dict:
     path = PROJECT / "tests" / "test_e2e_download.py"
     if not path.is_file():
         raise _SuiteUnavailable
@@ -359,19 +400,26 @@ def _execute_native_suite(report: CaseReporter) -> None:
     module = module_from_spec(spec)
     name = "FILING_FETCH_E2E_DOWNLOAD"
     previous = os.environ.get(name)
+    out, err = _ObservedOutput(), _ObservedOutput()
+    notices: dict[tuple[str, str, int], dict] = {}
+
+    def observe_warning(_message, category, filename, lineno, file=None, line=None):
+        name, basename = category.__name__, Path(filename).name
+        notices[(name, basename, lineno)] = {"type": name, "file": basename, "line": lineno}
+
     os.environ[name] = "1"
     try:
-        # Case evidence is structured. Provider stderr may contain environment data.
-        with open(os.devnull, "w", encoding="utf-8") as sink:
-            with redirect_stdout(sink), redirect_stderr(sink):
-                spec.loader.exec_module(module)
-                suite = unittest.TestSuite(module.DownloadE2E(method) for method in T3_CASES.values())
-                suite.run(_CaseResults(report))
+        with warnings.catch_warnings(), redirect_stdout(out), redirect_stderr(err):
+            warnings.showwarning = observe_warning
+            spec.loader.exec_module(module)
+            suite = unittest.TestSuite(module.DownloadE2E(method) for method in T3_CASES.values())
+            suite.run(_CaseResults(report))
     finally:
         if previous is None:
             os.environ.pop(name, None)
         else:
             os.environ[name] = previous
+    return {"stdout_observed": out.written, "stderr_observed": err.written, "warnings": list(notices.values())}
 
 
 def _live_exit(value: dict) -> int:
@@ -403,9 +451,11 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         print(json.dumps({"schema_version": SCHEMA, "state": "blocked", "reason": "invalid_run_id"}))
         return 2
-    except (OSError, TimeoutError):
+    except OSError as error:
+        reason = "receipt_io_failed"
         print(json.dumps({"schema_version": SCHEMA, "run_id": args.run_id,
-                          "state": "unknown", "reason": "receipt_io_failed"}))
+                          "state": "unknown", "reason": reason,
+                          "diagnostic": _diagnostic_view(cause_details(error, reason=reason))}))
         return 2 if args.command == "run-live" else 1
 
     print(json.dumps(value, ensure_ascii=True))

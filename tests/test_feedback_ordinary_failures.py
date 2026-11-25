@@ -85,7 +85,30 @@ def test_broken_explicit_transport_retains_native_failure_without_new_work(tmp_p
         tmp_path, "ff_job", ["--jobs-dir", jobs, "submit"], "[]", RESEARCH_FEEDBACK_OUT=str(invalid_target)
     )
     assert p.returncode == 2 and json.loads(p.stdout)["error"]["code"] == "request_error"
+    assert p.stderr == ""
     assert len([r for r in packets(jobs / "observations") if r["disposition"] == "deviation"]) == 1
+    assert not (jobs / "jobs").exists()
+
+
+def test_unavailable_feedback_outboxes_warn_without_changing_job_protocol(tmp_path):
+    jobs = tmp_path / "jobs"
+    args = ["--jobs-dir", jobs, "submit"]
+    baseline = cli(tmp_path, "ff_job", ["--jobs-dir", tmp_path / "control", "submit"], "[]")
+    blocked = tmp_path / "unavailable-private-path"
+    blocked.write_bytes(b"untouchable")
+    # Block all three channels without changing the original request.
+    jobs.mkdir()
+    original = jobs / "observations"
+    original.write_bytes(b"untouchable owner root")
+    failed = cli(tmp_path, "ff_job", args, "[]", RESEARCH_FEEDBACK_DIR=str(blocked),
+                 RESEARCH_FEEDBACK_OUT=str(blocked / "sidecar"))
+
+    assert failed.returncode == baseline.returncode == 2
+    assert failed.stdout == baseline.stdout
+    notice, = failed.stderr.splitlines()
+    assert "filing-fetch" in notice and "feedback" in notice
+    assert re.search(r"\([A-Za-z]+Error\)$", notice)
+    assert str(blocked) not in notice and "unavailable-private-path" not in notice
     assert not (jobs / "jobs").exists()
 
 

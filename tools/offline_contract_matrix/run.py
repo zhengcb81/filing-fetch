@@ -224,12 +224,7 @@ class Context:
                 "response_ref":path.name, "response_sha256":sha256_file(path), "scope":"fixture-only initial CWP acquisition/import; separate from local reuse counters"}
 
     def warm_seed_batch(self, seeds: list[tuple]) -> list[dict]:
-        """Run the warm-seed ensures sequentially in ONE bounded helper process.
-
-        Each request still executes the same real CWP ``ensure`` service with the
-        same argv, and keeps its own request/response/receipt/source-ref/count
-        record; only the repeated interpreter/CLI startup is removed (W07).
-        """
+        """Collect ordered warm seeds from the public owner command in one helper."""
         entries = []
         for identity, kind, year, period in seeds:
             tag = f"{self.artifact_prefix}seed_{identity.market.lower()}_{kind}_{year}_{period}"
@@ -239,14 +234,16 @@ class Context:
                 "state": self._seed_state(tag),
                 "argv": self._ensure_argv(identity, kind, year, period),
             })
+        deadline = self.deadline
         payload = {"artifacts": str(self.artifacts), "requests": entries,
-                   "adapter_log": str(self.scratch / "adapter_invocations.log")}
+                   "adapter_log": str(self.scratch / "adapter_invocations.log"),
+                   "deadline_end": deadline.end}
         self.phases.count_launch("seed_batch")
         with self.phases.span("seed_helper"):
             proc = run_process(
                 [sys.executable, str(HERE / "seed_batch.py")],
                 input=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                env=self.child_env(), cwd=self.scratch, deadline=self.deadline)
+                env=self.child_env(), cwd=self.scratch, deadline=deadline)
         (self.artifacts / f"{self.artifact_prefix}seed-batch.stdout.json").write_bytes(proc.stdout)
         (self.artifacts / f"{self.artifact_prefix}seed-batch.stderr.txt").write_bytes(proc.stderr)
         if proc.returncode != 0:
@@ -262,7 +259,7 @@ class Context:
             receipts.append({
                 "tag": entry["tag"],
                 "request_argv": row["request_argv"],
-                "execution": {"mode": "in_process_cli_service_single_helper",
+                "execution": {"mode": "public_cli_single_helper",
                               "helper": "tools/offline_contract_matrix/seed_batch.py",
                               "helper_processes": 1},
                 "exit_code": row["exit_code"],
