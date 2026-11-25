@@ -1,5 +1,9 @@
 # filing-fetch 当前规划状态
 
+## 2026-11-25 · S3 T3 周跑的 FF owner 收据
+
+[T3 owner 收据](docs/plans/mb11-ff-2026-11-11/S3-t3-assurance-owner.md)交付可冷查的原运行 id、四项测试状态和实跑/离线口径，供 RF 后续通过公开入口消费。离线回归及独审已通过。实跑、RF 采用和现有 Windows 调度状态另行验收。
+
 ## 2026-11-24 · F4 定时 slot 原批次冷查
 
 [FB-FF](docs/plans/feedback-loop-2026-11-17/FB-FF.md) 的 [F4-FF-SLOT-LOOKUP 子计划](docs/plans/f2-ff-short/f4-slot-lookup.md)已交付：`reconcile` 只读查回 `ff-scheduled-refresh/1/<run_id>` 的原尝试、派发与用量，不建第二账本、不启动新采集；`partial` 按已证实子项投影，`unknown` 与未知费用保留。两个真实历史 slot 与 `ff-job/1` 对照均通过，独立审查发现已修复。短请求 ET 用量归属和旧包停止重复扫描由 ROOT 单独确认。

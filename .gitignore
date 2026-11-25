@@ -20,3 +20,4 @@ e2e/.runs/
 
 # Generated filing-fetch-native feedback, outside the installable code.
 /.ff_jobs/observations/
+/.ff_t3_assurance/
