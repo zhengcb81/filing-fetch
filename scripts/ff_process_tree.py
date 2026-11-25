@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import ctypes
 import errno
 import os
@@ -108,6 +109,39 @@ class WindowsJob:
         handle, self.handle = self.handle, None
         if handle and not self.kernel.CloseHandle(handle):
             raise _win_error()
+
+
+def finish_owned_process(
+    proc: subprocess.Popen,
+    job: WindowsJob | None,
+    *,
+    deadline: float,
+    stop: Callable[[], object] | None = None,
+) -> list[tuple[str, Exception]]:
+    """Try owned teardown in one grace window and retain each native failure."""
+    failures: list[tuple[str, Exception]] = []
+
+    def attempt(stage: str, action: Callable[[], object]) -> bool:
+        try:
+            action()
+        except (OSError, subprocess.TimeoutExpired) as error:
+            failures.append((stage, error))
+            return False
+        return True
+
+    if stop is not None:
+        if not attempt("process_terminate", stop):
+            if job is not None:
+                # The existing OS Job is kill-on-close. Use it before waiting
+                # when explicit termination failed.
+                attempt("job_close", job.close)
+                job = None
+            if proc.poll() is None:
+                attempt("process_kill", proc.kill)
+        attempt("process_reap", lambda: proc.wait(timeout=max(0.0, deadline - time.monotonic())))
+    if job is not None:
+        attempt("job_close", job.close)
+    return failures
 
 
 def kill_owned_group(group_id: int) -> None:

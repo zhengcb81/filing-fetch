@@ -46,6 +46,8 @@ def cause_details(error, *, reason):
 
 def _cause_details(error, *, reason):
     """Follow Python's native chains, including explicit suppression; omit messages, bodies and absolute paths."""
+    from ff_process_transport import process_cleanup_facts
+
     causes = []
     pending = [("raised", error)] if error is not None else []
     seen = set()
@@ -68,6 +70,9 @@ def _cause_details(error, *, reason):
             frames.append(frame)
             trace = trace.tb_next
         item = {"relation": relation, "type": type(exc).__name__, "frames": frames}
+        cleanup = process_cleanup_facts(exc)
+        if cleanup:
+            item["process_cleanup"] = cleanup
         for name in ("errno", "winerror", "lineno", "colno", "pos"):
             value = getattr(exc, name, None)
             if type(value) is int:

@@ -180,3 +180,116 @@ def test_mid_import_signal_binds_provider_original_and_rejects_a_bad_digest(tmp_
     value["provider_payload_sha256"] = value["canonical_content_sha256"]
     receipt.write_text(json.dumps(value), encoding="utf-8")
     assert import_receipt_digest(receipt) is None
+
+
+def _w20_context(tmp_path, deadline):
+    from types import SimpleNamespace
+    from measurement import PhaseTimer
+
+    spec = SimpleNamespace(id="fixture", request_errors=lambda *a: [],
+                           fixture_errors=lambda *a: [],
+                           runs=[SimpleNamespace(request=lambda: {"fixture": True})])
+    (tmp_path / "state.fixture.run1.json").write_text("{}", encoding="utf-8")
+    return SimpleNamespace(
+        env=SimpleNamespace(proxy_state=tmp_path, ff_config=tmp_path / "config.json"),
+        ff_root=tmp_path, active_case_spec=spec, traces={}, artifacts=tmp_path,
+        scratch=tmp_path, deadline=deadline, phases=PhaseTimer(),
+        adapter_records=lambda: [], child_env=dict,
+    )
+
+
+def test_w20_spent_case_never_starts_a_new_process(tmp_path, monkeypatch):
+    import w20_fault_cases as w20
+    from runtime import Deadline, DeadlineExceeded
+
+    ctx = _w20_context(tmp_path, Deadline(end=0))
+    monkeypatch.setattr(w20.subprocess, "Popen", lambda *a, **k: pytest.fail("expired case spawned FF"))
+    with pytest.raises(DeadlineExceeded):
+        w20.launch_ff_run(ctx, case_id="fixture", run_label="run1", request={"fixture": True})
+    assert not list(tmp_path.glob("*.stdout.bin"))
+    assert not ctx.traces
+
+
+@pytest.mark.parametrize("point", [
+    "job_assignment", "deadline_at_release", "interrupt_observer", "job_close_failure", "terminate_failure",
+])
+def test_w20_reaps_held_child_and_keeps_failure_trace(tmp_path, monkeypatch, point):
+    from io import BytesIO
+    from types import SimpleNamespace
+    import w20_fault_cases as w20
+
+    from runtime import DeadlineExceeded
+
+    deadline = proof.Deadline()
+    ctx = _w20_context(tmp_path, SimpleNamespace(case=lambda _: deadline))
+    operations = []
+    state = {"returncode": None}
+
+    def kill():
+        operations.append("kill")
+        state["returncode"] = 1
+
+    def wait(*, timeout):
+        operations.append("reap")
+        child.returncode = state["returncode"]
+        return child.returncode
+
+    child = SimpleNamespace(pid=123, stdin=BytesIO(), returncode=None,
+                            poll=lambda: state["returncode"], kill=kill, wait=wait)
+
+    def assign(_proc):
+        operations.append("assign")
+        assert child.stdin.getvalue() == b""
+        if point == "job_assignment":
+            raise OSError("fixture job assignment failed")
+        if point == "deadline_at_release":
+            deadline.end = 0
+        return SimpleNamespace(terminate=terminate, close=close)
+
+    def terminate():
+        if point == "terminate_failure":
+            operations.append("terminate")
+            raise OSError("private terminate detail")
+        kill()
+
+    def close():
+        operations.append("close")
+        if point == "job_close_failure":
+            raise OSError("private close detail")
+        # Windows Job close kills the owned tree if explicit terminate failed.
+        state["returncode"] = 1
+
+    def observe():
+        operations.append("observe")
+        raise ValueError("fixture observer failed")
+
+    monkeypatch.setattr(w20, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(w20.subprocess, "CREATE_NO_WINDOW", 0, raising=False)
+    monkeypatch.setattr(w20.subprocess, "Popen", lambda *a, **kw: child)
+    monkeypatch.setattr(w20.ff_process_tree, "assign_windows_job", assign)
+    failures = {"job_assignment": OSError, "deadline_at_release": DeadlineExceeded,
+                "interrupt_observer": ValueError, "job_close_failure": ValueError,
+                "terminate_failure": ValueError}
+    failure = failures[point]
+    with pytest.raises(failure):
+        w20.launch_ff_run(ctx, case_id="fixture", run_label="run1", request={"fixture": True},
+                          kill_when=observe)
+
+    assert operations == {
+        "job_assignment": ["assign", "kill", "reap"],
+        "deadline_at_release": ["assign", "kill", "reap", "close"],
+        "interrupt_observer": ["assign", "observe", "kill", "reap", "close"],
+        "job_close_failure": ["assign", "observe", "kill", "reap", "close"],
+        "terminate_failure": ["assign", "observe", "terminate", "close", "reap"],
+    }[point]
+    assert child.stdin.closed
+    trace, = ctx.traces["fixture"]
+    assert trace["exit_code"] == 1
+    assert trace["launch_error"]["type"] == failure.__name__
+    assert trace["elapsed_seconds"] >= 0
+    assert trace["et_fixture_requests"] == 0
+    if point in {"job_close_failure", "terminate_failure"}:
+        assert trace["cleanup_errors"] == [{
+            "stage": "job_close" if point == "job_close_failure" else "process_terminate", "type": "OSError",
+        }]
+        assert "private" not in json.dumps(trace)

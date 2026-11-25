@@ -36,6 +36,7 @@ if str(HERE) not in sys.path:
 from cwp_readback_probe import probe_catalog, probe_exact_source  # noqa: E402
 from matrix_outcome import source_ref  # noqa: E402
 from run import Context, CASE_TIMEOUT  # noqa: E402
+from ff_process_transport import held_windows_command  # noqa: E402
 from report import CaseResult, sha256_file  # noqa: E402
 from fixture_builder import CN, HK, US, Identity  # noqa: E402
 import ff_process_tree  # noqa: E402  (FF's own owned-tree semantics, read-only)
@@ -169,41 +170,72 @@ def launch_ff_run(ctx: Context, *, case_id: str, run_label: str, request: dict[s
     env["W06_MATRIX_STATE"] = str(state_path)
     cmd = [sys.executable, str(ctx.ff_root / "scripts" / "fetch_filing.py"),
            "--config", str(ctx.env.ff_config), "--timeout-seconds", str(timeout)]
-    ctx.phases.count_launch("ff_cli")
+    run_deadline = ctx.deadline.case(timeout)
+    started = time.monotonic()
     killed, kill_reason = False, None
     proc = None
     job = None
-    popen_kwargs: dict[str, Any] = {}
-    if os.name != "nt":
-        popen_kwargs["start_new_session"] = True
-    with req_path.open("rb") as stdin_file, \
+    failure = None
+    cleanup_errors = []
+    reap_deadline = None
+    launch_stage = "process_start"
+    windows = os.name == "nt"
+    if windows:
+        cmd = held_windows_command(cmd, request_file=str(req_path))
+    with ctx.phases.span("ff_cli"), req_path.open("rb") as stdin_file, \
             stdout_path.open("wb") as out_file, stderr_path.open("wb") as err_file:
-        proc = subprocess.Popen(cmd, stdin=stdin_file, stdout=out_file, stderr=err_file,
-                                env=env, cwd=str(ctx.scratch), **popen_kwargs)
-        if os.name == "nt":
-            job = ff_process_tree.assign_windows_job(proc)
-        deadline_end = ctx.deadline.case(timeout).end
+        run_deadline.remaining()
+        ctx.phases.count_launch("ff_cli")
         try:
-            while True:
-                if proc.poll() is not None:
+            proc = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE if windows else stdin_file,
+                stdout=out_file, stderr=err_file, env=env, cwd=str(ctx.scratch),
+                start_new_session=not windows,
+                creationflags=subprocess.CREATE_NO_WINDOW if windows else 0,
+            )
+            if windows:
+                launch_stage = "process_ownership"
+                job = ff_process_tree.assign_windows_job(proc)
+                # The executable remains held if the case expired during attach.
+                launch_stage = "process_release"
+                run_deadline.remaining()
+                assert proc.stdin is not None
+                proc.stdin.write(b"\x00")
+                proc.stdin.close()
+            launch_stage = "process_observe"
+            while proc.poll() is None:
+                if time.monotonic() >= run_deadline.end:
+                    _terminate_tree(proc, job)
+                    killed, kill_reason = True, "case deadline bound reached"
                     break
                 if kill_when is not None and kill_when():
                     _terminate_tree(proc, job)
                     killed, kill_reason = True, "harness interruption at observed boundary"
                     break
-                if time.monotonic() >= deadline_end:
-                    _terminate_tree(proc, job)
-                    killed, kill_reason = True, "case deadline bound reached"
-                    break
                 time.sleep(POLL_SECONDS)
-            try:
-                proc.wait(timeout=KILL_WAIT_SECONDS)
-            except subprocess.TimeoutExpired:
-                _terminate_tree(proc, job)
-                proc.wait(timeout=KILL_WAIT_SECONDS)
+            launch_stage = "process_wait"
+            reap_deadline = time.monotonic() + KILL_WAIT_SECONDS
+            proc.wait(timeout=max(0.0, reap_deadline - time.monotonic()))
+        except BaseException as exc:
+            failure = exc
         finally:
-            if job is not None:
-                job.close()
+            if proc is not None:
+                stop = None
+                if failure is not None:
+                    # Before ownership attach, only the held wrapper exists.
+                    stop = proc.kill if windows and job is None else lambda: _terminate_tree(proc, job)
+                cleanup_errors = ff_process_tree.finish_owned_process(
+                    proc, job, deadline=reap_deadline or time.monotonic() + KILL_WAIT_SECONDS,
+                    stop=stop,
+                )
+                if proc.stdin is not None and not proc.stdin.closed:
+                    try:
+                        proc.stdin.close()
+                    except OSError as exc:
+                        cleanup_errors.append(("start_pipe_close", exc))
+    if failure is None and cleanup_errors:
+        launch_stage, failure = cleanup_errors[0]
+    elapsed = round(time.monotonic() - started, 4)
     stdout = stdout_path.read_bytes()
     stderr_bytes = stderr_path.read_bytes()
     try:
@@ -216,7 +248,8 @@ def launch_ff_run(ctx: Context, *, case_id: str, run_label: str, request: dict[s
     stderr_txt_path = ctx.artifacts / f"{prefix}{case_id}.{run_label}.stderr.txt"
     stderr_txt_path.write_text(stderr_text, encoding="utf-8")
     trace: dict[str, Any] = {
-        "exit_code": proc.returncode,
+        "exit_code": proc.returncode if proc is not None else None,
+        "elapsed_seconds": elapsed,
         "response": response,
         "stderr": stderr_text,
         "request_ref": req_path.name,
@@ -243,6 +276,12 @@ def launch_ff_run(ctx: Context, *, case_id: str, run_label: str, request: dict[s
         receipt = ctx.artifacts / f"{state.get('receipt_tag')}.{kind}.json"
         if receipt.is_file():
             trace[f"et_{kind}_receipt"] = {"file": receipt.name, "sha256": sha256_file(receipt)}
+    if failure is not None:
+        trace["launch_error"] = {"type": type(failure).__name__, "stage": launch_stage}
+    if cleanup_errors:
+        trace["cleanup_errors"] = [
+            {"stage": stage, "type": type(error).__name__} for stage, error in cleanup_errors
+        ]
     trace["fixture_requests"] = trace["et_fixture_requests"] + trace["adapter_fixture_requests"]
     if run_index is None:
         ctx.traces.setdefault(case_id, []).append(trace)
@@ -251,6 +290,8 @@ def launch_ff_run(ctx: Context, *, case_id: str, run_label: str, request: dict[s
         while len(traces) <= run_index:
             traces.append({})
         traces[run_index] = trace
+    if failure is not None:
+        raise failure
     return trace
 
 

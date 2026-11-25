@@ -578,6 +578,50 @@ def test_two_worker_groups_keep_independent_wikis_and_merge_proof_evidence(tmp_p
     assert "g1.fresh-source-proofs.json" in names and "g2.fresh-source-proofs.json" in names
 
 
+@pytest.mark.parametrize("fail_first", [False, True])
+def test_final_proof_groups_run_concurrently_and_merge_in_group_order(tmp_path, fail_first):
+    import threading
+    import cli_main
+
+    second_finished = threading.Event()
+    order = []
+    deadlines = {}
+
+    def proof(ctx):
+        prefix = ctx.artifact_prefix
+        deadlines[prefix] = ctx.batch_deadline
+        if prefix == "g1.":
+            assert second_finished.wait(5), "second proof group did not start independently"
+        order.append(prefix)
+        if prefix == "g2.":
+            second_finished.set()
+        if fail_first and prefix == "g1.":
+            raise RuntimeError("first proof group unavailable")
+        return {
+            "schema_version": "w06-fresh-source-proofs/2",
+            "proofs": {"same-document": {"verified": True, "content_sha256": "a" * 64,
+                                         "byte_size": 1, "label": prefix}},
+        }
+
+    def runner(ctx):
+        from report import CaseResult
+        return CaseResult(ctx.active_case_spec.id, "fixture", "ff-only", result="PASS")
+
+    registry = [(f"fake_case_{n}", runner) for n in range(2)]
+    with patch.object(cli_main, "_fresh_proofs", proof):
+        _, report, _ = _run_main_with_clock(tmp_path, None, registry, [], workers=2)
+    assert order == ["g2.", "g1."]
+    assert deadlines["g1."] is deadlines["g2."]
+    assert report["restore"]["restored"] is True
+    merged = report["source_proofs"]
+    assert set(merged["worker_groups"]) == ({"g2"} if fail_first else {"g1", "g2"})
+    assert merged["proofs"]["same-document"]["label"] == ("g2." if fail_first else "g1.")
+    if fail_first:
+        assert "first proof group unavailable" in report["scope"]["error"]
+    else:
+        assert merged["proofs"]["same-document"]["worker_collision"] is True
+
+
 def test_worker_group_runs_seeded_wiki_and_cases_in_own_context(tmp_path):
     from run import Context
     import cli_main

@@ -16,11 +16,12 @@ import subprocess
 import sys
 import threading
 import time
-from typing import BinaryIO, cast
+from typing import BinaryIO, NamedTuple, cast
 
 from ff_process_tree import (
     WindowsJob,
     assign_windows_job,
+    finish_owned_process,
     kill_owned_group,
     wait_owned_group_stopped,
     pid_is_alive as pid_is_alive,
@@ -35,12 +36,19 @@ _CLEANUP_GRACE_SECONDS = 2.5
 # os.read avoids prefetching request bytes. Keep this parent alive and propagate
 # the actual child's exit status; Windows os.execv would lose that guarantee.
 _WINDOWS_BOOTSTRAP = (
+    "from contextlib import nullcontext\n"
     "import os,subprocess,sys\n"
     "if os.read(0,1)!=b'\\x00': sys.exit(125)\n"
-    "p=subprocess.Popen(sys.argv[1:],stdin=sys.stdin,stdout=sys.stdout,stderr=sys.stderr,close_fds=True,"
+    "with (open(sys.argv[1],'rb') if sys.argv[1] else nullcontext(sys.stdin)) as source:\n"
+    " p=subprocess.Popen(sys.argv[2:],stdin=source,stdout=sys.stdout,stderr=sys.stderr,close_fds=True,"
     "creationflags=subprocess.CREATE_NO_WINDOW)\n"
-    "sys.exit(p.wait())\n"
+    " sys.exit(p.wait())\n"
 )
+
+
+def held_windows_command(command: list[str], *, request_file: str | None = None) -> list[str]:
+    """Create a Windows wrapper that cannot launch its target before the start byte."""
+    return [sys.executable, "-B", "-S", "-c", _WINDOWS_BOOTSTRAP, request_file or "", *command]
 
 
 class TransportError(Exception):
@@ -76,6 +84,28 @@ def _assign_windows_job(proc: subprocess.Popen) -> WindowsJob:
     return assign_windows_job(proc)
 
 
+class _ProcessCleanupFact(NamedTuple):
+    stage: str
+    error_type: str
+
+
+def process_cleanup_facts(error: BaseException) -> list[dict[str, str]]:
+    """Read only structured facts produced by this process owner."""
+    facts = vars(error).get("_process_cleanup_facts")
+    if not isinstance(facts, tuple):
+        return []
+    return [{"stage": fact.stage, "type": fact.error_type}
+            for fact in facts if type(fact) is _ProcessCleanupFact]
+
+
+def _remember_cleanup(error: BaseException, failures: list[tuple[str, Exception]]) -> None:
+    if failures:
+        facts = tuple(_ProcessCleanupFact(stage, type(problem).__name__) for stage, problem in failures)
+        vars(error)["_process_cleanup_facts"] = facts
+        for fact in facts:
+            BaseException.add_note(error, f"process cleanup {fact.stage}: {fact.error_type}")
+
+
 def _kill_tree(job: WindowsJob | None, proc: subprocess.Popen) -> None:
     try:
         if job is not None:
@@ -95,7 +125,7 @@ def _close_pipes(proc: subprocess.Popen) -> None:
 
 def _spawn(command, input_bytes, cwd, env):
     windows = os.name == "nt"
-    argv = [sys.executable, "-B", "-S", "-c", _WINDOWS_BOOTSTRAP, *command] if windows else command
+    argv = held_windows_command(command) if windows else command
     try:
         proc = subprocess.Popen(
             argv,
@@ -309,22 +339,25 @@ def _await_lifetime(proc, job, state: _IOState, deadline: float) -> None:
         state.wake.wait(min(0.02, remaining))
 
 
-def _cleanup(proc, job, state: _IOState) -> None:
+def _cleanup(proc, job, state: _IOState) -> list[tuple[str, Exception]]:
     deadline = time.monotonic() + _CLEANUP_GRACE_SECONDS
+    failures = finish_owned_process(proc, job, deadline=deadline, stop=lambda: _kill_tree(job, proc))
     try:
-        _kill_tree(job, proc)
-    finally:
-        if job is not None:
-            job.close()  # Also kills descendants if explicit termination failed.
-    proc.wait(timeout=max(0.001, deadline - time.monotonic()))
-    group_stopped = job is not None or wait_owned_group_stopped(proc.pid, deadline)
+        if job is None and not wait_owned_group_stopped(proc.pid, deadline):
+            raise TransportError("owned process group did not stop within cleanup grace")
+    except (OSError, TransportError) as error:
+        failures.append(("process_group", error))
     for thread in state.threads:
-        thread.join(timeout=max(0.0, deadline - time.monotonic()))
+        if thread.ident is not None:
+            thread.join(timeout=max(0.0, deadline - time.monotonic()))
     if any(thread.is_alive() for thread in state.threads):
-        raise TransportError("owned process cleanup exceeded its grace period")
-    _close_pipes(proc)
-    if not group_stopped:
-        raise TransportError("owned process group did not stop within cleanup grace")
+        failures.append(("io_join", TransportError("owned process cleanup exceeded its grace period")))
+    else:
+        try:
+            _close_pipes(proc)
+        except OSError as error:
+            failures.append(("pipe_close", error))
+    return failures
 
 
 def _result(proc, state: _IOState) -> dict[str, object]:
@@ -378,9 +411,20 @@ def run_bounded(
             raise ChildTimeout("deadline expired during spawn")
         state.start(proc, input_bytes, stdout_cap_bytes, stderr_cap_bytes)
         _await_lifetime(proc, job, state, deadline)
-    finally:
-        _cleanup(proc, job, state)
-    return _result(proc, state)
+    except BaseException as primary:
+        _remember_cleanup(primary, _cleanup(proc, job, state))
+        raise
+    failures = _cleanup(proc, job, state)
+    try:
+        result = _result(proc, state)
+    except ChildFailed as child_failure:
+        _remember_cleanup(child_failure, failures)
+        raise
+    if failures:
+        _, cleanup_failure = failures[0]
+        _remember_cleanup(cleanup_failure, failures)
+        raise cleanup_failure
+    return result
 
 
 def run_bounded_json(

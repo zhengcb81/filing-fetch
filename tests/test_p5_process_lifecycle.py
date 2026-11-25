@@ -248,3 +248,107 @@ def test_bootstrap_preserves_configured_cwd_and_env(tmp_path):
         env=dict(os.environ, P5_TEST_VALUE="original-language-中文"),
     )
     assert result["stdout"].decode() == str(tmp_path) + "\noriginal-language-中文"
+
+
+@pytest.mark.parametrize("cleanup_stage", ["process_terminate", "job_close"])
+def test_native_cleanup_reaps_and_preserves_primary_timeout(monkeypatch, cleanup_stage, tmp_path):
+    from types import SimpleNamespace
+
+    operations = []
+    state = {"returncode": None}
+    primary = fpt.ChildTimeout("the request reached its own deadline")
+
+    def kill():
+        operations.append("kill")
+        state["returncode"] = 1
+
+    def terminate():
+        operations.append("terminate")
+        if cleanup_stage == "process_terminate":
+            raise OSError("private exceptional terminate context")
+        state["returncode"] = 1
+
+    def close():
+        operations.append("close")
+        if cleanup_stage == "job_close":
+            raise OSError("private exceptional close context")
+        state["returncode"] = 1
+
+    def reap(*, timeout):
+        operations.append("reap")
+        assert 0 <= timeout <= fpt._CLEANUP_GRACE_SECONDS
+        return state["returncode"]
+
+    proc = SimpleNamespace(pid=123, stdin=None, stdout=None, stderr=None,
+                           poll=lambda: state["returncode"], kill=kill, wait=reap)
+    job = SimpleNamespace(terminate=terminate, close=close)
+
+    def time_out(*_args):
+        raise primary
+
+    monkeypatch.setattr(fpt, "_spawn", lambda *a: (proc, job))
+    monkeypatch.setattr(fpt._IOState, "start", lambda *a: None)
+    monkeypatch.setattr(fpt, "_await_lifetime", time_out)
+    with pytest.raises(fpt.ChildTimeout) as observed:
+        fpt.run_bounded(["synthetic-child"], timeout_seconds=1)
+    assert observed.value is primary
+    assert operations == (["terminate", "kill", "close", "reap"] if cleanup_stage == "process_terminate"
+                          else ["terminate", "reap", "close"])
+    assert primary.__notes__ == [f"process cleanup {cleanup_stage}: OSError"]
+
+    if cleanup_stage == "job_close":
+        import json
+        import ff_runtime_feedback as feedback
+
+        for env_name in (feedback.OUT_ENV, feedback.DIR_ENV, feedback.RUN_ENV, feedback.ATTEMPT_ENV):
+            monkeypatch.delenv(env_name, raising=False)
+        primary.add_note("private note outside owner cleanup")
+        jobs = tmp_path / "jobs"
+        feedback.cli_failure("fixture", "owner_timeout", primary, jobs_dir=jobs)
+        observations = jobs / "observations"
+        packet, = observations.glob("*.jsonl")
+        ref = json.loads(packet.read_text(encoding="utf-8").splitlines()[0])["details_ref"]
+        # The fixture monkeypatch covers the process-owner subprocess module
+        # only through its private launch seam, never this public cold command.
+        cold = subprocess.run(
+            [sys.executable, "-B", str(PROBE.parents[2] / "scripts/ff_job_feedback.py"),
+             "get-diagnostic", ref, "--jobs-dir", str(jobs)],
+            cwd=tmp_path, capture_output=True, check=True, timeout=30,
+        )
+        facts, = json.loads(cold.stdout)["causes"]
+        assert facts["type"] == "ChildTimeout"
+        assert facts["process_cleanup"] == [{"stage": "job_close", "type": "OSError"}]
+        assert b"private note" not in cold.stdout and b"private exceptional" not in cold.stdout
+
+
+@pytest.mark.parametrize("returncode", [0, 7])
+def test_native_cleanup_failure_preserves_completed_child_outcome(monkeypatch, returncode):
+    from types import SimpleNamespace
+
+    private_cleanup = OSError("fixture job close failed")
+    output = b'{"status":"blocked","reason":"fixture"}'
+    diagnostic = b'{"error_type":"fixture"}'
+    proc = SimpleNamespace(pid=123, stdin=None, stdout=None, stderr=None, returncode=returncode,
+                           poll=lambda: returncode, wait=lambda **_: returncode)
+
+    def close():
+        raise private_cleanup
+
+    job = SimpleNamespace(terminate=lambda: None, close=close)
+
+    def finished_io(state, *_args):
+        state.chunks["stdout"].append(output)
+        state.chunks["stderr"].append(diagnostic)
+        state.finished.update({"stdin", "stdout", "stderr"})
+
+    monkeypatch.setattr(fpt, "_spawn", lambda *a: (proc, job))
+    monkeypatch.setattr(fpt._IOState, "start", finished_io)
+    with pytest.raises(fpt.ChildFailed if returncode else OSError) as observed:
+        fpt.run_bounded(["synthetic-child"], timeout_seconds=1)
+    if returncode:
+        assert observed.value.returncode == returncode
+        assert observed.value.stdout == output
+        assert observed.value.stderr == diagnostic
+    else:
+        assert observed.value is private_cleanup
+    assert observed.value.__notes__ == ["process cleanup job_close: OSError"]

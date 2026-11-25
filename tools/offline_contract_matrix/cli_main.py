@@ -504,15 +504,24 @@ def main(argv: list[str] | None = None) -> int:
                 done_by_pos.update(dict(done))
                 if group_stop:
                     stops.append(group_stop)
-        results = [done_by_pos[pos] for pos in sorted(done_by_pos)]
-        stop_reason = "; ".join(dict.fromkeys(stops)) or None
-        # The mandatory final fresh source proof runs AFTER all groups joined and
-        # after every change, once per owned wiki, merged into one proof record.
-        timer.count_launch("fresh_source_proof", workers)
-        with timer.span("fresh_source_proof"):
-            for index, ctx in enumerate(ctxs):
-                part = _fresh_proofs(ctx)
-                _merge_source_proofs(proofs, part, f"g{index + 1}")
+            results = [done_by_pos[pos] for pos in sorted(done_by_pos)]
+            stop_reason = "; ".join(dict.fromkeys(stops)) or None
+            # The final proof starts only after all groups have stopped writing.
+            # Each helper uses its group's isolated wiki and the same batch end.
+            timer.count_launch("fresh_source_proof", workers)
+            with timer.span("fresh_source_proof"):
+                pending_proofs = [pool.submit(_fresh_proofs, ctx) for ctx in ctxs]
+                proof_failure = None
+                for index, future in enumerate(pending_proofs):
+                    try:
+                        _merge_source_proofs(proofs, future.result(), f"g{index + 1}")
+                    except Exception as exc:
+                        if proof_failure is None:
+                            proof_failure = exc
+                if proof_failure is not None:
+                    # Retain any other group's completed observations in the
+                    # partial report, but never certify a missing proof group.
+                    raise proof_failure
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
     finally:
