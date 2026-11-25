@@ -19,7 +19,7 @@ from pathlib import Path
 from ff_financial_statements import fetch_statements
 from ff_runtime_feedback import cli_failure, parse_arguments
 from ff_statement_feedback import publish_statement_response
-from filing_contracts import FilingFetchError
+from ff_errors import FilingFetchError
 
 STATEMENTS_RESPONSE_SCHEMA_VERSION = "financial-statements-response/1"
 

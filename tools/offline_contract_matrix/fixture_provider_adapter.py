@@ -112,7 +112,7 @@ def _discover(payload: dict) -> dict:
         "filing_date": payload.get("as_of_date", "2026-01-01"),
         "fiscal_year": fiscal_year,
     }
-    for optional in ("form_type", "fiscal_period", "language"):
+    for optional in ("security_id", "form_type", "fiscal_period", "language"):
         if payload.get(optional) is not None:
             candidate[optional] = payload[optional]
     body["candidates"] = [candidate]

@@ -1,75 +1,103 @@
-"""Fresh SourceVersionReader bytes and version counts from synthetic catalog only."""
-from dataclasses import fields
+"""Prove the final matrix sources through the real public CWP export/read ports."""
+from __future__ import annotations
+
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 
-
-def physical_originals(locations):
-    identities = set()
-    for row in locations:
-        path = Path(row["absolute_path"])
-        stat = path.stat()
-        identities.add((stat.st_dev, stat.st_ino) if stat.st_ino else str(path.resolve()).casefold())
-    return len(identities)
+from cwp_readback_probe import read_source
+from runtime import Deadline, run_process
 
 
-def catalog_snapshot(reader):
-    snapshot = []
-    for row in reader.fetchall("SELECT d.document_id,d.document_kind,d.published_date,d.metadata_json,s.source_id,s.content_sha256,s.byte_size,s.mime_type,d.source_status FROM documents d JOIN sources s ON s.source_id=d.primary_source_id"):
-        record = dict(row)
-        record["metadata"] = json.loads(record.pop("metadata_json") or "{}").get("acquisition") or {}
-        snapshot.append(record)
-    return snapshot
+PROOF_SCHEMA = "w06-fresh-source-proofs/2"
+REF_FIELDS = ("document_id", "source_id", "content_sha256", "byte_size", "mime_type")
+
+
+def export_sources(wiki_root, refs, *, env, deadline):
+    command = [
+        sys.executable, "-m", "company_wiki.source_catalog.source_export_v2_cli",
+        "--config", str(wiki_root / "config/source_catalog.yaml"),
+    ]
+    request = {
+        "schema_version": "2.0",
+        "source_refs": [
+            {"schema_version": "2.0", **{key: ref[key] for key in REF_FIELDS}} for ref in refs
+        ],
+        "evidence_spans": [],
+    }
+    proc = run_process(
+        command, input=json.dumps(request).encode("utf-8"),
+        env=env, cwd=wiki_root, deadline=deadline,
+    )
+    if proc.returncode != 0:
+        raise ValueError(f"CWP source export rc={proc.returncode}: {proc.stderr.decode('utf-8', 'replace').strip()}")
+    result = json.loads(proc.stdout)
+    if result.get("schema_version") != "2.0.0" or not isinstance(result.get("manifests"), list):
+        raise ValueError("CWP returned an unrecognized SourceExport receipt")
+    return result["manifests"]
+
+
+def _language_content_sha256(wiki_root, ref, *, env, deadline):
+    raw = read_source(wiki_root, ref, env=env, deadline=deadline)
+    if ref["mime_type"] == "application/json":
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            parsed = parsed[0] if parsed else None
+        text = parsed.get("content") if isinstance(parsed, dict) else None
+    else:
+        text = raw.decode("utf-8")
+    return (hashlib.sha256(text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")).hexdigest()
+            if isinstance(text, str) else None)
+
+
+def proves_reference(manifest, ref):
+    return isinstance(manifest, dict) and all(manifest.get(key) == ref[key] for key in REF_FIELDS)
+
+
+def prove_sources(wiki_root, references, *, env, deadline):
+    # A single owner export verifies the original bytes and returns bound,
+    # pathless manifests. Only transcripts need the binary port as well, to
+    # check the original-language body independently of the manifest.
+    refs = {}
+    for reference in references:
+        refs.setdefault(reference["document_id"], reference)
+    findings = {}
+    manifests = export_sources(wiki_root, refs.values(), env=env, deadline=deadline) if refs else []
+    by_document = {row["document_id"]: row for row in manifests}
+    for key, ref in refs.items():
+        manifest = by_document.get(key)
+        if not proves_reference(manifest, ref):
+            findings[key] = {"verified": False, "error": "owner export did not attest to this exact reference"}
+            continue
+        try:
+            language_sha = None
+            if manifest.get("document_kind") == "investor_call_transcript" and ref["mime_type"] in {
+                "application/json", "text/plain",
+            }:
+                language_sha = _language_content_sha256(wiki_root, ref, env=env, deadline=deadline)
+            findings[key] = {
+                "verified": True,
+                "reference": ref,
+                "manifest": manifest,
+                "content_sha256": manifest["content_sha256"],
+                "byte_size": manifest["byte_size"],
+                "document_kind": manifest.get("document_kind"),
+                "original_language_content_sha256": language_sha,
+            }
+        except (ValueError, OSError, TypeError) as exc:
+            findings[key] = {"verified": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"schema_version": PROOF_SCHEMA, "proofs": findings}
 
 
 def main():
-    from company_wiki.source_catalog.config import load_catalog_config
-    from company_wiki.source_catalog.service import SourceCatalog
-    from company_wiki.source_catalog.source_reader import SourceRef, SourceVersionReader
-
     payload = json.load(sys.stdin)
-    wiki = Path(payload["wiki"])
-    catalog = SourceCatalog(load_catalog_config(wiki/"config/source_catalog.yaml", project_root=wiki))
-    reader = SourceVersionReader(catalog)
-    result = {}
-    try:
-        for reference in payload["refs"]:
-            key = reference["document_id"]
-            if key in result:
-                continue
-            try:
-                ref = SourceRef(**{field.name: reference[field.name] for field in fields(SourceRef) if field.name in reference})
-                verified = reader.open_version(ref)
-                digest = hashlib.sha256(verified.data).hexdigest()
-                row = catalog.reader.exact_source_version(ref.document_id)
-                versions = catalog.reader.fetchone("SELECT COUNT(*) AS n FROM sources WHERE content_sha256=?", (digest,))["n"]
-                locations = catalog.reader.fetchone("SELECT COUNT(*) AS n FROM locations WHERE source_id=? AND role='original_primary' AND location_status='active'", (ref.source_id,))["n"]
-                location_rows = catalog.reader.fetchall("SELECT root_id, relative_path, absolute_path FROM locations WHERE source_id=? AND role='original_primary' AND location_status='active'", (ref.source_id,))
-                physical_count = physical_originals(location_rows)
-                source_content = None
-                if ref.mime_type == "application/json":
-                    parsed = json.loads(verified.data.decode("utf-8"))
-                    if isinstance(parsed, list) and parsed:
-                        source_content = parsed[0].get("content")
-                    elif isinstance(parsed, dict):
-                        source_content = parsed.get("content")
-                elif ref.mime_type == "text/plain":
-                    source_content = verified.data.decode("utf-8")
-                result[key] = {"verified": digest == ref.content_sha256 and len(verified.data) == ref.byte_size,
-                    "reference": reference, "content_sha256": digest, "byte_size": len(verified.data),
-                    "source_versions": versions, "original_locations": locations, "physical_originals":physical_count,
-                    "location_records":[dict(x) for x in location_rows],
-                    "document_kind": row["document_kind"],
-                    "metadata": (json.loads(row["metadata_json"] or "{}").get("acquisition") or {}),
-                    "original_language_content_sha256": None if source_content is None else hashlib.sha256(source_content.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")).hexdigest()}
-            except Exception as exc:
-                result[key] = {"verified": False, "error": f"{type(exc).__name__}: {exc}"}
-        snapshot = catalog_snapshot(catalog.reader)
-        print(json.dumps({"schema_version": "w06-fresh-source-proofs/1", "proofs": result, "catalog_snapshot":snapshot}, ensure_ascii=False))
-    finally:
-        catalog.close()
+    result = prove_sources(
+        Path(payload["wiki"]), payload["refs"], env=dict(os.environ),
+        deadline=Deadline(end=payload["deadline_end"]),
+    )
+    print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":

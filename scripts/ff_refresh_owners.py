@@ -18,7 +18,8 @@ from ff_job_contracts import FF_JOB_SCHEMA_VERSION, allowed_actions_for, validat
 from ff_job_runner import act, run_job
 from ff_job_store import JobStore
 from ff_process_transport import MAX_JSON_OUTPUT_BYTES, TransportError, run_bounded_json
-from filing_contracts import FilingFetchError, validate_acquisition_limits
+from ff_errors import FilingFetchError
+from filing_contracts import validate_acquisition_limits
 
 
 class OwnerUnavailable(RuntimeError):

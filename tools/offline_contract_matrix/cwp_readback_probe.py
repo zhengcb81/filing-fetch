@@ -1,108 +1,102 @@
-"""Isolated CWP public read-back probe (return R2, FF-R2-2).
-
-One bounded subprocess per probe call: the parent's ``sys.stdin``/``sys.stdout``
-are never touched, exceptions stay inside this process, and the result carries
-an EXPLICIT state — ``confirmed`` (this request's Ref read back byte-for-byte
-through the public query + verified open), ``not_found`` (the public query
-answered and this request's Ref is not durably readable), or ``probe_error``
-(the probe itself failed; NEVER usable as a not-durable negative).
-
-stdin JSON : {"wiki": abs, "cwp_src": abs, "identity_request": {...},
-              "content_sha": hex}
-stdout JSON: {"state": "confirmed|not_found|probe_error",
-              "ref": {...}|null, "error": str|null}
-"""
-
+"""Verify W20 read-back through the company-wiki public process ports."""
 from __future__ import annotations
 
-import contextlib
 import hashlib
-import io
 import json
-import sys
-from dataclasses import fields as dc_fields
+import os
 from pathlib import Path
+from typing import Any
+
+from runtime import Deadline, _short_path, run_process, process_transport
+from ff_company_wiki_connection import command_for
+from matrix_outcome import source_ref
 
 
-def main() -> int:
-    payload = json.load(sys.stdin)
-    wiki = Path(payload["wiki"])
-    cwp_src = Path(payload["cwp_src"])
-    content_sha = payload["content_sha"]
-    identity_request = payload["identity_request"]
-    if str(cwp_src) not in sys.path:
-        sys.path.insert(0, str(cwp_src))
-    result: dict = {"state": "probe_error", "ref": None, "error": None}
+def read_source(wiki_root: Path, ref: dict, *, env: dict[str, str], deadline: Deadline) -> bytes:
+    """Open one source through the binary CLI and bind bytes and receipt to the exact ref."""
+    opened = run_process(
+        [*command_for(wiki_root, "open"), "--exact-pair",
+         "--document-id", ref["document_id"], "--source-id", ref["source_id"],
+         "--content-sha256", ref["content_sha256"]],
+        env=env, cwd=wiki_root, deadline=deadline,
+    )
+    receipt = json.loads(opened.stderr)
+    if opened.returncode != 0 or receipt.get("status") != "ok":
+        raise ValueError(f"open rc={opened.returncode} reason={receipt.get('reason')}")
+    if receipt.get("schema_version") != "2.1" or any(
+        receipt.get(key) != ref[key]
+        for key in ("document_id", "source_id", "content_sha256", "byte_size")
+    ):
+        raise ValueError("open receipt did not bind the queried source")
+    if len(opened.stdout) != ref["byte_size"] or hashlib.sha256(opened.stdout).hexdigest() != ref["content_sha256"]:
+        raise ValueError("open bytes did not match the queried source")
+    return opened.stdout
+
+
+def probe_exact_source(
+    wiki_root: Path, ref: dict[str, Any], *, env: dict[str, str], deadline: Deadline,
+) -> dict[str, Any]:
+    """Reopen an already observed SourceRef; no duplicate discovery is needed."""
     try:
-        from company_wiki.source_catalog.config import load_catalog_config
-        from company_wiki.source_catalog.service import SourceCatalog
-        from company_wiki.source_catalog.source_query_cli import main as query_main
-        from company_wiki.source_catalog.source_reader import SourceRef, SourceVersionReader
+        read_source(wiki_root, ref, env=env, deadline=deadline)
+    except (OSError, ValueError, TypeError, AttributeError, process_transport.TransportError) as exc:
+        return {"state": "probe_error", "ref": None, "error": f"{type(exc).__name__}: {exc}"[:300]}
+    verified = {key: ref[key] for key in
+                ("document_id", "source_id", "content_sha256", "byte_size", "mime_type")}
+    return {"state": "confirmed", "ref": verified, "error": None}
 
-        # The provider-scoped transcript-import lookup envelope — the same
-        # public path FF's duplicate-suppression reuse uses. It includes
-        # unknown-publication sources and is not subject to the plain
-        # query's as-of eligibility exclusion (a stored future-period
-        # original must still be readable back).
-        lookup = {
+
+def probe_catalog(
+    *,
+    wiki_root: Path,
+    identity_request: dict[str, Any],
+    content_sha: str,
+    cwp_src: str,
+    env: dict[str, str] | None = None,
+    timeout_seconds: float = 30.0,
+    deadline: Deadline | None = None,
+) -> dict[str, Any]:
+    """Distinguish a verified original, an authoritative miss and a probe fault."""
+    result = {"state": "probe_error", "ref": None, "error": None}
+    try:
+        if env is None:
+            env = {
+                key: os.environ[key]
+                for key in ("SystemRoot", "WINDIR", "COMSPEC", "PATH", "PATHEXT")
+                if key in os.environ
+            }
+            owned_state = str(wiki_root.parent / "probe-home")
+            env.update(LOCALAPPDATA=owned_state, XDG_STATE_HOME=owned_state, PYTHONDONTWRITEBYTECODE="1")
+        child_env = {**env, "PYTHONUTF8": "1"}
+        existing_path = child_env.get("PYTHONPATH")
+        paths = [str(_short_path(Path(cwp_src))), *(existing_path or "").split(os.pathsep)]
+        child_env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys(filter(None, paths)))
+        # No product state belongs in the legacy project's real config or home.
+        cwd = wiki_root
+        limit = deadline or Deadline(timeout_seconds)
+        lookup_request = {
             "schema_version": "company-wiki-transcript-import-lookup-request/1",
             "source_request": identity_request,
         }
-        out = io.StringIO()
-        saved_stdin = sys.stdin
-        sys.stdin = io.TextIOWrapper(
-            io.BytesIO(json.dumps(lookup, ensure_ascii=False).encode("utf-8")),
-            encoding="utf-8")
-        try:
-            with contextlib.redirect_stdout(out):
-                code = query_main(["--config", str(wiki / "config" / "source_catalog.yaml")])
-        finally:
-            sys.stdin = saved_stdin
-        if code != 0:
-            result["error"] = f"query rc={code} out={out.getvalue()[:200]}"
-        else:
-            data = json.loads(out.getvalue())
-            status = data.get("status")
-            if status not in ("found", "unknown_publication") or len(data.get("matches") or []) != 1:
-                result["state"] = "not_found"
-                result["error"] = (f"status={status} reason={data.get('reason')} "
-                                   f"matches={len(data.get('matches') or [])}")
-            else:
-                ref = data["matches"][0]
-                if ref.get("content_sha256") != content_sha:
-                    result["state"] = "not_found"
-                    result["error"] = (f"sha mismatch {str(ref.get('content_sha256'))[:16]} "
-                                       f"!= {content_sha[:16]} (another source matched)")
-                else:
-                    catalog = SourceCatalog(load_catalog_config(
-                        wiki / "config" / "source_catalog.yaml", project_root=wiki))
-                    try:
-                        reader = SourceVersionReader(catalog)
-                        kwargs = {f.name: ref[f.name]
-                                  for f in dc_fields(SourceRef) if f.name in ref}
-                        verified = reader.open_version(SourceRef(**kwargs))
-                        digest = hashlib.sha256(verified.data).hexdigest()
-                        if digest != content_sha or len(verified.data) != ref.get("byte_size"):
-                            result["state"] = "not_found"
-                            result["error"] = (f"readback mismatch digest={digest[:16]} "
-                                               f"len={len(verified.data)}")
-                        else:
-                            result["state"] = "confirmed"
-                            result["ref"] = {
-                                "document_id": ref["document_id"],
-                                "source_id": ref["source_id"],
-                                "content_sha256": digest,
-                                "byte_size": len(verified.data),
-                                "mime_type": ref.get("mime_type"),
-                            }
-                    finally:
-                        catalog.close()
-    except Exception as exc:  # noqa: BLE001 — the probe owns and reports its own failure
-        result["state"] = "probe_error"
-        result["error"] = f"{type(exc).__name__}: {exc}"[:300]
-    sys.stdout.write(json.dumps(result, ensure_ascii=False))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+        lookup = run_process(
+            command_for(wiki_root, "query"), env=child_env, cwd=cwd, deadline=limit,
+            input=json.dumps(lookup_request, ensure_ascii=False).encode("utf-8"),
+        )
+        data = json.loads(lookup.stdout)
+        status = data.get("status")
+        reason = data.get("reason")
+        if lookup.returncode != 0 or data.get("schema_version") != "2.0":
+            return {**result, "error": f"query rc={lookup.returncode} status={status} reason={reason}"}
+        matches = data.get("matches")
+        if status == "not_found" and matches == []:
+            return {**result, "state": "not_found", "error": reason}
+        if status not in {"found", "unknown_publication"} or not isinstance(matches, list) or len(matches) != 1:
+            return {**result, "error": f"lookup did not return one source: {status} ({reason})"}
+        ref = source_ref(matches[0])
+        if ref is None:
+            return {**result, "error": "query returned an incomplete source reference"}
+        if ref["content_sha256"] != content_sha:
+            return {**result, "state": "not_found", "error": "another original matched the lookup"}
+        return probe_exact_source(wiki_root, ref, env=child_env, deadline=limit)
+    except (OSError, ValueError, TypeError, AttributeError, process_transport.TransportError) as exc:
+        return {**result, "error": f"{type(exc).__name__}: {exc}"[:300]}

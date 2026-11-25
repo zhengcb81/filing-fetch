@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from filing_contracts import FilingFetchError, FILING_V2_RESPONSE_SCHEMA_VERSION, _validate_companion_request
+from ff_errors import FilingFetchError
+from filing_contracts import FILING_V2_RESPONSE_SCHEMA_VERSION, validate_companion_request
 from ff_source_ref import validate_source_ref as _reference
 from ff_source_candidate import ERROR_CANDIDATE_CODES, projected_error_candidates
 from ff_local_preparation_observation import validated_local_preparation_observation
@@ -138,7 +139,7 @@ def _undispatched_companion(request: dict[str, Any]) -> dict[str, Any]:
     if option is None:
         return {"status": "not_requested", "retryable": False}
     try:
-        _validate_companion_request(option)
+        validate_companion_request(option)
     except (FilingFetchError, TypeError, ValueError):
         return {"status": "request_error", "reason": "invalid_companion_request", "retryable": False}
     if option.get("fiscal_year") is None or option.get("fiscal_quarter") is None:

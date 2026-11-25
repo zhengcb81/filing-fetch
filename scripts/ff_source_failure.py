@@ -11,9 +11,9 @@ import hashlib
 import json
 from typing import Any
 
-from filing_contracts import FilingFetchError
+from ff_errors import FilingFetchError
 from ff_provider_cause import source_condition
-from ff_source_candidate import contains_physical_field
+from ff_pathless_payload import contains_physical_field
 
 _REQUEST_FIELDS = (
     "entity",

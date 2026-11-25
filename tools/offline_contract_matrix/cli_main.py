@@ -106,13 +106,16 @@ def _verify_binding(cwp_src: Path, et_root: Path, env: dict[str, str], *, deadli
     # groups never double-compile the same trees (W07 measurement).
     script = '''import json, hashlib, company_wiki, transcript_tool
 import company_wiki.source_catalog.cli, company_wiki.source_catalog.source_query_cli
-import tests.test_retrieval_runtime, tests.test_transcript_api
+import matrix_et_http_fixture
+import company_wiki.source_catalog.source_reader_cli, company_wiki.source_catalog.source_export_v2_cli
 def record(m):
     return {"file":m.__file__, "sha256":hashlib.sha256(open(m.__file__,"rb").read()).hexdigest()}
 print(json.dumps({"company_wiki":record(company_wiki), "transcript_tool":record(transcript_tool)}))'''
     try:
         proc = run_process([sys.executable, "-c", script], env=env, cwd=cwd or HERE,
                            deadline=deadline or Deadline(30))
+        if proc.returncode != 0:
+            return {"verified": False, "error": f"binding rc={proc.returncode}: {proc.stderr.decode('utf-8', 'replace').strip()}"}
         data = json.loads(proc.stdout.decode("utf-8").strip().splitlines()[-1])
         expected = {"company_wiki":cwp_src / "company_wiki/__init__.py", "transcript_tool":et_root / "transcript_tool.py"}
         data["verified"] = proc.returncode == 0 and all(
@@ -162,7 +165,8 @@ def _fresh_proofs(ctx: Context) -> dict:
                 if ref:
                     refs.append(ref)
     proc = run_process([sys.executable, str(HERE / "source_proofs.py")],
-                       input=json.dumps({"wiki":str(ctx.env.wiki), "refs":refs}).encode("utf-8"),
+                       input=json.dumps({"wiki": str(ctx.env.wiki), "refs": refs,
+                                         "deadline_end": ctx.batch_deadline.end}).encode("utf-8"),
                        env=ctx.child_env(), cwd=ctx.scratch, deadline=ctx.batch_deadline)
     prefix = getattr(ctx, "artifact_prefix", "")
     path = ctx.artifacts / f"{prefix}fresh-source-proofs.json"
@@ -184,6 +188,8 @@ def _merge_source_proofs(target: dict, part: dict, group: str) -> None:
     if group in groups:
         raise ValueError(f"duplicate worker proof group: {group}")
     groups[group] = part
+    if part.get("schema_version") is not None:
+        target.setdefault("schema_version", part["schema_version"])
     merged = target.setdefault("proofs", {})
     for key, row in (part.get("proofs") or {}).items():
         previous = merged.get(key)
@@ -199,7 +205,8 @@ def _merge_source_proofs(target: dict, part: dict, group: str) -> None:
             if not combined["verified"]:
                 combined["error"] = "worker proof collision includes a failed or incompatible verification"
             merged[key] = combined
-    target.setdefault("catalog_snapshot", []).extend(part.get("catalog_snapshot") or [])
+    if "catalog_snapshot" in part:  # Retain legacy evidence when replaying V1 test receipts.
+        target.setdefault("catalog_snapshot", []).extend(part["catalog_snapshot"])
 
 
 def run_case_group(ctx: Context, entries: list[tuple[int, tuple[str, Callable]]],
@@ -433,7 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     guard = ProductionGuard(ff_root, cwp_root, et_root)
     protected = tuple(root / child for root in (ff_root, cwp_root, et_root) for child in ("config", "companies", "src", "scripts", "transcripts"))
     attempt = OwnedAttempt.create(args.owned_root, args.out_root, protected)
-    results, binding, proofs, deps, events = [], {"verified":False}, {"proofs": {}, "catalog_snapshot": []}, [], []
+    results, binding, proofs, deps, events = [], {"verified":False}, {"proofs": {}}, [], []
     registry = []
     base_registry, union, selection = [], [], None
     ctxs = []

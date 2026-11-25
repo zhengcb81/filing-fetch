@@ -3,7 +3,7 @@
 显式手动运行、完全独立临时状态的跨仓套件。证明一次真正的
 **FF 公开入口 → EarningsTranscriptsTransport → ET transcript_tool.main →
 真实 retrieval supervisor/worker/transcript_api → FF 真实 import → CWP 原文注册 →
-SourceVersionReader.open_version 实读 → 再次 FF 命中** 链路（链 A），并给出文档类型覆盖图。
+CWP 公开 source-reader 二进制接口实读 → 再次 FF 命中** 链路（链 A），并给出文档类型覆盖图。
 
 产品源码只读；只在 owned scratch 写状态。无真实网络、无真实收费、不翻译。
 所有请求都是 fixture 请求，单列不入母账。合成响应不证明外网可达、真实供应商完整或经济质量。
@@ -71,7 +71,7 @@ runner 不隐式使用它，否则批次会依赖上一次运行的计时。
 - **链 A（真三层）**：FF v2 请求 = 本地命中 filing + `companion_transcript(fetch_if_missing, exact FY/Q)`。
   FF config `earnings_transcripts_tool` 指向 **test-proxy** `et_transcript_proxy.py`（明确标注 test-proxy，
   非未经代理生产二进制）。proxy 转发真实 `transcript_tool.main` argv，只用既有 private launcher seam
-  （`tests.test_retrieval_runtime:build_fake_session`）替换 worker HTTP。真 supervisor/worker/transcript_api
+  （`matrix_et_http_fixture:build_session`，由 FF 测试目录提供）替换 worker HTTP。真 supervisor/worker/transcript_api
   子进程照常跑。ET 结果经 FF 真实 `transcript_import_cli` 入 CWP，`source_reader_cli` open_version 实读校验。
 - **财报 fixture provider**：`fixture_provider_adapter.py`（CWP `json_command_v1`，cn/hk/us）在
   *fixture provider 边界* 合成供应商响应（candidate + 下载原件），真实 CWP ensure/import 照常执行。

@@ -18,7 +18,8 @@ from typing import Any
 from et_v2_contract import ET_NOT_FOUND_DIAGNOSTICS
 from ff_configuration import expand_config_path, read_json_object
 from ff_company_wiki_connection import WikiEndpoint, command_for, connection_cwd, connection_environment
-from filing_contracts import CWP_TRANSCRIPT_DOCUMENT_KIND, FilingFetchError, _validate_date
+from ff_errors import FilingFetchError
+from filing_contracts import CWP_TRANSCRIPT_DOCUMENT_KIND, validate_iso_date
 from ff_source_ref import validate_source_ref
 from transcript_reuse_selection import (
     LocalQueryContractError,
@@ -539,12 +540,12 @@ class EarningsTranscriptsTransport:
         unknown = published is None
         if not unknown:
             try:
-                published = _validate_date(published, "published_date", code="upstream_error")
+                published = validate_iso_date(published, "published_date", code="upstream_error")
             except FilingFetchError:
                 return {"status": "upstream_error", "reason": "publication_date_invalid",
                         "as_of_cutoff_verified": False, "provider_calls": 0}
             try:
-                cutoff = _validate_date(expected.get("as_of_date"), "as_of_date", code="upstream_error")
+                cutoff = validate_iso_date(expected.get("as_of_date"), "as_of_date", code="upstream_error")
             except FilingFetchError:
                 return {"status": "upstream_error", "reason": "transcript_lookup_contract",
                         "as_of_cutoff_verified": False, "provider_calls": 0}

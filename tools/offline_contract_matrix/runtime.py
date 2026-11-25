@@ -270,6 +270,7 @@ def synthetic_env(scratch: Path, cwp_root: Path, et_root: Path, *, with_fmp_key:
     for path in (home, temp, home / "AppData/Roaming", home / "AppData/Local", pycache):
         path.mkdir(parents=True, exist_ok=True)
     code_roots = [_short_path(Path(cwp_root) / "src"), _short_path(Path(et_root))]
+    fixture_root = _short_path(Path(__file__).resolve().parent)
     pycache = _short_path(pycache)
     guard = prepare_guard(scratch)
     env.update({"HOME":str(home), "USERPROFILE":str(home), "APPDATA":str(home / "AppData/Roaming"),
@@ -279,7 +280,7 @@ def synthetic_env(scratch: Path, cwp_root: Path, et_root: Path, *, with_fmp_key:
                 # stay pristine while repeated child imports stop recompiling the
                 # full company_wiki/ET trees on every launch.
                 "PYTHONPYCACHEPREFIX":str(pycache),
-                "PYTHONPATH":os.pathsep.join([str(guard), *(str(p) for p in code_roots)]),
+                "PYTHONPATH":os.pathsep.join(str(p) for p in (guard, *code_roots, fixture_root)),
                 "W06_ET_ROOT":str(code_roots[1]), "W06_MATRIX_SCRATCH":str(scratch),
                 "W06_MATRIX_STATE":str(scratch / "proxy/state.json"), "W06_GUARD_LOG":str(scratch / "guard.jsonl"),
                 "W06_LAUNCH_LOG":str(scratch / "launches.jsonl")})

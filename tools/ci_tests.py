@@ -64,6 +64,7 @@ CI_TESTS = (
     "tests/test_ci_tests.py",
     "tests/test_w07_matrix_efficiency.py",
     "tests/test_root_w07_matrix_boundaries.py",
+    "tests/test_s3_matrix_owner_boundary.py",
 )
 # Explicit existing pure-unit nodes; additions to a file cannot widen daily work.
 LOCAL_SMOKE_TESTS = (

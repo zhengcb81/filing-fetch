@@ -44,7 +44,7 @@ from ff_job_contracts import (
 from ff_job_feedback import publish_job_observation
 from ff_runtime_feedback import RUN_ENV, ATTEMPT_ENV, cause_details
 from ff_job_store import JobStore, now_iso
-from filing_contracts import FilingFetchError
+from ff_errors import FilingFetchError
 
 _MAX_ACTIONS = 50
 _MAX_EVENTS = 50

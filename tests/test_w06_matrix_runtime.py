@@ -144,34 +144,6 @@ def test_initialization_failure_restores_only_created_items(tmp_path):
     assert not out.exists()
 
 
-def test_physical_original_count_separates_alias_rows_from_copies(tmp_path):
-    from source_proofs import physical_originals
-    one = tmp_path / "one.pdf"
-    two = tmp_path / "two.pdf"
-    one.write_bytes(b"synthetic-original")
-    two.write_bytes(b"synthetic-original")
-    assert physical_originals([{"absolute_path":str(one)}, {"absolute_path":str(one.parent / "." / one.name)}]) == 1
-    assert physical_originals([{"absolute_path":str(one)}, {"absolute_path":str(two)}]) == 2
-
-
-def test_catalog_snapshot_uses_document_status_not_source_status():
-    import sqlite3
-    from source_proofs import catalog_snapshot
-    db = sqlite3.connect(":memory:")
-    db.row_factory = sqlite3.Row
-    db.executescript("CREATE TABLE sources(source_id TEXT,content_sha256 TEXT,byte_size INTEGER,mime_type TEXT); CREATE TABLE documents(document_id TEXT,document_kind TEXT,published_date TEXT,metadata_json TEXT,primary_source_id TEXT,source_status TEXT);")
-    db.execute("INSERT INTO sources VALUES (?,?,?,?)", ("source", "a"*64, 3, "application/pdf"))
-    db.execute("INSERT INTO documents VALUES (?,?,?,?,?,?)", ("document", "annual_report", "2025-01-01", '{"acquisition":{"fiscal_year":2024}}', "source", "active"))
-    class Reader:
-        def fetchall(self, sql): return db.execute(sql).fetchall()
-    try:
-        result = catalog_snapshot(Reader())
-        assert result[0]["source_status"] == "active"
-        assert result[0]["metadata"] == {"fiscal_year":2024}
-    finally:
-        db.close()
-
-
 def test_fixture_originals_distinguish_issuer_market_and_period(tmp_path):
     import fixture_provider_adapter as adapter
     from unittest.mock import patch

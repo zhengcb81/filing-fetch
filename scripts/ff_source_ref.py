@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from filing_contracts import FilingFetchError
+from ff_errors import FilingFetchError
 
 _REF_KEYS = frozenset(
     {

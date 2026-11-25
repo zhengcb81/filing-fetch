@@ -12,7 +12,8 @@ from ff_refresh_owners import Deployment, OwnerUnavailable, stable_key
 from ff_refresh_policy import due_slot, slot_consumed, utc_text, work_scope
 from ff_refresh_store import RefreshStore
 from ff_source_ref import validate_source_ref
-from filing_contracts import CWP_TRANSCRIPT_DOCUMENT_KIND, FilingFetchError
+from ff_errors import FilingFetchError
+from filing_contracts import CWP_TRANSCRIPT_DOCUMENT_KIND
 
 
 class Ports(Protocol):

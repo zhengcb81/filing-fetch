@@ -31,6 +31,7 @@ from pathlib import Path
 import hashlib
 import json
 from matrix_outcome import count, source_ref
+from source_proofs import PROOF_SCHEMA, proves_reference
 from case_specs import audit_coverage, get_spec
 from case_specs import case_specs as _base_case_specs
 from w20_case_specs import w20_case_specs as _supplemental_case_specs
@@ -310,7 +311,9 @@ def _bound_evidence(report: dict, evidence_root: str | Path | None = None) -> li
     # searches the disk and nothing falls back to the report's recorded root.
     root_value = evidence_root if evidence_root is not None else report.get("evidence_root")
     root = Path(root_value).resolve() if root_value else None
-    proofs = (report.get("source_proofs") or {}).get("proofs") or {}
+    proof_set = report.get("source_proofs") or {}
+    from_public_export = proof_set.get("schema_version") == PROOF_SCHEMA
+    proofs = proof_set.get("proofs") or {}
     for case in report.get("cases", []):
         cid = case.get("id")
         if _is_not_selected_row(case):
@@ -441,20 +444,25 @@ def _bound_evidence(report: dict, evidence_root: str | Path | None = None) -> li
                 expected_kind = (
                     request.get("document_kind") if kind == "filing" else "investor_call_transcript"
                 )
+                owner_observed = (
+                    proves_reference(proof.get("manifest"), ref)
+                    and proof["manifest"].get("document_kind") == expected_kind
+                    if from_public_export else
+                    proof.get("source_versions") == 1 and proof.get("physical_originals") == 1
+                )
                 if (
-                    proof.get("verified") is not True
+                    not owner_observed
+                    or proof.get("verified") is not True
                     or proof.get("reference") != ref
                     or proof.get("content_sha256") != ref["content_sha256"]
                     or proof.get("byte_size") != ref["byte_size"]
-                    or proof.get("source_versions") != 1
-                    or proof.get("physical_originals") != 1
                     or proof.get("document_kind") != expected_kind
                 ):
                     findings.append(
                         Finding(
                             "source_bytes_not_verified",
                             cid,
-                            f"fresh reader/source version/original count mismatch for {kind}",
+                            f"fresh owner source proof mismatched for {kind}",
                         )
                     )
                 if (

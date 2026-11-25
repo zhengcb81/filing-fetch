@@ -34,12 +34,11 @@ from filing_contracts import (  # noqa: E402  re-export
     COMPANY_WIKI_CONFIG_SCHEMA_VERSION,
     COMPANY_WIKI_IDENTITY_SCHEMA_VERSION,
     SUPPORTED_COMPANY_WIKI_CONTRACTS,
-    FilingFetchError,
     validate_handle,
     validate_handle_metadata,
     validate_request,
     validate_resolution_envelope,
-    _required_text,
+    require_text,
 )
 
 # The shared bounded process layer both JSON runners call; stdout/stderr are
@@ -59,15 +58,16 @@ from ff_process_transport import (  # noqa: E402
 import ff_provider_cause
 from ff_source_failure import decode_failure, invalid_result, source_request_id, validate_query_failure
 
+from ff_errors import FilingFetchError as FilingFetchError
 from ff_configuration import load_connection_root, validate_company_wiki_root
 from ff_company_wiki_connection import WikiConnection, WikiEndpoint, command_for, connection_cwd, connection_environment, acquisition_arguments
 from ff_request_context import RequestContext
+from ff_pathless_payload import contains_physical_field as _contains_physical_field
 from ff_source_candidate import (
     CANDIDATE_DETAIL_FIELDS as _CANDIDATE_DETAIL_FIELDS,
     CANDIDATE_DETAIL_LIMIT as _CANDIDATE_DETAIL_LIMIT,
     COMPANY_IDENTITY_FIELDS as _COMPANY_IDENTITY_FIELDS,
     project_source_candidate_fields,
-    contains_physical_field as _contains_physical_field,
     validate_source_candidate,
 )
 from ff_local_preparation_observation import (
@@ -152,7 +152,7 @@ def _limit_arguments(request: dict[str, Any]) -> list[str]:
 def _command_arguments(request: dict[str, Any]) -> list[str]:
     required = ("entity", "document_kind", "as_of_date")
     for name in required:
-        _required_text(request.get(name), name)
+        require_text(request.get(name), name)
     arguments = [
         "--entity",
         request["entity"],
@@ -175,7 +175,7 @@ def _command_arguments(request: dict[str, Any]) -> list[str]:
     for name, flag in options.items():
         value = request.get(name)
         if value is not None:
-            arguments.extend((flag, _required_text(value, name)))
+            arguments.extend((flag, require_text(value, name)))
     identity_scope = request.get("identity_scope")
     issuer_link_id = request.get("issuer_link_id")
     if identity_scope is not None or issuer_link_id is not None:
@@ -199,16 +199,16 @@ def _command_arguments(request: dict[str, Any]) -> list[str]:
 
 
 def _identity_arguments(request: dict[str, Any]) -> list[str]:
-    query = _required_text(request.get("company_query"), "company_query")
+    query = require_text(request.get("company_query"), "company_query")
     for name in ("document_kind", "as_of_date"):
-        _required_text(request.get(name), name)
+        require_text(request.get(name), name)
     arguments = ["--query", query]
     for name, flag in (("market", "--market"), ("exchange", "--exchange")):
         value = request.get(name)
         if name == "market" and value is None:
             value = request.get("source_market")
         if value is not None:
-            arguments.extend((flag, _required_text(value, name)))
+            arguments.extend((flag, require_text(value, name)))
     return arguments
 
 

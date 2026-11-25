@@ -13,7 +13,8 @@ from pathlib import Path
 import re
 from typing import Any
 
-from filing_contracts import COMPANY_WIKI_CONFIG_SCHEMA_VERSION, FilingFetchError
+from ff_errors import FilingFetchError
+from filing_contracts import COMPANY_WIKI_CONFIG_SCHEMA_VERSION
 from ff_company_wiki_connection import WikiConnection, WikiEndpoint
 
 _TOKEN = re.compile(r"\$\{([^}]+)\}")

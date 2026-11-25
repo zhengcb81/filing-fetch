@@ -5,7 +5,7 @@ filing-fetch's ``earnings_transcripts_tool`` points and forwards the real
 ``transcript_tool.main`` argv unchanged. It starts the REAL retrieval
 supervisor / worker / ``transcript_api`` and replaces ONLY the worker's HTTP
 session, using the pre-existing private launcher seam
-(``tests.test_retrieval_runtime:build_fake_session``). No production CLI flag
+(``matrix_et_http_fixture:build_session``). No production CLI flag
 and no site-packages modification is introduced.
 
 Environment contract (set by the runner, inherited through filing-fetch):
@@ -20,6 +20,7 @@ never be presented as an un-proxied production run.
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import os
@@ -125,8 +126,6 @@ def main(argv: list[str] | None = None) -> int:
         sys.path.insert(0, str(et_path))
 
     import transcript_tool  # noqa: E402  (from the supplied ET root)
-    from tests.test_retrieval_runtime import fake_spec, StallResponse  # noqa: E402
-    from tests.test_transcript_api import FakeResponse, FMP_URL  # noqa: E402
 
     args = list(sys.argv[1:] if argv is None else argv)
     # Capabilities use real ET metadata and create no provider request.
@@ -147,65 +146,45 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(request, dict):
         request = {}
 
-    # Scenario -> fake worker HTTP (or worker failure). Only the worker HTTP is
-    # replaced; the supervisor / worker / transcript_api run for real.
-    if scenario == "worker_loss":
-        spec = fake_spec(build_failure="SystemExit:7", calls_file=calls_file)
-    else:
-        status = 200
-        content_type = "application/json"
-        payload = _build_fmp_payload(request, state)
-        if scenario == "entitlement_402":
-            status, payload = 402, b""
-        elif scenario == "http_429":
-            status, payload = 429, b""
-        elif scenario == "http_500":
-            status, payload = 500, b""
-        if scenario == "wrong_mime":
-            content_type = "text/html"
-        response = FakeResponse(FMP_URL, payload, status_code=status, content_type=content_type)
-        if scenario == "stall":
-            response = StallResponse(FMP_URL, payload, content_type=content_type, stall=(0, None), stall_in_get=True)
-        elif scenario == "request_failure":
-            import requests
-            response = requests.RequestException("synthetic-after-GET-failure")
-        spec = fake_spec({FMP_URL: response}, calls_file=calls_file)
+    # Only the worker's HTTP session changes. ET owns the real supervisor and worker.
+    spec = {
+        "scenario": scenario,
+        "calls_file": calls_file,
+        "payload_b64": base64.b64encode(_build_fmp_payload(request, state)).decode("ascii"),
+    }
 
+    sys.stdin = io.StringIO(original_stdin)
+    real_out, real_err = sys.stdout, sys.stderr
+    cap_out, cap_err = io.StringIO(), io.StringIO()
+    sys.stdout, sys.stderr = cap_out, cap_err
     try:
-        sys.stdin = io.StringIO(original_stdin)
-        real_out, real_err = sys.stdout, sys.stderr
-        cap_out, cap_err = io.StringIO(), io.StringIO()
-        sys.stdout, sys.stderr = cap_out, cap_err
-        try:
-            rc = transcript_tool.main(
-                args,
-                _retrieval_launcher="tests.test_retrieval_runtime:build_fake_session",
-                _retrieval_spec=spec,
-                _retrieval_temp_root=runtime,
-            )
-        finally:
-            sys.stdout, sys.stderr = real_out, real_err
-        out_text, err_text = cap_out.getvalue(), cap_err.getvalue()
-        # W20 boundary faults (only scenarios that name one): the worker HTTP
-        # above already ran the real chain; this reshapes only the emitted
-        # result/usage stream so the consumer's parsing/binding is exercised.
-        out_text, forced_rc = _apply_result_fault(out_text, scenario)
-        err_text = _apply_usage_fault(err_text, scenario)
-        if forced_rc is not None:
-            rc = forced_rc
-        # Persist the receipts exactly as the consumer saw them (test-proxy
-        # artifacts for the report's receipt refs).
-        receipts = Path(state.get("receipts_dir") or (runtime.parent / "receipts"))
-        receipts.mkdir(parents=True, exist_ok=True)
-        tag = state.get("receipt_tag") or "et"
-        (receipts / f"{tag}.result.json").write_text(out_text, encoding="utf-8")
-        (receipts / f"{tag}.usage.json").write_text(err_text, encoding="utf-8")
-        # Re-emit unchanged so filing-fetch's transport sees the real contract.
-        real_out.write(out_text)
-        real_err.write(err_text)
-        return rc
+        rc = transcript_tool.main(
+            args,
+            _retrieval_launcher="matrix_et_http_fixture:build_session",
+            _retrieval_spec=spec,
+            _retrieval_temp_root=runtime,
+        )
     finally:
-        pass
+        sys.stdout, sys.stderr = real_out, real_err
+    out_text, err_text = cap_out.getvalue(), cap_err.getvalue()
+    # W20 boundary faults (only scenarios that name one): the worker HTTP
+    # above already ran the real chain; this reshapes only the emitted
+    # result/usage stream so the consumer's parsing/binding is exercised.
+    out_text, forced_rc = _apply_result_fault(out_text, scenario)
+    err_text = _apply_usage_fault(err_text, scenario)
+    if forced_rc is not None:
+        rc = forced_rc
+    # Persist the receipts exactly as the consumer saw them (test-proxy
+    # artifacts for the report's receipt refs).
+    receipts = Path(state.get("receipts_dir") or (runtime.parent / "receipts"))
+    receipts.mkdir(parents=True, exist_ok=True)
+    tag = state.get("receipt_tag") or "et"
+    (receipts / f"{tag}.result.json").write_text(out_text, encoding="utf-8")
+    (receipts / f"{tag}.usage.json").write_text(err_text, encoding="utf-8")
+    # Re-emit unchanged so filing-fetch's transport sees the real contract.
+    real_out.write(out_text)
+    real_err.write(err_text)
+    return rc
 
 
 if __name__ == "__main__":

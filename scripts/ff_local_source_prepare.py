@@ -10,7 +10,7 @@ import ff_process_transport
 from ff_provider_cause import condition_cause, source_condition
 from ff_source_ref import validate_source_ref
 from ff_local_preparation_observation import local_preparation_observation
-from filing_contracts import FilingFetchError
+from ff_errors import FilingFetchError
 from ff_company_wiki_connection import WikiEndpoint, command_for, connection_cwd, connection_environment
 
 _RESULT_FIELDS = frozenset({

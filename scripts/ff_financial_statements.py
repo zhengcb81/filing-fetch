@@ -22,7 +22,7 @@ from ff_process_transport import (
     TransportError,
     run_bounded_json as _run_bounded_json,
 )
-from filing_contracts import FilingFetchError
+from ff_errors import FilingFetchError
 
 STATEMENTS_REQUEST_SCHEMA_VERSION = "financial-statements-request/1"
 STATEMENTS_RESPONSE_SCHEMA_VERSION = "financial-statements-response/1"

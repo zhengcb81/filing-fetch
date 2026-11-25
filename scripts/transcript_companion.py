@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any, NamedTuple, Protocol, cast
 
 from ff_source_ref import validate_source_ref
-from filing_contracts import FilingFetchError, validate_acquisition_limits
+from ff_errors import FilingFetchError
+from filing_contracts import validate_acquisition_limits
 
 
 class TranscriptTransport(Protocol):

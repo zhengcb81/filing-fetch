@@ -11,17 +11,8 @@ import re
 from pathlib import Path
 from typing import Any, Sequence
 
-# R6-FF-CAUSE: shape validation for the optional upstream diagnostic (the
-# closed-vocabulary builder lives in ff_provider_cause; importing only the
-# validator keeps this module free of parsing logic).
-from ff_provider_cause import (
-    STAGES,
-    build_request_diagnostic,
-    validated_request_diagnostic,
-    validated_acquisition_failure,
-    validated_acquisition_observation,
-    validated_cause,
-)
+from ff_errors import FilingFetchError as FilingFetchError
+from ff_provider_cause import build_request_diagnostic
 
 
 # ---------------------------------------------------------------------------
@@ -54,84 +45,6 @@ SUPPORTED_COMPANY_WIKI_CONTRACTS = {
 }
 
 CWP_TRANSCRIPT_DOCUMENT_KIND = "investor_call_transcript"
-
-
-# ---------------------------------------------------------------------------
-# Errors
-# ---------------------------------------------------------------------------
-
-
-class FilingFetchError(RuntimeError):
-    """Raised when a capture-ready filing cannot be resolved or downloaded."""
-
-    def __init__(
-        self,
-        message: str,
-        code: str = "fatal",
-        candidates: list | None = None,
-        debug_trace: list | None = None,
-        stage: str | None = None,
-        attempts: int | None = None,
-        resolution_trace: dict | None = None,
-        upstream_cause: dict[str, Any] | None = None,
-        acquisition_failure: dict[str, Any] | None = None,
-        acquisition_observation: dict[str, Any] | None = None,
-        request_diagnostic: dict[str, Any] | None = None,
-        producer_exit_code: int | None = None,
-        local_preparation_observation: dict[str, Any] | None = None,
-    ) -> None:
-        super().__init__(message)
-        self.code = code
-        self.producer_exit_code = producer_exit_code if type(producer_exit_code) is int else None
-        # ZR-205: retryable = the caller may retry. catalog_busy (raw SQLite
-        # busy/locked) and db_timeout join catalog_locked/worker_paused; the
-        # deadline-aware auto-retry loop in fetch_filing only spins on the
-        # bounded catalog-contention codes (worker_paused stays caller-side).
-        self.retryable = code in {
-            "upstream_error",
-            "worker_paused",
-            "catalog_locked",
-            "catalog_busy",
-            "db_timeout",
-        }
-        # Candidate identities surfaced by company-wiki when the query is
-        # ambiguous, so callers can disambiguate from the error response alone.
-        self.candidates = candidates
-        # Per-candidate exclusion trace from the company-wiki resolve step,
-        # surfaced with --debug so a not_found explains itself (Phase 19.6).
-        self.debug_trace = debug_trace
-        # ZR-205 stage transparency: which company-wiki call failed
-        # (identify/ensure/resolve/close-gap) and how many attempts were made,
-        # so the final envelope stays reconcilable (READ-09).
-        self.stage = stage if isinstance(stage, str) and stage in STAGES else None
-        self.attempts = attempts if type(attempts) is int and attempts >= 0 else None
-        # ZR-307 staged-evidence visibility: the upstream resolution summary
-        # (request_id/status/reason) survives a downstream failure — the
-        # error never swallows the exact-reuse/download=0 evidence.
-        self.resolution_trace = resolution_trace
-        # R6-FF-CAUSE: optional safe machine diagnostic for a failed
-        # company-wiki producer call.  Only a validated
-        # filing-upstream-cause/1 object (built by ff_provider_cause from
-        # closed vocabularies) is accepted — garbage never rides the envelope.
-        if upstream_cause is not None and validated_cause(upstream_cause) is None:
-            raise TypeError(
-                "upstream_cause must be a validated filing-upstream-cause/1 object"
-            )
-        self.upstream_cause = upstream_cause
-        self.acquisition_failure = validated_acquisition_failure(acquisition_failure)
-        # M3-USAGE: same fail-closed pass-through as the failure receipt —
-        # only a validated operation observation rides, garbage is dropped.
-        self.acquisition_observation = validated_acquisition_observation(acquisition_observation)
-        # A request subtype is separate from the unchanged producer cause.
-        # Keep a verified copy; serializers validate again before emission.
-        diagnostic = validated_request_diagnostic(request_diagnostic)
-        if request_diagnostic is not None and diagnostic is None:
-            raise TypeError("request_diagnostic must be a validated filing-request-diagnostic/1 object")
-        self.request_diagnostic = diagnostic
-        # Lazy import avoids a contract/candidate dependency cycle. This is an
-        # optional observation only; it does not decide eligibility or usage.
-        from ff_local_preparation_observation import validated_local_preparation_observation
-        self.local_preparation_observation = validated_local_preparation_observation(local_preparation_observation)
 
 
 # ---------------------------------------------------------------------------
@@ -198,16 +111,16 @@ def _validate_v2_request(request: dict[str, Any]) -> None:
         request.get("acquisition_limits"),
         required_for_reuse_only=request.get("mode") == "latest_as_of",
     )
-    _validate_companion_request(request.get("companion_transcript"))
+    validate_companion_request(request.get("companion_transcript"))
 
 
-def _required_text(value: Any, field_name: str) -> str:
+def require_text(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         raise FilingFetchError(f"{field_name} must be non-empty trimmed text", code="request_error")
     return value
 
 
-def _validate_date(value: object, field: str, *, code: str) -> str:
+def validate_iso_date(value: object, field: str, *, code: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
         raise FilingFetchError(f"{field} must use YYYY-MM-DD format", code=code)
     try:
@@ -234,7 +147,7 @@ def validate_request(request: dict[str, Any]) -> None:
             f"unknown request field(s): {', '.join(sorted(unknown))}",
             code="request_error",
         )
-    _required_text(request.get("company_query"), "company_query")
+    require_text(request.get("company_query"), "company_query")
     market = request.get("market")
     if market is not None and market not in {"CN", "HK", "US"}:
         raise FilingFetchError(
@@ -246,13 +159,13 @@ def validate_request(request: dict[str, Any]) -> None:
             f"source_market must be one of CN, HK, US: {source_market!r}",
             code="request_error",
         )
-    _required_text(request.get("document_kind"), "document_kind")
+    require_text(request.get("document_kind"), "document_kind")
     for name in ("form_type", "fiscal_period"):
         value = request.get(name)
         if value is not None:
-            _required_text(value, name)
-    _required_text(request.get("as_of_date"), "as_of_date")
-    _validate_date(request["as_of_date"], "as_of_date", code="request_error")
+            require_text(value, name)
+    require_text(request.get("as_of_date"), "as_of_date")
+    validate_iso_date(request["as_of_date"], "as_of_date", code="request_error")
     mode = request.get("mode")
     if mode is not None and mode not in REQUEST_MODES:
         raise FilingFetchError(
@@ -275,7 +188,7 @@ def validate_request(request: dict[str, Any]) -> None:
                 f"authorization missing field(s): {', '.join(sorted(missing))}",
                 code="request_error",
             )
-        _required_text(authorization.get("provider"), "authorization.provider")
+        require_text(authorization.get("provider"), "authorization.provider")
         accessions = authorization.get("allowed_accessions")
         if (
             not isinstance(accessions, list)
@@ -375,7 +288,7 @@ def validate_acquisition_limits(
                       "acquisition_limits_invalid", "acquisition_limits.max_cost_usd")
 
 
-def _validate_companion_request(value: Any) -> None:
+def validate_companion_request(value: Any) -> None:
     """Validate an optional transcript intent without inventing a fiscal quarter."""
     if value is None:
         return
@@ -619,7 +532,7 @@ def validate_handle_metadata(
     published = handle.get("published_date")
     if published is None and allow_unknown_publication_date is True:
         return
-    published = _validate_date(published, "handle published_date", code="upstream_error")
+    published = validate_iso_date(published, "handle published_date", code="upstream_error")
     as_of = request.get("as_of_date")
     if isinstance(as_of, str) and as_of and published > as_of:
         raise FilingFetchError("handle published_date is after as_of_date", code="upstream_error")
@@ -750,7 +663,7 @@ def validate_handle(
             "handle snapshot_sha256 does not match the canonical file bytes", code="upstream_error"
         )
     published = handle.get("published_date", "")
-    published = _validate_date(published, "handle published_date", code="upstream_error")
+    published = validate_iso_date(published, "handle published_date", code="upstream_error")
     as_of = request.get("as_of_date", "")
     if isinstance(as_of, str) and as_of and published > as_of:
         raise FilingFetchError(

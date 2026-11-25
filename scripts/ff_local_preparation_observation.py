@@ -10,7 +10,7 @@ import math
 import re
 from typing import Any
 
-from ff_source_candidate import contains_physical_field
+from ff_pathless_payload import contains_physical_field
 
 SCHEMA = 'filing-local-preparation-observation/1'
 _FIELDS = {'schema_version', 'usage_scope', 'status', 'reason', 'blocks_download',

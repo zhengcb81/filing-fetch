@@ -39,12 +39,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from filing_contracts import FilingFetchError, FILING_V2_REQUEST_SCHEMA_VERSION, validate_request
+from ff_errors import FilingFetchError
+from filing_contracts import FILING_V2_REQUEST_SCHEMA_VERSION, validate_request
 from ff_financial_statements import validate_request as validate_statements_request
 from transcript_companion import validate_standalone_transcript_request
+from ff_pathless_payload import contains_physical_field as _contains_physical_field
 from ff_source_candidate import (
     ERROR_CANDIDATE_CODES,
-    contains_physical_field as _contains_physical_field,
     projected_error_candidates as _projected_error_candidates,
 )
 

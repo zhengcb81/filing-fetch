@@ -42,3 +42,9 @@
 `2a603f0` 只更新了 DU11 离线用例依赖的 CWP 发布接口。旧 pin 的 reader 缺 canonical identity 参数，import 缺原文和响应字节参数。新 pin 为 CWP 已发布 `c27efdff`。保持原文来源校验、财政期、原文哈希和下载限额。作者 10 项离线端到端、74 项定向测试通过。独立使用短临时目录复验真实 SQLite 与公开 CLI，首次隔离导入、同 SourceRef 复用和零残留通过。
 
 药明康德 W12 的原公开请求复用同一半年报。已查本地目录无符合要求的 FY2026 Q2 精确电话会。错期、错主体和会前通知不能充当原文。没有启动 ET 或外部供应商，新增下载和费用均为零。精确伴随原文本身仍待通过现有端口获取。
+
+## 2026-11-25 S3/S4 follow-up
+
+The current filing-fetch matrix boundary implementation, the isolated real test
+receipts, and the remaining production seams are recorded in
+[S3/S4 filing-fetch public boundaries](S3-offline-matrix-owner-ports.md).

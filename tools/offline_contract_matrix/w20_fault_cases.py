@@ -18,6 +18,7 @@ query/import path; the harness never builds a second state store.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -32,6 +33,7 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+from cwp_readback_probe import probe_catalog, probe_exact_source  # noqa: E402
 from matrix_outcome import source_ref  # noqa: E402
 from run import Context, CASE_TIMEOUT  # noqa: E402
 from report import CaseResult, sha256_file  # noqa: E402
@@ -88,53 +90,6 @@ def new_original_matching_sha(directory: Path, before: set[str],
         except OSError:
             continue
     return None
-
-
-def probe_catalog(*, wiki_root: Path, identity_request: dict[str, Any],
-                  content_sha: str, cwp_src: str, env: dict[str, str] | None = None,
-                  timeout_seconds: float = 30.0) -> dict[str, Any]:
-    """Public read-back through ONE bounded subprocess per call (return R2).
-
-    The child runs the public transcript query CLI and the public
-    ``SourceVersionReader.open_version`` in its own process, so the parent's
-    ``sys.stdin``/``sys.stdout`` are never swapped and concurrent callers in a
-    worker group cannot cross-contaminate. The result carries an explicit
-    state: ``confirmed`` (this request's Ref read back byte-for-byte),
-    ``not_found`` (the public query answered; not durably readable as THIS
-    Ref), or ``probe_error`` (the probe failed — never usable as a
-    not-durable negative). Results belong to this call only; nothing is
-    stored in module globals.
-    """
-    import subprocess as _subprocess
-    payload = {"wiki": str(wiki_root), "cwp_src": str(cwp_src),
-               "identity_request": identity_request, "content_sha": content_sha}
-    if env is None:
-        env = {k: os.environ[k] for k in ("SystemRoot", "WINDIR", "COMSPEC", "PATH", "PATHEXT")
-               if k in os.environ}
-        env["PYTHONUTF8"] = "1"
-        # A standalone caller gets an owned HOME inside its own tree.
-        probe_home = Path(wiki_root).parent / "probe-home"
-        probe_home.mkdir(parents=True, exist_ok=True)
-        env["HOME"] = env["USERPROFILE"] = str(probe_home)
-    env = dict(env)
-    try:
-        proc = _subprocess.run(
-            [sys.executable, "-B", str(HERE / "cwp_readback_probe.py")],
-            input=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            capture_output=True, timeout=timeout_seconds, env=env,
-            cwd=str(HERE))
-        if proc.returncode != 0:
-            return {"state": "probe_error", "ref": None,
-                    "error": f"probe rc={proc.returncode} "
-                             f"stderr={proc.stderr.decode('utf-8', 'replace')[:200]}"}
-        data = json.loads(proc.stdout.decode("utf-8"))
-        if data.get("state") not in {"confirmed", "not_found", "probe_error"}:
-            return {"state": "probe_error", "ref": None,
-                    "error": f"unknown probe state: {str(data.get('state'))[:80]}"}
-        return data
-    except Exception as exc:  # noqa: BLE001 — the caller gets an explicit error state
-        return {"state": "probe_error", "ref": None,
-                "error": f"{type(exc).__name__}: {exc}"[:300]}
 
 
 def _confirmed_ref(result: dict[str, Any]) -> dict[str, Any] | None:
@@ -368,35 +323,47 @@ def case_call_kill_before_durable(ctx: Context) -> CaseResult:
     })
 
 
+def import_receipt_digest(path: Path) -> str | None:
+    """Confirm the owned ET receipt describes complete, original provider bytes."""
+    try:
+        result = json.loads(path.read_bytes())
+        if not isinstance(result, dict) or result.get("status") != "fetched":
+            return None
+        digest = hashlib.sha256(base64.b64decode(result.get("provider_payload_base64"), validate=True)).hexdigest()
+    except (OSError, TypeError, ValueError):
+        return None
+    return digest if digest == result.get("provider_payload_sha256") else None
+
+
 def case_call_kill_after_import(ctx: Context) -> CaseResult:
     """Mid-import interruption, explicitly NOT a durable-pass proxy (R1).
 
-    The trigger fires only on THIS request's own new canonical bytes (R2):
-    pre-existing unrelated-period originals/sidecars can never fire it. The
+    The trigger is THIS request's complete ET original receipt (R2).
+    Pre-existing unrelated-period originals/sidecars can never fire it. The
     durable-or-not state at kill time is OBSERVED through the public CWP
     interface and cross-checked against the recovery branch; the strict
     post-durable proof is the separate ``w20_call_kill_after_durable`` case.
     """
     cid = "w20_call_kill_after_import"
     content = "Synthetic W20 durable-interrupt transcript FY2034 Q2."
-    content_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
     p1 = _prepare_run(ctx, cid, "run1", "success", content, 0)
-    # The trigger is THIS request's own ET result receipt (the proxy writes it
-    # only for this run's tag): it appears when ET has finished and BEFORE the
-    # CWP import starts — a deterministic mid-import window bound to this
-    # request. Pre-existing files of other periods can never fire it.
-    # The proxy names receipts by the run's own receipt_tag (no group prefix).
+    # The synthetic proxy publishes a result before FF begins CWP import.
+    # A partial receipt or the separate hash of the extracted words cannot
+    # serve as evidence for the persisted provider original.
     receipt_signal = ctx.artifacts / f"{cid}.run1.result.json"
-    run1 = _execute(ctx, p1, kill_when=lambda: receipt_signal.is_file())
-    durable_probe = probe_catalog(
-        wiki_root=ctx.env.wiki, identity_request={
-            "entity": US.canonical_name, "document_kind": "investor_call_transcript",
-            "as_of_date": "2026-12-31", "market": US.market, "security_id": US.security_id,
-            "form_type": None, "fiscal_year": 2034, "fiscal_period": "Q2",
-            "language": None, "provider": "fmp", "provider_document_id": None,
-            "mode": "exact", "allow_download": False, "schema_version": "1.0"},
-        content_sha=content_sha, cwp_src=str(ctx.cwp_root / "src"),
-        env=ctx.child_env())
+    run1 = _execute(ctx, p1, kill_when=lambda: import_receipt_digest(receipt_signal) is not None)
+    digest = import_receipt_digest(receipt_signal)
+    durable_probe = {"state": "probe_error", "error": "missing complete ET original receipt"}
+    if digest is not None:
+        durable_probe = probe_catalog(
+            wiki_root=ctx.env.wiki, identity_request={
+                "entity": US.canonical_name, "document_kind": "investor_call_transcript",
+                "as_of_date": "2026-12-31", "market": US.market, "security_id": US.security_id,
+                "form_type": None, "fiscal_year": 2034, "fiscal_period": "Q2",
+                "language": None, "provider": "fmp", "provider_document_id": None,
+                "mode": "exact", "allow_download": False, "schema_version": "1.0"},
+            content_sha=digest, cwp_src=str(ctx.cwp_root / "src"),
+            env=ctx.child_env(), deadline=ctx.deadline)
     durable_state = durable_probe["state"]
     p2 = _prepare_run(ctx, cid, "run2", "success", content, 1)
     run2 = _execute(ctx, p2)
@@ -406,13 +373,14 @@ def case_call_kill_after_import(ctx: Context) -> CaseResult:
               else "not_durable_at_kill")
     p3 = _prepare_run(ctx, cid, "run3", "success", content, 2)
     _execute(ctx, p3)
-    return _result(ctx, cid, "FF tree killed on THIS request's canonical bytes "
+    return _result(ctx, cid, "FF tree killed on THIS request's ET original receipt "
                              "(mid-import window); durable state observed, never "
                              "assumed, and the strict post-durable proof is the "
                              "separate post_durable case", {
         "interruption_phase": "mid_import_observed",
         "recovery_branch": branch,
         "durable_state_public_readback": durable_state,
+        "probe_error": durable_probe.get("error") if durable_state == "probe_error" else None,
         "kill_reason": run1.get("kill_reason"),
     })
 
@@ -421,7 +389,7 @@ def case_call_kill_after_durable(ctx: Context) -> CaseResult:
     """Deterministic post-durable interruption (return R1).
 
     The kill fires ONLY when this request's source is readable back through
-    the public CWP interfaces (query + verified open) and hashes to this
+    the public CWP exact verified open and hashes to this
     request's content. An unrelated-period original is pre-placed on disk as
     a built-in control: it can never fire the trigger because the probe sees
     only durable catalog state. Recovery must reuse with ZERO extra provider
@@ -445,18 +413,8 @@ def case_call_kill_after_durable(ctx: Context) -> CaseResult:
         return _result(ctx, cid, "run 0 failed to produce a source ref; the "
                                  "post-durable phase cannot be attempted", {
             "interruption_phase": "post_durable", "verified_at_kill": None})
-    # Public-interface read-back confirmation with a bounded retry window:
-    # the kill fires only AFTER THIS request's Ref (from run 0's own response)
-    # is readable back through CWP's public interfaces byte-for-byte.
-    confirmed = probe_catalog(
-        wiki_root=ctx.env.wiki, identity_request={
-            "entity": US.canonical_name, "document_kind": "investor_call_transcript",
-            "as_of_date": "2026-12-31", "market": US.market, "security_id": US.security_id,
-            "form_type": None, "fiscal_year": 2036, "fiscal_period": "Q1",
-            "language": None, "provider": "fmp", "provider_document_id": None,
-            "mode": "exact", "allow_download": False, "schema_version": "1.0"},
-        content_sha=ref0["content_sha256"], cwp_src=str(ctx.cwp_root / "src"),
-        env=ctx.child_env())
+    # Reopen the exact immutable Ref of this response through the owner.
+    confirmed = probe_exact_source(ctx.env.wiki, ref0, env=ctx.child_env(), deadline=ctx.deadline)
     verified = _confirmed_ref(confirmed)
     probe_error = None if verified is not None else confirmed.get("error")
     # Run 1 re-requests the SAME source and is killed before its return can
@@ -504,16 +462,7 @@ def case_call_lost_reply_after_durable(ctx: Context) -> CaseResult:
     ref0 = source_ref((run0.get("response") or {}).get("transcript", {}).get("source_ref"))
     verified, probe_state, probe_error = None, None, None
     if ref0 is not None:
-        confirmed = probe_catalog(
-            wiki_root=ctx.env.wiki, identity_request={
-                "entity": US.canonical_name, "document_kind": "investor_call_transcript",
-                "as_of_date": "2026-12-31", "market": US.market,
-                "security_id": US.security_id, "form_type": None,
-                "fiscal_year": 2038, "fiscal_period": "Q1", "language": None,
-                "provider": "fmp", "provider_document_id": None, "mode": "exact",
-                "allow_download": False, "schema_version": "1.0"},
-            content_sha=ref0["content_sha256"], cwp_src=str(ctx.cwp_root / "src"),
-            env=ctx.child_env())
+        confirmed = probe_exact_source(ctx.env.wiki, ref0, env=ctx.child_env(), deadline=ctx.deadline)
         verified = _confirmed_ref(confirmed)
         probe_state, probe_error = confirmed["state"], confirmed.get("error")
     # First recovery: the same company/period is requested again and must be
