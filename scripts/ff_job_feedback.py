@@ -10,9 +10,10 @@ import sys
 import tempfile
 
 from ff_job_observation import publish_job_observation as publish_job_observation
+from ff_persistence import owner_io_path
 from ff_runtime_feedback import (
     DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, observation_directories, parse_arguments, publish,
-    read_native_diagnostic, record_runtime_failure, start_was_offered, terminal_was_offered,
+    read_cli_failure, read_native_diagnostic, record_runtime_failure, start_was_offered, terminal_was_offered,
 )
 
 
@@ -111,6 +112,27 @@ def _digest(value) -> str:
     return hashlib.sha256(raw.encode("ascii")).hexdigest()
 
 
+def _write_receipt_once(path: Path, data: bytes) -> bool:
+    """Publish a complete owner receipt without replacing a previous decision."""
+    path = owner_io_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+    try:
+        if os.name == "nt":
+            os.rename(temporary, path)
+        else:
+            os.link(temporary, path)
+    except FileExistsError:
+        return False
+    finally:
+        temporary.unlink(missing_ok=True)
+    return True
+
+
 def _record_report(root: Path, request: dict) -> dict:
     key = request["action_id"]
     payload = request.get("payload")
@@ -127,34 +149,19 @@ def _record_report(root: Path, request: dict) -> dict:
         ["filing-fetch", "report", key, payload],
     ):
         raise ValueError("report identity mismatch")
-    root.mkdir(parents=True, exist_ok=True)
     path = root / (key + ".json")
     data = (json.dumps(request, ensure_ascii=True, sort_keys=True) + "\n").encode("ascii")
-    with tempfile.NamedTemporaryFile(dir=root, delete=False) as handle:
-        temporary = Path(handle.name)
-        handle.write(data)
-        handle.flush()
-        os.fsync(handle.fileno())
-    try:
-        try:
-            if os.name == "nt":
-                os.rename(temporary, path)
-            else:
-                os.link(temporary, path)
-        except FileExistsError:
-            if path.read_bytes() != data:
-                raise ValueError("conflicting report for the same action") from None
-    finally:
-        temporary.unlink(missing_ok=True)
+    if not _write_receipt_once(path, data) and owner_io_path(path).read_bytes() != data:
+        raise ValueError("conflicting report for the same action")
     return {"recorded": True}
 
 
-def _job_observation(request: dict) -> dict:
-    owner, kind = "filing-fetch", "reconcile"
+def _job_observation(request: dict, *, kind="reconcile", method="lookup") -> dict:
+    owner = "filing-fetch"
     if not isinstance(request, dict) or (
         request.get("schema_version"), request.get("owner"), request.get("kind"), request.get("method")
-    ) != ("feedback-action/1", owner, kind, "lookup"):
-        raise ValueError("not a filing-fetch lookup")
+    ) != ("feedback-action/1", owner, kind, method):
+        raise ValueError("not a filing-fetch observation action")
     payload = request.get("payload")
     observation = payload.get("observation") if isinstance(payload, dict) else None
     if not isinstance(observation, dict):
@@ -425,6 +432,82 @@ def _owner_roots(values):
     return list(dict.fromkeys(root.expanduser().resolve() for root in roots))
 
 
+def _triage_original(args: argparse.Namespace, observation: dict) -> dict | None:
+    reference = observation.get("evidence_ref")
+    roots = _owner_roots(args.jobs_dir)
+    if observation["check_id"] == "execution-outcome":
+        directories = [path for root in roots for path in observation_directories(root)]
+        if args.observations_dir is not None:
+            directories.insert(0, args.observations_dir)
+        facts = read_cli_failure(observation, dict.fromkeys(directories))
+        if facts is None:
+            return None
+        missing = ["original_caller", "original_request"]
+        if facts["invocation_usage"]["cost_state"] == "unknown":
+            missing.append("original_invocation_usage")
+        result = {"facts": facts, "missing_evidence": missing}
+        if observation["actual"] == "request_error" or "refusal_code" in observation:
+            result["gate_review"] = {
+                "decision": "needs_evidence",
+                "reason": "The original caller and input are absent from the retained diagnostic.",
+                "evidence_ref": facts["diagnostic_ref"],
+            }
+        return result
+    if (observation["check_id"] == "refresh-outcome" and observation.get("actual") == "partial"
+            and isinstance(reference, str) and reference.startswith(_REFRESH_REFERENCE)):
+        for root in roots:
+            reply = _lookup_refresh(argparse.Namespace(jobs_dir=root), observation)
+            facts = reply.get("result")
+            if not isinstance(facts, dict) or facts.get("native_status") != observation["actual"]:
+                continue
+            missing = ["original_item_failures"]
+            if facts["cost_state"] == "unknown":
+                missing.append("original_usage")
+            names = ("native_status", "job_status", "cost_state", "reason_codes", "counts")
+            return {"facts": {name: facts[name] for name in names}, "missing_evidence": missing}
+    return None
+
+
+def _read_triage(path: Path) -> dict:
+    receipt = json.loads(owner_io_path(path).read_bytes())
+    request = receipt.get("request") if isinstance(receipt, dict) else None
+    observation = _job_observation(request, kind="triage", method="submit")
+    result = receipt.get("result")
+    if (path.stem != request["action_id"] or not isinstance(result, dict)
+            or result.get("decision") != "needs_evidence"
+            or result.get("issue_ref") != f"ff-triage/1/{path.stem}"
+            or result.get("evidence_ref") != observation.get("evidence_ref")):
+        raise ValueError("invalid triage receipt")
+    return receipt
+
+
+def _record_triage(args: argparse.Namespace, request: dict) -> dict | None:
+    observation = _job_observation(request, kind="triage", method="submit")
+    if (observation["owner"] != "filing-fetch" or observation.get("schema_version") != "feedback-observation/1"
+            or not isinstance(observation.get("actual"), str) or not observation["actual"]):
+        raise ValueError("not a native filing-fetch outcome")
+    key = request["action_id"]
+    path = args.reports_dir / "triage" / (key + ".json")
+    try:
+        existing = _read_triage(path)
+    except FileNotFoundError:
+        facts = _triage_original(args, observation)
+        if facts is None:
+            return None
+        result = {
+            "decision": "needs_evidence", "issue_ref": f"ff-triage/1/{key}",
+            "evidence_ref": observation["evidence_ref"], **facts,
+        }
+        receipt = {"request": request, "result": result}
+        content = (json.dumps(receipt, ensure_ascii=True, sort_keys=True) + "\n").encode("ascii")
+        if _write_receipt_once(path, content):
+            return result
+        existing = _read_triage(path)
+    if existing["request"] != request:
+        raise ValueError("conflicting triage for the same action")
+    return existing["result"]
+
+
 def _flush_observations(roots, observations_dir=None):
     from ff_direct_run import flush_direct_observations
     from ff_job_observation import flush_job_observations
@@ -479,6 +562,10 @@ def main() -> int:
     flush.add_argument("--observations-dir", type=Path, help="custom observation directory for the primary root")
     sub.add_parser("report")
     sub.add_parser("get-report").add_argument("action_id")
+    triage = sub.add_parser("triage", help="record a scoped decision from retained owner evidence")
+    triage.add_argument("--jobs-dir", type=Path, action="append", required=True)
+    triage.add_argument("--observations-dir", type=Path, help="custom observation directory for the primary root")
+    sub.add_parser("get-triage", help="cold-read an original triage action").add_argument("action_id")
     lookup = sub.add_parser("reconcile", help="query the original job or scheduled slot without reacquisition")
     lookup.add_argument("--jobs-dir", type=Path, action="append", required=True)
     lookup.add_argument("--observations-dir", type=Path, help="custom observation directory for the primary root")
@@ -547,24 +634,39 @@ def main() -> int:
         print(json.dumps(reply, ensure_ascii=True))
         return 0
     if args.reports_dir is None:
-        parser.error("--reports-dir is required for reports")
-    if args.command == "report":
+        parser.error("--reports-dir is required for feedback receipts")
+    if args.command in {"report", "triage"}:
         try:
             request = json.load(sys.stdin)
         except (OSError, ValueError, RecursionError) as error:
-            record_runtime_failure("feedback-report", "invalid_report_request", error)
-            raise
+            record_runtime_failure(f"feedback-{args.command}", f"invalid_{args.command}_request", error)
+            if args.command == "report":
+                raise
+            print(json.dumps({"error": type(error).__name__}))
+            return 1
         key = request.get("action_id") if isinstance(request, dict) else None
     else:
         key = args.action_id
     if not isinstance(key, str) or not re.fullmatch(r"[0-9a-f]{64}", key):
         parser.error("invalid feedback action id")
     try:
-        value = ({"result": _record_report(args.reports_dir, request)} if args.command == "report"
-                 else {"report": json.loads((args.reports_dir / (key + ".json")).read_bytes())})
-    except (OSError, ValueError) as error:
-        if args.command != "get-report" or not isinstance(error, FileNotFoundError):
-            record_runtime_failure("feedback-" + args.command, "report_io_failed", error)
+        if args.command == "triage":
+            result = _record_triage(args, request)
+            if result is None:
+                print(json.dumps({"error": "original_evidence_unavailable"}))
+                return 1
+            value = {"result": result}
+        elif args.command == "get-triage":
+            value = {"receipt": _read_triage(args.reports_dir / "triage" / (key + ".json"))}
+        elif args.command == "report":
+            value = {"result": _record_report(args.reports_dir, request)}
+        else:
+            path = owner_io_path(args.reports_dir / (key + ".json"))
+            value = {"report": json.loads(path.read_bytes())}
+    except (OSError, ValueError, RecursionError) as error:
+        if args.command not in {"get-report", "get-triage"} or not isinstance(error, FileNotFoundError):
+            reason = "triage_io_failed" if args.command.endswith("triage") else "report_io_failed"
+            record_runtime_failure("feedback-" + args.command, reason, error)
         print(json.dumps({"error": type(error).__name__}))
         return 1
     print(json.dumps(value, ensure_ascii=True))

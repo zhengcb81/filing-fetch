@@ -11,7 +11,7 @@ import pytest
 
 from test_feedback_ordinary_failures import packets
 from test_ff_job_facade import _CANDIDATE_HANDLE, _FETCH_REQUEST, _observation, _submit
-from test_ff_job_feedback_lookup import _digest, _request, _snapshot
+from test_ff_job_feedback_lookup import _digest, _request, _snapshot, _triage_cli, _triage_request
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER = "filing-fetch"
@@ -153,6 +153,36 @@ def _assert_untouched(root, before):
     assert after == before
     assert _attempts(after) == _attempts(before)
     assert not (root / "observations").exists()
+
+
+@pytest.mark.parametrize("run", [_undispatched(), _unknown_cost()])
+def test_triage_retains_partial_slot_facts_and_original_cost_state(tmp_path, monkeypatch, run):
+    root = tmp_path / "owner-state"
+    reports = tmp_path / "reports"
+    original_jobs = [_original_jobs()[0]] if run["run_id"] == FIRST else _original_jobs()
+    _ledger(root, [run], original_jobs)
+    observation = _offered(run, root, tmp_path, monkeypatch, "refresh-outcome")
+    before = _snapshot(root)
+    expected = _reconcile(root, observation)["result"]
+    request = _triage_request(observation)
+    action = request["action_id"]
+    mismatched = _triage_request({**observation, "attempt_id": "another"})
+    failed = _triage_cli(reports, "triage", "--jobs-dir", root, request=mismatched)
+    assert failed.returncode == 1 and json.loads(failed.stdout) == {"error": "original_evidence_unavailable"}
+    assert not reports.exists()
+
+    result = _triage_cli(reports, "triage", "--jobs-dir", tmp_path / "empty", "--jobs-dir", root, request=request)
+    assert result.returncode == 0
+    triage = json.loads(result.stdout)["result"]
+    assert triage["decision"] == "needs_evidence"
+    assert triage["evidence_ref"] == observation["evidence_ref"]
+    names = ("native_status", "job_status", "cost_state", "reason_codes", "counts")
+    assert triage["facts"] == {name: expected[name] for name in names}
+    assert "original_item_failures" in triage["missing_evidence"]
+    assert ("original_usage" in triage["missing_evidence"]) == (expected["cost_state"] == "unknown")
+    cold = _triage_cli(reports, "get-triage", action)
+    assert cold.returncode == 0 and json.loads(cold.stdout) == {"receipt": {"request": request, "result": triage}}
+    _assert_untouched(root, before)
 
 
 @pytest.mark.parametrize(

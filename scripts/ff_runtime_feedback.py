@@ -171,6 +171,47 @@ def read_native_diagnostic(name, directories):
     return None, unreadable
 
 
+def read_cli_failure(observation, directories):
+    """Project only the occurrence and usage that the original CLI left at its owner."""
+    operation, _, invocation = observation["step_id"].partition("/")
+    if (not invocation or observation.get("evidence_ref") != f"ff-cli/1/{invocation}"
+            or observation.get("check_id") != "execution-outcome"):
+        return None
+    name = _packet_name(tuple(observation[field] for field in _HEADER), "complete")
+    reference = f"ff-diagnostic/1/{name}"
+    if observation.get("details_ref") != reference:
+        return None
+    for root in directories:
+        detail, _ = read_native_diagnostic(name, [root])
+        if detail is None or detail.get("reason") != observation.get("actual"):
+            continue
+        known = _recorded_no_dispatch(root, name, observation)
+        return {
+            "operation": operation, "outcome": detail["reason"], "diagnostic_ref": reference,
+            "invocation_usage": {"provider_started": False if known else None,
+                                 "cost_state": "not_applicable" if known else "unknown"},
+            "target_job_cost_state": "unknown",
+        }
+    return None
+
+
+def _recorded_no_dispatch(root, name, observation):
+    pairs = {"provider-start": set(), "provider-usage": set()}
+    scope = (*_HEADER, "evidence_ref")
+    try:
+        packet = owner_io_path(root / (name + ".jsonl"))
+        for line in packet.read_bytes().splitlines():
+            row = json.loads(line)
+            if (isinstance(row, dict) and row.get("schema_version") == "feedback-observation/1"
+                    and all(row.get(field) == observation[field] for field in scope)):
+                check, actual = row.get("check_id"), row.get("actual")
+                if isinstance(check, str) and check in pairs and isinstance(actual, str):
+                    pairs[check].add(actual)
+    except (OSError, ValueError, RecursionError):
+        return False
+    return pairs == {"provider-start": {"not_started"}, "provider-usage": {"not_applicable"}}
+
+
 def _was_offered(row, jobs_dir, *, started, require_detail=False):
     name = _packet_name(tuple(row[k] for k in _HEADER), "started" if started else "complete")
     directories = observation_directories(jobs_dir)

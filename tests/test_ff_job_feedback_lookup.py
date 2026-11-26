@@ -2,6 +2,7 @@
 from argparse import Namespace
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -10,6 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from test_ff_job_facade import _CANDIDATE_HANDLE, _FETCH_REQUEST, _observation, _submit
+from test_feedback_ordinary_failures import cli, packets
 from ff_job_feedback import _lookup_job
 from ff_job_runner import run_job
 from ff_job_store import JobStore
@@ -48,6 +50,120 @@ def _invoke(jobs, observation, *config):
 
 def _snapshot(jobs):
     return {path.relative_to(jobs): path.read_bytes() for path in jobs.rglob("*") if path.is_file()}
+
+
+def _triage_request(observation):
+    request = _request(observation)
+    payload = request["payload"]
+    action = _digest(["triage", OWNER, payload["occurrence_id"]])
+    return {**request, "kind": "triage", "method": "submit", "action_id": action,
+            "request_digest": _digest([OWNER, "triage", action, payload])}
+
+
+def _triage_cli(reports, *args, request=None, lose_reply=False):
+    program = ROOT / "scripts/ff_job_feedback.py"
+    if lose_reply:
+        # Interrupt the owner after the receipt is committed and before its stdout reply.
+        interrupted = (
+            "import builtins,os,runpy,sys\n"
+            "sys.argv = sys.argv[1:]\n"
+            "sys.path.insert(0, sys.argv[0].rsplit(os.sep, 1)[0])\n"
+            "builtins.print = lambda *args, **kwargs: os._exit(73)\n"
+            "runpy.run_path(sys.argv[0], run_name='__main__')"
+        )
+        command = ["-c", interrupted, str(program)]
+    else:
+        command = [str(program)]
+    return subprocess.run(
+        [sys.executable, "-B", "-X", "utf8", *command, "--reports-dir", str(reports), *map(str, args)],
+        input=None if request is None else json.dumps(request), capture_output=True, text=True,
+        encoding="utf-8", check=False, timeout=20, env=os.environ.copy(),
+    )
+
+
+@pytest.mark.parametrize("historical", [False, True])
+def test_triage_cold_reads_the_owner_decision_after_losing_the_reply(tmp_path, historical):
+    jobs = tmp_path / "jobs"
+    reports = tmp_path / "reports"
+    original = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "get_status", "--owner-job-id", "foreign-id"])
+    assert original.returncode == 2
+    outbox = jobs / "observations"
+    observations = packets(outbox)
+    row = next(row for row in observations if row["check_id"] == "execution-outcome")
+    if historical:
+        packet, = outbox.glob("*.jsonl")
+        packet.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    before = _snapshot(jobs)
+    request = _triage_request(row)
+    action = request["action_id"]
+
+    absent = _triage_cli(reports, "get-triage", action)
+    assert absent.returncode == 1 and not reports.exists()
+    run = _triage_cli(reports, "triage", "--jobs-dir", jobs, request=request, lose_reply=True)
+    assert run.returncode == 73 and run.stdout == run.stderr == ""
+    cold = _triage_cli(reports, "get-triage", action)
+    receipt = json.loads(cold.stdout)["receipt"]
+    assert cold.returncode == 0 and receipt["request"] == request
+    result = receipt["result"]
+    assert result["decision"] == "needs_evidence" and result["evidence_ref"] == row["evidence_ref"]
+    assert result["issue_ref"] == f"ff-triage/1/{action}"
+    assert {"original_caller", "original_request"} <= set(result["missing_evidence"])
+    assert result["facts"] == {
+        "operation": "get_status", "outcome": "request_error", "diagnostic_ref": row["details_ref"],
+        "invocation_usage": {"provider_started": None if historical else False,
+                             "cost_state": "unknown" if historical else "not_applicable"},
+        "target_job_cost_state": "unknown",
+    }
+    assert _snapshot(jobs) == before
+    report = _triage_cli(reports, "get-report", action)
+    assert report.returncode == 1
+    saved = _snapshot(reports)
+    assert len(saved) == 1
+
+    # A durable triage decision survives the disappearance of the original log in this fixture.
+    repeat = _triage_cli(reports, "triage", "--jobs-dir", tmp_path / "absent-owner", request=request)
+    assert repeat.returncode == 0 and json.loads(repeat.stdout) == {"result": result}
+    conflicting = _triage_request({**row, "actual": "other_failure"})
+    refused = _triage_cli(reports, "triage", "--jobs-dir", jobs, request=conflicting)
+    assert refused.returncode != 0 and _snapshot(reports) == saved
+
+
+def test_triage_refuses_a_wrong_attempt_and_a_forged_native_reason(tmp_path):
+    jobs = tmp_path / "jobs"
+    reports = tmp_path / "reports"
+    original = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "get_status", "--owner-job-id", "foreign-id"])
+    assert original.returncode == 2
+    row = next(row for row in packets(jobs / "observations") if row["check_id"] == "execution-outcome")
+    for changes in ({"attempt_id": "another"}, {"actual": "other_failure"}):
+        forged = _triage_request({**row, **changes})
+        refused = _triage_cli(reports, "triage", "--jobs-dir", jobs, request=forged)
+        assert refused.returncode == 1 and json.loads(refused.stdout) == {"error": "original_evidence_unavailable"}
+        assert not reports.exists()
+
+
+def test_report_keeps_version_bound_replay_receipts_separate_from_triage(tmp_path):
+    reports = tmp_path / "reports"
+    request = {"schema_version": "feedback-action/1", "owner": OWNER, "method": "submit", "kind": "report"}
+    scope = ["occurrence", OWNER, "owner/issue", "fixed-version"]
+    for verdict in ("needs_evidence", "verified"):
+        action = _digest(["report", OWNER, *scope, verdict])
+        payload = {
+            "occurrence_id": scope[0], "original_occurrence_id": scope[0], "origin_owner": OWNER,
+            "issue_ref": scope[2], "fixed_version": scope[3], "verdict": verdict, "evidence_ref": "replay/receipt",
+        }
+        submit = {**request, "action_id": action, "payload": payload,
+                  "request_digest": _digest([OWNER, "report", action, payload])}
+        response = _triage_cli(reports, "report", request=submit)
+        if verdict == "needs_evidence":
+            assert response.returncode == 1 and not reports.exists()
+        else:
+            assert response.returncode == 0 and json.loads(response.stdout) == {"result": {"recorded": True}}
+            saved = _snapshot(reports)
+            assert _triage_cli(reports, "report", request=submit).returncode == 0
+            cold = _triage_cli(reports, "get-report", action)
+            assert cold.returncode == 0 and json.loads(cold.stdout) == {"report": submit}
+            assert _triage_cli(reports, "get-triage", action).returncode == 1
+            assert _snapshot(reports) == saved
 
 
 @pytest.mark.parametrize("provider_fee", ["0.35", None])
