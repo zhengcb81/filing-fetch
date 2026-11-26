@@ -881,7 +881,7 @@ def test_replay_never_starts_context_seed_provider_or_network(controlled, tmp_pa
             "cli_main._fresh_proofs",
             "cli_main.run_case_group",
             "cli_main.run_process",
-            "run.run_process",
+            "matrix_context.run_process",
             "runtime.run_process",
             "subprocess.Popen",
             "subprocess.run",

@@ -29,7 +29,7 @@ import cli_main  # noqa: E402
 import case_scheduling  # noqa: E402
 from case_specs import case_specs, get_spec  # noqa: E402
 from fixture_builder import ScratchEnvironment  # noqa: E402
-from run import Context  # noqa: E402
+from matrix_context import Context  # noqa: E402
 
 original_seed_original = ScratchEnvironment.seed_original
 
@@ -117,7 +117,7 @@ def _drive_main(tmp_path, recorded_batches, recorded_scans, *, workers=2,
             stack.enter_context(patch("fixture_builder.ScratchEnvironment.seed_original",
                                       seed_original_recorder))
         stack.enter_context(patch.object(cli_main, "run_process", fake_run_process))
-        stack.enter_context(patch("run.run_process", fake_run_process))
+        stack.enter_context(patch("matrix_context.run_process", fake_run_process))
         stack.enter_context(patch.object(cli_main, "_verify_binding",
                                          return_value={"verified": True}))
         stack.enter_context(patch.object(cli_main, "_dependency", fake_dependency))

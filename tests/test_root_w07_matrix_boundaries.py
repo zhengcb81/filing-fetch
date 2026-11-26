@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools/offline_contract_matrix"))
 import runtime
 import cli_main
-from run import Context
+import matrix_context
 
 
 def test_matrix_assembly_loads_context_without_reimporting_its_launcher():
@@ -107,19 +107,50 @@ def test_dead_child_is_reaped_after_second_communicate_error(tmp_path,monkeypatc
     assert not [t for t in threading.enumerate() if t.name.startswith("ff-process")]
 
 
-@pytest.mark.parametrize("kind",["missing","extra","reordered"])
-def test_seed_response_cardinality_and_order_are_validated(tmp_path,monkeypatch,kind):
-    
-    ctx=Context(ff_root=tmp_path/"ff",cwp_root=tmp_path/"cwp",et_root=tmp_path/"et",scratch=tmp_path/"scratch",out_root=tmp_path/"out")
-    seeds=[(SimpleNamespace(market="US",canonical_name="Apple Inc.",security_id="US:AAPL"),"annual_report",2025,"FY")]
-    def fake(command,**kw):
-        payload=json.loads(kw["input"])
-        row={"tag":payload["requests"][0]["tag"],"request_argv":payload["requests"][0]["argv"],"exit_code":0,"response":{},"response_ref":"x","response_sha256":"a","source_ref":{},"counts":{}}
-        rows=[] if kind=="missing" else [row,row] if kind=="extra" else [dict(row,tag="other")]
-        return SimpleNamespace(returncode=0,stdout=json.dumps({"schema_version":"w07-seed-batch/1","requests":rows}).encode(),stderr=b"")
-    monkeypatch.setattr(sys.modules["run"],"run_process",fake)
-    with pytest.raises(ValueError):
-        ctx.warm_seed_batch(seeds)
+@pytest.mark.parametrize("kind", ["valid", "missing", "extra", "reordered", "wrong-argv"])
+def test_seed_response_cardinality_and_order_are_validated(tmp_path, monkeypatch, kind):
+    ctx = matrix_context.Context(
+        ff_root=tmp_path / "ff", cwp_root=tmp_path / "cwp", et_root=tmp_path / "et",
+        scratch=tmp_path / "scratch", out_root=tmp_path / "out",
+    )
+    company = SimpleNamespace(market="US", canonical_name="Fixture Company", security_id="US:FIXTURE")
+    seeds = [(company, "annual_report", year, "FY") for year in (2024, 2025)]
+    launches = []
+
+    def fake(command, **kwargs):
+        assert Path(command[1]).name == "seed_batch.py"
+        requests = json.loads(kwargs["input"])["requests"]
+        launches.append(requests)
+        rows = [
+            {"tag": request["tag"], "request_argv": request["argv"], "exit_code": 0,
+             "response": {}, "response_ref": request["tag"] + ".json", "response_sha256": "a",
+             "source_ref": {}, "counts": {}}
+            for request in requests
+        ]
+        if kind == "missing":
+            rows.pop()
+        elif kind == "extra":
+            rows.append(rows[-1])
+        elif kind == "reordered":
+            rows.reverse()
+        elif kind == "wrong-argv":
+            rows[0]["request_argv"] = rows[1]["request_argv"]
+        return SimpleNamespace(
+            returncode=0, stderr=b"",
+            stdout=json.dumps({"schema_version": "w07-seed-batch/1", "requests": rows}).encode(),
+        )
+
+    monkeypatch.setattr(matrix_context, "run_process", fake)
+    if kind == "valid":
+        receipts = ctx.warm_seed_batch(seeds)
+        assert [(row["tag"], row["request_argv"]) for row in receipts] == [
+            (request["tag"], request["argv"]) for request in launches[0]
+        ]
+    else:
+        match = "cardinality" if kind in {"missing", "extra"} else "order or identity"
+        with pytest.raises(ValueError, match=match):
+            ctx.warm_seed_batch(seeds)
+    assert len(launches) == 1 and len(launches[0]) == 2
 
 def test_independent_catalog_alias_counts_are_not_byte_identity():
     target={"proofs":{},"catalog_snapshot":[]}

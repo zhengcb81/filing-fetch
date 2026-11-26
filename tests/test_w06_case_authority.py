@@ -185,7 +185,7 @@ def test_authority_runner_registry_consumes_same_fixed_objects():
 
 def test_authority_runner_rejects_drift_before_process_and_binds_valid_input(tmp_path):
     from case_specs import get_spec
-    from run import Context
+    from matrix_context import Context
     from subprocess import CompletedProcess
     from unittest.mock import patch
 
@@ -199,7 +199,7 @@ def test_authority_runner_rejects_drift_before_process_and_binds_valid_input(tmp
     spec = get_spec("fin_cn_annual_hit")
     bad = spec.runs[0].request()
     bad["market"] = "HK"
-    with patch("run.run_process") as launch:
+    with patch("matrix_context.run_process") as launch:
         with pytest.raises(ValueError, match="contract drift"):
             ctx.run_ff(bad, case_id=spec.id)
         launch.assert_not_called()
@@ -209,7 +209,7 @@ def test_authority_runner_rejects_drift_before_process_and_binds_valid_input(tmp
         path = ctx.artifacts / trace["fixture_ref"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == trace["fixture_sha256"]
     ctx.active_case_spec = get_spec("call_past_cutoff")
-    with patch("run.run_process") as launch:
+    with patch("matrix_context.run_process") as launch:
         with pytest.raises(ValueError, match="active case"):
             ctx.run_ff(spec.runs[0].request(), case_id=spec.id)
         launch.assert_not_called()
@@ -217,7 +217,7 @@ def test_authority_runner_rejects_drift_before_process_and_binds_valid_input(tmp
 
 def test_authority_runner_rejects_wrong_fixture_before_launch(tmp_path):
     from case_specs import get_spec
-    from run import Context
+    from matrix_context import Context
     from unittest.mock import patch
 
     ctx = Context(
@@ -234,7 +234,7 @@ def test_authority_runner_rejects_wrong_fixture_before_launch(tmp_path):
         call_date="2025-06-01",
         receipt_tag=spec.id,
     )
-    with patch("run.run_process") as launch:
+    with patch("matrix_context.run_process") as launch:
         with pytest.raises(ValueError, match="fixture"):
             ctx.run_ff(spec.runs[0].request(), case_id=spec.id)
         launch.assert_not_called()
