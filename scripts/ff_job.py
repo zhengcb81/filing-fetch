@@ -211,6 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="durable job store directory (default: <skill_root>/.ff_jobs)",
     )
     parser.add_argument("--pretty", action="store_true", help="indent the JSON response")
+    parser.set_defaults(no_dispatch=False)
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_submit_parser(subparsers)
     _add_run_parser(subparsers)
@@ -247,7 +248,7 @@ def _add_status_parser(subparsers) -> None:
         "get_status", help="cross-process JobView for one owner_job_id",
     )
     status.add_argument("--owner-job-id", required=True)
-    status.set_defaults(handler=_cmd_get_status)
+    status.set_defaults(handler=_cmd_get_status, no_dispatch=True)
 
 
 def _add_actions_parser(subparsers) -> None:
@@ -255,7 +256,7 @@ def _add_actions_parser(subparsers) -> None:
         "allowed_actions", help="declared actions for one owner_job_id",
     )
     actions.add_argument("--owner-job-id", required=True)
-    actions.set_defaults(handler=_cmd_allowed_actions)
+    actions.set_defaults(handler=_cmd_allowed_actions, no_dispatch=True)
 
 
 def _add_act_parser(subparsers) -> None:
@@ -283,7 +284,7 @@ def _add_list_parser(subparsers) -> None:
     listing.add_argument("--cursor", default=None,
                          help="return jobs strictly after this owner_job_id")
     listing.add_argument("--limit", type=int, default=50, help="page size 1..100 (default: 50)")
-    listing.set_defaults(handler=_cmd_list_jobs)
+    listing.set_defaults(handler=_cmd_list_jobs, no_dispatch=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -297,11 +298,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.handler(args)
     except FFJobError as exc:
-        cli_failure(args.command, exc.code, exc, jobs_dir=args.jobs_dir)
+        cli_failure(args.command, exc.code, exc, jobs_dir=args.jobs_dir, no_dispatch=args.no_dispatch)
         _emit(_error_payload(args.command, exc), pretty=args.pretty)
         return 2
     except Exception as exc:  # noqa: BLE001 - fatal exits 1 per house convention
-        cli_failure(args.command, "fatal", exc, jobs_dir=args.jobs_dir)
+        cli_failure(args.command, "fatal", exc, jobs_dir=args.jobs_dir, no_dispatch=args.no_dispatch)
         _emit({
             "schema_version": FF_JOB_SCHEMA_VERSION,
             "command": getattr(args, "command", "unknown"),

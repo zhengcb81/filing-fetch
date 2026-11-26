@@ -191,6 +191,57 @@ def test_normal_failed_entrypoint_is_cold_recoverable(tmp_path, script, args, bo
         assert cause in text
 
 
+@pytest.mark.parametrize(("args", "reason", "no_dispatch"), [
+    (("get_status", "--owner-job-id", "foreign-id"), "request_error", True),
+    (("allowed_actions", "--owner-job-id", "ffjob-000000000000"), "request_error", True),
+    (("list_jobs",), "fatal", True),
+    (("run", "--owner-job-id", "foreign-id"), "request_error", False),
+    (("act", "--owner-job-id", "foreign-id", "--action", "retry", "--idempotency-key", "fixture"),
+     "request_error", False),
+])
+def test_job_failure_reports_only_proven_no_dispatch(tmp_path, args, reason, no_dispatch):
+    jobs = tmp_path / "state"
+    corrupt_job = jobs / "jobs" / "ffjob-000000000000.json"
+    if args[0] == "list_jobs":
+        corrupt_job.parent.mkdir(parents=True)
+        corrupt_job.write_text('{"error":{"unexpected":true}}', encoding="utf-8")
+
+    result = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, *args])
+    envelope = json.loads(result.stdout)
+    assert result.returncode == 2 and result.stderr == ""
+    assert envelope["command"] == args[0] and envelope["error"]["code"] == reason
+    original = packets(jobs / "observations")
+    checks = {row["check_id"]: row["actual"] for row in original}
+    assert checks == (
+        {"execution-outcome": reason, "provider-start": "not_started", "provider-usage": "not_applicable"}
+        if no_dispatch else {"execution-outcome": reason}
+    )
+    assert len({(row["run_id"], row["attempt_id"], row["step_id"], row["evidence_ref"])
+                for row in original}) == 1
+    logged, = runtime_rows(jobs)
+    assert {check["check_id"]: check["actual"] for check in logged["checks"]} == checks
+    assert logged["diagnostic"]["causes"][0]["type"] == "FFJobError"
+    if args[0] == "list_jobs":
+        assert corrupt_job.read_text(encoding="utf-8") == '{"error":{"unexpected":true}}'
+
+
+def test_bare_pytest_isolates_inherited_feedback(tmp_path):
+    directory = Path(os.environ["RESEARCH_FEEDBACK_DIR"])
+    assert directory.is_relative_to(tmp_path)
+    assert not any(
+        name in os.environ
+        for name in ("RESEARCH_FEEDBACK_OUT", "RESEARCH_FEEDBACK_RUN_ID", "RESEARCH_FEEDBACK_ATTEMPT_ID")
+    )
+    state = tmp_path / "state"
+    output = cli(
+        tmp_path, "ff_job", ["--jobs-dir", state, "get_status", "--owner-job-id", "foreign-id"],
+        RESEARCH_FEEDBACK_DIR=str(directory),
+    )
+    assert output.returncode == 2
+    assert any(row["check_id"] == "execution-outcome" for row in packets(directory))
+    assert not (state / "observations").exists()
+
+
 def test_broken_explicit_transport_retains_native_failure_without_new_work(tmp_path):
     jobs = tmp_path / "jobs"
     invalid_target = tmp_path / "directory-not-a-file"

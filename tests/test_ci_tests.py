@@ -125,6 +125,8 @@ def test_real_pytest_failure_reports_node_and_restores_owned_temp(
     runner = _load("ff_ci_real_failure", "tools/ci_tests.py")
     monkeypatch.setattr(runner, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(runner, "CI_TESTS", ("test_owned_failure.py",))
+    # Model the owner's pytest root even when a caller puts --basetemp inside another repo.
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
     (tmp_path / "test_owned_failure.py").write_text(
         "def test_specific_ci_failure():\n    assert False, 'specific-ci-failure'\n", encoding="utf-8")
     before = set(tmp_path.iterdir())
