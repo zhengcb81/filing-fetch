@@ -225,9 +225,10 @@ def test_job_failure_reports_only_proven_no_dispatch(tmp_path, args, reason, no_
         assert corrupt_job.read_text(encoding="utf-8") == '{"error":{"unexpected":true}}'
 
 
-def test_bare_pytest_isolates_inherited_feedback(tmp_path):
+def test_bare_pytest_isolates_inherited_feedback(tmp_path, tmp_path_factory):
     directory = Path(os.environ["RESEARCH_FEEDBACK_DIR"])
-    assert directory.is_relative_to(tmp_path)
+    assert directory.parent == tmp_path_factory.getbasetemp()
+    assert directory != tmp_path
     assert not any(
         name in os.environ
         for name in ("RESEARCH_FEEDBACK_OUT", "RESEARCH_FEEDBACK_RUN_ID", "RESEARCH_FEEDBACK_ATTEMPT_ID")
@@ -239,7 +240,9 @@ def test_bare_pytest_isolates_inherited_feedback(tmp_path):
     )
     assert output.returncode == 2
     assert any(row["check_id"] == "execution-outcome" for row in packets(directory))
-    assert not (state / "observations").exists()
+    logged, = runtime_rows(directory)
+    assert logged["event"] == "get_status"
+    assert not state.exists()
 
 
 def test_broken_explicit_transport_retains_native_failure_without_new_work(tmp_path):
