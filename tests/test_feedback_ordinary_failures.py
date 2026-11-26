@@ -397,6 +397,9 @@ def test_public_schedule_mixed_document_results_have_individual_cold_references(
         assert not packets(inbox)
         inbox.unlink()
         refresh("status")
+        assert not inbox.exists()
+        flush = cli(tmp_path, "ff_job_feedback", ["flush-observations", "--jobs-dir", jobs])
+        assert flush.returncode == 0, (flush.stdout, flush.stderr)
     assert original["state"] == "partial" and original["counts"]["failed"] == 2
     assert len(original["failures"]) == 2
     native = packets(jobs / "observations")
@@ -478,6 +481,9 @@ raise SystemExit(ff_job.main())
         cold = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "get_status", "--owner-job-id", jid])
         job = json.loads(cold.stdout)["job"]
         assert job["status"] == "unknown" and job["execution_count"] == 0 and job["attempts"] == 1
+    assert not any(r["check_id"] == "job-failure" for r in packets(jobs / "observations"))
+    offered = cli(tmp_path, "ff_job_feedback", ["reoffer-job", "--jobs-dir", jobs, "--owner-job-id", jid])
+    assert offered.returncode == 0
     rows = packets(jobs / "observations")
     failure = next(r for r in rows if r["check_id"] == "job-failure")
     assert (failure["actual"], failure["run_id"], failure["attempt_id"]) == (
@@ -549,12 +555,15 @@ def test_unavailable_transport_is_repaired_from_existing_native_job_on_cold_read
     native.unlink()  # Remove only the obstruction created by this fixture.
     args = ["--jobs-dir", jobs, "get_status", "--owner-job-id", jid]
     assert json.loads(cli(tmp_path, "ff_job", args).stdout)["job"] == job
+    maintenance = ["reoffer-job", "--jobs-dir", jobs, "--owner-job-id", jid]
+    assert cli(tmp_path, "ff_job_feedback", maintenance).returncode == 0
     rows = packets(native)
     assert any(r["issue_key"] == "config_error" for r in rows if "issue_key" in r)
     signals = list(native.glob("*.ready"))
     for signal in signals:
         signal.unlink()  # consumer ACK
     assert json.loads(cli(tmp_path, "ff_job", args).stdout)["job"] == job
+    assert cli(tmp_path, "ff_job_feedback", maintenance).returncode == 0
     assert not list(native.glob("*.ready"))
 
 def test_multiple_outstanding_slots_survive_restart_and_replay_independently(tmp_path, monkeypatch):
@@ -580,6 +589,9 @@ def test_multiple_outstanding_slots_survive_restart_and_replay_independently(tmp
     assert set(store.load()["feedback_pending"]) == snapshot_ids and len(snapshot_ids) == 2
     out.unlink()
     p = cli(tmp_path, "ff_scheduled_refresh", ["--jobs-dir", jobs, "status"])
+    assert p.returncode == 0 and set(store.load()["feedback_pending"]) == snapshot_ids
+    assert not out.exists()
+    p = cli(tmp_path, "ff_job_feedback", ["flush-observations", "--jobs-dir", jobs])
     assert p.returncode == 0 and store.load()["feedback_pending"] == []
     recovered = [r for r in packets(out) if r["check_id"] == "refresh-item-outcome"]
     assert {r["run_id"] for r in recovered} == {"original-day-0","original-day-1"}
@@ -588,4 +600,5 @@ def test_multiple_outstanding_slots_survive_restart_and_replay_independently(tmp
         marker.unlink()
     for command in ("status","runs"):
         assert cli(tmp_path, "ff_scheduled_refresh", ["--jobs-dir",jobs,command]).returncode == 0
+    assert cli(tmp_path, "ff_job_feedback", ["flush-observations", "--jobs-dir", jobs]).returncode == 0
     assert not list(out.glob("*.ready"))

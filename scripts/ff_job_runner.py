@@ -41,7 +41,7 @@ from ff_job_contracts import (
     retry_eligible,
     validate_action,
 )
-from ff_job_feedback import publish_job_observation
+from ff_job_observation import append_job_diagnostic, load_observed_job, publish_job_observation
 from ff_runtime_feedback import RUN_ENV, ATTEMPT_ENV, cause_details
 from ff_job_store import JobStore, now_iso
 from ff_errors import FilingFetchError
@@ -88,6 +88,13 @@ def _record_action(record: dict, action: str, idempotency_key: str) -> bool:
     return True
 
 
+def _persist_transition(store: JobStore, record: dict, entry: dict) -> dict:
+    """Commit the owner transition before any secondary diagnostics."""
+    stored = store.write_locked(record)
+    append_job_diagnostic(store, stored, entry)
+    return stored
+
+
 def run_job(
     store: JobStore,
     owner_job_id: str,
@@ -124,6 +131,7 @@ def run_job(
         record.pop("statement_feedback", None)
         record["feedback_identity"] = {"run_id": os.environ.get(RUN_ENV) or owner_job_id,
                                        "attempt_id": os.environ.get(ATTEMPT_ENV) or str(record["attempts"])}
+        record["feedback_delivery_tracked"] = True
         record["status"] = "running"
         record["status_known"] = True
         record["started_at"] = record.get("started_at") or now_iso()
@@ -138,8 +146,7 @@ def run_job(
             "pid": record["owner_pid"],
             "timeout_seconds": timeout_seconds,
         })
-        store.append_log(owner_job_id, {"event": "run_started", "pid": record["owner_pid"]})
-        record = store.write_locked(record)
+        record = _persist_transition(store, record, {"event": "run_started", "pid": record["owner_pid"]})
         publish_job_observation(record, started=True, jobs_dir=store.jobs_dir)
         landed = _execute(store, record, config_path=config_path, timeout_seconds=timeout_seconds)
         publish_job_observation(landed, started=False, jobs_dir=store.jobs_dir)
@@ -169,7 +176,7 @@ def _execute(
                 record["request"], config_path=config_path, timeout_seconds=timeout_seconds,
             )
         else:
-            from transcript_companion import fetch_standalone_transcript
+            from ff_transcript_entrypoint import fetch_standalone_transcript
 
             envelope = fetch_standalone_transcript(
                 record["request"], config_path=config_path, timeout_seconds=timeout_seconds,
@@ -373,16 +380,15 @@ def _land_terminal(
     record["execution_count"] = record.get("execution_count", 0) + 1
     record["heartbeat_at"] = now_iso()
     outcome = envelope.get("status") if isinstance(envelope, dict) else None
-    _event(record, "run_finished", {"status": record["status"], "engine_status": outcome})
-    store.append_log(record["owner_job_id"], {
-        "event": "run_finished",
+    event = {
         "status": record["status"],
         "engine_status": outcome,
         "calls": stats.get("calls", 0),
         "downloads": downloads,
-    })
+    }
+    _event(record, "run_finished", event)
     record["owner_pid"] = None
-    return store.write_locked(record)
+    return _persist_transition(store, record, {"event": "run_finished", **event})
 
 
 # ---------------------------------------------------------------------------
@@ -447,9 +453,8 @@ def _act_cancel(store: JobStore, record: dict, idempotency_key: str) -> dict:
     record["cost_state"] = cost_state
     _record_action(record, "cancel", idempotency_key)
     _event(record, "cancelled", {"idempotency_key": idempotency_key})
-    store.append_log(record["owner_job_id"], {"event": "cancelled"})
     record["owner_pid"] = None
-    return store.write_locked(record)
+    return _persist_transition(store, record, {"event": "cancelled"})
 
 
 def _act_retry(store: JobStore, record: dict, idempotency_key: str) -> dict:
@@ -475,8 +480,7 @@ def _act_retry(store: JobStore, record: dict, idempotency_key: str) -> dict:
     record["run_deadline_at"] = None
     _record_action(record, "retry", idempotency_key)
     _event(record, "retry_queued", {"idempotency_key": idempotency_key})
-    store.append_log(record["owner_job_id"], {"event": "retry_queued"})
-    return store.write_locked(record)
+    return _persist_transition(store, record, {"event": "retry_queued"})
 
 
 def reconcile(
@@ -494,7 +498,7 @@ def reconcile(
     statements data now exists in the durable company-wiki catalog; the answer
     lands as succeeded/failed with the prior spend evidence carried forward.
     """
-    record, _ = store.load_checked(owner_job_id, fix=True)
+    record = load_observed_job(store, owner_job_id)
     if expected_attempt is not None and record.get("attempts") != expected_attempt:
         raise FFJobError("reconcile attempt changed", code="request_error")
     # The action receipt is checked BEFORE the status gate: a replayed
@@ -534,9 +538,8 @@ def reconcile(
         # read-only and cannot certify the interrupted run's spend.
         _record_action(current, "reconcile", idempotency_key)
         _event(current, "reconciled", {"landed_status": status})
-        store.append_log(owner_job_id, {"event": "reconciled", "landed_status": status})
         current["owner_pid"] = None
-        return store.write_locked(current), False
+        return _persist_transition(store, current, {"event": "reconciled", "landed_status": status}), False
     finally:
         lock.release()
 
@@ -566,7 +569,7 @@ def _reconcile_query(
             code = "not_found" if landed == "not_found" else "upstream_error"
             reason = landed
         else:
-            from transcript_companion import fetch_standalone_transcript
+            from ff_transcript_entrypoint import fetch_standalone_transcript
 
             read_only = {key: value for key, value in request.items() if key != "acquisition_limits"}
             read_only["intent"] = "reuse_only"

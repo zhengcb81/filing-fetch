@@ -115,7 +115,9 @@ def test_missing_job_and_attempt_mismatch_never_start_recovery(tmp_path):
     assert _snapshot(jobs) == saved
 
 
-def test_configured_lookup_reconciles_once_on_the_original_request(tmp_path):
+def test_configured_lookup_is_pure_before_explicit_read_only_reconciliation(tmp_path):
+    from ff_job_runner import reconcile
+
     jobs = tmp_path / "jobs"
     store = JobStore(jobs)
     job, _ = _submit(store, kind="filing.acquire", request=_FETCH_REQUEST)
@@ -132,9 +134,14 @@ def test_configured_lookup_reconciles_once_on_the_original_request(tmp_path):
     request = _request(row)
     readonly = Namespace(jobs_dir=jobs, config=None, timeout_seconds=10.0)
     configured = Namespace(jobs_dir=jobs, config=tmp_path / "lookup-only.json", timeout_seconds=10.0)
+    before = _snapshot(jobs)
     with patch("ff_job_runner._reconcile_query", return_value=("succeeded", None, {})) as query:
         assert _lookup_job(readonly, request) == {"state": "unknown"}
+        assert _lookup_job(configured, request) == {"state": "unknown"}
         query.assert_not_called()
+        assert _snapshot(jobs) == before
+        reconcile(store, job_id, idempotency_key="explicit-reconcile", config_path=configured.config,
+                  timeout_seconds=10.0, expected_attempt=1)
         first = _lookup_job(configured, request)
         assert first == _lookup_job(configured, request)
         query.assert_called_once_with(

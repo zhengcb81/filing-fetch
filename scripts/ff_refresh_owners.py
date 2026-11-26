@@ -16,6 +16,7 @@ from ff_company_wiki_connection import command_for, connection_cwd, connection_e
 from ff_configuration import expand_config_path, load_connection_root, read_json_object
 from ff_job_contracts import FF_JOB_SCHEMA_VERSION, allowed_actions_for, validate_submit_body
 from ff_job_runner import act, run_job
+from ff_job_observation import load_observed_job
 from ff_job_store import JobStore
 from ff_process_transport import MAX_JSON_OUTPUT_BYTES, TransportError, run_bounded_json
 from ff_errors import FilingFetchError
@@ -384,7 +385,7 @@ class OwnerPorts:
                 })
                 job, _ = jobs.create_job(body, command_id=run_id)
             job_id = job["owner_job_id"]
-            job, _ = jobs.load_checked(job_id, fix=True)
+            job = load_observed_job(jobs, job_id)
             executed_now = False
             retry_key = f"{run_id}-retry-{job_id}"
             if job["status"] == "failed" and "retry" in allowed_actions_for(job):

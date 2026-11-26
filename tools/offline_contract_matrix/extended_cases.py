@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from report import CaseResult
 from fixture_builder import US, CN
-from run import _mk_filing_request, _companion
+from matrix_context import _mk_filing_request, _companion
 from matrix_outcome import source_ref
 
 

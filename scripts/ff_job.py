@@ -47,8 +47,8 @@ from ff_runtime_feedback import DEFAULT_JOBS_DIR, cli_failure, parse_arguments
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _store(args: argparse.Namespace) -> JobStore:
-    return JobStore(Path(args.jobs_dir).expanduser().resolve())
+def _store(args: argparse.Namespace, *, initialize=True) -> JobStore:
+    return JobStore(Path(args.jobs_dir).expanduser().resolve(), initialize=initialize)
 
 
 def _read_body(args: argparse.Namespace) -> dict:
@@ -124,19 +124,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 def _cmd_get_status(args: argparse.Namespace) -> int:
     validate_owner_job_id(args.owner_job_id)
-    store = _store(args)
-    record, changed = store.load_checked(args.owner_job_id, fix=True)
-    if not changed and record.get("attempts"):
-        from ff_job_feedback import publish_job_observation
-        publish_job_observation(record, started=False, jobs_dir=store.jobs_dir, recover_only=True)
+    store = _store(args, initialize=False)
+    record, _ = store.load_checked(args.owner_job_id, fix=False)
     _emit(_view_payload("get_status", record), pretty=args.pretty)
     return 0
 
 
 def _cmd_allowed_actions(args: argparse.Namespace) -> int:
     validate_owner_job_id(args.owner_job_id)
-    store = _store(args)
-    record, _ = store.load_checked(args.owner_job_id, fix=True)
+    store = _store(args, initialize=False)
+    record, _ = store.load_checked(args.owner_job_id, fix=False)
     from ff_job_contracts import allowed_actions_for
 
     actions = allowed_actions_for(record)
@@ -166,7 +163,7 @@ def _cmd_act(args: argparse.Namespace) -> int:
 
 
 def _cmd_list_jobs(args: argparse.Namespace) -> int:
-    store = _store(args)
+    store = _store(args, initialize=False)
     limit = max(1, min(100, args.limit))
     items: list[dict] = []
     next_cursor: str | None = None

@@ -13,7 +13,7 @@ from typing import Any, Callable, Iterator
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from run import (  # noqa: E402
+from matrix_context import (  # noqa: E402
     Context, ProductionGuard, CASE_TIMEOUT, BATCH_DEADLINE, PROOF_RESERVE_SECONDS,
 )
 from runtime import Deadline, DeadlineExceeded, OwnedAttempt, run_process, guard_events  # noqa: E402

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parents[1] / "tools/offline_contract_matrix"
 sys.path.insert(0, str(HERE))
-import run as runner  # noqa: E402
+import matrix_context as runner  # noqa: E402
 import cli_main  # noqa: E402
 
 def test_production_guard_does_not_read_even_synthetic_key(tmp_path):

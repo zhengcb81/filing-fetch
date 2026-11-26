@@ -6,7 +6,7 @@ Layout under ``--jobs-dir`` (default ``<skill_root>/.ff_jobs``):
     index/idem/<sha256(key)>.json   idempotency pointer {"owner_job_id", "request_hash"}
     index/idem/.submit.lock         OS lock for submission publication
     locks/<owner_job_id>.lock       OS lock for job mutation
-    logs/<owner_job_id>.log         append-only runner audit trail (JSON lines)
+    logs/<owner_job_id>.log         optional append-only runner diagnostics
 
 Cross-process discipline:
 
@@ -31,7 +31,7 @@ import hashlib
 import json
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterator
 
@@ -51,6 +51,7 @@ from ff_persistence import (
     LockBusy,
     acquire_file_lock,
     atomic_write_json as _atomic_write_json,
+    now_iso as now_iso,
     owner_io_path,
 )
 
@@ -64,10 +65,6 @@ def _acquire_file_lock(path: Path, timeout_seconds: float, busy: str) -> "_JobLo
         return acquire_file_lock(path, timeout_seconds)
     except LockBusy as exc:
         raise FFJobError(busy, code="request_error") from exc
-
-
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _canonical_hash(payload: dict) -> str:
@@ -98,7 +95,7 @@ class JobStore:
         self.locks = storage / "locks"
         self.logs_dir = storage / "logs"
         if initialize:
-            for directory in (self.jobs, self.idem_index, self.locks, self.logs_dir):
+            for directory in (self.jobs, self.idem_index, self.locks):
                 directory.mkdir(parents=True, exist_ok=True)
 
     # -- paths --------------------------------------------------------------
@@ -261,9 +258,8 @@ class JobStore:
             return True
         return now > moment + RUN_STALENESS_GRACE_SECONDS
 
-    def _mark_unknown(self, record: dict, reason: str) -> dict:
+    def _unknown_view(self, record: dict, reason: str) -> dict:
         updated = dict(record)
-        stamp = now_iso()
         updated["status"] = "unknown"
         updated["status_known"] = False
         updated["error"] = {
@@ -277,6 +273,11 @@ class JobStore:
         updated["cost"] = None
         spend_intent = job_spend_intent(updated["kind"], updated["request"])
         updated["cost_state"] = "unknown" if spend_intent != "reuse_only" else "not_applicable"
+        return updated
+
+    def _mark_unknown(self, record: dict, reason: str) -> dict:
+        updated = self._unknown_view(record, reason)
+        stamp = now_iso()
         updated["updated_at"] = stamp
         updated["events"] = [*record.get("events", []), {"at": stamp, "event": "run_lost",
                                                          "detail": {"reason": reason}}][-_MAX_EVENTS:]
@@ -284,8 +285,8 @@ class JobStore:
 
     def load_checked(self, owner_job_id: str, *, fix: bool) -> tuple[dict, bool]:
         """Load a record and evaluate run liveness. ``fix=True`` persists an
-        unknown transition (best-effort under the lock); otherwise the record
-        is returned as stored."""
+        unknown transition under the lock. Pure reads project the same current
+        status without rewriting timestamps, history or feedback."""
         record = self.load(owner_job_id)
         if record is None:
             raise FFJobError(f"unknown owner_job_id: {owner_job_id}", code="request_error")
@@ -293,7 +294,7 @@ class JobStore:
         if reason is None:
             return record, False
         if not fix:
-            return record, False
+            return self._unknown_view(record, reason), False
         try:
             with self.lock(owner_job_id, timeout_seconds=2.0):
                 current = self.load(owner_job_id)
@@ -303,8 +304,6 @@ class JobStore:
                 if reason is not None:
                     current = self._mark_unknown(current, reason)
                     _atomic_write_json(self._job_path(owner_job_id), current)
-                    from ff_job_feedback import publish_job_observation
-                    publish_job_observation(current, started=False, jobs_dir=self.jobs_dir)
                     return current, True
                 return current, False
         except FFJobError:
@@ -348,7 +347,9 @@ class JobStore:
 
     def append_log(self, owner_job_id: str, entry: dict) -> None:
         line = json.dumps({"at": now_iso(), **entry}, ensure_ascii=False)
-        with self._log_path(owner_job_id).open("a", encoding="utf-8", newline="\n") as stream:
+        path = self._log_path(owner_job_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8", newline="\n") as stream:
             stream.write(line + "\n")
             stream.flush()
 

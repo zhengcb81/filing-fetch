@@ -178,14 +178,15 @@ class RefreshStore:
 
         self._update(close)
 
-    def feedback_receipts(self, visible):
+    def feedback_receipts(self, visible, *, include_retained=False):
         """Read only the outstanding native slots and the receipts already requested by this caller."""
         state = self.load()
         waiting = set(state.get("feedback_pending", []))
         runs = {run["run_id"]: run for run in (*visible, state.get("last_run"), state.get("current"))
                 if isinstance(run, dict) and (run.get("feedback_identity") or run.get("failures")
                                               or run.get("state") == "partial")}
-        for rid in waiting - runs.keys():
+        retained = {path.stem for path in self._history.glob("sr-*.json")} if include_retained else set()
+        for rid in (waiting | retained) - runs.keys():
             if not isinstance(rid, str) or Path(rid).name != rid or not rid.startswith("sr-"):
                 continue
             try:

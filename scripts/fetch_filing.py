@@ -1846,6 +1846,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     import argparse
     from ff_runtime_feedback import cli_failure, parse_arguments
+    from ff_run_input import read_request_bytes
 
     parser = argparse.ArgumentParser(
         prog="filing-fetch",
@@ -1909,6 +1910,14 @@ def main(argv: list[str] | None = None) -> int:
     allow_download: bool | None = None
     observation: ff_short_feedback.ShortObservation | None = None
 
+    def emit(output: Any, exit_code: int, error: BaseException | None = None) -> int:
+        if observation is not None:
+            observation.finished(output=output, error=error, stats=stats, request=request,
+                                 allow_download=allow_download, exit_code=exit_code)
+        json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
+        sys.stdout.write("\n")
+        return exit_code
+
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
         cli_failure("short-filing", "invalid_timeout", no_dispatch=True)
         print("error: timeout-seconds must be positive and finite", file=sys.stderr)
@@ -1932,10 +1941,12 @@ def main(argv: list[str] | None = None) -> int:
             observation = None
         parsed: Any = None
         try:
-            if args.request_file:
-                parsed = json.loads(args.request_file.read_text(encoding="utf-8"))
-            else:
-                parsed = json.loads(sys.stdin.read())
+            raw = read_request_bytes(args.request_file)
+            try:
+                parsed = json.loads(raw.decode("utf-8"))
+            finally:
+                if observation is not None:
+                    observation.request_read(raw, parsed, args.request_file)
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise FilingFetchError(f"invalid request: {exc}", code="request_error") from exc
         if not isinstance(parsed, dict):
@@ -1951,6 +1962,8 @@ def main(argv: list[str] | None = None) -> int:
         # (the --allow-download flag only ever applies to v1 requests).
         allow_download = _download_intent(request, None if v2_response else args.allow_download)
         resolved_context: dict[str, RequestContext] = {}
+        if observation is not None:
+            observation.dispatching()
         handle = resolve_filing(
             request=request,
             config_path=args.config,
@@ -1983,12 +1996,7 @@ def main(argv: list[str] | None = None) -> int:
                 "calls": stats["calls"],
                 "downloads": stats["downloads"],
             }
-        json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
-        sys.stdout.write("\n")
-        if observation is not None:
-            observation.finished(output=output, stats=stats, request=request,
-                                 allow_download=allow_download)
-        return 0
+        return emit(output, 0)
     except FilingFetchError as exc:
         if v2_response:
             from ff_v2_envelope import error_envelope
@@ -2009,12 +2017,7 @@ def main(argv: list[str] | None = None) -> int:
                 local_preparation_observation=exc.local_preparation_observation,
                 candidates=exc.candidates,
             )
-            json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
-            sys.stdout.write("\n")
-            if observation is not None:
-                observation.finished(output=output, error=exc, stats=stats,
-                                     request=request, allow_download=allow_download)
-            return 2
+            return emit(output, 2, exc)
         error_response: dict[str, Any] = {
             "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
             "status": exc.code,
@@ -2054,12 +2057,7 @@ def main(argv: list[str] | None = None) -> int:
         if stats is not None:
             error_response["calls"] = stats["calls"]
             error_response["downloads"] = stats["downloads"]
-        json.dump(error_response, sys.stdout, ensure_ascii=False, indent=2)
-        sys.stdout.write("\n")
-        if observation is not None:
-            observation.finished(output=error_response, error=exc, stats=stats,
-                                 request=request, allow_download=allow_download)
-        return 2
+        return emit(error_response, 2, exc)
     except Exception as exc:
         if v2_response:
             from ff_v2_envelope import error_envelope
@@ -2071,12 +2069,7 @@ def main(argv: list[str] | None = None) -> int:
                 stats=stats,
                 request=request,
             )
-            json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
-            sys.stdout.write("\n")
-            if observation is not None:
-                observation.finished(output=output, error=exc, stats=stats,
-                                     request=request, allow_download=allow_download)
-            return 1
+            return emit(output, 1, exc)
         output = {
             "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
             "status": "fatal",
@@ -2084,17 +2077,7 @@ def main(argv: list[str] | None = None) -> int:
             "error_code": "fatal",
             "retryable": False,
         }
-        json.dump(
-            output,
-            sys.stdout,
-            ensure_ascii=False,
-            indent=2,
-        )
-        sys.stdout.write("\n")
-        if observation is not None:
-            observation.finished(output=output, error=exc, stats=stats,
-                                 request=request, allow_download=allow_download)
-        return 1
+        return emit(output, 1, exc)
 
 
 __all__ = [

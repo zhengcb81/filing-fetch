@@ -19,8 +19,7 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-# Import runner helpers and context without triggering run.py's __main__.
-from run import Context, _mk_filing_request, _companion  # noqa: E402
+from matrix_context import Context, _mk_filing_request, _companion  # noqa: E402
 from report import CaseResult  # noqa: E402
 from fixture_builder import CN, US, HK, Identity  # noqa: E402
 from matrix_outcome import Outcome, filing_reused, count  # noqa: E402

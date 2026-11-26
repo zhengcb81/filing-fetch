@@ -27,6 +27,7 @@ CI_TESTS = (
     "tests/test_ff_job_feedback_lookup.py",
     "tests/test_ff_slot_feedback_lookup.py",
     "tests/test_feedback_ordinary_failures.py",
+    "tests/test_ff_runtime_lifecycle.py",
     "tests/test_s1_windows_tick_logging.py",
     "tests/test_ff_t3_receipt.py",
     "tests/test_provider_cause_contract.py",

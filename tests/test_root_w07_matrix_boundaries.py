@@ -1,6 +1,7 @@
 """ROOT independent boundaries for concurrent offline matrix ownership/evidence."""
 import json
 from pathlib import Path
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -10,6 +11,13 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools/offline_contrac
 import runtime
 import cli_main
 from run import Context
+
+
+def test_matrix_assembly_loads_context_without_reimporting_its_launcher():
+    tools = Path(__file__).resolve().parents[1] / "tools" / "offline_contract_matrix"
+    code = "import sys; sys.path.insert(0, sys.argv[1]); import cli_main; assert 'run' not in sys.modules"
+    result = subprocess.run([sys.executable, "-B", "-c", code, str(tools)], capture_output=True, timeout=15)
+    assert result.returncode == 0, result.stderr
 
 def test_attempt_caches_do_not_share_between_independent_batches(tmp_path):
     first = runtime.OwnedAttempt.create(tmp_path/"owned",tmp_path/"out")

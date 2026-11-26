@@ -8,12 +8,15 @@ never refer to a durable ff-job/1 or invent spend from the download count.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import os
 from pathlib import Path
 import uuid
 from typing import Any
 
 from ff_runtime_feedback import ATTEMPT_ENV, OUT_ENV, RULE_CODES, RUN_ENV, cause_details, publish
+from ff_direct_run import DirectRun, SHORT
+from ff_run_input import replay_input
 from ff_local_preparation_observation import validated_local_preparation_observation
 from ff_provider_cause import (
     validated_acquisition_failure,
@@ -77,20 +80,19 @@ class ShortObservation:
     def __init__(self, path: Path | None, *, run_id: str, attempt_id: str, operation_id: str) -> None:
         self._path = path
         self._start_rows: list[dict] = []
-        self._run_id = run_id
-        self._attempt_id = attempt_id
-        self._operation_id = operation_id
+        self._run = DirectRun(SHORT, run_id=run_id, attempt_id=attempt_id, operation_id=operation_id)
 
     def started(self) -> None:
         """Write the start row before any business work runs."""
-        self._start_rows = [_base_row(self._identity()) | {
-            "check_id": START_CHECK,
-            "expected": "started",
-            "actual": "started",
-            "disposition": "expected",
-            "terminal_check_id": OUTCOME_CHECK,
-        }]
+        self._start_rows = [self._run.start_row]
         publish(self._start_rows, file=self._path)
+
+    def request_read(self, raw: bytes, request: Any, request_file: Path | None) -> None:
+        self._run.mark("request_read", request_sha256=hashlib.sha256(raw).hexdigest(),
+                       input=replay_input(request, request_file=request_file))
+
+    def dispatching(self) -> None:
+        self._run.mark("dispatching", external_effect="possible", cost_state="unknown")
 
     def finished(
         self,
@@ -100,6 +102,7 @@ class ShortObservation:
         stats: dict[str, int] | None = None,
         request: dict[str, Any] | None = None,
         allow_download: bool | None = None,
+        exit_code: int = 0,
     ) -> None:
         """Write the terminal rows; an observation bug never breaks business."""
         try:
@@ -109,19 +112,24 @@ class ShortObservation:
             )
             reason = rows[0]["actual"]
             detail = cause_details(error, reason=reason) if error is not None else None
-            publish(rows, file=self._path, context=self._start_rows, detail=detail)
+            checks = {row["check_id"]: row["actual"] for row in rows}
+            cost = "known" if checks.get(USAGE_CHECK) == "known" and checks.get(
+                TRANSCRIPT_USAGE_CHECK
+            ) != "unknown" else "unknown"
+            effect = self._run.external_effect
+            if effect == "possible" and error is None:
+                effect = "response_received"
+            if effect == "not_started":
+                cost = "not_applicable"
+            self._run.finish(
+                outcome={"status": reason, "exit_code": exit_code, "diagnostic": detail, "checks": checks},
+                effect=effect, cost=cost, rows=rows, start=self._start_rows, file=self._path,
+            )
         except Exception:  # noqa: BLE001 - diagnostics must never change the result
             return
 
     def _identity(self) -> dict[str, str]:
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "owner": OWNER,
-            "run_id": self._run_id,
-            "attempt_id": self._attempt_id,
-            "step_id": f"short-filing/{self._operation_id}",
-            "evidence_ref": f"ff-short/1/{self._operation_id}",
-        }
+        return self._run.base
 
 def begin_observation() -> ShortObservation:
     """Claim the parent sidecar if supplied; standalone execution uses the native outbox."""
@@ -191,7 +199,7 @@ def observation_rows(
     if isinstance(request, dict) and isinstance(request.get("companion_transcript"), dict):
         transcript_usage = _transcript_usage(facts.transcript, facts)
         rows.append(_check(
-            {**base, "step_id": f"{base['step_id']}/transcript"},
+            {**base, "step_id": f"{base['step_id']}/transcript", "parent_step_id": base["step_id"]},
             TRANSCRIPT_USAGE_CHECK, "accounted", transcript_usage,
             "unknown" if transcript_usage == "unknown" else "expected",
         ))
@@ -207,6 +215,8 @@ def _base_row(identity: dict[str, str]) -> dict[str, str]:
         "step_id": identity["step_id"],
         "evidence_ref": identity["evidence_ref"],
     }
+    if "version" in identity:
+        base["version"] = identity["version"]
     return base
 
 

@@ -11,14 +11,15 @@ errors exit 2 with an error envelope; unexpected failures exit 1.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
 from pathlib import Path
 
 from ff_financial_statements import fetch_statements
-from ff_runtime_feedback import cli_failure, parse_arguments
-from ff_statement_feedback import publish_statement_response
+from ff_run_input import read_request_bytes, replay_input
+from ff_statement_feedback import begin_statement_run, publish_statement_response
 from ff_errors import FilingFetchError
 
 STATEMENTS_RESPONSE_SCHEMA_VERSION = "financial-statements-response/1"
@@ -45,10 +46,16 @@ def main(argv: list[str] | None = None) -> int:
         help="overall deadline for the entire request (default: 300)",
     )
     parser.add_argument("--pretty", action="store_true", help="indent the output")
-    args = parse_arguments(parser, argv, "statements")
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        if exc.code:
+            publish_statement_response(begin_statement_run(), "argument_error", exc.code, error=exc)
+        raise
 
+    run = begin_statement_run()
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
-        cli_failure("statements", "invalid_timeout", no_dispatch=True)
+        publish_statement_response(run, "invalid_timeout", 2)
         print("error: timeout-seconds must be positive and finite", file=sys.stderr)
         return 2
     try:
@@ -56,12 +63,17 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdin.reconfigure(encoding="utf-8", errors="strict")
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8", errors="strict")
-        if args.request_file:
-            request = json.loads(args.request_file.read_text(encoding="utf-8"))
-        else:
-            request = json.loads(sys.stdin.read())
+        raw = read_request_bytes(args.request_file)
+        request_sha256 = hashlib.sha256(raw).hexdigest()
+        try:
+            request = json.loads(raw.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            run.mark("request_read", request_sha256=request_sha256)
+            raise
+        run.mark("request_read", request_sha256=request_sha256,
+                 input=replay_input(request, request_file=args.request_file))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        cli_failure("statements", "request_error", exc, no_dispatch=True)
+        publish_statement_response(run, "request_error", 2, error=exc)
         json.dump(
             {
                 "schema_version": STATEMENTS_RESPONSE_SCHEMA_VERSION,
@@ -79,9 +91,12 @@ def main(argv: list[str] | None = None) -> int:
             config_path=args.config,
             request=request,
             timeout_seconds=args.timeout_seconds,
+            before_dispatch=lambda: run.mark("dispatching", external_effect="possible", cost_state="unknown"),
+            on_child_exit=run.child_exited,
         )
     except FilingFetchError as exc:
-        cli_failure("statements", exc.code, exc)
+        exit_code = 2 if exc.code != "fatal" else 1
+        publish_statement_response(run, exc.code, exit_code, error=exc)
         error_envelope = {
             "schema_version": STATEMENTS_RESPONSE_SCHEMA_VERSION,
             "status": exc.code,
@@ -97,9 +112,9 @@ def main(argv: list[str] | None = None) -> int:
             indent=2 if args.pretty else None,
         )
         sys.stdout.write("\n")
-        return 2 if exc.code != "fatal" else 1
+        return exit_code
     except Exception as exc:  # noqa: BLE001 - surfaced as an honest envelope
-        cli_failure("statements", "fatal", exc)
+        publish_statement_response(run, "fatal", 1, error=exc)
         json.dump(
             {
                 "schema_version": STATEMENTS_RESPONSE_SCHEMA_VERSION,
@@ -113,16 +128,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         sys.stdout.write("\n")
         return 1
+    # W19-R3: a structured CWP error status maps to its own exit code.
+    status = envelope["status"]
+    exit_code = 2 if status in ("request_error", "config_error") else 1 if status == "fatal" else 0
+    publish_statement_response(run, status, exit_code, envelope=envelope)
     json.dump(envelope, sys.stdout, ensure_ascii=False, indent=2 if args.pretty else None)
     sys.stdout.write("\n")
-    # W19-R3: a structured CWP error status maps to its own exit code.
-    status = envelope.get("status")
-    publish_statement_response(envelope)
-    if status in ("request_error", "config_error"):
-        return 2
-    if status == "fatal":
-        return 1
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

@@ -35,7 +35,7 @@ if str(HERE) not in sys.path:
 
 from cwp_readback_probe import probe_catalog, probe_exact_source  # noqa: E402
 from matrix_outcome import source_ref  # noqa: E402
-from run import Context, CASE_TIMEOUT  # noqa: E402
+from matrix_context import Context, CASE_TIMEOUT  # noqa: E402
 from ff_process_transport import held_windows_command  # noqa: E402
 from report import CaseResult, sha256_file  # noqa: E402
 from fixture_builder import CN, HK, US, Identity  # noqa: E402

@@ -8,6 +8,7 @@ owns only the request/response contract for
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import json
 from ff_company_wiki_connection import WikiEndpoint, command_for, connection_cwd, connection_environment
 from pathlib import Path
@@ -154,6 +155,8 @@ def fetch_statements(
     config_path: Path | None,
     request: dict[str, Any],
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    before_dispatch: Callable[[], None] | None = None,
+    on_child_exit: Callable[[int, bool], None] | None = None,
 ) -> dict[str, Any]:
     """Run the bounded CWP child and return one validated response envelope."""
     validate_request(request)
@@ -163,16 +166,22 @@ def fetch_statements(
     root = load_connection_root(Path(config_path), skill_root=skill_root)
     command = build_cwp_command(root)
     environment = connection_environment(root)
+    # Serialize before announcing dispatch. Invalid bytes cannot start a child.
+    payload = json.dumps(request, ensure_ascii=False).encode("utf-8")
+    if before_dispatch is not None:
+        before_dispatch()
     try:
         stdout, stderr, returncode = _run_bounded_json(
             command,
             timeout_seconds=timeout_seconds,
-            input_bytes=json.dumps(request, ensure_ascii=False).encode("utf-8"),
+            input_bytes=payload,
             cwd=str(connection_cwd(root)),
             env=environment,
             stdout_cap_bytes=MAX_STDOUT_BYTES,
         )
     except ChildFailed as exc:
+        if on_child_exit is not None:
+            on_child_exit(exc.returncode, bool(exc.stdout))
         # W19-R3: a CWP-side request/config refusal is a business answer, not
         # an upstream fault — pass its envelope through with the true status
         # instead of mislabeling it upstream_error/retryable.
@@ -189,6 +198,8 @@ def fetch_statements(
             f"company-wiki financial statements child failed: {type(exc).__name__}",
             code="upstream_error",
         ) from exc
+    if on_child_exit is not None:
+        on_child_exit(returncode, bool(stdout))
     try:
         envelope = json.loads(stdout.decode("utf-8", errors="strict"))
     except (UnicodeError, json.JSONDecodeError) as exc:

@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-import uuid
-
-from ff_financial_statements import RESPONSE_STATUSES, STATEMENT_TYPES, STATEMENTS_RESPONSE_SCHEMA_VERSION
-from ff_runtime_feedback import OUT_ENV, RULE_CODES, identity, publish
+from ff_financial_statements import RESPONSE_STATUSES, STATEMENT_TYPES
+from ff_process_transport import ChildStartFailed
+from ff_runtime_feedback import OUT_ENV, RULE_CODES, cause_details, publish
+from ff_direct_run import DirectRun, STATEMENTS
 
 
 ERROR_STATUS = {"request_error", "config_error", "fatal"}
@@ -44,10 +44,10 @@ def _usage(value):
     return amounts
 
 
-def statement_snapshot(envelope):
-    """Capture only the public fields needed to reproduce an incomplete response."""
+def statement_snapshot(envelope, *, record_all=False):
+    """Capture public origin and usage fields without retaining report contents."""
     status = envelope.get("status")
-    if status not in ("partial", "unavailable", *ERROR_STATUS):
+    if not record_all and status not in ("partial", "unavailable", *ERROR_STATUS):
         return None
     result = {"schema_version": "ff-failure-detail/1", "reason": status, "status": status,
               "statements": [], "usage": _usage(envelope.get("usage"))}
@@ -99,7 +99,8 @@ def statement_rows(base, snapshot, *, summarize):
         if status in ERROR_STATUS or any(row["disposition"] == "deviation" for row in rows):
             disposition = "deviation"
         elif not rows:
-            disposition = "deviation" if status == "unavailable" else "unknown"
+            disposition = ("deviation" if status == "unavailable" else
+                           "expected" if status in {"complete", "not_found"} else "unknown")
         elif any(row["disposition"] == "unknown" for row in rows):
             disposition = "unknown"
         summary = dict(base, check_id="execution-outcome", expected="completed", actual=status,
@@ -113,11 +114,40 @@ def statement_rows(base, snapshot, *, summarize):
     return rows
 
 
-def publish_statement_response(envelope):
-    snapshot = statement_snapshot(envelope)
-    if snapshot is None:
-        return
-    op = uuid.uuid4().hex
-    base = identity(op, 1, f"statements/{op}", f"ff-cli/1/{op}", STATEMENTS_RESPONSE_SCHEMA_VERSION)
-    publish(statement_rows(base, snapshot, summarize=True), file=os.environ.get(OUT_ENV),
-            detail=snapshot, detail_for_all=True)
+def begin_statement_run() -> DirectRun:
+    run = DirectRun(STATEMENTS)
+    publish([run.start_row], file=os.environ.get(OUT_ENV))
+    return run
+
+
+def publish_statement_response(
+    run: DirectRun, status: str, exit_code: int, *, envelope=None, error=None,
+) -> None:
+    base = run.base
+    if envelope is not None:
+        phase = "response_received"
+        detail = statement_snapshot(envelope, record_all=True)
+        rows = statement_rows(base, detail, summarize=True)
+        usage = detail["usage"]
+        cost = "known" if {"http_requests", "cost_usd"} <= usage.keys() else "unknown"
+    else:
+        phase = ("not_started" if isinstance(getattr(error, "__cause__", None), ChildStartFailed)
+                 else run.external_effect)
+        detail = cause_details(error, reason=status)
+        usage = {}
+        cost = "not_applicable" if phase == "not_started" else "unknown"
+        rows = [
+            dict(base, check_id="execution-outcome", expected="completed", actual=status,
+                 disposition="deviation", issue_key=status),
+            dict(base, check_id="provider-start", expected="attributed", actual=phase,
+                 disposition="expected" if phase == "not_started" else "unknown"),
+            dict(base, check_id="provider-usage", expected="accounted", actual=cost,
+                 disposition="expected" if cost == "not_applicable" else "unknown"),
+        ]
+    detail["external_effect"] = phase
+    detail["exit_code"] = exit_code
+    run.finish(outcome={
+        "status": status, "exit_code": exit_code, "usage": usage, "diagnostic": detail,
+        "producer_exit_code": run.producer_exit_code,
+    }, effect=phase, cost=cost, rows=rows, start=[run.start_row], file=os.environ.get(OUT_ENV),
+        detail_for_all=envelope is not None)

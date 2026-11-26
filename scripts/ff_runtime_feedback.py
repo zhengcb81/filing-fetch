@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import nullcontext
 import hashlib
 import json
 import os
@@ -12,7 +11,9 @@ import re
 import sys
 import uuid
 
-from ff_persistence import acquire_file_lock, atomic_write_json, atomic_write_text, owner_io_path, separate_partial_line
+from ff_persistence import (
+    LockBusy, acquire_file_lock, atomic_write_json, atomic_write_text, owner_io_path, separate_partial_line,
+)
 from ff_runtime_log import append_runtime_issue
 
 DEFAULT_JOBS_DIR = Path(__file__).resolve().parents[1] / ".ff_jobs"
@@ -137,11 +138,12 @@ def _runtime_roots(jobs_dir):
     return _feedback_targets(Path(jobs_dir or DEFAULT_JOBS_DIR))
 
 
-def record_runtime_failure(surface, reason, error=None, *, jobs_dir=None, run_id=None, detail=None):
+def record_runtime_failure(surface, reason, error=None, *, jobs_dir=None, run_id=None, detail=None, base=None):
     """Record an owner CLI/control failure locally, without creating F4 work for itself."""
     try:
-        occurrence = uuid.uuid4().hex
-        base = identity(run_id or occurrence, 1, f"{surface}/{occurrence}", f"ff-cli/1/{occurrence}", "ff-cli/1")
+        if base is None:
+            occurrence = uuid.uuid4().hex
+            base = identity(run_id or occurrence, 1, f"{surface}/{occurrence}", f"ff-cli/1/{occurrence}", "ff-cli/1")
         row = dict(base, check_id="execution-outcome", expected="completed", actual=reason,
                    disposition="deviation", issue_key=reason)
         append_runtime_issue(_runtime_roots(jobs_dir), [row], detail or cause_details(error, reason=reason))
@@ -149,22 +151,67 @@ def record_runtime_failure(surface, reason, error=None, *, jobs_dir=None, run_id
         return
 
 
-def terminal_was_offered(row, jobs_dir):
-    name = _packet_name(tuple(row[k] for k in _HEADER), "complete")
-    return any(
-        owner_io_path(directory / (name + ".sent")).is_file()
-        for directory in observation_directories(jobs_dir)
-    )
+def read_native_diagnostic(name, directories):
+    """Return the first readable diagnostic bound to this occurrence."""
+    unreadable = None
+    for root in directories:
+        try:
+            value = json.loads(owner_io_path(root / (name + ".cause.json")).read_bytes())
+            if not isinstance(value, dict) or value.get("schema_version") != "ff-failure-detail/1":
+                raise ValueError("invalid diagnostic schema")
+            key = tuple(value.get(field) for field in _HEADER)
+            if (key[0] != "filing-fetch" or not all(isinstance(part, str) and part for part in key)
+                    or name not in {_packet_name(key, "started"), _packet_name(key, "complete")}):
+                raise ValueError("diagnostic occurrence does not match reference")
+            return value, None
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError, RecursionError) as error:
+            unreadable = error
+    return None, unreadable
 
 
-def _write_packet(root, name, marker_key, marker, content, frozen, closes_start):
+def _was_offered(row, jobs_dir, *, started, require_detail=False):
+    name = _packet_name(tuple(row[k] for k in _HEADER), "started" if started else "complete")
+    directories = observation_directories(jobs_dir)
+    if require_detail and read_native_diagnostic(name, directories)[0] is None:
+        return False
+    for directory in directories:
+        try:
+            data = owner_io_path(directory / (name + ".jsonl")).read_bytes()
+            if not data.endswith(b"\n"):
+                continue
+            rows = [json.loads(line) for line in data.splitlines()]
+            if (rows and all(
+                isinstance(item, dict) and item.get("schema_version") == "feedback-observation/1"
+                and all(item.get(k) == row[k] for k in _HEADER)
+                and all(isinstance(item.get(k), str) and item[k] for k in ("check_id", "expected", "actual"))
+                for item in rows
+            ) and all(item["check_id"] == "action-started" for item in rows) == started):
+                return True
+        except (OSError, ValueError, RecursionError):
+            continue
+    return False
+
+
+def terminal_was_offered(row, jobs_dir, *, require_detail=False):
+    return _was_offered(row, jobs_dir, started=False, require_detail=require_detail)
+
+
+def start_was_offered(row, jobs_dir):
+    return _was_offered(row, jobs_dir, started=True)
+
+
+def _write_packet(root, name, marker_key, marker, content, frozen, closes_start, *, started):
     root = owner_io_path(root)
     root.mkdir(parents=True, exist_ok=True)
     packet = root / (name + ".jsonl")
     sent = packet.with_suffix(".sent")
-    # Serialize only native publication. A releasing consumer cannot resurrect an old ACK.
-    with acquire_file_lock(root / ".delivery.lock", 0) if frozen else nullcontext():
-        if sent.exists() and (not packet.is_file() or packet.read_text(encoding="utf-8") == content):
+    # Serialize publication against the runner and maintenance inside each native outbox.
+    with acquire_file_lock(root / ".delivery.lock", 0.7):
+        if started and (root / (_packet_name(marker_key, "complete") + ".jsonl")).is_file():
+            return
+        if packet.is_file() and packet.read_text(encoding="utf-8") == content:
             return
         atomic_write_text(packet, content)
         atomic_write_json(packet.with_suffix(".ready"), marker)
@@ -201,14 +248,15 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recovera
         detail_error = None
         groups = {}
         for row in rows:
-            groups.setdefault(tuple(row[k] for k in _HEADER), []).append(row)
+            groups.setdefault(tuple(row[k] for k in _HEADER), []).append(dict(row))
         directories = observation_directories(jobs_dir)
         runtime_roots = _runtime_roots(jobs_dir)
         for marker_key, group in groups.items():
             marker = dict(zip(_HEADER, marker_key))
             only_start = all(row["check_id"] == "action-started" for row in group)
             name = _packet_name(marker_key, "started" if only_start else "complete")
-            local_detail = detail is not None and group[0] is rows[0]
+            local_detail = detail is not None and all(rows[0][key] == marker[key] for key in _HEADER)
+            frozen = recoverable or (not only_start and any(r["check_id"] == "job-outcome" for r in group))
             append_runtime_issue(runtime_roots, group, detail if local_detail else None)
             if local_detail:
                 for item in group:
@@ -225,24 +273,25 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recovera
                         failed = error
                 else:
                     detail_error = failed
+                    # The owner still has the diagnostic in its original receipt.
+                    # Keep this packet for recovery without offering a weaker occurrence.
+                    if frozen:
+                        continue
                     for item in group:
                         item.pop("details_ref", None)
             if file and _explicit(file, group):
-                if recoverable:
-                    for root in directories:
-                        try:
-                            atomic_write_text(root / (name + ".sent"), "")
-                            break
-                        except OSError:
-                            continue
                 continue
             prefix = [r for r in context if all(r[k] == marker[k] for k in _HEADER)]
             content = _text([*prefix, *group])
             failed = None
             for root in directories:
                 try:
-                    frozen = recoverable or (not only_start and any(r["check_id"] == "job-outcome" for r in group))
-                    _write_packet(root, name, marker_key, marker, content, frozen, bool(prefix))
+                    _write_packet(root, name, marker_key, marker, content, frozen, bool(prefix), started=only_start)
+                    break
+                except LockBusy as error:
+                    # A healthy primary writer is already publishing. Keep the same pending
+                    # owner receipt, so maintenance retries that packet rather than cloning it.
+                    publication_error = error
                     break
                 except OSError as error:
                     failed = error
@@ -252,7 +301,7 @@ def publish(rows, *, jobs_dir=None, file=None, context=(), detail=None, recovera
             warn_diagnostic_unavailable("feedback publication", publication_error)
         elif detail_error is not None:
             warn_diagnostic_unavailable("feedback detail", detail_error)
-        return publication_error is None
+        return publication_error is None and detail_error is None
     except Exception as error:
         # The owner result and fee record take precedence over optional diagnostics.
         warn_diagnostic_unavailable("feedback publication", error)

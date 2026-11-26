@@ -237,14 +237,16 @@ from ff_job_store import JobStore
 from ff_job_contracts import FFJobError
 
 if mode == "park":
-    original = JobStore.append_log
-    def append(self, owner_job_id, entry):
-        if entry["event"] == "run_started":
+    original = JobStore.write_locked
+    def write(self, record):
+        # Stop before the first durable run reservation. The job stays
+        # queued, so a competing process can run it once the lock releases.
+        if record["status"] == "running":
             ready.touch()
             sys.stdin.read(1)
             os._exit(73)
-        original(self, owner_job_id, entry)
-    JobStore.append_log = append
+        return original(self, record)
+    JobStore.write_locked = write
 else:
     acquire = JobStore.acquire_lock
     JobStore.acquire_lock = lambda self, job, timeout_seconds: acquire(

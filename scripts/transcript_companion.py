@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 from typing import Any, NamedTuple, Protocol, cast
 
 from ff_source_ref import validate_source_ref
@@ -267,39 +266,11 @@ def validate_standalone_transcript_request(request: dict) -> None:
         raise FilingFetchError(option_error["reason"], code="request_error")
 
 
-def fetch_standalone_transcript(
-    request: dict, *, config_path: Path | None, timeout_seconds: float, stats: dict[str, int],
+def resolve_standalone_transcript(
+    request: dict, identity: dict[str, Any], transport: TranscriptTransport,
 ) -> dict:
-    """Use the original transcript transport after verified listing lookup."""
-    from fetch_filing import (
-        DEFAULT_COMPANY_WIKI_CONFIG, filing_operation_deadline, identify_company, load_company_wiki_root,
-    )
-    from transcript_tool_transport import EarningsTranscriptsTransport
-
-    validate_standalone_transcript_request(request)
-    deadline = filing_operation_deadline(request, timeout_seconds=timeout_seconds)
-    selected = request["identity"]
-    try:
-        root = load_company_wiki_root(config_path=config_path)
-        query = {
-            "company_query": selected["ticker"], "market": selected["market"],
-            "exchange": selected.get("exchange"), "document_kind": "earnings_transcript",
-            "as_of_date": request["as_of_date"],
-        }
-        identity = identify_company(request=query, root=root, deadline=deadline, stats=stats)
-        if identity["ticker"].casefold() != selected["ticker"].casefold():
-            raise FilingFetchError("transcript listing ticker differs from resolved ticker",
-                                   code="identity_error")
-        transport = EarningsTranscriptsTransport(
-            wiki_root=root, config_path=config_path or DEFAULT_COMPANY_WIKI_CONFIG, deadline=deadline,
-        )
-    except FilingFetchError as exc:
-        exc.stage = "identify"
-        raise
-    result = _resolve_exact(
+    """Apply the exact-period policy after the entrypoint verified a listing."""
+    return _resolve_exact(
         _Ready(request, identity, request["fiscal_year"], request["fiscal_quarter"]),
         request["as_of_date"], transport, None, track_local_usage=True,
     )
-    stats["calls"] += transport.company_wiki_calls
-    stats["downloads"] += int(result["status"] == "downloaded")
-    return result

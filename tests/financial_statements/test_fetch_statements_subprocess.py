@@ -238,6 +238,9 @@ def test_durable_statement_result_replays_after_inbox_repair_without_refetch(tmp
     inbox.unlink()
     inbox.mkdir()
     assert job("get_status", *argv_id)["job"]["result"] == ran["job"]["result"]
+    maintenance = [sys.executable, "-B", str(SKILL_ROOT / "scripts/ff_job_feedback.py"), "reoffer-job",
+                   "--jobs-dir", str(jobs), *argv_id]
+    subprocess.run(maintenance, env=env, cwd=tmp_path, capture_output=True, timeout=15, check=True)
     (ready,) = inbox.glob("*.ready")
     rows = [json.loads(line) for line in ready.with_suffix(".jsonl").read_bytes().splitlines()]
     by_check = {row["check_id"]: row for row in rows}
@@ -253,5 +256,6 @@ def test_durable_statement_result_replays_after_inbox_repair_without_refetch(tmp
     ready.unlink()
     assert not job("run", *argv_id, "--config", str(config))["engine_executed"]
     job("get_status", *argv_id)
+    subprocess.run(maintenance, env=env, cwd=tmp_path, capture_output=True, timeout=15, check=True)
     assert not list(inbox.glob("*.ready"))
     assert calls.read_text().splitlines() == ["diagnostic_mixed"]

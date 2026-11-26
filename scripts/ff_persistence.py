@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import UTC, datetime
 import errno
 import json
 import os
@@ -15,6 +16,10 @@ from typing import BinaryIO
 
 class LockBusy(TimeoutError):
     """An existing writer still owns the lock."""
+
+
+def now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 class FileLock:

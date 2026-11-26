@@ -79,12 +79,12 @@ def run_command(args: argparse.Namespace) -> dict:
         if args.limit < 1:
             raise ValueError("limit must be positive")
         rows, cursor = store.history(args.cursor, args.limit)
-        redeliver_refresh(store, rows)
         return {"schema_version": RUNS_SCHEMA, "items": rows, "next_cursor": cursor}
-    redeliver_refresh(store)
     if args.command == "configure":
         settings, revision = parse_config_request(json.load(sys.stdin))
         store.configure(settings, revision)
+    if args.command == "tick":
+        redeliver_refresh(store)
     if args.command == "tick" and store.load()["settings"]["enabled"] and deployment.is_file():
         from ff_refresh_owners import OwnerPorts, load_deployment
         from ff_refresh_runner import run_tick
