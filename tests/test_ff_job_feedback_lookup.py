@@ -141,6 +141,42 @@ def test_triage_refuses_a_wrong_attempt_and_a_forged_native_reason(tmp_path):
         assert not reports.exists()
 
 
+@pytest.mark.parametrize("scope", ["request", "payload", "observation", "observation_value"])
+def test_triage_does_not_retain_fields_outside_the_durable_action_contract(tmp_path, scope):
+    jobs = tmp_path / "jobs"
+    reports = tmp_path / "reports"
+    original = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "get_status", "--owner-job-id", "foreign-id"])
+    assert original.returncode == 2
+    row = next(row for row in packets(jobs / "observations") if row["check_id"] == "execution-outcome")
+    row.update(parent_step_id="fixture-parent", original_occurrence_id="fixture-origin",
+               refusal_code="fixture_refusal", terminal_check_id="fixture-terminal")
+    valid = _triage_request(row)
+    request = json.loads(json.dumps(valid))
+    payload = request["payload"]
+    marker = "fixture-private-field"
+    if scope == "observation_value":
+        payload["observation"]["issue_key"] = {"uncontracted_field": marker}
+    else:
+        fields = {"request": request, "payload": payload, "observation": payload["observation"]}
+        fields[scope]["uncontracted_field"] = marker
+    action_id = request["action_id"]
+    request["request_digest"] = _digest([OWNER, "triage", action_id, payload])
+
+    rejected = _triage_cli(reports, "triage", "--jobs-dir", jobs, request=request)
+    assert rejected.returncode == 1 and not reports.exists()
+    assert marker not in rejected.stdout + rejected.stderr
+
+    accepted = _triage_cli(reports, "triage", "--jobs-dir", jobs, request=valid)
+    assert accepted.returncode == 0
+    lookup = _triage_cli(reports, "get-triage", action_id)
+    assert lookup.returncode == 0 and json.loads(lookup.stdout)["receipt"]["request"] == valid
+
+    receipt_path = reports / "triage" / f"{action_id}.json"
+    receipt_path.write_text(json.dumps({"request": request, **json.loads(accepted.stdout)}), encoding="utf-8")
+    rejected_lookup = _triage_cli(reports, "get-triage", action_id)
+    assert rejected_lookup.returncode == 1 and marker not in rejected_lookup.stdout + rejected_lookup.stderr
+
+
 def test_report_keeps_version_bound_replay_receipts_separate_from_triage(tmp_path):
     reports = tmp_path / "reports"
     request = {"schema_version": "feedback-action/1", "owner": OWNER, "method": "submit", "kind": "report"}

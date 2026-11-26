@@ -468,10 +468,26 @@ def _triage_original(args: argparse.Namespace, observation: dict) -> dict | None
     return None
 
 
+def _triage_observation(request: dict) -> dict:
+    """Only the feedback action DTO belongs in the immutable owner receipt."""
+    observation = _job_observation(request, kind="triage", method="submit")
+    fields = {"schema_version", "owner", "origin_owner", "run_id", "attempt_id", "step_id", "check_id",
+              "expected", "actual", "issue_key", "version", "evidence_ref", "details_ref", "parent_step_id",
+              "disposition", "original_occurrence_id", "terminal_check_id", "refusal_code"}
+    if (request.keys() != {"schema_version", "owner", "kind", "method", "action_id", "request_digest", "payload"}
+            or request["payload"].keys() != {"occurrence_id", "observation"} or observation.keys() - fields
+            or any(value is not None and not isinstance(value, str) for value in observation.values())):
+        raise ValueError("invalid durable triage action")
+    if (observation["owner"] != "filing-fetch" or observation.get("schema_version") != "feedback-observation/1"
+            or not observation.get("actual")):
+        raise ValueError("not a native filing-fetch outcome")
+    return observation
+
+
 def _read_triage(path: Path) -> dict:
     receipt = json.loads(owner_io_path(path).read_bytes())
     request = receipt.get("request") if isinstance(receipt, dict) else None
-    observation = _job_observation(request, kind="triage", method="submit")
+    observation = _triage_observation(request)
     result = receipt.get("result")
     if (path.stem != request["action_id"] or not isinstance(result, dict)
             or result.get("decision") != "needs_evidence"
@@ -482,10 +498,7 @@ def _read_triage(path: Path) -> dict:
 
 
 def _record_triage(args: argparse.Namespace, request: dict) -> dict | None:
-    observation = _job_observation(request, kind="triage", method="submit")
-    if (observation["owner"] != "filing-fetch" or observation.get("schema_version") != "feedback-observation/1"
-            or not isinstance(observation.get("actual"), str) or not observation["actual"]):
-        raise ValueError("not a native filing-fetch outcome")
+    observation = _triage_observation(request)
     key = request["action_id"]
     path = args.reports_dir / "triage" / (key + ".json")
     try:
