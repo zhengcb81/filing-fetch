@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+from stat import FILE_ATTRIBUTE_REPARSE_POINT, S_ISREG
 import sys
 import time
 from typing import BinaryIO
@@ -48,6 +49,30 @@ def owner_io_path(path: Path) -> Path:
     if value.startswith("\\\\"):
         return Path("\\\\?\\UNC\\" + value[2:])
     return Path("\\\\?\\" + value)
+
+
+def _ordinary_file(metadata: os.stat_result) -> bool:
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    return S_ISREG(metadata.st_mode) and not attributes & FILE_ATTRIBUTE_REPARSE_POINT
+
+
+def read_regular_bytes(path: Path) -> bytes:
+    """Read a directly named ordinary record, without following a linked leaf."""
+    path = owner_io_path(path)
+    original = path.lstat()
+    if not _ordinary_file(original):
+        raise ValueError("owner receipt must be a regular file")
+    flags = (
+        os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    )
+    with os.fdopen(os.open(path, flags), "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        current = path.lstat()
+        if (not _ordinary_file(opened) or not _ordinary_file(current)
+                or not os.path.samestat(original, opened) or not os.path.samestat(current, opened)):
+            raise ValueError("owner receipt changed before reading")
+        return stream.read()
 
 
 def acquire_file_lock(path: Path, timeout_seconds: float) -> FileLock:

@@ -4,14 +4,18 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from stat import FILE_ATTRIBUTE_REPARSE_POINT
 import subprocess
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
+import ff_job_feedback as feedback
 from test_ff_job_facade import _CANDIDATE_HANDLE, _FETCH_REQUEST, _observation, _submit
 from test_feedback_ordinary_failures import cli, packets
+from test_selective_installation import _directory_link, _remove_directory_link
 from ff_job_feedback import _lookup_job
 from ff_job_runner import run_job
 from ff_job_store import JobStore
@@ -141,6 +145,107 @@ def test_triage_refuses_a_wrong_attempt_and_a_forged_native_reason(tmp_path):
         assert not reports.exists()
 
 
+@pytest.mark.parametrize("linked", [False, True])
+def test_triage_uses_the_selected_reports_root_even_with_an_old_subdirectory(tmp_path, linked):
+    jobs = tmp_path / "jobs"
+    reports = tmp_path / "reports"
+    outside = tmp_path / "outside"
+    reports.mkdir()
+    old = reports / "triage"
+    if linked:
+        outside.mkdir()
+        _directory_link(old, outside)
+    else:
+        old.mkdir()
+    try:
+        attempt = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "get_status", "--owner-job-id", "foreign-id"])
+        assert attempt.returncode == 2
+        row = next(row for row in packets(jobs / "observations") if row["check_id"] == "execution-outcome")
+        request = _triage_request(row)
+        accepted = _triage_cli(reports, "triage", "--jobs-dir", jobs, request=request)
+        assert accepted.returncode == 0
+        assert not list(old.iterdir())
+        assert (reports / f"triage-{request['action_id']}.json").is_file()
+        cold = _triage_cli(reports, "get-triage", request["action_id"])
+        assert cold.returncode == 0 and json.loads(cold.stdout)["receipt"]["request"] == request
+    finally:
+        if linked:
+            _remove_directory_link(old)
+
+
+@pytest.mark.parametrize("linked", [False, True])
+def test_triage_preserves_only_a_regular_receipt_that_wins_creation(tmp_path, monkeypatch, linked):
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    outside = tmp_path / "other.json"
+    row = {
+        "schema_version": "feedback-observation/1", "owner": OWNER, "run_id": "run", "attempt_id": "attempt",
+        "step_id": "get_status/operation", "check_id": "execution-outcome", "expected": "completed",
+        "actual": "request_error", "evidence_ref": "ff-cli/1/operation",
+    }
+    request = _triage_request(row)
+    expected = reports / f"triage-{request['action_id']}.json"
+    args = Namespace(reports_dir=reports, jobs_dir=[tmp_path / "jobs"], observations_dir=None)
+    monkeypatch.setattr(feedback, "_triage_original", lambda *_: {"missing_evidence": ["second_writer"]})
+    write_once = feedback._write_receipt_once
+    final = {}
+
+    def competing_writer(path, content):
+        assert path == expected
+        first = json.loads(content)
+        first["result"]["missing_evidence"] = ["first_writer"]
+        final.update(first)
+        data = json.dumps(first).encode("utf-8")
+        if linked:
+            outside.write_bytes(data)
+            try:
+                path.symlink_to(outside)
+            except (OSError, NotImplementedError):
+                pytest.skip("file symlinks unavailable on this filesystem")
+        else:
+            path.write_bytes(data)
+        assert write_once(path, content) is False
+        return False
+
+    monkeypatch.setattr(feedback, "_write_receipt_once", competing_writer)
+    if linked:
+        try:
+            with pytest.raises(ValueError, match="regular file"):
+                feedback._record_triage(args, request)
+            assert expected.is_symlink() and json.loads(outside.read_bytes()) == final
+        finally:
+            expected.unlink(missing_ok=True)
+    else:
+        assert feedback._record_triage(args, request) == final["result"]
+        assert json.loads(expected.read_bytes()) == final
+
+
+def test_triage_rejects_an_open_descriptor_from_a_different_inode(tmp_path, monkeypatch):
+    path = tmp_path / "triage-original.json"
+    other = tmp_path / "other.json"
+    path.write_bytes(b"{}")
+    other.write_bytes(b"{}")
+    monkeypatch.setattr(os, "fstat", lambda _: other.stat())
+    with pytest.raises(ValueError, match="changed before reading"):
+        feedback._read_triage(path)
+
+
+def test_triage_rejects_a_reparse_leaf_even_with_a_regular_mode(tmp_path, monkeypatch):
+    path = tmp_path / "triage-original.json"
+    path.write_bytes(b"{}")
+    ordinary_mode = path.lstat().st_mode
+    lstat = Path.lstat
+
+    def reparse_candidate(candidate):
+        if candidate.name == path.name:
+            return SimpleNamespace(st_mode=ordinary_mode, st_file_attributes=FILE_ATTRIBUTE_REPARSE_POINT)
+        return lstat(candidate)
+
+    monkeypatch.setattr(Path, "lstat", reparse_candidate)
+    with pytest.raises(ValueError, match="regular file"):
+        feedback._read_triage(path)
+
+
 @pytest.mark.parametrize("scope", ["request", "payload", "observation", "observation_value"])
 def test_triage_does_not_retain_fields_outside_the_durable_action_contract(tmp_path, scope):
     jobs = tmp_path / "jobs"
@@ -171,7 +276,7 @@ def test_triage_does_not_retain_fields_outside_the_durable_action_contract(tmp_p
     lookup = _triage_cli(reports, "get-triage", action_id)
     assert lookup.returncode == 0 and json.loads(lookup.stdout)["receipt"]["request"] == valid
 
-    receipt_path = reports / "triage" / f"{action_id}.json"
+    receipt_path = reports / f"triage-{action_id}.json"
     receipt_path.write_text(json.dumps({"request": request, **json.loads(accepted.stdout)}), encoding="utf-8")
     rejected_lookup = _triage_cli(reports, "get-triage", action_id)
     assert rejected_lookup.returncode == 1 and marker not in rejected_lookup.stdout + rejected_lookup.stderr

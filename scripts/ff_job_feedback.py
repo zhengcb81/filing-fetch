@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 from ff_job_observation import publish_job_observation as publish_job_observation
-from ff_persistence import owner_io_path
+from ff_persistence import owner_io_path, read_regular_bytes
 from ff_runtime_feedback import (
     DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, observation_directories, parse_arguments, publish,
     read_cli_failure, read_native_diagnostic, record_runtime_failure, start_was_offered, terminal_was_offered,
@@ -484,14 +484,19 @@ def _triage_observation(request: dict) -> dict:
     return observation
 
 
+def _triage_name(key: str) -> str:
+    return f"triage-{key}.json"
+
+
 def _read_triage(path: Path) -> dict:
-    receipt = json.loads(owner_io_path(path).read_bytes())
+    receipt = json.loads(read_regular_bytes(path))
     request = receipt.get("request") if isinstance(receipt, dict) else None
     observation = _triage_observation(request)
     result = receipt.get("result")
-    if (path.stem != request["action_id"] or not isinstance(result, dict)
+    key = request["action_id"]
+    if (path.name != _triage_name(key) or not isinstance(result, dict)
             or result.get("decision") != "needs_evidence"
-            or result.get("issue_ref") != f"ff-triage/1/{path.stem}"
+            or result.get("issue_ref") != f"ff-triage/1/{key}"
             or result.get("evidence_ref") != observation.get("evidence_ref")):
         raise ValueError("invalid triage receipt")
     return receipt
@@ -500,7 +505,7 @@ def _read_triage(path: Path) -> dict:
 def _record_triage(args: argparse.Namespace, request: dict) -> dict | None:
     observation = _triage_observation(request)
     key = request["action_id"]
-    path = args.reports_dir / "triage" / (key + ".json")
+    path = args.reports_dir / _triage_name(key)
     try:
         existing = _read_triage(path)
     except FileNotFoundError:
@@ -670,7 +675,7 @@ def main() -> int:
                 return 1
             value = {"result": result}
         elif args.command == "get-triage":
-            value = {"receipt": _read_triage(args.reports_dir / "triage" / (key + ".json"))}
+            value = {"receipt": _read_triage(args.reports_dir / _triage_name(key))}
         elif args.command == "report":
             value = {"result": _record_report(args.reports_dir, request)}
         else:
