@@ -28,7 +28,10 @@ def test_unhandled_custom_exception_retains_last_frame_and_ignores_multiline_bod
         "    raise FilingFetchError('detail private data\\nValueError: misleading') from err\n",
         encoding="utf-8",
     )
-    result = subprocess.run([sys.executable, "-B", str(entry)], capture_output=True, timeout=15)
+    result = subprocess.run(
+        [sys.executable, "-B", str(entry)], stdin=subprocess.DEVNULL,
+        capture_output=True, timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
     facts = launcher._tick_failure(result.returncode, result.stderr)
     assert facts == {
         "exit_code": 1,
@@ -99,7 +102,10 @@ def test_windows_failure_is_data_minimal_and_cold_readable(tmp_path, monkeypatch
         "--observations-dir", str(observations),
     ]
     for _ in range(2):
-        cold = subprocess.run(command, capture_output=True, check=True, timeout=20)
+        cold = subprocess.run(
+            command, stdin=subprocess.DEVNULL, capture_output=True, check=True, timeout=20,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
         detail = json.loads(cold.stdout)
         assert detail["child_process"] == logged["diagnostic"]["child_process"]
         assert detail["run_id"] == observation["run_id"]
@@ -147,3 +153,59 @@ def test_windows_success_keeps_original_exit_and_no_failure_log(tmp_path, monkey
     assert rc == 0
     assert not (jobs_dir / "logs").exists()
     assert not (jobs_dir / "observations").exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows scheduled tick runner")
+def test_timeout_reaps_tick_and_does_not_redispatch(tmp_path, monkeypatch):
+    from ff_process_tree import pid_is_alive
+
+    _isolate_feedback(monkeypatch)
+    jobs_dir = tmp_path / "jobs"
+    calls = tmp_path / "calls"
+    monkeypatch.setenv("FF_TIMEOUT_TEST_CALLS", str(calls))
+    entry = tmp_path / "hanging_tick.py"
+    entry.write_text(
+        "import os, time\n"
+        "from pathlib import Path\n"
+        "with Path(os.environ['FF_TIMEOUT_TEST_CALLS']).open('a') as log:\n"
+        "    log.write(str(os.getpid()) + '\\n')\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(launcher, "ENTRY", entry)
+    assert launcher.run([
+        "run", "--python", sys.executable, "--jobs-dir", str(jobs_dir),
+        "--tick-timeout-seconds", "1.5",
+    ]) == 124
+    original_pid, = [int(value) for value in calls.read_text(encoding="utf-8").splitlines()]
+    assert not pid_is_alive(original_pid)
+    row, = [
+        json.loads(line) for line in (jobs_dir / "logs/runtime-errors.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert row["event"] == "windows-tick" and row["checks"][0]["actual"] == "tick_timeout"
+    packet, = (jobs_dir / "observations").glob("*.jsonl")
+    observed, = packet.read_text(encoding="utf-8").splitlines()
+    assert json.loads(observed)["actual"] == "tick_timeout"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows scheduled tick runner")
+def test_tick_ignores_unconsumed_stdout(tmp_path, monkeypatch):
+    from ff_process_transport import MAX_JSON_OUTPUT_BYTES
+
+    _isolate_feedback(monkeypatch)
+    jobs_dir = tmp_path / "jobs"
+    child = tmp_path / "verbose_tick.py"
+    child.write_text(
+        "import sys\n"
+        f"remaining = {MAX_JSON_OUTPUT_BYTES + 1}\n"
+        "while remaining:\n"
+        "    size = min(remaining, 65536)\n"
+        "    sys.stdout.buffer.write(b'x' * size)\n"
+        "    remaining -= size\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(launcher, "ENTRY", child)
+    assert launcher.run(["run", "--python", sys.executable, "--jobs-dir", str(jobs_dir)]) == 0
+    assert not (jobs_dir / "logs").exists()

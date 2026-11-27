@@ -123,14 +123,14 @@ def _close_pipes(proc: subprocess.Popen) -> None:
             pipe.close()
 
 
-def _spawn(command, input_bytes, cwd, env):
+def _spawn(command, input_bytes, cwd, env, discard_stdout=False):
     windows = os.name == "nt"
     argv = held_windows_command(command) if windows else command
     try:
         proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE if windows or input_bytes is not None else subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.DEVNULL if discard_stdout else subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=cwd,
             env=env,
@@ -273,7 +273,10 @@ class _IOState:
             ("stdout", proc.stdout, stdout_cap),
             ("stderr", proc.stderr, stderr_cap),
         ):
-            self.launch(self.read, (stream, kind, cap), f"{kind}-reader")
+            if stream is None:
+                self.finish(kind)
+            else:
+                self.launch(self.read, (stream, kind, cap), f"{kind}-reader")
         if proc.stdin is None:
             self.finish("stdin")
         else:
@@ -390,10 +393,13 @@ def run_bounded(
     env: dict[str, str] | None = None,
     stdout_cap_bytes: int = _DEFAULT_STDOUT_CAP,
     stderr_cap_bytes: int | None = _DEFAULT_STDERR_CAP,
+    discard_stdout: bool = False,
 ) -> dict[str, object]:
     """Bound stdin, the stdout payload, diagnostics and exit by one absolute deadline.
 
-    stdout over ``stdout_cap_bytes`` raises ``OutputLimitExceeded``. stderr is
+    stdout over ``stdout_cap_bytes`` raises ``OutputLimitExceeded``. For commands
+    whose result is only their exit status, ``discard_stdout`` connects the stream
+    to the OS null sink without introducing a payload limit. stderr is
     optional diagnostics: only the newest ``stderr_cap_bytes`` are retained,
     ``stderr_bytes_read`` reports what the child actually wrote, and overflow,
     a lost diagnostic read or non-UTF-8 log bytes never fail a delivered
@@ -404,7 +410,7 @@ def run_bounded(
     """
     _validate(timeout_seconds, stdout_cap_bytes, stderr_cap_bytes, command, input_bytes)
     deadline = time.monotonic() + timeout_seconds
-    proc, job = _spawn(command, input_bytes, cwd, env)
+    proc, job = _spawn(command, input_bytes, cwd, env, discard_stdout)
     state = _IOState()
     try:
         if time.monotonic() >= deadline:

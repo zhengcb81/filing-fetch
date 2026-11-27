@@ -8,6 +8,7 @@ import csv
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -18,6 +19,7 @@ import tempfile
 from xml.etree import ElementTree as xml
 from xml.parsers.expat import errors as xml_errors
 
+from ff_process_transport import ChildFailed, ChildTimeout, run_bounded
 from ff_refresh_policy import utc_text
 from ff_refresh_store import RefreshStore
 from ff_runtime_feedback import cli_failure, parse_arguments
@@ -27,6 +29,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ENTRY = ROOT / "scripts/ff_scheduled_refresh.py"
 NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 DESCRIPTION = "Filing-fetch scheduled document refresh"
+DEFAULT_TICK_TIMEOUT_SECONDS = 600
+TICK_TIMEOUT_EXIT = 124
 _NS = {"t": NAMESPACE}
 xml.register_namespace("", NAMESPACE)
 
@@ -127,6 +131,13 @@ def _normalized(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 
+def _positive_seconds(value: str) -> float:
+    result = float(value)
+    if not math.isfinite(result) or result <= 0:
+        raise argparse.ArgumentTypeError("must be a positive finite duration")
+    return result
+
+
 def run(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("preview", "install", "remove", "run"), default="preview", nargs="?")
@@ -135,6 +146,10 @@ def run(argv=None) -> int:
     parser.add_argument("--jobs-dir", type=Path, default=ROOT / ".ff_jobs")
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--task-name")
+    parser.add_argument(
+        "--tick-timeout-seconds", type=_positive_seconds, default=DEFAULT_TICK_TIMEOUT_SECONDS,
+        help="Windows watchdog deadline for the complete tick process (default: %(default)s)",
+    )
     args = _normalized(parse_arguments(parser, argv, "windows-task"))
     try:
         return _run_action(parser, args)
@@ -203,22 +218,23 @@ def _run_action(parser, args):
     if os.name != "nt":
         parser.error("Windows Task Scheduler requires Windows")
     if args.action == "run":
-        # pythonw is only the launcher. The normal interpreter keeps stdio for
-        # filing-fetch's bounded child transports, with no visible console.
-        result = subprocess.run(
-            [str(args.python), "-B", str(ENTRY), *_action_args(args), "tick"], cwd=ROOT,
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
-        if result.returncode:
-            facts = _tick_failure(result.returncode, result.stderr or b"")
-            cli_failure(
-                "windows-tick",
-                "tick_exit_" + str(result.returncode),
-                jobs_dir=args.jobs_dir,
-                child_process=facts,
+        # Use the shared process owner so a timed-out launcher also reaps descendants.
+        command = [str(args.python), "-B", str(ENTRY), *_action_args(args), "tick"]
+        try:
+            run_bounded(
+                command, timeout_seconds=args.tick_timeout_seconds, cwd=str(ROOT), discard_stdout=True,
             )
-        return result.returncode
+        except ChildTimeout as exc:
+            cli_failure("windows-tick", "tick_timeout", exc, jobs_dir=args.jobs_dir)
+            return TICK_TIMEOUT_EXIT
+        except ChildFailed as exc:
+            facts = _tick_failure(exc.returncode, exc.stderr)
+            cli_failure(
+                "windows-tick", "tick_exit_" + str(exc.returncode),
+                jobs_dir=args.jobs_dir, child_process=facts,
+            )
+            return exc.returncode
+        return 0
     name, sid = _identity()
     task_name = args.task_name or f"FilingFetch-ScheduledRefresh-{sid}"
     if any(char in "\\/" or ord(char) < 32 for char in task_name):
@@ -229,7 +245,10 @@ def _run_action(parser, args):
         if candidate is None:
             parser.error("Windows scheduled refresh requires an installed pythonw.exe")
         launcher = Path(candidate)
-    arguments = ["-B", str(Path(__file__).resolve()), "run", "--python", str(args.python), *_action_args(args)]
+    arguments = [
+        "-B", str(Path(__file__).resolve()), "run", "--python", str(args.python),
+        "--tick-timeout-seconds", str(args.tick_timeout_seconds), *_action_args(args),
+    ]
     definition = task_definition(sid=sid, task_name=task_name, launcher=launcher, arguments=arguments)
     if args.action == "preview":
         print(json.dumps({"action": "preview", "task_name": task_name, "definition": definition}))
