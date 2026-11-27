@@ -13,6 +13,7 @@ from typing import Mapping
 OPERATIONS = frozenset({
     "catalog", "query", "local_prepare", "open", "transcript_import", "financial_statements",
     "incremental_discover", "incremental_backlog", "incremental_read", "incremental_read_status",
+    "t3_workspace",
 })
 _MODULES = {"catalog": "cli", "query": "source_query_cli", "local_prepare": "local_prepare_cli",
             "open": "source_reader_cli", "transcript_import": "transcript_import_cli",
@@ -68,6 +69,8 @@ def command_for(endpoint: Path | WikiConnection, operation: str) -> list[str]:
         if operation in _CATALOG_REQUESTS and "catalog" in endpoint.commands:
             return [*endpoint.commands["catalog"], *_incremental_args(operation, endpoint.acquisition_config)]
         raise ValueError("connection operation is not configured: " + operation)
+    if operation == "t3_workspace":
+        raise ValueError("t3_workspace requires an explicit owner connection")
     module = "cli" if operation in _CATALOG_REQUESTS else _MODULES[operation]
     command = [sys.executable, "-m", "company_wiki.source_catalog." + module]
     if operation in {"transcript_import", "financial_statements"}:

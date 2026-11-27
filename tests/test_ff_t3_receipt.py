@@ -7,10 +7,10 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 from threading import Event
-import unittest
 
 import pytest
 
@@ -80,8 +80,10 @@ def test_abrupt_process_death_preserves_partial_and_refuses_second_execution(tmp
     child = r"""
 import os
 from pathlib import Path
+import shutil
 import sys
 sys.path.insert(0, sys.argv[1])
+import ff_t3_native as native
 import ff_t3_receipt as receipt
 
 def execution(report):
@@ -165,46 +167,118 @@ def test_existing_running_record_never_calls_another_executor(tmp_path):
         assert original.result(10)["state"] == "completed"
 
 
-def test_native_dispatch_shape_can_be_replayed_offline(tmp_path, monkeypatch):
-    fixture = tmp_path / "tests" / "test_e2e_download.py"
-    fixture.parent.mkdir()
-    methods = "\n".join(
-        f"    def {method}(self): self.assertEqual(os.environ['FILING_FETCH_E2E_DOWNLOAD'], '1')"
-        for method in receipt.T3_CASES.values()
-    )
-    fixture.write_text(
-        "import os, unittest\n"
-        "class DownloadE2E(unittest.TestCase):\n" + methods + "\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(receipt, "PROJECT", tmp_path)
-    monkeypatch.setenv("FILING_FETCH_E2E_DOWNLOAD", "0")
+def test_installed_t3_executes_bound_owner_protocol_once_without_tests(tmp_path):
+    shipped = tmp_path / "scripts"
+    shutil.copytree(Path(receipt.__file__).parent, shipped)
+    owner = tmp_path / "workspace_owner.py"
+    owner.write_text(r"""
+import json, sys
+from pathlib import Path
 
-    def fixture_execution(report):
-        receipt._execute_native_suite(report)
+root = Path(__file__).parent
+request = json.load(sys.stdin)
+assert request.pop("schema_version") == "cwp-t3-workspace-request/1"
+case = request["case_id"]
+workspace_id = "isolated-" + case
+proof = root / workspace_id
+with (root / "actions.jsonl").open("a", encoding="utf-8") as stream:
+    stream.write(json.dumps(request) + chr(10))
+operation = request["operation"]
+response = {"schema_version": "cwp-t3-workspace/1", **request, "workspace_id": workspace_id}
+if operation == "open":
+    proof.mkdir()
+    response.update(status="opened", connection={
+        "cwd": str(proof),
+        "commands": {"catalog": [sys.executable, "-B", str(Path(__file__))]},
+    })
+elif operation == "observe":
+    assert request["workspace_id"] == workspace_id and proof.is_dir()
+    facts = {"no_residue": True, "downloaded_new": 1, "sha256": "a" * 64, "source_id": "source-" + case,
+             "mtime_ns": 1722448888, "provenance_complete": True, "reused_before_download": True}
+    if case == "corrupt_original":
+        facts.update(corrupt_original_unchanged=True, downloaded_new=0)
+    response.update(status="observed", facts=facts)
+else:
+    assert operation == "close" and request["workspace_id"] == workspace_id
+    proof.rmdir()
+    response.update(status="closed")
+print(json.dumps(response))
+""", encoding="utf-8")
+    (shipped / "fetch_filing.py").write_text(r"""
+import argparse, json, sys
+from pathlib import Path
 
-    value = receipt._run_once(tmp_path / "receipts", "fixture-dispatch", fixture_execution)
-    assert value["mode"] == "offline" and value["state"] == "completed"
-    assert set(value["cases"]) == set(receipt.T3_CASES)
-    assert os.environ["FILING_FETCH_E2E_DOWNLOAD"] == "0"
+parser = argparse.ArgumentParser()
+parser.add_argument("--config", type=Path, required=True)
+parser.add_argument("--timeout-seconds", type=int, required=True)
+parser.add_argument("--allow-download", action="store_true")
+args = parser.parse_args()
+config = json.loads(args.config.read_text())["connection"]
+workspace = Path(config["cwd"])
+assert workspace.is_dir() and "catalog" in config["commands"]
+request = json.load(sys.stdin)
+assert args.timeout_seconds == 180
+if args.allow_download:
+    assert request["acquisition_limits"] == {
+        "max_bytes": 52428800, "timeout_seconds": 180, "max_cost_usd": "0",
+    }
+calls = workspace.parent / "fetch.jsonl"
+previous = calls.read_text().splitlines() if calls.exists() else []
+with calls.open("a", encoding="utf-8") as stream:
+    stream.write(workspace.name + chr(10))
+if workspace.name == "isolated-corrupt_original":
+    mode = "ensure" if args.allow_download else "reuse"
+    print(json.dumps({"status": "upstream_error", "downloads": 0,
+                      "upstream_cause": {"operation": mode, "provider_started": False}}))
+    sys.exit(2)
+print(json.dumps({"status": "capture_ready", "downloads": int(workspace.name not in previous),
+                  "handle": {"capture_ready": True, "snapshot_sha256": "a" * 64,
+                             "source_id": workspace.name.replace("isolated-", "source-", 1)}}))
+""", encoding="utf-8")
+    config = tmp_path / "connection.json"
+    config.write_text(json.dumps({"schema_version": "1.0", "connection": {
+        "cwd": str(tmp_path), "commands": {"t3_workspace": [sys.executable, "-B", str(owner)]},
+    }}), encoding="utf-8")
+    command = [sys.executable, "-B", str(shipped / "ff_t3_receipt.py"),
+               "--receipts-dir", str(tmp_path / "receipts")]
+    options = ["run-live", "--run-id", "original", "--config", str(config)]
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    def invoke(*action):
+        result = subprocess.run(
+            [*command, *action], cwd=tmp_path, capture_output=True,
+            timeout=48, check=False, creationflags=flags,
+        )
+        if result.returncode != 0:
+            pytest.fail(result.stdout.decode("ascii"))
+        return json.loads(result.stdout)
+    first = invoke(*options)
+    assert first["mode"] == "live" and first["state"] == "completed"
+    assert set(first["cases"]) == set(receipt.T3_CASES)
+    assert all(row["outcome"] == "passed" for row in first["cases"].values())
+    assert invoke(*options) == invoke("get", "--run-id", "original") == first
+    actions = [json.loads(line) for line in (tmp_path / "actions.jsonl").read_text().splitlines()]
+    for case in receipt.T3_CASES:
+        chosen = [action for action in actions if action["case_id"] == case]
+        expected = ["open", "observe", "close"] if case == "corrupt_original" else [
+            "open", "observe", "observe", "close",
+        ]
+        assert [action["operation"] for action in chosen] == expected
+        assert {action["run_id"] for action in chosen} == {"original"}
+    assert len((tmp_path / "fetch.jsonl").read_text().splitlines()) == 8
+    assert not list(tmp_path.glob("isolated-*"))
+    assert not (tmp_path / "tests").exists()
 
 
 def test_native_warnings_are_cold_readable_without_emitting_raw_streams(tmp_path, monkeypatch, capsys):
-    fixture = tmp_path / "tests" / "test_e2e_download.py"
-    fixture.parent.mkdir()
-    methods = "\n".join(f"    def {method}(self): pass" for method in receipt.T3_CASES.values())
-    fixture.write_text(
-        "import sys, unittest, warnings\n"
-        "print('private stdout')\n"
-        "print('private stderr', file=sys.stderr)\n"
-        "warnings.warn('private warning body', ResourceWarning)\n"
-        "class DownloadE2E(unittest.TestCase):\n" + methods + "\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(receipt, "PROJECT", tmp_path)
-    monkeypatch.setenv("FILING_FETCH_E2E_DOWNLOAD", "0")
     import warnings
 
+    def local_cases(report, **_):
+        print("private stdout")
+        print("private stderr", file=sys.stderr)
+        warnings.warn("private warning body", ResourceWarning)
+        _succeed(report)
+
+    monkeypatch.setattr(receipt, "run_cases", local_cases)
     with warnings.catch_warnings():
         warnings.simplefilter("always", ResourceWarning)
         command = ["--receipts-dir", str(tmp_path / "receipt")]
@@ -214,10 +288,11 @@ def test_native_warnings_are_cold_readable_without_emitting_raw_streams(tmp_path
     cold = capsys.readouterr()
     assert cold.out == first.out and cold.err == first.err == ""
     value = json.loads(cold.out)
-    assert value["suite_output"] == {
-        "stdout_observed": True, "stderr_observed": True,
-        "warnings": [{"type": "ResourceWarning", "file": "test_e2e_download.py", "line": 4}],
-    }
+    output = value["suite_output"]
+    assert output["stdout_observed"] and output["stderr_observed"]
+    warning, = output["warnings"]
+    assert warning["type"] == "ResourceWarning" and warning["file"] == Path(__file__).name
+    assert warning["line"] > 0
     assert "private" not in cold.out
 
 
@@ -236,40 +311,46 @@ def test_latest_io_error_includes_cause_without_path_or_new_receipt(tmp_path, mo
     assert not list(tmp_path.iterdir())
 
 
-def test_structured_unittest_events_reflect_cleanup_and_redact_raw_failure():
+def test_unconfigured_workspace_is_blocked_without_guessing_a_sibling(tmp_path, capsys):
+    config = tmp_path / "old.json"
+    config.write_text(json.dumps({"schema_version": "1.0", "company_wiki_root": str(tmp_path)}))
+    prefix = ["--receipts-dir", str(tmp_path / "receipt")]
+    assert receipt.main([
+        *prefix, "run-live", "--run-id", "without-port", "--config", str(config),
+    ]) == 2
+    first = json.loads(capsys.readouterr().out)
+    assert first["state"] == "blocked"
+    assert {case["reason"] for case in first["cases"].values()} == {"workspace_not_configured"}
+    assert receipt.main([*prefix, "get", "--run-id", "without-port"]) == 0
+    assert json.loads(capsys.readouterr().out) == first
+
+
+def test_structured_native_events_reflect_cleanup_and_redact_raw_failure(tmp_path, monkeypatch):
+    import ff_t3_native as native
+
     observed = {}
 
-    diagnostics = {}
-
     def received(case, outcome, reason, detail):
-        observed[case] = (outcome, reason)
-        if detail is not None:
-            diagnostics[case] = detail
+        observed[case] = (outcome, reason, detail)
 
-    class Fixture(unittest.TestCase):
-        def test_download_cn_annual_report(self):
-            self.addCleanup(self.fail, "secret-cleanup-detail")
-
-        def test_download_hk_annual_report(self):
-            self.skipTest("secret-skip-detail")
-
-        def test_download_us_annual_report(self):
+    def local_case(_workspace, _run, case):
+        if case == "cn_annual":
+            raise AssertionError("secret-cleanup-detail")
+        if case == "us_annual":
             raise RuntimeError("secret-exception-detail")
 
-        def test_download_rejects_corrupted_local_copy(self):
-            self.addCleanup(lambda: None)
-
-    suite = unittest.TestSuite(Fixture(name) for name in receipt.T3_CASES.values())
-    suite.run(receipt._CaseResults(received))
-    assert observed == {
+    monkeypatch.setattr(native, "WorkspaceClient", lambda *args, **kwargs: object())
+    monkeypatch.setattr(native, "probe_case", local_case)
+    native.run_cases(received, config=tmp_path / "config", run_id="fixture")
+    assert {case: facts[:2] for case, facts in observed.items()} == {
         "cn_annual": ("failed", "assertion_failed"),
-        "hk_annual": ("blocked", "test_skipped"),
+        "hk_annual": ("passed", None),
         "us_annual": ("failed", "test_error"),
         "corrupt_original": ("passed", None),
     }
-    assert diagnostics["cn_annual"]["causes"][0]["type"] == "AssertionError"
-    assert diagnostics["us_annual"]["causes"][0]["type"] == "RuntimeError"
-    assert "secret-" not in json.dumps(diagnostics)
+    assert observed["cn_annual"][2]["causes"][0]["type"] == "AssertionError"
+    assert observed["us_annual"][2]["causes"][0]["type"] == "RuntimeError"
+    assert "secret-" not in json.dumps(observed)
 
 
 def test_latest_uses_claim_start_and_does_not_hide_a_damaged_newest(tmp_path, monkeypatch, capsys):

@@ -6,8 +6,8 @@ import argparse
 from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime
+from functools import partial
 import hashlib
-from importlib.util import module_from_spec, spec_from_file_location
 from io import TextIOBase
 import json
 import os
@@ -15,25 +15,20 @@ from pathlib import Path
 import re
 import subprocess
 from typing import Any, Protocol
-import unittest
 import warnings
 
 from ff_persistence import acquire_file_lock, atomic_write_json, owner_io_path
 from ff_process_tree import pid_is_alive
 from ff_runtime_feedback import cause_details, parse_arguments, record_runtime_failure
+from ff_t3_native import T3_CASES, run_cases
 from ff_runtime_log import diagnostic_fields as _diagnostic_fields, diagnostic_view as _diagnostic_view
 
 SCHEMA = "ff-t3-assurance/1"
 PROJECT = Path(__file__).resolve().parents[1]
 DEFAULT_ROOT = PROJECT / ".ff_t3_assurance"
-T3_CASES = {
-    "cn_annual": "test_download_cn_annual_report",
-    "hk_annual": "test_download_hk_annual_report",
-    "us_annual": "test_download_us_annual_report",
-    "corrupt_original": "test_download_rejects_corrupted_local_copy",
-}
+DEFAULT_CONFIG = PROJECT / "config/company_wiki.json"
 _CASE_RESULTS = ("passed", "failed", "blocked")
-_CASE_REASONS = {"assertion_failed", "test_error", "test_skipped", "unexpected_success"}
+_CASE_REASONS = {"assertion_failed", "test_error", "test_skipped", "unexpected_success", "workspace_not_configured"}
 _RUN_REASONS = {
     "case_results_incomplete", "case_execution_blocked", "executor_failed",
     "owner_interrupted", "test_suite_unavailable",
@@ -44,10 +39,6 @@ class CaseReporter(Protocol):
     def __call__(
         self, case: str, outcome: str, reason: str | None, detail: dict | None = None,
     ) -> None: ...
-
-
-class _SuiteUnavailable(RuntimeError):
-    pass
 
 
 def _id(value: str) -> str:
@@ -80,6 +71,7 @@ def _owner_revision() -> str:
         result = subprocess.run(
             ["git", "-C", str(PROJECT), "rev-parse", "HEAD"],
             capture_output=True, text=True, timeout=5, check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.TimeoutExpired):
         return "unknown"
@@ -234,7 +226,7 @@ def get_latest_receipt(root: Path) -> dict:
 
 
 def _run_once(
-    root: Path, run_id: str, execute: Callable[[CaseReporter], dict | None],
+    root: Path, run_id: str, execute: Callable[[CaseReporter], dict | None], *, mode: str = "offline",
 ) -> dict:
     key = _key(run_id)
     # Reuse an existing claim, including an unreadable or interrupted one.
@@ -249,7 +241,6 @@ def _run_once(
             return _project(prior)
         started = datetime.now(UTC)
         path = root / (started.strftime("%Y%m%dT%H%M%S%fZ") + "--" + key + ".json")
-        mode = "live" if execute is _execute_native_suite else "offline"
         cases: dict[str, dict] = {}
         value: dict[str, Any] = {
             "schema_version": SCHEMA, "run_id": run_id, "owner_revision": _owner_revision(),
@@ -277,9 +268,6 @@ def _run_once(
     reason: str | None
     try:
         suite_output = execute(report)
-    except _SuiteUnavailable as error:
-        state, reason = "blocked", "test_suite_unavailable"
-        value["diagnostic"] = cause_details(error, reason=reason)
     except OSError:
         raise
     except Exception as error:
@@ -301,41 +289,6 @@ def _run_once(
     return _project(value)
 
 
-class _CaseResults(unittest.TestResult):
-    """Project unittest events after setup, execution and cleanup finish."""
-
-    def __init__(self, report: CaseReporter) -> None:
-        super().__init__()
-        self._report = report
-        self._cases = {method: case for case, method in T3_CASES.items()}
-        self._outcomes: dict[str, tuple[str, str | None, dict | None]] = {}
-
-    def addSuccess(self, test) -> None:
-        self._outcomes[test.id()] = ("passed", None, None)
-
-    def addFailure(self, test, err) -> None:
-        reason = "assertion_failed"
-        self._outcomes[test.id()] = ("failed", reason, cause_details(err[1], reason=reason))
-
-    def addError(self, test, err) -> None:
-        reason = "test_error"
-        self._outcomes[test.id()] = ("failed", reason, cause_details(err[1], reason=reason))
-
-    def addSkip(self, test, reason) -> None:
-        self._outcomes.setdefault(test.id(), ("blocked", "test_skipped", None))
-
-    def addUnexpectedSuccess(self, test) -> None:
-        self._outcomes[test.id()] = ("failed", "unexpected_success", None)
-
-    def stopTest(self, test) -> None:
-        super().stopTest(test)
-        identity = test.id()
-        outcome = self._outcomes.pop(identity, None)
-        case = self._cases.get(identity.rsplit(".", 1)[-1])
-        if case is not None and outcome is not None:
-            self._report(case, *outcome)
-
-
 class _ObservedOutput(TextIOBase):
     """Recognize an incidental stream without storing messages or provider data."""
 
@@ -347,16 +300,7 @@ class _ObservedOutput(TextIOBase):
         return len(value)
 
 
-def _execute_native_suite(report: CaseReporter) -> dict:
-    path = PROJECT / "tests" / "test_e2e_download.py"
-    if not path.is_file():
-        raise _SuiteUnavailable
-    spec = spec_from_file_location("ff_t3_native_e2e", path)
-    if spec is None or spec.loader is None:
-        raise _SuiteUnavailable
-    module = module_from_spec(spec)
-    name = "FILING_FETCH_E2E_DOWNLOAD"
-    previous = os.environ.get(name)
+def _execute_native_suite(report: CaseReporter, *, config: Path, run_id: str) -> dict:
     out, err = _ObservedOutput(), _ObservedOutput()
     notices: dict[tuple[str, str, int], dict] = {}
 
@@ -364,18 +308,9 @@ def _execute_native_suite(report: CaseReporter) -> dict:
         name, basename = category.__name__, Path(filename).name
         notices[(name, basename, lineno)] = {"type": name, "file": basename, "line": lineno}
 
-    os.environ[name] = "1"
-    try:
-        with warnings.catch_warnings(), redirect_stdout(out), redirect_stderr(err):
-            warnings.showwarning = observe_warning
-            spec.loader.exec_module(module)
-            suite = unittest.TestSuite(module.DownloadE2E(method) for method in T3_CASES.values())
-            suite.run(_CaseResults(report))
-    finally:
-        if previous is None:
-            os.environ.pop(name, None)
-        else:
-            os.environ[name] = previous
+    with warnings.catch_warnings(), redirect_stdout(out), redirect_stderr(err):
+        warnings.showwarning = observe_warning
+        run_cases(report, config=config, run_id=run_id)
     return {"stdout_observed": out.written, "stderr_observed": err.written, "warnings": list(notices.values())}
 
 
@@ -397,14 +332,17 @@ def main(argv: list[str] | None = None) -> int:
     get = commands.add_parser("get").add_mutually_exclusive_group(required=True)
     get.add_argument("--run-id")
     get.add_argument("--latest", action="store_true")
-    commands.add_parser("run-live").add_argument("--run-id", required=True)
+    live = commands.add_parser("run-live")
+    live.add_argument("--run-id", required=True)
+    live.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     args = parse_arguments(parser, argv, "t3", local_only=True)
     try:
         if args.command == "get":
             value = (get_latest_receipt(args.receipts_dir) if args.latest
                      else get_receipt(args.receipts_dir, args.run_id))
         else:
-            value = _run_once(args.receipts_dir, args.run_id, _execute_native_suite)
+            execute = partial(_execute_native_suite, config=args.config, run_id=args.run_id)
+            value = _run_once(args.receipts_dir, args.run_id, execute, mode="live")
     except ValueError as error:
         record_runtime_failure("t3-" + args.command, "invalid_run_id", error, run_id=args.run_id)
         print(json.dumps({"schema_version": SCHEMA, "state": "blocked", "reason": "invalid_run_id"}))
