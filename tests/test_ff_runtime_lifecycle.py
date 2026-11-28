@@ -93,6 +93,7 @@ class Case:
     def invoke(self, script, *args, body=None):
         return subprocess.run(
             self.argv(script, *args), input=json.dumps(body).encode("utf-8") if body is not None else None,
+            stdin=subprocess.DEVNULL if body is None else None,
             env=self.env, cwd=self.root, capture_output=True, timeout=15, creationflags=NO_WINDOW,
         )
 
@@ -215,7 +216,8 @@ def test_reconcile_state_is_durable_before_optional_log(tmp_path):
     args = ("--owner-job-id", jid, "--config", str(case.config), "--timeout-seconds", "10")
     child = subprocess.Popen(
         case.argv("ff_job.py", "--jobs-dir", str(case.jobs), "run", *args),
-        env=case.env, cwd=case.root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
+        env=case.env, cwd=case.root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
     )
     try:
         case.wait_for_dispatch(child)
@@ -539,4 +541,59 @@ def test_public_run_and_attempt_find_redacted_replay_scope(tmp_path):
     assert trace["input"]["request"]["acquisition_limits"] == REQUEST["acquisition_limits"]
     assert "continuation" not in trace["input"]["request"]
     assert "continuation" in trace["input"]["withheld"]
+    assert case.count() == 1
+
+
+@pytest.mark.e2e_offline
+@pytest.mark.regression
+@pytest.mark.parametrize("recovery", ["reoffer", "flush"])
+def test_killed_job_cold_reads_observed_process_loss(tmp_path, recovery):
+    case = Case(tmp_path, "park")
+    case.env.update(RESEARCH_FEEDBACK_RUN_ID="original-job-run", RESEARCH_FEEDBACK_ATTEMPT_ID="original-job-attempt")
+    jid = case.submit()
+    path = case.jobs / "jobs" / (jid + ".json")
+    child = subprocess.Popen(
+        case.argv("ff_job.py", "--jobs-dir", str(case.jobs), "run", "--owner-job-id", jid,
+                  "--config", str(case.config), "--timeout-seconds", "10"),
+        env=case.env, cwd=case.root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
+    )
+    try:
+        case.wait_for_dispatch(child)
+        original = path.read_bytes()
+        assert json.loads(original)["status"] == "running"
+        assert child.poll() is None
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.wait(timeout=10)
+    assert child.returncode != 0
+    assert case.get_job(jid)["status"] == "unknown"
+    assert path.read_bytes() == original
+
+    def recover():
+        return case.reoffer(jid) if recovery == "reoffer" else case.flush()
+
+    first = recover()
+    assert first.returncode == 0, (first.stdout, first.stderr)
+    offered = {p.name: p.read_bytes() for p in case.inbox.glob("*.jsonl")}
+    rows = [json.loads(line) for data in offered.values() for line in data.splitlines()]
+    terminal, = (row for row in rows if row["check_id"] == "job-outcome")
+    failure, = (row for row in rows if row["check_id"] == "job-failure")
+    for row in (terminal, failure):
+        assert (row["run_id"], row["attempt_id"], row["step_id"]) == (
+            "original-job-run", "original-job-attempt", f"{jid}/1",
+        )
+    assert terminal["actual"] == "unknown"
+    assert failure["actual"] == "run_lost"
+    diagnostic = case.diagnostic(failure["details_ref"])
+    assert diagnostic.returncode == 0, (diagnostic.stdout, diagnostic.stderr)
+    detail = json.loads(diagnostic.stdout)
+    assert detail["reason"] == "run_lost"
+    assert detail["process_loss"] == "owner_pid_dead"
+    assert detail["causes"] == []
+    second = recover()
+    assert second.returncode == 0, (second.stdout, second.stderr)
+    assert {p.name: p.read_bytes() for p in case.inbox.glob("*.jsonl")} == offered
+    assert case.get_job(jid)["cost_state"] == "unknown"
     assert case.count() == 1

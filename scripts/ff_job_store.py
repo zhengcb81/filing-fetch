@@ -273,6 +273,14 @@ class JobStore:
             "next_actions": ["reconcile"],
             "correlation_id": record.get("owner_job_id", ""),
         }
+        # Liveness checks do not supply a traceback. Retain the native
+        # liveness result observed by recovery on this original attempt.
+        updated["failure_detail"] = {
+            "schema_version": "ff-failure-detail/1",
+            "reason": "run_lost",
+            "process_loss": reason,
+            "causes": [],
+        }
         updated["cost"] = None
         spend_intent = job_spend_intent(updated["kind"], updated["request"])
         updated["cost_state"] = "unknown" if spend_intent != "reuse_only" else "not_applicable"
