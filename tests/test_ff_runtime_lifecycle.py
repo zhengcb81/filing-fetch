@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -9,6 +10,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from threading import Event
 import time
 import uuid
 
@@ -134,6 +136,94 @@ class Case:
         while self.count() == 0 and child.poll() is None and time.monotonic() < deadline:
             time.sleep(0.025)
         assert self.count() == 1
+
+
+def _job_receipt_identities(directory):
+    identity = ("owner", "run_id", "attempt_id", "step_id", "evidence_ref")
+    return {
+        tuple(row[field] for field in identity)
+        for marker in directory.glob("*.ready")
+        for line in marker.with_suffix(".jsonl").read_bytes().splitlines()
+        if (row := json.loads(line))["check_id"] == "job-outcome"
+    }
+
+
+def _undelivered_original(root, label):
+    root.mkdir()
+    case = Case(root, "partial")
+    case.env.update(RESEARCH_FEEDBACK_RUN_ID=label + "-run", RESEARCH_FEEDBACK_ATTEMPT_ID=label + "-attempt")
+    jid = case.submit()
+    assert case.run_job(jid).returncode == 0
+    expected = _job_receipt_identities(case.inbox)
+    assert len(expected) == 1
+    assert next(iter(expected))[1:3] == (label + "-run", label + "-attempt")
+    assert case.count() == 1
+    for packet in case.inbox.glob("feedback-*"):
+        packet.unlink()
+    native_receipt = case.jobs / "jobs" / (jid + ".json")
+    return case, expected, native_receipt, native_receipt.read_bytes()
+
+
+def test_concurrent_public_flush_keeps_each_owner_replay_target(tmp_path, monkeypatch, capsys):
+    import ff_job_observation
+    from ff_job_feedback import main
+
+    first, original_a, receipt_a, frozen_a = _undelivered_original(tmp_path / "alpha", "alpha")
+    second, original_b, receipt_b, frozen_b = _undelivered_original(tmp_path / "beta", "beta")
+    inherited = tmp_path / "inherited-observations"
+    monkeypatch.setenv("RESEARCH_FEEDBACK_DIR", str(inherited))
+    a_ready, b_ready, a_done = Event(), Event(), Event()
+    flush_jobs = ff_job_observation.flush_job_observations
+
+    def at_real_job_relay(store, **kwargs):
+        if store.jobs_dir == first.jobs:
+            a_ready.set()
+            assert b_ready.wait(10)
+        else:
+            assert store.jobs_dir == second.jobs
+            b_ready.set()
+            assert a_done.wait(10)
+        return flush_jobs(store, **kwargs)
+
+    monkeypatch.setattr(ff_job_observation, "flush_job_observations", at_real_job_relay)
+
+    def run(case):
+        try:
+            return main(["flush-observations", "--jobs-dir", str(case.jobs), "--observations-dir", str(case.inbox)])
+        finally:
+            if case is first:
+                a_done.set()
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        call_a = workers.submit(run, first)
+        assert a_ready.wait(10)
+        call_b = workers.submit(run, second)
+        assert (call_a.result(timeout=12), call_b.result(timeout=12)) == (0, 0)
+    assert not capsys.readouterr().err
+    assert _job_receipt_identities(first.inbox) == original_a
+    assert _job_receipt_identities(second.inbox) == original_b
+    assert os.environ["RESEARCH_FEEDBACK_DIR"] == str(inherited)
+    assert not inherited.exists()
+    assert (receipt_a.read_bytes(), receipt_b.read_bytes()) == (frozen_a, frozen_b)
+    assert (first.count(), second.count()) == (1, 1)
+
+
+def test_native_flush_routes_explicit_primary_and_auxiliary_owner(tmp_path):
+    primary, original_a, receipt_a, frozen_a = _undelivered_original(tmp_path / "primary", "primary")
+    auxiliary, original_b, receipt_b, frozen_b = _undelivered_original(tmp_path / "auxiliary", "auxiliary")
+    inherited = tmp_path / "inherited-observations"
+    primary.env["RESEARCH_FEEDBACK_DIR"] = str(inherited)
+    result = primary.invoke(
+        "ff_job_feedback.py", "flush-observations", "--jobs-dir", str(primary.jobs),
+        "--jobs-dir", str(auxiliary.jobs), "--observations-dir", str(primary.inbox),
+    )
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    assert json.loads(result.stdout)["status"] == "ok"
+    assert _job_receipt_identities(primary.inbox) == original_a
+    assert _job_receipt_identities(auxiliary.jobs / "observations") == original_b
+    assert not inherited.exists()
+    assert (receipt_a.read_bytes(), receipt_b.read_bytes()) == (frozen_a, frozen_b)
+    assert (primary.count(), auxiliary.count()) == (1, 1)
 
 
 def _feedback_request(observation):
