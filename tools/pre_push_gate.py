@@ -1,6 +1,6 @@
 """Daily pushes run Ruff once and one fixed local smoke; CI stays explicit.
 
-``--push-checks`` never repeats commit type checks, the full40-file CI list,
+``--push-checks`` never repeats commit type checks, the full offline test inventory,
 three-repository doctors, plan/BOM scans or global install checks. The existing
 manual ``--ci-tests``/``--run-tests`` modes retain their complete checks.
 A local_fast_pass is only the fixed smoke, not complete CI acceptance.
@@ -49,6 +49,8 @@ def _run(
             errors="replace",
             env=ci_tests.subprocess_environment(),
             timeout=timeout,
+            stdin=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except subprocess.TimeoutExpired:
         print(f"FAILED: {label} (timeout after {timeout}s)")
@@ -169,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
                           help="run only Ruff and the fixed local pure-unit smoke")
     behavior.add_argument("--run-tests", action="store_true")
     behavior.add_argument("--ci-tests", action="store_true",
-                          help="run the shared focused offline CI behavior suite")
+                          help="run the full discovered offline CI behavior suite")
     parser.add_argument("--skip-mypy", action="store_true")
     parser.add_argument("--skip-install-sync", action="store_true")
     args = parser.parse_args(argv)
@@ -224,23 +226,6 @@ def main(argv: list[str] | None = None) -> int:
                 "mypy public contracts (CI FC-1204-c set)",
             )
         )
-    if args.run_tests:
-        gates.append(
-            (
-                [
-                    sys.executable,
-                    "-m",
-                    "pytest",
-                    "tests",
-                    "-q",
-                    "--tb=short",
-                    "--ignore=tests/test_real_tool_conformance.py",
-                    "--ignore=tests/test_e2e_download.py",
-                ],
-                "hermetic test suite (CI)",
-            )
-        )
-
     for cmd, label in gates:
         rc = _run(cmd, label)
         if rc != 0:
@@ -292,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
     if _no_bom_check() != 0:
         return 1
 
-    if args.ci_tests:
+    if args.ci_tests or args.run_tests:
         import ci_tests
 
         print("\n=== shared focused CI behavior tests ===")

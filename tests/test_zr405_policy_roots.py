@@ -281,19 +281,18 @@ class PolicyRootsTests(unittest.TestCase):
         self.assertIn("outside the policy snapshot", str(ctx.exception))
 
     def test_symlink_escape_rejected(self) -> None:
-        """A symlink inside the policy root pointing outside resolves
-        outside and fails containment.  Skipped where symlinks cannot be
-        created (Windows non-privileged)."""
-        outside = self._tmp / "secret.pdf"
+        """A directory link inside the policy root cannot escape containment."""
+        from e2e_support.directory_links import make_directory_link
+
+        foreign = self._tmp / "foreign"
+        foreign.mkdir()
+        outside = foreign / "secret.pdf"
         outside.write_bytes(b"%PDF-1.4 zr405")
-        link = self.wiki_root / "Dropbox" / "Stock" / "linked.pdf"
-        try:
-            link.symlink_to(outside)
-        except (OSError, NotImplementedError) as exc:  # pragma: no cover
-            self.skipTest(f"cannot create symlink: {exc}")
+        link = self.wiki_root / "Dropbox" / "Stock" / "linked"
+        make_directory_link(link, foreign)
         policy = _policy(root_ids=("dropbox_stock",), wiki_root=self.wiki_root)
         handle = _handle(self.wiki_root, "Dropbox/Stock/2025.pdf")
-        handle["canonical_path"] = str(link)
+        handle["canonical_path"] = str(link / outside.name)
         handle["byte_size"] = outside.stat().st_size
         handle["content_sha256"] = hashlib.sha256(b"%PDF-1.4 zr405").hexdigest()
         handle["snapshot_sha256"] = hashlib.sha256(b"%PDF-1.4 zr405").hexdigest()

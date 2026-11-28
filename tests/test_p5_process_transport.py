@@ -8,11 +8,12 @@ failed run. Both transports (filing runner + transcript runner) must reuse it.
 
 from __future__ import annotations
 
-import os
 import sys
 import tempfile
 import time
 import unittest
+
+import pytest
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
@@ -95,13 +96,14 @@ class BoundedTransportUnitTests(unittest.TestCase):
             )
         self.assertLess(time.monotonic() - start, 13)
 
+    @pytest.mark.windows_only
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
     def test_grandchild_holding_pipe_never_hangs(self):
         # Child spawns a grandchild seeding the grandchild's stdout/stderr to
         # OS null handles *except* one inherited anonymous pipe that the child
         # itself owns — the child exits first; the parent must not wait on the
         # grandchild. kill_tree reaps the orphan afterwards.
-        if os.name != "nt":
-            self.skipTest("windows-family process-tree reaper test")
         child = (
             "import subprocess,sys,os\n"
             "p = subprocess.Popen([\n"

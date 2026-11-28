@@ -4,7 +4,17 @@ target-version = "py313"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not live'"
 pythonpath = ["scripts", "tests"]
+markers = [
+  "unit: isolated component behavior",
+  "contract: public interface behavior",
+  "e2e_offline: isolated entrypoint and controlled dependencies",
+  "regression: previously failing behavior",
+  "live: deliberately requires a live provider or production owner",
+  "windows_only: requires the Windows native runtime",
+  "posix_only: requires a POSIX capability",
+]
 
 [tool.coverage.run]
 source = ["scripts"]
@@ -18,5 +28,5 @@ skip_covered = false
 fail_under = 90
 
 [tool.mypy]
-# Match the single Ubuntu CI target on Windows too; runtime tests cover native Windows.
+# Type checking models the portable source surface; both CI hosts execute runtime tests.
 platform = "linux"

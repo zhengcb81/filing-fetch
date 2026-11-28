@@ -1,276 +1,211 @@
-"""FC-803: minimal download + second-request zero fetch/write (T1).
-SCENARIO: LT-01 LT-02 LT-05 LT-07 LT-08 LT-09/DL-04 DL-02 DL-03 DL-07 DL-08 DL-09
+"""Real FF/CWP acquisition smoke, using a localhost provider and owned originals."""
 
-Real cross-process spies: the IsolatedWiki acquisition config points at
-tests/e2e_support/spy_adapter.py (a real subprocess json_command_v1
-adapter) whose every invocation lands in a spy log.  Scenarios:
-LT-09/DL-04 (second identical request: fetch=0, write=0), LT-02 (reuse
-the old period, download only the missing new one), LT-01 (local is
-latest: discover ok, fetch=0, local handle), LT-05 (provider unavailable:
-retryable plan, local reuse preserved, fetch=0), LT-07 (not-yet-published
-never leaks into the gap).
-"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from functools import cache
+import hashlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
-import os
-import tempfile
-import unittest
 from pathlib import Path
+import sys
+from threading import Thread
 
-from e2e_support.isolated_wiki import IsolatedWiki, cleanup_temporary
+import pytest
 
-_SPY = Path(__file__).resolve().parent / "e2e_support" / "spy_adapter.py"
-
-
-def _spy_acquisition_yaml(log: Path, fixture: Path) -> str:
-    from e2e_support.isolated_wiki import _NOOP_ADAPTER
-
-    command = json.dumps(
-        [os.environ.get("PYTHON_EXECUTABLE", "python"), str(_SPY)],
-        ensure_ascii=False,
-    )
-    noop = json.dumps(_NOOP_ADAPTER, ensure_ascii=False)
-    return f"""schema_version: "1.1"
-staging_root: "${{PROJECT_ROOT}}/.source_catalog/staging"
-timeout_seconds: 120
-adapters:
-  cn:
-    name: "spy-provider"
-    version: "1.0.0"
-    interface: "json_command_v1"
-    supports_acquisition_budget: true
-    project_root: "${{PROJECT_ROOT}}"
-    config_root: null
-    command: {command}
-  hk:
-    name: "e2e-noop-hk"
-    version: "1.0.0"
-    interface: "dayu_cli_v1"
-    project_root: "${{PROJECT_ROOT}}"
-    config_root: "${{PROJECT_ROOT}}/config"
-    command: {noop}
-  us:
-    name: "e2e-noop-us"
-    version: "1.0.0"
-    interface: "dayu_cli_v1"
-    project_root: "${{PROJECT_ROOT}}"
-    config_root: "${{PROJECT_ROOT}}/config"
-    command: {noop}
-"""
+from e2e_support.isolated_wiki import IsolatedWiki
 
 
-def _policy_file(wiki: IsolatedWiki) -> None:
-    import sys
+pytestmark = pytest.mark.e2e_offline
+ADAPTER = Path(__file__).with_name("e2e_support") / "loopback_provider.py"
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".." / "company-wiki" / "src"))
-    from company_wiki.source_catalog.runtime_policy import snapshot_hash
+@cache
+def annual_pdf(year: int) -> bytes:
+    # Use the actual PDF reader format. A %PDF magic-prefix stub cannot
+    # establish an older local fiscal scope before a download decision.
+    import pymupdf
 
-    policy = {
-        "schema_version": "1.0",
-        "policy_hash": "c" * 64,
-        "flags": {"v2_resolve_active": False, "legacy_bridge_enabled": True,
-                  "v2_bundle_active": False, "v2_persist_assertions": False,
-                  "v2_resolve_shadow": False, "v2_scan_shadow": False},
-        "current_epoch": "epoch-1",
-        "active_cohorts": ["cohort-1"],
-        "updated_at": "2026-08-11T00:00:00Z",
-    }
-    policy["snapshot_sha256"] = snapshot_hash(policy)
-    wiki.catalog_dir.mkdir(parents=True, exist_ok=True)
-    (wiki.catalog_dir / "runtime_policy.json").write_text(
-        json.dumps(policy, ensure_ascii=False), encoding="utf-8")
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text((48, 65), f"宁德时代\n证券代码：300750\n{year}年年度报告",
+                         fontname="china-s", fontsize=13)
+        return document.tobytes(no_new_id=True)
 
 
-def _candidate(accession: str, year: int, *, form_type: str = "annual_report",
-               filing_date: str = "2026-04-15") -> dict:
-    return {
-        "candidate_id": f"c-{accession}",
-        "provider": "spy",
-        "provider_document_id": accession,
-        "title": f"ACME {year} annual",
-        "form_type": form_type,
-        "filing_date": filing_date,
-        "fiscal_year": year,
-    }
+def seed_old_period(wiki: IsolatedWiki) -> Path:
+    original = wiki.seed_market("CN")
+    original.write_bytes(annual_pdf(2024))
+    return original
 
 
-class Fc803MinimalDownloadTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self._temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self._temporary.name)
-        self.wiki = IsolatedWiki(self.root)
-        _policy_file(self.wiki)
-        self.spy_log = self.root / "spy_log.jsonl"
-        self.fixture = self.root / "spy_fixture.json"
-        self.fixture.write_text(json.dumps({}), encoding="utf-8")
-        self._write_acquisition()
+@dataclass
+class Provider:
+    candidates: list[dict] = field(default_factory=list)
+    calls: list[tuple[str, dict]] = field(default_factory=list)
+    unavailable: bool = False
 
-    def tearDown(self) -> None:
-        cleanup_temporary(self._temporary)
+    def call_count(self, operation: str) -> int:
+        return sum(action == operation for action, _ in self.calls)
 
-    def _write_acquisition(self) -> None:
-        # The spy env flows through os.environ: the filing-fetch CLI and the
-        # company-wiki CLI subprocesses inherit it down to the adapter.
-        os.environ["SPY_ADAPTER_LOG"] = str(self.spy_log)
-        os.environ["SPY_ADAPTER_FIXTURE"] = str(self.fixture)
-        # never leak a fault from a previous test into this one
-        os.environ.pop("SPY_ADAPTER_FAULT", None)
-        (self.root / "config" / "source_acquisition.yaml").write_text(
-            _spy_acquisition_yaml(self.spy_log, self.fixture), encoding="utf-8")
 
-    def _write_acquisition_fault(self) -> None:
-        os.environ["SPY_ADAPTER_FAULT"] = "provider_unavailable"
-        (self.root / "config" / "source_acquisition.yaml").write_text(
-            _spy_acquisition_yaml(self.spy_log, self.fixture), encoding="utf-8")
+@pytest.fixture
+def provider(tmp_path):
+    state = Provider()
 
-    def _spy_actions(self) -> list[str]:
-        if not self.spy_log.is_file():
-            return []
-        return [
-            str(json.loads(line).get("action"))
-            for line in self.spy_log.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            operation = self.path.lstrip("/")
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            state.calls.append((operation, request))
+            if state.unavailable:
+                self.send_error(503)
+                return
+            data = (json.dumps(state.candidates).encode() if operation == "discover"
+                    else annual_pdf(request["fiscal_year"]))
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
 
-    def _spy_fetches(self) -> list[dict]:
-        if not self.spy_log.is_file():
-            return []
-        return [
-            json.loads(line)
-            for line in self.spy_log.read_text(encoding="utf-8").splitlines()
-            if line.strip() and json.loads(line).get("action") == "fetch"
-        ]
+        def log_message(self, *_: object) -> None:
+            pass
 
-    def _companies_files(self) -> set[str]:
-        companies = self.root / "companies"
-        return {
-            str(p.relative_to(companies))
-            for p in companies.rglob("*")
-            if p.is_file()
-        } if companies.exists() else set()
-
-    def _authorized_latest(self) -> dict:
-        return {
-            "schema_version": "1.2",
-            "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
-            "company_query": "宁德时代",
-            "market": "CN",
-            "document_kind": "annual_report",
-            "mode": "latest_as_of",
-            "as_of_date": "2026-07-31",
-            "authorization": {
-                "provider": "spy",
-                "allowed_accessions": ["acc-2025"],
-                "max_items": 2,
-                "max_bytes": 5_000_000,
-                "expires_at": "2099-01-01T00:00:00Z",
+    wiki = IsolatedWiki(tmp_path)
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as listener:
+        command = [sys.executable, "-B", str(ADAPTER), f"http://127.0.0.1:{listener.server_port}"]
+        config = {
+            "schema_version": "1.1", "staging_root": str(wiki.catalog_dir / "staging"),
+            "timeout_seconds": 15,
+            "adapters": {
+                market: {
+                    "name": "ff-loopback-fixture", "version": "1.0.0",
+                    "interface": "json_command_v1" if market == "cn" else "dayu_sdk_bounded_v1",
+                    "supports_acquisition_budget": True,
+                    "project_root": str(wiki.root), "config_root": None,
+                    "command": command,
+                }
+                for market in ("cn", "hk", "us")
             },
         }
-
-    def test_lt09_second_request_zero_fetch_write(self) -> None:
-        """DL-04/LT-09: after the first authorized close-gap, the second
-        identical request reuses — provider fetch=0 and canonical write=0."""
-        self.wiki.seed_market("CN")
-        self.wiki.scan()
-        self.fixture.write_text(json.dumps({
-            "CN": [_candidate("acc-2025", 2025)],
-        }), encoding="utf-8")
-        request = self._authorized_latest()
-        rc, out, err = self.wiki.run_fetch(request, allow_download=True)
-        self.assertEqual(rc, 0, out + err)
-        first = json.loads(out)
-        self.assertEqual(first["status"], "capture_ready", out[:300])
-        self.assertEqual(self._spy_actions().count("fetch"), 1)
-        files_after_first = self._companies_files()
-        self.assertTrue(files_after_first, "first download wrote nothing")
-
-        # second identical request: current target is reused,
-        # with zero fetch and no new original files
-        rc2, out2, err2 = self.wiki.run_fetch(request, allow_download=True)
-        self.assertEqual(rc2, 0, err2)
-        second = json.loads(out2)
-        self.assertEqual(second["status"], "capture_ready", out2[:300])
-        self.assertEqual(second["handle"]["resolution_envelope"]["download_events"], 0)
-        self.assertEqual(second["handle"]["source_id"], first["handle"]["source_id"])
-        self.assertEqual(second["handle"]["content_sha256"], first["handle"]["content_sha256"])
-        self.assertEqual(self._spy_actions().count("fetch"), 1,
-                         "second request fetched again")
-        self.assertEqual(self._companies_files(), files_after_first,
-                         "second request wrote to companies")
-
-    def test_lt02_reuse_old_download_missing_new_only(self) -> None:
-        """LT-02: Dropbox/companies has the old period; the provider has a
-        NEWER period — the old handle is reused and ONLY the missing new
-        period is downloaded (one fetch, for the new year)."""
-        self.wiki.seed_market("CN")  # FY2024 local
-        self.fixture.write_text(json.dumps({
-            "CN": [_candidate("acc-2025", 2025)],
-        }), encoding="utf-8")
-        request = self._authorized_latest()
-        rc, out, err = self.wiki.run_fetch(request, allow_download=True)
-        self.assertEqual(rc, 0, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "capture_ready", out[:300])
-        fetches = self._spy_fetches()
-        self.assertEqual(len(fetches), 1)
-        self.assertEqual(fetches[0]["payload"].get("fiscal_year"), 2025,
-                         "downloaded the wrong period")
-        # the old-period document remains (reused, not re-downloaded)
-        self.assertTrue(any("2024" in f for f in self._companies_files()),
-                        f"old period vanished: {self._companies_files()}")
-
-    def test_lt01_local_is_latest_fetch_zero(self) -> None:
-        """LT-01: the provider confirms local is latest — discover may
-        run, fetch=0, and the local handle is returned."""
-        self.wiki.seed_market("CN")  # FY2024 local
-        self.wiki.scan()
-        self.fixture.write_text(json.dumps({
-            "CN": [_candidate("syn-cn-0001", 2024)],
-        }), encoding="utf-8")
-        rc, out, err = self.wiki.run_fetch(self._authorized_latest(),
-                                           allow_download=True)
-        self.assertEqual(rc, 0, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "gap", out[:300])
-        self.assertEqual(payload["gap_plan"]["missing"], [])
-        self.assertTrue(payload["gap_plan"]["reuse"],
-                        "local reuse handle not surfaced")
-        self.assertEqual(self._spy_actions().count("fetch"), 0)
-        self.assertEqual(self._spy_actions().count("discover"), 1)
-
-    def test_lt05_provider_unavailable_keeps_local_reuse(self) -> None:
-        """LT-05: a provider outage must NOT claim 'no gap' — the plan is
-        retryable, the local reuse is preserved, and fetch=0."""
-        self.wiki.seed_market("CN")
-        self._write_acquisition_fault()
-        rc, out, err = self.wiki.run_fetch(self._authorized_latest(),
-                                           allow_download=True)
-        self.assertEqual(rc, 0, err + " OUT:" + out[:400])
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "gap", out[:300])
-        self.assertTrue(payload["gap_plan"]["provider_unavailable"])
-        self.assertEqual(self._spy_actions().count("fetch"), 0)
-
-    def test_lt07_future_filing_never_leaks_into_gap(self) -> None:
-        """LT-07: a candidate filed after as_of is excluded from the gap —
-        nothing to fetch, nothing downloaded."""
-        self.wiki.seed_market("CN")
-        # the explicitly scoped provider candidate is FY2025; a
-        # FY2025 filing dated 2027-03-15 (after as_of 2026-07-31) is future
-        self.fixture.write_text(json.dumps({
-            "CN": [_candidate("acc-2025-future", 2025,
-                              filing_date="2027-03-15")],
-        }), encoding="utf-8")
-        request = self._authorized_latest()
-        request["authorization"]["allowed_accessions"] = ["acc-2025-future"]
-        rc, out, err = self.wiki.run_fetch(request, allow_download=True)
-        self.assertEqual(rc, 0, err + " OUT:" + out[:400])
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "gap", out[:300])
-        plan = payload["gap_plan"]
-        self.assertEqual(plan["missing"], [])
-        self.assertTrue(plan["future"], "future candidate not surfaced")
-        self.assertEqual(self._spy_actions().count("fetch"), 0)
+        (wiki.root / "config" / "source_acquisition.yaml").write_text(json.dumps(config), encoding="utf-8")
+        server = Thread(target=listener.serve_forever, daemon=True)
+        server.start()
+        try:
+            yield wiki, state
+        finally:
+            listener.shutdown()
+            server.join(timeout=5)
+            assert not server.is_alive()
 
 
-if __name__ == "__main__":
-    unittest.main()
+def candidate(accession: str, fiscal_year: int, *, filing_date: str = "2026-04-15") -> dict:
+    return {
+        "candidate_id": accession, "provider": "cninfo", "provider_document_id": accession,
+        "entity": "宁德时代", "market": "CN", "security_id": "300750",
+        "title": f"宁德时代{fiscal_year}年年度报告", "source_url": f"https://example.invalid/{accession}.pdf",
+        "document_kind": "annual_report", "form_type": "FY", "fiscal_year": fiscal_year,
+        "fiscal_period": "FY", "filing_date": filing_date, "amended": False, "language": "zh",
+    }
+
+
+def fetch(wiki: IsolatedWiki, *, fiscal_year: int | None = 2025,
+          intent: str = "fetch_if_missing") -> tuple[int, dict]:
+    request = {
+        "schema_version": "2.0", "company_query": "宁德时代", "market": "CN",
+        "document_kind": "annual_report", "mode": "exact" if fiscal_year else "latest_as_of",
+        "as_of_date": "2026-07-31", "filing_intent": intent,
+    }
+    if fiscal_year is not None:
+        request["fiscal_year"] = fiscal_year
+    if intent == "fetch_if_missing":
+        request["acquisition_limits"] = {"max_bytes": 80_000, "timeout_seconds": 30, "max_cost_usd": "0"}
+    code, stdout, stderr = wiki.run_fetch(request)
+    assert stdout, stderr
+    return code, json.loads(stdout)
+
+
+def published(reply: tuple[int, dict], *, content: bytes, downloads: int) -> dict:
+    code, output = reply
+    assert code == 0, output
+    assert output["status"] == output["filing"]["status"] == "source_candidate"
+    assert output["downloads"] == downloads
+    ref = output["filing"]["source_ref"]
+    assert ref["content_sha256"] == hashlib.sha256(content).hexdigest()
+    return ref
+
+
+def companies(wiki: IsolatedWiki) -> dict[str, str]:
+    root = wiki.root / "companies"
+    return {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in root.rglob("*") if path.is_file()}
+
+
+def test_lt09_second_request_adds_no_provider_dispatch_or_writes(provider):
+    wiki, state = provider
+    wiki.scan()
+    state.candidates = [candidate("fixture-2025", 2025)]
+    ref = published(fetch(wiki), content=annual_pdf(2025), downloads=1)
+    first = companies(wiki)
+    assert len(first) == 2  # original and its provenance sidecar
+    assert published(fetch(wiki), content=annual_pdf(2025), downloads=0) == ref
+    assert companies(wiki) == first
+    assert state.call_count("discover") == state.call_count("fetch") == 1
+
+
+def seed_verified_period(wiki: IsolatedWiki, state: Provider) -> dict:
+    wiki.scan()
+    state.candidates = [candidate("fixture-2024", 2024, filing_date="2025-03-14")]
+    ref = published(fetch(wiki, fiscal_year=2024), content=annual_pdf(2024), downloads=1)
+    assert state.call_count("discover") == state.call_count("fetch") == 1
+    return ref
+
+
+def test_lt02_fetches_only_the_new_period_and_keeps_the_old_original(provider):
+    wiki, state = provider
+    old = seed_verified_period(wiki, state)
+    before = companies(wiki)
+    start = len(state.calls)
+    state.candidates = [candidate("fixture-2025", 2025)]
+    published(fetch(wiki), content=annual_pdf(2025), downloads=1)
+    assert published(fetch(wiki, fiscal_year=2024, intent="reuse_only"),
+                     content=annual_pdf(2024), downloads=0) == old
+    after = companies(wiki)
+    assert len(after) == len(before) + 2
+    assert all(after[path] == digest for path, digest in before.items())
+    assert [request.get("fiscal_year") for op, request in state.calls[start:] if op == "fetch"] == [2025]
+
+
+def test_lt01_latest_existing_original_adds_no_download(provider):
+    wiki, state = provider
+    old = seed_verified_period(wiki, state)
+    before = companies(wiki)
+    assert published(fetch(wiki, fiscal_year=None), content=annual_pdf(2024), downloads=0) == old
+    assert companies(wiki) == before
+    assert state.call_count("fetch") == 1
+
+
+def test_lt05_provider_failure_does_not_mutate_or_occlude_the_cached_period(provider):
+    wiki, state = provider
+    old = seed_verified_period(wiki, state)
+    before = companies(wiki)
+    state.unavailable = True
+    code, first = fetch(wiki)
+    assert code == 2 and first["status"] != "source_candidate", first
+    assert first["downloads"] == 0
+    assert state.call_count("discover") == 2 and state.call_count("fetch") == 1
+    assert published(fetch(wiki, fiscal_year=2024, intent="reuse_only"),
+                     content=annual_pdf(2024), downloads=0) == old
+    assert state.call_count("discover") == 2 and companies(wiki) == before
+
+
+def test_lt07_future_filing_is_not_dispatched_or_relabelled(provider):
+    wiki, state = provider
+    seed_old_period(wiki)
+    wiki.scan()
+    before = companies(wiki)
+    state.candidates = [candidate("fixture-future", 2025, filing_date="2027-03-15")]
+    code, output = fetch(wiki)
+    assert code == 2 and output["status"] != "source_candidate", output
+    assert output["downloads"] == 0 and "source_ref" not in output["filing"]
+    assert state.call_count("discover") == 1 and state.call_count("fetch") == 0
+    assert companies(wiki) == before

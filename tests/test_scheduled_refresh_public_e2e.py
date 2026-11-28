@@ -165,7 +165,10 @@ def test_native_scheduled_job_requires_the_requested_accession(accession, tmp_pa
     assert len(log.read_text(encoding="utf-8").splitlines()) == 2
 
 
-@pytest.mark.skipif(os.name != "nt", reason="schtasks uses the Windows OEM code page")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 @pytest.mark.parametrize("encoding", ["oem", "utf-16"])
 def test_windows_query_accepts_task_xml_from_redirected_native_command(tmp_path, monkeypatch, encoding):
     import ff_scheduled_windows as launcher
@@ -187,7 +190,10 @@ def test_windows_query_accepts_task_xml_from_redirected_native_command(tmp_path,
     assert name in launcher._find(observed, "t:Actions/t:Exec/t:Arguments")
 
 
-@pytest.mark.skipif(os.name != "nt", reason="native Windows task installation protocol")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 @pytest.mark.parametrize("operation,registered", [("install", True), ("remove", False)])
 def test_windows_task_mutation_keeps_its_stdout_for_the_json_receipt(
     tmp_path, monkeypatch, capsys, operation, registered,
@@ -213,13 +219,17 @@ def test_windows_task_mutation_keeps_its_stdout_for_the_json_receipt(
     assert receipt["task_name"] == name and receipt["registered"] is registered
 
 
-@pytest.mark.skipif(os.name != "nt", reason="native Windows Task Scheduler inputs")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_windows_preview_produces_hidden_user_task_without_installing(tmp_path):
     helper = SCRIPT.with_name("ff_scheduled_windows.py")
     result = subprocess.run([
         sys.executable, "-B", str(helper), "preview", "--python", sys.executable,
         "--config", str(tmp_path / "space in config.json"), "--jobs-dir", str(tmp_path / "space in store"),
-    ], capture_output=True, text=True, timeout=20)
+    ], capture_output=True, stdin=subprocess.DEVNULL, text=True, timeout=20,
+       creationflags=subprocess.CREATE_NO_WINDOW)
     assert result.returncode == 0, (result.stdout, result.stderr)
     task = ElementTree.fromstring(json.loads(result.stdout)["definition"])
     ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
@@ -239,7 +249,10 @@ def test_windows_preview_produces_hidden_user_task_without_installing(tmp_path):
     assert not list(tmp_path.iterdir())
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows owner-record sharing semantics")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_atomic_publication_reuses_the_same_temporary_bytes_after_a_share_conflict(tmp_path, monkeypatch):
     replace = os.replace
     seen = []

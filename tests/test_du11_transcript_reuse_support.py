@@ -12,21 +12,20 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
 
 import pytest
 
-CWP_COMMIT = "c27efdffb9b357bd12b78162448cc5138bf59ba5"
+from e2e_support.cwp_runtime import CWP_REVISION, cwp_checkout, isolated_environment, run_quiet
+
+CWP_COMMIT = CWP_REVISION
 FF_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CWP_REPO = FF_ROOT.parent / "company-wiki"
 
 AS_OF = "2026-09-30"
 ENTITY = "Microsoft Corporation"
@@ -141,38 +140,19 @@ sys.stderr.write(json.dumps({
 """
 
 
-def cwp_repo() -> Path:
-    explicit = os.environ.get("COMPANY_WIKI_REPO")
-    return Path(explicit) if explicit else DEFAULT_CWP_REPO
-
-
-def _git(*arguments: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["git", "-C", str(cwp_repo()), *arguments], capture_output=True, timeout=120
-    )
-
-
-def _require_frozen_commit() -> None:
-    if not (cwp_repo() / ".git").exists():
-        pytest.skip(f"company-wiki repository is unavailable: {cwp_repo()}")
-    if _git("cat-file", "-e", f"{CWP_COMMIT}^{{commit}}").returncode != 0:
-        pytest.skip(f"frozen company-wiki commit {CWP_COMMIT} is unavailable")
-
-
 @contextmanager
 def frozen_archive() -> Iterator[Path]:
     """One ``git archive`` of only ``src/`` and ``pyproject.toml`` from the frozen commit."""
-    _require_frozen_commit()
+    cwp = cwp_checkout()
     holder = Path(tempfile.mkdtemp(prefix="du11-cwp-frozen-"))
     tar = holder / "cwp.tar"
     try:
-        result = subprocess.run(
+        result = run_quiet(
             [
-                "git", "-C", str(cwp_repo()), "archive", "--format=tar",
+                "git", "archive", "--format=tar",
                 "-o", str(tar), CWP_COMMIT, "src", "pyproject.toml",
             ],
-            capture_output=True,
-            timeout=300,
+            cwd=cwp, timeout=300,
         )
         if result.returncode != 0:
             raise AssertionError(
@@ -264,11 +244,7 @@ class OwnedWiki:
 
     # -- real company-wiki CLI -------------------------------------------
     def _env(self, extra: dict[str, str] | None = None) -> dict[str, str]:
-        env = dict(os.environ)
-        env["PYTHONPATH"] = str(self.root / "src")
-        env["PYTHONUTF8"] = "1"
-        env.pop("FMP_API_KEY", None)
-        env.pop("FMP_API_KEY_FILE", None)
+        env = isolated_environment(self.root / "runtime", self.root / "src")
         if extra:
             env.update(extra)
         return env
@@ -277,7 +253,7 @@ class OwnedWiki:
         self, module: str, arguments: list[str], payload: bytes | None = None,
         *, timeout: float = 300, extra_env: dict[str, str] | None = None,
     ) -> tuple[int, bytes, bytes]:
-        process = subprocess.run(
+        process = run_quiet(
             [
                 sys.executable, "-m", module,
                 "--config", str(self.root / "config" / "source_catalog.yaml"),
@@ -286,13 +262,12 @@ class OwnedWiki:
             input=payload,
             cwd=self.root,
             env=self._env(extra_env),
-            capture_output=True,
             timeout=timeout,
         )
         return process.returncode, process.stdout, process.stderr
 
     def run_scan(self) -> dict:
-        process = subprocess.run(
+        process = run_quiet(
             [
                 sys.executable, "-m", "company_wiki.source_catalog.cli",
                 "--config", str(self.root / "config" / "source_catalog.yaml"),
@@ -300,7 +275,6 @@ class OwnedWiki:
             ],
             cwd=self.root,
             env=self._env(),
-            capture_output=True,
             timeout=300,
         )
         if process.returncode != 0:

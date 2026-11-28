@@ -140,22 +140,18 @@ def test_forged_bundle_does_not_relax_deep_checks(tmp_path):
 def test_e2e_f04_symlink_outside_root_rejected(tmp_path):
     """E2E-F04: a canonical_path that resolves (via symlink) outside the
     configured allowance must be rejected by the path fence."""
-    import os
+    from e2e_support.directory_links import make_directory_link
 
     outside = tmp_path / "outside"
     outside.mkdir()
     secret = outside / "secret.pdf"
     secret.write_bytes(b"%PDF-1.4 secret")
-    root = tmp_path / "companies"
-    acme = root / "ACME"
-    acme.mkdir(parents=True, exist_ok=True)  # _base_handle 也会建；Linux CI 首次真实执行暴露
-    link = acme / "linked.pdf"
-    try:
-        os.symlink(secret, link)
-    except (OSError, NotImplementedError):
-        pytest.skip("symlink unsupported on this platform")
+    acme = tmp_path / "companies" / "ACME"
+    acme.mkdir(parents=True, exist_ok=True)
+    link = acme / "linked"
+    make_directory_link(link, outside)
     handle = _base_handle(tmp_path)
-    handle["canonical_path"] = str(link)
+    handle["canonical_path"] = str(link / secret.name)
     handle["byte_size"] = len(b"%PDF-1.4 secret")
     import hashlib
 

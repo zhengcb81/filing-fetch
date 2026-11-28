@@ -48,34 +48,30 @@ def _configured_runtime(tmp_path):
     return project, wiki, config
 
 
-def test_hook_uses_fixed_local_smoke_and_ci_retains_complete_inventory():
+def test_hook_uses_fixed_local_smoke_and_ci_executes_the_complete_offline_suite():
     workflow = yaml.safe_load((ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8"))
-    steps = workflow["jobs"]["verify"]["steps"]
-    behavior = next(step["run"] for step in steps
-                    if step.get("name") == "Run focused regression suite once")
-    assert behavior.strip() == "python tools/ci_tests.py"
+    jobs = workflow["jobs"]
+    strategy = jobs["verify"]["strategy"]["matrix"]
+    assert strategy["os"] == ["ubuntu-latest", "windows-latest"]
+    assert strategy["shard"] == [0, 1, 2]
+    behavior = next(step["run"] for step in jobs["verify"]["steps"]
+                    if step.get("name") == "Run the full offline suite")
+    assert "tools/ci_tests.py --evidence" in behavior
+    assert '--shard "${{ matrix.shard }}/3"' in behavior
+    assert "tools.anti_trick_gate_spec coverage" in jobs["coverage"]["steps"][-1]["run"]
     hook = (ROOT / ".githooks/pre-push").read_text(encoding="utf-8")
-    assert '--push-checks' in hook
-    assert '--ci-tests' not in hook
-    runner = _load("ff_ci_list", "tools/ci_tests.py")
-    assert len(runner.CI_TESTS) == len(set(runner.CI_TESTS))
-    for name in ("tests/test_provider_cause_contract.py", "tests/test_acquisition_failure_consumer.py",
-                 "tests/test_transcript_companion_transport.py", "tests/test_transcript_launch_contract.py",
-                 "tests/test_ci_tests.py", "tests/test_local_preparation_observation.py",
-                 "tests/b34/test_unknown_publication_candidate.py"):
-        assert name in runner.CI_TESTS
-    assert all((ROOT / relative).is_file() for relative in runner.CI_TESTS)
+    assert "--push-checks" in hook
+    assert "--ci-tests" not in hook
 
 
-def test_shared_ci_table_covers_pure_local_reuse_and_current_reader_regressions():
-    runner = _load("ff_ci_du11_regressions", "tools/ci_tests.py")
-    for name in ("tests/test_du11_transcript_reuse_selection.py",
-                 "tests/test_du11_transcript_reuse_contract.py",
-                 "tests/test_du11_verified_reader_revalidation.py"):
-        assert name in runner.CI_TESTS
-    assert len(runner.CI_TESTS) == len(set(runner.CI_TESTS))
-    # The frozen-CWP archive/real CLI matrix remains a large-node exercise.
-    assert "tests/test_du11_transcript_reuse_e2e.py" not in runner.CI_TESTS
+def test_offline_scope_is_directory_discovery_and_local_smoke_is_fixed():
+    runner = _load("ff_ci_offline_selection", "tools/ci_tests.py")
+    policy = json.loads((ROOT / "tools/ci_test_policy.json").read_text(encoding="utf-8"))
+    for platform in ("linux", "windows"):
+        expected = policy["platforms"][platform]
+        assert expected["roots"] == ["tests", "tools/anti_trick_gate_spec/tests"]
+        assert runner.offline_selection(platform) == [*expected["roots"], "-m", expected["markexpr"]]
+    assert all("::" in item for item in runner.LOCAL_SMOKE_TESTS)
 
 
 def test_failure_keeps_full_node_output_exit_code_and_cleans_scratch(
@@ -88,7 +84,8 @@ def test_failure_keeps_full_node_output_exit_code_and_cleans_scratch(
     before = set(tmp_path.iterdir())
     for key in runner.GIT_REPOSITORY_CONTEXT:
         monkeypatch.setenv(key, "parent-hook-context")
-    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "safe-context-must-remain")
+    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "parent-hook-context")
+    monkeypatch.setenv("FF_TEST_CREDENTIAL", "fixture-only-sentinel")
 
     def fail(command, **kwargs):
         calls.append(command)
@@ -96,7 +93,10 @@ def test_failure_keeps_full_node_output_exit_code_and_cleans_scratch(
         scratch.append(owned)
         (owned / "child-proof.txt").write_text("owned", encoding="utf-8")
         assert not any(key in kwargs["env"] for key in runner.GIT_REPOSITORY_CONTEXT)
-        assert kwargs["env"]["GIT_CONFIG_PARAMETERS"] == "safe-context-must-remain"
+        assert "GIT_CONFIG_PARAMETERS" not in kwargs["env"]
+        assert "FF_TEST_CREDENTIAL" not in kwargs["env"]
+        assert Path(kwargs["env"]["HOME"]).parent == owned.parent
+        assert Path(kwargs["env"]["LOCALAPPDATA"]).is_dir()
         feedback = Path(kwargs["env"]["RESEARCH_FEEDBACK_DIR"])
         assert feedback.parent == owned.parent and feedback != owned
         assert "RESEARCH_FEEDBACK_OUT" not in kwargs["env"]
@@ -110,7 +110,7 @@ def test_failure_keeps_full_node_output_exit_code_and_cleans_scratch(
     assert runner.run_tests() == 7
     assert len(calls) == 1
     assert "-rs" in calls[0]
-    assert [item for item in calls[0] if item in runner.CI_TESTS] == list(runner.CI_TESTS)
+    assert calls[0][4:6] == ["tests", "tools/anti_trick_gate_spec/tests"]
     assert scratch and all(not path.exists() for path in scratch)
     output = capsys.readouterr()
     assert "first_failure_node" in output.out
@@ -124,7 +124,7 @@ def test_real_pytest_failure_reports_node_and_restores_owned_temp(
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     runner = _load("ff_ci_real_failure", "tools/ci_tests.py")
     monkeypatch.setattr(runner, "PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr(runner, "CI_TESTS", ("test_owned_failure.py",))
+    monkeypatch.setattr(runner, "offline_selection", lambda platform: ["test_owned_failure.py"])
     # Model the owner's pytest root even when a caller puts --basetemp inside another repo.
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
     (tmp_path / "test_owned_failure.py").write_text(
@@ -245,7 +245,7 @@ def test_local_smoke_has_fixed_nodes_no_runtime_config_or_parent_git(monkeypatch
     runner = _load("ff_local_smoke_schedule", "tools/ci_tests.py")
     assert 0 < len(runner.LOCAL_SMOKE_TESTS) <= 12
     assert len(runner.LOCAL_SMOKE_TESTS) == len(set(runner.LOCAL_SMOKE_TESTS))
-    assert all("::test_" in node and node.split("::")[0] in runner.CI_TESTS
+    assert all("::test_" in node and (ROOT / node.split("::")[0]).is_file()
                for node in runner.LOCAL_SMOKE_TESTS)
     monkeypatch.setattr(fetch_filing, "load_company_wiki_root",
                         lambda **kwargs: pytest.fail("local smoke loaded another repo"))
@@ -260,7 +260,7 @@ def test_local_smoke_has_fixed_nodes_no_runtime_config_or_parent_git(monkeypatch
         (owned/"child.txt").write_text("owned", encoding="utf-8")
         assert kwargs["timeout"] == 180
         assert not any(key in kwargs["env"] for key in runner.GIT_REPOSITORY_CONTEXT)
-        assert kwargs["env"]["GIT_CONFIG_PARAMETERS"] == "keep-this-context"
+        assert "GIT_CONFIG_PARAMETERS" not in kwargs["env"]
         assert [x for x in command if x in runner.LOCAL_SMOKE_TESTS] == list(runner.LOCAL_SMOKE_TESTS)
         return subprocess.CompletedProcess(command, 0, "", "")
     monkeypatch.setattr(runner.subprocess,"run",child)

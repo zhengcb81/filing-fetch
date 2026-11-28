@@ -22,6 +22,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from e2e_support.isolated_wiki import IsolatedWiki, cleanup_temporary
 
 _REAL_DOWNLOAD_AUTHORIZED = os.environ.get("FC805_REAL_DOWNLOAD") == "1"
@@ -152,6 +154,9 @@ def _run_real_flow(company_query: str, market: str, tmp: Path) -> dict:
             "fiscal_year": handle.get("fiscal_year"),
         },
     }
+
+
+pytestmark = pytest.mark.live
 
 
 @unittest.skipUnless(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -11,65 +13,7 @@ import xml.etree.ElementTree as ET
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CI_TESTS = (
-    "tests/test_architecture_quality.py",
-    "tests/test_m3_acquisition_usage_ff.py",
-    "tests/test_m3_acquisition_usage_acceptance.py",
-    "tests/test_failure_usage_continuity.py",
-    "tests/test_s3_single_request_limits.py",
-    "tests/test_single_intent_acquisition.py",
-    "tests/test_s3_install_surface.py",
-    "tests/test_selective_installation.py",
-    "tests/test_install_runtime_diagnostics.py",
-    "tests/test_ff_v2_contract.py",
-    "tests/test_ff_job_facade.py",
-    "tests/test_ff_job_cross_process.py",
-    "tests/test_ff_job_feedback_lookup.py",
-    "tests/test_ff_slot_feedback_lookup.py",
-    "tests/test_feedback_ordinary_failures.py",
-    "tests/test_ff_runtime_lifecycle.py",
-    "tests/test_s1_windows_tick_logging.py",
-    "tests/test_ff_t3_receipt.py",
-    "tests/test_provider_cause_contract.py",
-    "tests/test_r1_source_business_failure.py",
-    "tests/test_acquisition_failure_consumer.py",
-    "tests/test_ff_golden.py",
-    "tests/test_source_ref_v2.py",
-    "tests/test_source_ref_v2_db_query.py",
-    "tests/b34/test_unknown_publication_candidate.py",
-    "tests/test_local_source_prepare.py",
-    "tests/test_decoupled_connection.py",
-    "tests/test_public_operation_isolation.py",
-    "tests/financial_statements/test_fetch_statements.py",
-    "tests/financial_statements/test_fetch_statements_subprocess.py",
-    "tests/financial_statements/test_layer_boundary.py",
-    "tests/test_process_business_exit.py",
-    "tests/test_local_preparation_observation.py",
-    "tests/test_transcript_companion.py",
-    "tests/test_transcript_companion_transport.py",
-    "tests/test_transcript_launch_contract.py",
-    "tests/test_transcript_response_budget.py",
-    # Pure local reuse/current-reader regressions; the real frozen-CWP matrix
-    # remains a separate integration node instead of running on every push.
-    "tests/test_du11_transcript_reuse_selection.py",
-    "tests/test_du11_transcript_reuse_contract.py",
-    "tests/test_du11_verified_reader_revalidation.py",
-    "tests/test_fetch_filing.py",
-    "tests/test_fc802_gap_orchestration.py",
-    "tests/test_fc1204_coverage_gap.py",
-    "tests/test_p5_process_lifecycle.py",
-    "tests/test_p5_legacy_request_limits.py",
-    "tests/test_complexity_diagnostics.py",
-    "tests/test_verify_plan_claims.py",
-    "tests/test_latest_mode.py",
-    "tests/test_dropbox_config_invariants.py",
-    "tests/test_bundle_compat.py",
-    "tests/e2e_support/test_spy_log.py",
-    "tests/test_ci_tests.py",
-    "tests/test_w07_matrix_efficiency.py",
-    "tests/test_root_w07_matrix_boundaries.py",
-    "tests/test_s3_matrix_owner_boundary.py",
-)
+TEST_POLICY = Path(__file__).with_name('ci_test_policy.json')
 # Explicit existing pure-unit nodes; additions to a file cannot widen daily work.
 LOCAL_SMOKE_TESTS = (
     "tests/test_architecture_quality.py::test_valid_leap_day_is_accepted",
@@ -82,7 +26,7 @@ LOCAL_SMOKE_TESTS = (
     "tests/test_transcript_companion.py::test_existing_exact_transcript_is_reused_without_fetch",
     "tests/test_transcript_companion.py::test_direct_companion_fetch_without_caps_makes_zero_transport_calls",
     "tests/test_latest_mode.py::test_latest_as_of_mode_valid",
-    "tests/test_ci_tests.py::test_shared_ci_table_covers_pure_local_reuse_and_current_reader_regressions",
+    "tests/test_ci_tests.py::test_offline_scope_is_directory_discovery_and_local_smoke_is_fixed",
 )
 
 GIT_REPOSITORY_CONTEXT = (
@@ -102,6 +46,19 @@ def subprocess_environment() -> dict[str, str]:
     return environment
 
 
+_TEST_ENVIRONMENT = {
+    "COMSPEC", "COMPANY_WIKI_REPO", "FILING_FETCH_V2_WIKI_SRC",
+    "GITHUB_ACTIONS", "PATH", "PATHEXT", "PROGRAMDATA", "PROGRAMFILES",
+    "PROGRAMFILES(X86)", "SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR", "WINDIR",
+    "PYTHONUTF8", "PYTHONIOENCODING", "PYTHONDONTWRITEBYTECODE", "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+}
+
+
+def _test_environment() -> dict[str, str]:
+    return {key: value for key, value in subprocess_environment().items()
+            if key.upper() in _TEST_ENVIRONMENT}
+
+
 def _annotate_failures(report: Path) -> None:
     """Expose node names in GitHub Checks; missing diagnostics never alter exit."""
     try:
@@ -117,16 +74,21 @@ def _annotate_failures(report: Path) -> None:
 
 
 def _run_tests(tests, *, scratch_prefix: str, timeout_seconds: int) -> int:
-    environment = subprocess_environment()
+    environment = _test_environment()
     with tempfile.TemporaryDirectory(prefix=scratch_prefix) as scratch:
         root = Path(scratch)
-        test_tmp = root / "pytest"
-        test_tmp.mkdir()
-        for name in ("RESEARCH_FEEDBACK_OUT", "RESEARCH_FEEDBACK_RUN_ID", "RESEARCH_FEEDBACK_ATTEMPT_ID"):
-            environment.pop(name, None)
-        environment["RESEARCH_FEEDBACK_DIR"] = str(root / "observations")
+        test_tmp = root / "t"
+        profile = root / "profile"
+        appdata = profile / "AppData" / "Roaming"
+        local = profile / "AppData" / "Local"
+        for directory in (test_tmp, appdata, local):
+            directory.mkdir(parents=True)
+        environment.update(HOME=str(profile), USERPROFILE=str(profile), APPDATA=str(appdata),
+                           LOCALAPPDATA=str(local), TMP=str(root), TEMP=str(root), TMPDIR=str(root),
+                           RESEARCH_FEEDBACK_DIR=str(root / "observations"),
+                           RESEARCH_FEEDBACK_STATE_ROOT=str(root / "feedback-state"))
         command = [sys.executable, "-B", "-m", "pytest", *tests,
-                   "-q", "-rs", "--tb=short", "-p", "no:cacheprovider", "--basetemp", str(test_tmp)]
+                   "-q", "-rs", "--capture=sys", "--tb=short", "-p", "no:cacheprovider", "--basetemp", str(test_tmp)]
         report = Path(scratch) / "junit.xml"
         annotated = environment.get("GITHUB_ACTIONS") == "true"
         if annotated:
@@ -140,6 +102,8 @@ def _run_tests(tests, *, scratch_prefix: str, timeout_seconds: int) -> int:
             encoding="utf-8",
             errors="replace",
             timeout=timeout_seconds,
+            stdin=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         # Preserve every failed node, including the first one in a long report.
         if result.stdout:
@@ -151,10 +115,28 @@ def _run_tests(tests, *, scratch_prefix: str, timeout_seconds: int) -> int:
         return result.returncode
 
 
-def run_tests() -> int:
-    """Run the consumer suite; ROOT owns producer integration."""
-    return _run_tests(CI_TESTS, scratch_prefix="ff-ci-", timeout_seconds=900)
+def offline_selection(platform: str) -> list[str]:
+    """Read the same reviewed owner policy independently checked against CI evidence."""
+    policy = json.loads(TEST_POLICY.read_text(encoding="utf-8"))
+    selection = policy["platforms"][platform]
+    return [*selection["roots"], "-m", selection["markexpr"]]
 
+
+def run_tests(*, collect_only: bool = False, evidence: Path | None = None,
+              revision: str | None = None, shard: str | None = None) -> int:
+    """Discover and run all applicable non-live tests, without using owner state."""
+    platform = "windows" if os.name == "nt" else "linux"
+    command = [*offline_selection(platform), "--strict-markers"]
+    if collect_only:
+        command.append("--collect-only")
+    if shard is not None:
+        command.extend(("-p", "tools.pytest_shards", "--ff-shard", shard))
+    if evidence is not None:
+        if not revision:
+            raise ValueError("test evidence requires the checkout revision")
+        command.extend(("-p", "tools.anti_trick_gate_spec.pytest_probe",
+                        "--s6-evidence", str(evidence.resolve()), "--s6-revision", revision))
+    return _run_tests(command, scratch_prefix="ff-ci-", timeout_seconds=900)
 
 def run_local_smoke() -> int:
     """One fixed pure-unit child; no production/sibling configuration lookup."""
@@ -162,11 +144,22 @@ def run_local_smoke() -> int:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--collect-only", action="store_true")
+    parser.add_argument("--evidence", type=Path)
+    parser.add_argument("--revision")
+    parser.add_argument("--shard", metavar="SHARD/COUNT")
+    settings = parser.parse_args()
+    if settings.evidence is not None and not settings.revision:
+        parser.error("--evidence requires --revision")
+    if settings.collect_only and settings.shard is not None:
+        parser.error("canonical collection cannot be sharded")
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
             reconfigure(encoding="utf-8", errors="replace")
-    return run_tests()
+    return run_tests(collect_only=settings.collect_only, evidence=settings.evidence,
+                     revision=settings.revision, shard=settings.shard)
 
 
 if __name__ == "__main__":

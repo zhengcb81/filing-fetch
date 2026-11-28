@@ -1,31 +1,13 @@
-"""Build a throwaway company-wiki instance backed by the real company-wiki
-code (editable install) with fully temporary state.
+"""Temporary CWP source catalog with owned synthetic data and public commands.
 
-Layout (findings.md has the provenance for every rule):
-
-    <root>/                          <- wiki root (config's two parents up)
-      config/source_catalog.yaml     <- exact keys: schema_version/catalog_dir/roots;
-                                         single company_raw root -> <root>/companies
-      config/source_catalog_worker.yaml  <- copied from production; ensure requires
-                                            the file to exist (strict resolve), never parses it
-      config/source_acquisition.yaml <- no-op adapters (offline): discovery returns
-                                        zero candidates -> resolution MISSING
-      .source_catalog/security_master/{cn,hk,us}.json <- copied production snapshots,
-                                            identify is fully offline without --refresh
-      .source_catalog/worker_control.json  <- only for the paused-worker scenario
-      companies/<Entity>/raw/...     <- seed files + .source.json sidecars
-
-The production wiki is only ever *read* (shutil.copy2).  Nothing writes into
-``company-wiki`` itself; the company-wiki CLI runs as a subprocess against the
-temporary root.
+Offline runs use the explicitly pinned release's code and fixture data only.
+The manual live suite can opt in to its separately configured acquisition adapter.
 """
 
 from __future__ import annotations
 
 import json
-import shutil
 import os
-import subprocess
 import sys
 import tempfile
 import time
@@ -33,20 +15,12 @@ from pathlib import Path
 
 import yaml
 
-# Prefer the sibling layout (…/Projects/<repo>) so the harness also works when
-# the weekly T3 scheduled task runs as SYSTEM, where Path.home() is the system
-# profile; fall back to ~/Projects for installed skill copies (GP-009 fix).
-_SIBLING_PROJECTS = Path(__file__).resolve().parents[2].parent
-PRODUCTION_WIKI = (
-    _SIBLING_PROJECTS / "company-wiki"
-    if (_SIBLING_PROJECTS / "company-wiki").is_dir()
-    else Path.home() / "Projects" / "company-wiki"
-)
+from e2e_support.cwp_runtime import cwp_checkout, isolated_environment, run_quiet
 
-PRODUCTION_MASTER_AVAILABLE = all(
-    (PRODUCTION_WIKI / ".source_catalog" / "security_master" / f"{market}.json").is_file()
-    for market in ("cn", "hk", "us")
-)
+def _live_wiki_root() -> Path:
+    return Path(os.environ["FILING_FETCH_LIVE_WIKI"]) if "FILING_FETCH_LIVE_WIKI" in os.environ \
+        else Path.home() / "Projects" / "company-wiki"
+
 
 # Fixed timestamp: the synthetic master must be byte-stable across runs
 # (double-run determinism), so it cannot use the runtime clock.
@@ -73,8 +47,7 @@ _SYNTHETIC_MASTER_CANONICALS = {
 def _synthetic_security_master(market: str) -> dict:
     """Deterministic minimal security_master built from SYNTHETIC_SEEDS.
 
-    Used when the production snapshot is unavailable (CI clones a clean
-    company-wiki with no .source_catalog/).  Schema mirrors the production
+    Schema mirrors the CWP owner
     snapshot: {market, record_count, records, retrieved_at, schema_version}.
     """
     upper = market.upper()
@@ -200,7 +173,7 @@ adapters:
 def _configured_code_path(value: str) -> str:
     """Keep deployed code entry points resolvable from a temporary wiki."""
     if value.startswith(("${PROJECT_ROOT}/../", "${PROJECT_ROOT}/tools/")):
-        return value.replace("${PROJECT_ROOT}", PRODUCTION_WIKI.as_posix(), 1)
+        return value.replace("${PROJECT_ROOT}", _live_wiki_root().as_posix(), 1)
     return value
 
 
@@ -239,14 +212,12 @@ class IsolatedWiki:
         paused: bool = False,
         with_security_master: bool = True,
     ) -> None:
-        self.root = root
+        self.root = root.resolve(strict=True)
+        self.src = cwp_checkout() / "src"
+        (root / "companies").mkdir(exist_ok=True)
         config = root / "config"
         config.mkdir(parents=True, exist_ok=True)
         (config / "source_catalog.yaml").write_text(_CATALOG_YAML, encoding="utf-8")
-        shutil.copy2(
-            PRODUCTION_WIKI / "config" / "source_catalog_worker.yaml",
-            config / "source_catalog_worker.yaml",
-        )
         (config / "source_acquisition.yaml").write_text(
             _ACQUISITION_YAML, encoding="utf-8"
         )
@@ -261,19 +232,10 @@ class IsolatedWiki:
             master = self.catalog_dir / "security_master"
             master.mkdir(parents=True, exist_ok=True)
             for market in ("cn", "hk", "us"):
-                production = (
-                    PRODUCTION_WIKI
-                    / ".source_catalog"
-                    / "security_master"
-                    / f"{market}.json"
+                (master / f"{market}.json").write_text(
+                    json.dumps(_synthetic_security_master(market), ensure_ascii=False),
+                    encoding="utf-8",
                 )
-                if production.is_file():
-                    shutil.copy2(production, master / f"{market}.json")
-                else:
-                    (master / f"{market}.json").write_text(
-                        json.dumps(_synthetic_security_master(market), ensure_ascii=False),
-                        encoding="utf-8",
-                    )
         if paused:
             self.catalog_dir.mkdir(parents=True, exist_ok=True)
             (self.catalog_dir / "worker_control.json").write_text(
@@ -283,7 +245,7 @@ class IsolatedWiki:
 
     def use_production_adapters(self) -> None:
         """Use the owner's adapter configuration with isolated writable state."""
-        source = PRODUCTION_WIKI / "config" / "source_acquisition.yaml"
+        source = _live_wiki_root() / "config" / "source_acquisition.yaml"
         config = yaml.safe_load(source.read_text(encoding="utf-8"))
         config["staging_root"] = str(self.catalog_dir / "staging")
         for adapter in config["adapters"].values():
@@ -337,26 +299,21 @@ class IsolatedWiki:
         )
         return target
 
+    def read(self, source_ref: dict) -> tuple[int, bytes, bytes]:
+        result = run_quiet(
+            [sys.executable, "-B", "-m", "company_wiki.source_catalog.source_reader_cli",
+             "--config", str(self.config_path), "--document-id", source_ref["document_id"],
+             "--source-id", source_ref["source_id"], "--content-sha256", source_ref["content_sha256"],
+             "--purpose", "preview"], cwd=self.root, env=isolated_environment(self.root, self.src),
+        )
+        return result.returncode, result.stdout, result.stderr
+
     def scan(self) -> None:
         """Run the real ``scan`` CLI (acquires and releases the catalog lock)."""
-        env = os.environ.copy()
-        env["PYTHONUTF8"] = "1"
-        env["PYTHONDONTWRITEBYTECODE"] = "1"
-        proc = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "company_wiki.source_catalog.cli",
-                "--config",
-                str(self.config_path),
-                "scan",
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=env,
-            timeout=300,
+        proc = run_quiet(
+            [sys.executable, "-B", "-m", "company_wiki.source_catalog.cli",
+             "--config", str(self.config_path), "scan", "--root-id", "company_raw"],
+            cwd=self.root, env=isolated_environment(self.root, self.src),
         )
         if proc.returncode != 0:
             raise AssertionError(
@@ -381,22 +338,15 @@ class IsolatedWiki:
             str(self.root / "company_wiki.json"),
             "--timeout-seconds",
             str(timeout),
+            "--jobs-dir",
+            str(self.root / "ff-jobs"),
         ]
         if allow_download:
             command.append("--allow-download")
         if extra_args:
             command.extend(extra_args)
-        env = os.environ.copy()
-        env["PYTHONUTF8"] = "1"
-        env["PYTHONDONTWRITEBYTECODE"] = "1"
-        proc = subprocess.run(
-            command,
-            input=json.dumps(request, ensure_ascii=False),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=env,
-            timeout=timeout + 60,
+        proc = run_quiet(
+            command, cwd=self.root, env=isolated_environment(self.root, self.src),
+            input=json.dumps(request, ensure_ascii=False).encode("utf-8"), timeout=timeout + 15,
         )
-        return proc.returncode, proc.stdout, proc.stderr
+        return proc.returncode, proc.stdout.decode("utf-8"), proc.stderr.decode("utf-8", "replace")

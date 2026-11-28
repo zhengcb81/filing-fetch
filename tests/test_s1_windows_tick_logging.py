@@ -48,7 +48,10 @@ def _isolate_feedback(monkeypatch):
             monkeypatch.delenv(key)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows scheduled tick runner")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_windows_failure_is_data_minimal_and_cold_readable(tmp_path, monkeypatch):
     _isolate_feedback(monkeypatch)
     jobs_dir = tmp_path / "ff-jobs"
@@ -125,7 +128,10 @@ def test_windows_failure_is_data_minimal_and_cold_readable(tmp_path, monkeypatch
     assert legacy.read_text(encoding="utf-8") == "existing historical log\n"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows scheduled tick runner")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_windows_failure_log_survives_unavailable_outbox(tmp_path, monkeypatch):
     _isolate_feedback(monkeypatch)
     jobs_dir = tmp_path / "jobs"
@@ -141,7 +147,10 @@ def test_windows_failure_log_survives_unavailable_outbox(tmp_path, monkeypatch):
     assert (jobs_dir / "observations").read_text(encoding="utf-8") == "not a directory"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows scheduled tick runner")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_windows_success_keeps_original_exit_and_no_failure_log(tmp_path, monkeypatch):
     _isolate_feedback(monkeypatch)
     jobs_dir = tmp_path / "jobs"
@@ -155,7 +164,10 @@ def test_windows_success_keeps_original_exit_and_no_failure_log(tmp_path, monkey
     assert not (jobs_dir / "observations").exists()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows scheduled tick runner")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_timeout_reaps_tick_and_does_not_redispatch(tmp_path, monkeypatch):
     from ff_process_tree import pid_is_alive
 
@@ -190,7 +202,10 @@ def test_timeout_reaps_tick_and_does_not_redispatch(tmp_path, monkeypatch):
     assert json.loads(observed)["actual"] == "tick_timeout"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows scheduled tick runner")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_tick_ignores_unconsumed_stdout(tmp_path, monkeypatch):
     from ff_process_transport import MAX_JSON_OUTPUT_BYTES
 

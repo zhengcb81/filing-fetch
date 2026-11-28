@@ -60,8 +60,8 @@ def test_invalid_resources_are_rejected_without_spawning(monkeypatch, invalid):
 
 def _watchdog_job(proc):
     # Independent test watchdog. The probe is blocked on stdin until assigned.
-    win32api = pytest.importorskip("win32api")
-    win32job = pytest.importorskip("win32job")
+    import win32api
+    import win32job
     job = win32job.CreateJobObject(None, "")
     info = win32job.QueryInformationJobObject(job, win32job.JobObjectExtendedLimitInformation)
     info["BasicLimitInformation"]["LimitFlags"] = win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
@@ -184,7 +184,10 @@ def test_strict_utf8_success_output_remains_a_named_transport_error():
         fpt.run_bounded_json(command, timeout_seconds=3)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows job assignment")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_failed_job_assignment_reaps_bootstrap_before_user_command(monkeypatch, tmp_path):
     marker = tmp_path / "should-not-run"
     captured = []
@@ -209,7 +212,10 @@ def test_failed_job_assignment_reaps_bootstrap_before_user_command(monkeypatch, 
     assert all(pipe.closed for pipe in (captured[0].stdin, captured[0].stdout, captured[0].stderr))
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows job assignment")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_spawn_time_uses_request_deadline_and_never_releases_expired_child(monkeypatch, tmp_path):
     import time
 

@@ -548,7 +548,10 @@ raise SystemExit(ff_job.main())
     assert failure["disposition"] == "deviation" and signal.read_text() == "1"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="the native Windows login launcher is Windows-specific")
+@pytest.mark.windows_only
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
 def test_login_launcher_reports_missing_interpreter_without_registering_a_task(tmp_path):
     jobs = tmp_path / "jobs"
     result = cli(

@@ -59,3 +59,9 @@ harness 显式返回：断言/golden 不匹配为 exit 1，缺少 golden 为 exi
 - `python e2e/run_companies_reuse_only_e2e.py`（exit 0/1/2）
 - 当前本地 `.git/hooks/pre-commit` 调用 `.pre-commit-config.yaml`，执行 ruff 与两个公开契约模块的 mypy；完整回归需另行执行。`.githooks/pre-commit` 保留旧 pytest/E2E/install-sync 脚本，但本次查询 `core.hooksPath` 未设置，不能称其每次提交自动执行。
 - `.github/workflows/quality.yml` 在 push/PR 配置 manifest-driven sibling runtime、静态检查、类型检查、测试/coverage、config doctor、reuse-only E2E、install-sync 和 plan verifier；本次仅核对配置，未查询远端运行结果。
+
+## S6 双平台离线回归
+
+日常 pre-push 继续使用固定的快速纯单元集合。完整质量工作流在 Ubuntu 和 Windows 由同一 policy 发现全部适用的离线测试，分别记录实际测试收集及执行。外部供应商用例只在明确运行 `-m live` 时参与，CI 不运行它们。
+
+本地复跑前，把 `COMPANY_WIKI_REPO` 指向 workflow 中固定 SHA 的独立 CWP checkout，并安装工作流依赖。Windows 另需 pywin32 与 Git 自带的 sh。运行 `python tools/ci_tests.py`。固定 CWP 仅提供公开 CLI 与版本化来源数据接口，测试不会拷贝用户原件、安全主数据或生产配置。采集烟雾使用测试拥有的 loopback HTTP server，核对真实派发、原件字节和重复运行的零增量。三市场正向用结构化期间，旧 HK sidecar 缺期间的已知对接问题由 CWP 单独跟踪，FF 继续拒绝无证据的期次。

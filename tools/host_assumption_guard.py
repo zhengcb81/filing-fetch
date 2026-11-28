@@ -24,10 +24,13 @@ first version of this docstring claimed more, and the claim was false):
     suite before pushing, not by this file.  Rule 2's own value is narrower: a NEW
     file that calls a capability API and never guards it is invisible to both
     local hooks (the pre-push gate runs six contract files) and green on Windows.
-  * All three rules are SYNTAX-level.  A path or digest that is CONCATENATED or
-    COMPUTED at runtime (``"C:" + "/Windows/win.ini"``, ``os.path.join``,
-    ``hashlib.sha256(...).hexdigest()`` compared against a constant) is invisible
-    here by construction.  That is the price of a fast, deterministic gate.
+  * The two retained rules are SYNTAX-level.  A path that is CONCATENATED or
+    COMPUTED at runtime (``"C:" + "/Windows/win.ini"``, ``os.path.join``) is
+    invisible here by construction.  That is the price of a fast checker.
+  * Digest literals are not host assumptions.  The old third rule matched every
+    64-character hash, including real immutable source hashes, and required a
+    manual registry.  It is retired.  Byte integrity belongs to the source reader;
+    host-dependent payload assertions need relocation tests, not hash licenses.
   * Rule 1 is a FINITE list of absolute prefixes (``WIN_ABS`` / ``POSIX_ABS``),
     widened on 2026-09-13 with the macOS/container roots the first review found
     missing.  It is deliberately not "anything starting with a slash": tests
@@ -69,7 +72,6 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_ROOTS = ("tests", "src")
-REGISTRY = REPO / "tests" / "contract" / "host_assumption_allowlist.json"
 BASELINE = REPO / "tests" / "contract" / "host_assumption_baseline.json"
 
 WIN_ABS = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\[^\\/]|\\\\\?\\|\\\\\.\\)")
@@ -86,10 +88,6 @@ POSIX_ABS = re.compile(
     r")"
 )
 URL = re.compile(r"^[a-z][a-z0-9+.-]*://", re.IGNORECASE)
-# Case-insensitive since B.VR1307-05: many tools print lowercase OR uppercase hex,
-# and the URL rule above already used IGNORECASE.  Registry lookups lowercase the
-# literal, so registering one case covers both.
-HEX64 = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 # Exact APIs, matched by full dotted receiver: a helper called `link()` must not be
 # mistaken for `os.link` (that false positive is B.VR1307-02's second half).
 CAPABILITY_FUNCTIONS = ("os.symlink", "os.link", "os.mkfifo")
@@ -107,7 +105,6 @@ MODULE_SKIP_NAMES = ("pytestmark",)
 
 RULE_PATHS = "host-absolute-path"
 RULE_CAPABILITY = "host-capability-without-skip"
-RULE_FROZEN_HASH = "unregistered-frozen-hash"
 RULE_SYNTAX = "syntax-error"
 RULE_UNREADABLE = "unreadable-file"
 BASELINEABLE = (RULE_PATHS, RULE_CAPABILITY)
@@ -127,11 +124,38 @@ def _docstring_nodes(tree: ast.AST) -> set[int]:
     return lines
 
 
+def _is_json_pointer_data_literal(node: ast.Constant, parents: dict[int, ast.AST]) -> bool:
+    """Classify literal source coordinates, without exempting filesystem calls.
+
+    Only the two explicit pointer data fields qualify.  A literal may be a
+    string-concatenation operand, but calls or containers between it and the
+    dictionary value stop the classification.  RFC 6901 permits only ~0 and ~1
+    escapes; this checks the literal, not the runtime value of a computed pointer.
+    """
+    value = node.value
+    if not isinstance(value, str) or (value and not value.startswith("/")):
+        return False
+    if re.search(r"~(?![01])", value):
+        return False
+    current: ast.AST = node
+    parent = parents.get(id(current))
+    while isinstance(parent, ast.BinOp) and isinstance(parent.op, ast.Add):
+        current = parent
+        parent = parents.get(id(current))
+    if not isinstance(parent, ast.Dict):
+        return False
+    for key, item in zip(parent.keys, parent.values):
+        if item is current and isinstance(key, ast.Constant):
+            return key.value in ("record_pointer", "field_pointer")
+    return False
+
+
 def _string_literals(tree: ast.AST, doc_lines: set[int]) -> list[tuple[str, int]]:
     out: list[tuple[str, int]] = []
+    parents = _parents(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if node.lineno in doc_lines:
+            if node.lineno in doc_lines or _is_json_pointer_data_literal(node, parents):
                 continue
             out.append((node.value, node.lineno))
         elif isinstance(node, ast.JoinedStr):
@@ -289,9 +313,6 @@ def scan_file(path: Path) -> list[dict[str, Any]]:
         if in_tests and (WIN_ABS.match(stripped) or POSIX_ABS.match(stripped)):
             violations.append({"rule": RULE_PATHS, "file": str(path), "line": lineno,
                                "value": stripped})
-        if HEX64.match(stripped):
-            violations.append({"rule": RULE_FROZEN_HASH, "file": str(path), "line": lineno,
-                               "value": stripped})
     if in_tests:
         for item in _capability_violations(tree):
             item["file"] = str(path)
@@ -306,7 +327,7 @@ def load_json(path: Path, default: Any) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise SystemExit(f"{path} is not readable JSON ({type(exc).__name__}: {exc}); "
-                         f"the gate cannot run - fix the file")
+                         f"the gate cannot run - fix the file") from exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -318,8 +339,6 @@ def main(argv: list[str] | None = None) -> int:
                              "paste (this script never writes into the tree)")
     args = parser.parse_args(argv)
 
-    registry = load_json(REGISTRY, {"registered_hashes": {}})
-    registered = {digest.lower() for digest in registry.get("registered_hashes", {})}
     baseline = set(load_json(BASELINE, {"baseline": []}).get("baseline", []))
 
     def key(item: dict[str, Any]) -> str:
@@ -367,26 +386,17 @@ def main(argv: list[str] | None = None) -> int:
     for item in violations:
         if item["rule"] in BASELINEABLE and key(item) in baseline:
             continue  # recorded pre-existing offender (ratchet: only NEW ones fail)
-        if item["rule"] == RULE_FROZEN_HASH:
-            if item["value"].lower() in registered:
-                continue
-            if key(item) in baseline:
-                continue
         new.append(item)
 
     for item in new:
         rel = Path(item["file"]).resolve().relative_to(REPO).as_posix()
         print(f"VIOLATION {item['rule']}: {rel}:{item['line']}  {item['value'][:200]}")
     print(f"scanned roots={args.roots}; violations={len(violations)}; "
-          f"new(not baselined/registered)={len(new)}; "
-          f"baseline={len(baseline)}; registered_hashes={len(registered)}")
+          f"new(not baselined)={len(new)}; baseline={len(baseline)}")
     if new:
         print("\nFix the assertion to be host-neutral (tmp_path.anchor, pytest.skip in the "
-              "same test, or a platform-independent property).  A frozen digest that is "
-              "genuinely host-independent (content hashing, not a host-derived payload) can be "
-              f"registered with a rationale in {REGISTRY.relative_to(REPO).as_posix()}.  A "
-              "CONCATENATED or COMPUTED host path/digest is outside this gate's reach - review "
-              "it by hand.")
+              "same test, or a platform-independent property).  CONCATENATED or COMPUTED "
+              "host paths and assertion-layer host dependence are outside this check's scope.")
     if args.report:
         return 0
     return 1 if new else 0

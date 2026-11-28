@@ -18,14 +18,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
-import subprocess
 import sys
 import time
 from typing import Any
 
 import pytest
+
+from e2e_support.cwp_runtime import run_quiet
 
 from test_du11_transcript_reuse_support import (
     AFTER_AS_OF_BODY,
@@ -43,6 +43,8 @@ from test_du11_transcript_reuse_support import (
 
 from transcript_companion import resolve_companion_transcript
 from transcript_tool_transport import EarningsTranscriptsTransport
+
+pytestmark = pytest.mark.e2e_offline
 
 FF_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = FF_ROOT / "tests" / "fixtures" / "du11_transcript_reuse"
@@ -485,17 +487,14 @@ def test_real_ff_cli_reuses_the_registered_transcript_end_to_end(
     owner = owned_wiki
 
     def run(request: dict) -> tuple[int, dict, str]:
-        process = subprocess.run(
+        process = run_quiet(
             [
-                sys.executable, str(FF_ROOT / "scripts" / "fetch_filing.py"),
-                "--config", str(config),
-                "--timeout-seconds", "180",
+                sys.executable, "-B", str(FF_ROOT / "scripts" / "fetch_filing.py"),
+                "--config", str(config), "--jobs-dir", str(owner.root / "runtime" / "jobs"),
+                "--timeout-seconds", "75",
             ],
             input=json.dumps(request).encode("utf-8"),
-            cwd=FF_ROOT,
-            capture_output=True,
-            timeout=300,
-            env={**os.environ, "PYTHONUTF8": "1"},
+            cwd=owner.root, env=owner._env(), timeout=100,
         )
         assert process.stdout, process.stderr.decode("utf-8", "replace")
         return (

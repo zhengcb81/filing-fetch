@@ -173,7 +173,12 @@ def test_triage_uses_the_selected_reports_root_even_with_an_old_subdirectory(tmp
             _remove_directory_link(old)
 
 
-@pytest.mark.parametrize("linked", [False, True])
+@pytest.mark.parametrize("linked", [
+    False, pytest.param(True, marks=[
+        pytest.mark.posix_only,
+        pytest.mark.skipif(sys.platform == "win32", reason="requires a POSIX file symlink"),
+    ]),
+])
 def test_triage_preserves_only_a_regular_receipt_that_wins_creation(tmp_path, monkeypatch, linked):
     reports = tmp_path / "reports"
     reports.mkdir()
@@ -200,8 +205,8 @@ def test_triage_preserves_only_a_regular_receipt_that_wins_creation(tmp_path, mo
             outside.write_bytes(data)
             try:
                 path.symlink_to(outside)
-            except (OSError, NotImplementedError):
-                pytest.skip("file symlinks unavailable on this filesystem")
+            except NotImplementedError:
+                pytest.skip("filesystem does not implement file symlinks")
         else:
             path.write_bytes(data)
         assert write_once(path, content) is False

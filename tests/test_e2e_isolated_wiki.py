@@ -1,460 +1,247 @@
-"""Real company-wiki code, fully temporary state: the three-layer matrix.
-
-Read-only scenarios share one scanned instance (setUpClass); mutating
-scenarios each build their own instance.  Everything is offline: identify
-uses copied production security-master snapshots, and the acquisition
-config uses no-op adapters (discovery returns zero candidates).
-"""
+"""Real FF 2.0 and pinned CWP process contracts over isolated source and identity data."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
-import threading
-import time
-import unittest
+
+import pytest
+
+from e2e_support.cwp_runtime import isolated_environment, run_quiet
+from e2e_support.isolated_wiki import IsolatedWiki, SYNTHETIC_SEEDS
+
+
+pytestmark = pytest.mark.e2e_offline
+NAMES = {"CN": "宁德时代", "HK": "腾讯", "US": "Apple"}
+YEARS = {"CN": 2024, "HK": 2024, "US": 2025}
+
+
+def request(market: str = "CN", **changes) -> dict:
+    result = {
+        "schema_version": "2.0", "company_query": NAMES[market], "market": market,
+        "document_kind": "annual_report", "mode": "exact", "fiscal_year": YEARS[market],
+        "as_of_date": "2026-07-31", "filing_intent": "reuse_only",
+    }
+    result.update(changes)
+    return result
+
+
+def call(wiki: IsolatedWiki, value: dict, *, extra_args: list[str] | None = None) -> tuple[int, dict]:
+    code, out, err = wiki.run_fetch(value, timeout=30, extra_args=extra_args)
+    assert out, err
+    return code, json.loads(out)
+
+
+def originals(wiki: IsolatedWiki) -> dict[str, bytes]:
+    root = wiki.root / "companies"
+    return {path.relative_to(root).as_posix(): path.read_bytes()
+            for path in root.rglob("*") if path.is_file()}
+
+
+def assert_reused(wiki: IsolatedWiki, result: tuple[int, dict], market: str) -> dict:
+    code, value = result
+    assert code == 0, value
+    assert value["schema_version"] == "2.0"
+    assert value["status"] == value["filing"]["status"] == "source_candidate"
+    assert value["downloads"] == 0
+    assert str(wiki.root) not in json.dumps(value)
+    source_ref = value["filing"]["source_ref"]
+    body = SYNTHETIC_SEEDS[market]["bytes"]
+    assert source_ref["content_sha256"] == hashlib.sha256(body).hexdigest()
+    assert source_ref["byte_size"] == len(body)
+    return source_ref
+
+
+@pytest.fixture(scope="module")
+def seeded(tmp_path_factory) -> IsolatedWiki:
+    wiki = IsolatedWiki(tmp_path_factory.mktemp("filing-v2"))
+    for market in NAMES:
+        seed = wiki.seed_market(market)
+        if market == "HK":
+            # This v2 contract case has an explicit disclosed fiscal year.
+            # The four-field legacy sidecar has its own case below.
+            sidecar = seed.with_name(seed.name + ".source.json")
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            payload["fiscal_year"] = YEARS[market]
+            sidecar.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    wiki.scan()
+    return wiki
+
+
+@pytest.mark.parametrize("market", NAMES)
+def test_e2e_current_v2_reuses_each_market_and_cwp_can_open_the_exact_original(seeded, market):
+    # US uses a different display name from
+    # the directory. CN uses a literal UTF-8 query through stdin.
+    before = originals(seeded)
+    result = call(seeded, request(market))
+    source_ref = assert_reused(seeded, result, market)
+    rc, content, receipt = seeded.read(source_ref)
+    assert rc == 0, receipt
+    assert content == SYNTHETIC_SEEDS[market]["bytes"]
+    assert originals(seeded) == before
+
+
+@pytest.mark.parametrize("changes", [
+    {"document_kind": "quarterly_report"},
+    {"fiscal_year": 1999},
+    {"as_of_date": "2025-01-01"},
+], ids=["kind", "year", "information-date"])
+def test_e2e_scope_mismatch_cannot_reuse_a_nearby_original(seeded, changes):
+    before = originals(seeded)
+    code, value = call(seeded, request(**changes))
+    assert code != 0
+    assert value["status"] == "source_blocked", value
+    assert value["filing"]["retryable"] is False
+    assert "source_ref" not in value["filing"]
+    assert originals(seeded) == before
+
+
+def test_e2e_ambiguous_identity_is_not_auto_selected(tmp_path):
+    from e2e_support.isolated_wiki import _synthetic_security_master
+
+    wiki = IsolatedWiki(tmp_path)
+    master = wiki.catalog_dir / "security_master" / "cn.json"
+    payload = _synthetic_security_master("cn")
+    baseline = payload["records"][0]
+    payload["records"] = [
+        dict(baseline, aliases=["万科"], canonical_name="深圳万科股份", security_id="000002",
+             ticker="000002", source_record_id="synthetic-vi"),
+        dict(baseline, aliases=["万科"], canonical_name="广州万科股份", security_id="000004",
+             ticker="000004", source_record_id="synthetic-vii"),
+    ]
+    payload["record_count"] = len(payload["records"])
+    master.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    wiki.scan()
+    code, result = call(wiki, request(company_query="万科"))
+    assert code != 0
+    assert result["status"] == "identity_error", result
+    assert result["filing"]["retryable"] is False
+
+
+def test_e2e_missing_identity_cache_retains_actionable_failure(tmp_path):
+    wiki = IsolatedWiki(tmp_path, with_security_master=False)
+    code, value = call(wiki, request("US"))
+    assert code != 0
+    assert value["status"] == "fatal", value
+    assert value["filing"]["status"] == "fatal"
+    assert value["filing"]["retryable"] is False
+    assert str(tmp_path) not in json.dumps(value)
+
+
+def test_e2e_missing_producer_period_is_not_filled_from_the_consumer_request(tmp_path):
+    wiki = IsolatedWiki(tmp_path)
+    wiki.seed_market("HK")  # The old sidecar leaves fiscal_year out.
+    wiki.scan()
+    before = originals(wiki)
+    code, output = call(wiki, request("HK"))
+    assert code == 2
+    assert output["status"] == "upstream_error", output
+    assert "fiscal_year mismatch" in output["filing"]["reason"]
+    assert output["downloads"] == 0
+    assert originals(wiki) == before
+
+
+def test_e2e_legacy_partial_provenance_is_not_capture_ready(tmp_path):
+    wiki = IsolatedWiki(tmp_path)
+    source = wiki.seed_market("CN")
+    sidecar = source.with_name(source.name + ".source.json")
+    observed = SYNTHETIC_SEEDS["CN"]["sidecar"]
+    raw = {key: observed[key] for key in ("market", "security_id", "source_title", "published_date")}
+    raw["source_url"] = "http://insecure.example/synthetic.pdf"
+    sidecar.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    wiki.scan()
+    value = request(schema_version="1.1")
+    del value["filing_intent"]
+    del value["mode"]
+    code, result = call(wiki, value)
+    assert code != 0
+    assert result["status"] == "not_found", result
+    assert "handle" not in result
+
+
+def test_e2e_cwp_origin_owner_rejects_corrupted_bytes_after_selection(tmp_path):
+    wiki = IsolatedWiki(tmp_path)
+    source = wiki.seed_market("CN")
+    wiki.scan()
+    ref = assert_reused(wiki, call(wiki, request()), "CN")
+    original = source.read_bytes()
+    source.write_bytes(original[:-1] + b"!")
+    code, body, receipt = wiki.read(ref)
+    assert code != 0, receipt
+    assert body == b""
+    assert json.loads(receipt)["reason"] == "no_verified_location"
+    errors = (wiki.root / "logs" / "runtime_errors.log").read_text(encoding="utf-8")
+    assert "content_sha256_mismatch" in errors
+    assert source.read_bytes() == original[:-1] + b"!"
+
+
+BUSY_CATALOG = r"""
+import json
 from pathlib import Path
-from tempfile import TemporaryDirectory
+import subprocess
+import sys
 
-SKILL_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(SKILL_ROOT / "tests"))
-
-from e2e_support.isolated_wiki import (  # noqa: E402
-    IsolatedWiki,
-    PRODUCTION_MASTER_AVAILABLE,
-    SYNTHETIC_SEEDS,
-    cleanup_temporary,
-)
-
-
-def _hold_lock_for(catalog_dir: Path, seconds: float, acquired: threading.Event) -> threading.Thread:
-    """Hold the catalog operation lock for ``seconds``, then release it."""
-    from company_wiki.source_catalog.lock import CatalogOperationLock  # noqa: E402
-
-    def run() -> None:
-        with CatalogOperationLock(catalog_dir, operation="e2e-hold"):
-            acquired.set()
-            time.sleep(seconds)
-
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
-    return thread
+argv = sys.argv[2:]
+with Path(sys.argv[1]).open("a", encoding="utf-8") as log:
+    log.write(json.dumps(argv) + "\n")
+if any(word in {"scan", "close-gap", "ensure"} for word in argv):
+    sys.stderr.write(json.dumps({"schema_version": "1.0", "error_type": "catalog_locked",
+                                 "retryable": True, "error": "catalog operation active"}))
+    raise SystemExit(1)
+result = subprocess.run([sys.executable, "-B", "-m", "company_wiki.source_catalog.cli", *argv],
+                        capture_output=True, stdin=subprocess.DEVNULL,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), check=False)
+sys.stdout.buffer.write(result.stdout)
+sys.stderr.buffer.write(result.stderr)
+raise SystemExit(result.returncode)
+"""
 
 
-def _hold_lock_until_release(catalog_dir: Path, release: threading.Event, acquired: threading.Event) -> threading.Thread:
-    """Hold the catalog operation lock until ``release`` is set."""
-    from company_wiki.source_catalog.lock import CatalogOperationLock  # noqa: E402
-
-    def run() -> None:
-        with CatalogOperationLock(catalog_dir, operation="e2e-hold"):
-            acquired.set()
-            release.wait(60)
-
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
-    return thread
-
-
-class SharedReadOnlyE2E(unittest.TestCase):
-    """Scenarios 1-6 and 9: one scanned instance reused across fetches."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls._temporary = TemporaryDirectory()
-        cls.wiki = IsolatedWiki(Path(cls._temporary.name))
-        for market in ("CN", "US", "HK"):
-            cls.wiki.seed_market(market)
-        cls.wiki.scan()
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cleanup_temporary(cls._temporary)
-
-    def _files_before(self) -> set[str]:
-        return {
-            str(path.relative_to(self.wiki.root))
-            for path in self.wiki.root.rglob("*")
-            if path.is_file() and ".source_catalog" not in path.parts
-        }
-
-    def test_e2e_reuse_cn_annual_report(self) -> None:
-        """CN seed exists: identify + resolve, exit 0, capture_ready, no downloads."""
-        files = self._files_before()
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "宁德时代",
-                "market": "CN",
-                "document_kind": "annual_report",
-                "fiscal_year": 2024,
-                "as_of_date": "2026-07-31",
-            }
-        )
-        self.assertEqual(rc, 0, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "capture_ready")
-        self.assertTrue(payload["handle"]["capture_ready"])
-        parts = Path(payload["handle"]["canonical_path"]).parts
-        self.assertIn("financial_reports", parts)
-        self.assertIn("annual", parts)
-        self.assertEqual(payload["handle"]["company_identity"]["security_id"], "300750")
-        self.assertEqual(self._files_before(), files)  # reuse only: nothing written
-
-    def test_e2e_reuse_us_annual_report(self) -> None:
-        """US seed: canonical_name 'Apple Inc.' vs directory 'Apple Inc' still
-        matches via the sidecar security_id (AAPL) fallback."""
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "Apple",
-                "market": "US",
-                "document_kind": "annual_report",
-                "fiscal_year": 2025,
-                "as_of_date": "2026-07-31",
-            }
-        )
-        self.assertEqual(rc, 0, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "capture_ready")
-        self.assertEqual(
-            payload["handle"]["company_identity"]["canonical_name"], "Apple Inc."
-        )
-        self.assertIn("10-K", payload["handle"]["title"])
-
-    def test_e2e_hk_old_sidecar_reuse(self) -> None:
-        """HK seed uses the old 4-field sidecar whose source_url is https:
-        after scan fills hash + capture_trace it is capture_ready and reusable."""
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "腾讯",
-                "market": "HK",
-                "document_kind": "annual_report",
-                "fiscal_year": 2024,
-                "as_of_date": "2026-07-31",
-            }
-        )
-        self.assertEqual(rc, 0, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "capture_ready")
-        self.assertTrue(payload["handle"]["capture_ready"])
-
-    def test_e2e_missing_filing_reuse_only(self) -> None:
-        """A document kind that was never seeded: not_found, no download."""
-        files = self._files_before()
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "宁德时代",
-                "market": "CN",
-                "document_kind": "quarterly_report",
-                "as_of_date": "2026-07-31",
-            }
-        )
-        self.assertEqual(rc, 2, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "not_found")
-        self.assertFalse(payload["retryable"])
-        self.assertEqual(self._files_before(), files)
-
-    def test_e2e_missing_fiscal_year(self) -> None:
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "宁德时代",
-                "market": "CN",
-                "document_kind": "annual_report",
-                "fiscal_year": 1999,
-                "as_of_date": "2026-07-31",
-            }
-        )
-        self.assertEqual(rc, 2, out + err)
-        self.assertEqual(json.loads(out)["status"], "not_found")
-
-    def test_e2e_as_of_before_publication(self) -> None:
-        """as_of_date before published_date -> future match -> MISSING."""
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "宁德时代",
-                "market": "CN",
-                "document_kind": "annual_report",
-                "fiscal_year": 2024,
-                "as_of_date": "2025-01-01",
-            }
-        )
-        self.assertEqual(rc, 2, out + err)
-        self.assertEqual(json.loads(out)["status"], "not_found")
-
-    @unittest.skipUnless(
-        PRODUCTION_MASTER_AVAILABLE,
-        "requires production security_master snapshot (CI clone has no .source_catalog/); "
-        "ambiguity behavior is pinned by the mock tests in test_fetch_filing.py",
-    )
-    def test_e2e_ambiguous_identity(self) -> None:
-        """万科 resolves ambiguous against the production snapshot."""
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "万科",
-                "market": "CN",
-                "document_kind": "annual_report",
-                "as_of_date": "2026-07-31",
-            }
-        )
-        self.assertEqual(rc, 2, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "identity_error")
-        self.assertFalse(payload["retryable"])
-
-
-class MutatingE2E(unittest.TestCase):
-    """Each mutating scenario gets its own isolated instance."""
-
-    def setUp(self) -> None:
-        self._temporary = TemporaryDirectory()
-        self.wiki = IsolatedWiki(Path(self._temporary.name))
-
-    def tearDown(self) -> None:
-        cleanup_temporary(self._temporary)
-
-
-class TestPartialProvenance(MutatingE2E):
-    def test_e2e_partial_provenance_capture_not_ready(self) -> None:
-        """A synthetic old-style sidecar with a non-https source_url never
-        becomes capture_ready: resolver drops it and the fetch is not_found
-        (plan-drift note: Phase 16.2 drops the handle silently, so the
-        missing_capture_fields detail cannot propagate through resolve; the
-        mock test test_capture_not_ready_carries_not_found_code pins it)."""
-        self.wiki.seed_market("CN")
-        target = self.wiki.root / "companies" / "宁德时代" / "raw" / "financial_reports" / "annual"
-        sidecar = target / (SYNTHETIC_SEEDS["CN"]["filename"] + ".source.json")
-        sidecar.write_text(
-            json.dumps(
-                {
-                    "market": "CN",
-                    "security_id": "300750",
-                    "source_title": "2024年年度报告",
-                    "published_date": "2025-03-14",
-                    "source_url": "http://insecure.example/finalpage/1222806982.PDF",
-                }
-            ),
-            encoding="utf-8",
-        )
-        self.wiki.scan()
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "宁德时代",
-                "market": "CN",
-                "document_kind": "annual_report",
-                "fiscal_year": 2024,
-                "as_of_date": "2026-07-31",
-            }
-        )
-        self.assertEqual(rc, 2, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "not_found")
-
-
-class TestCorruptedBytes(MutatingE2E):
-    def test_e2e_corrupted_bytes_after_scan(self) -> None:
-        """Scan records the true hash; corrupting the bytes afterwards makes
-        filing-fetch's deep handle validation reject the reused handle."""
-        self.wiki.seed_market("CN")
-        self.wiki.scan()
-        target = self.wiki.root / "companies" / "宁德时代" / "raw" / "financial_reports" / "annual"
-        source = target / SYNTHETIC_SEEDS["CN"]["filename"]
-        raw = bytearray(source.read_bytes())
-        raw[0] ^= 0xFF  # same length, different bytes
-        source.write_bytes(bytes(raw))
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "宁德时代",
-                "market": "CN",
-                "document_kind": "annual_report",
-                "fiscal_year": 2024,
-                "as_of_date": "2026-07-31",
-            }
-        )
-        self.assertEqual(rc, 2, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "upstream_error")
-        self.assertIn("snapshot_sha256", payload["error"])
-
-
-class TestIdentityUnavailable(MutatingE2E):
-    def setUp(self) -> None:
-        self._temporary = TemporaryDirectory()
-        self.wiki = IsolatedWiki(
-            Path(self._temporary.name), with_security_master=False
-        )
-
-    def test_e2e_identity_unavailable_without_snapshots(self) -> None:
-        """No security_master snapshots: identify exits 1 with a structured
-        fatal (ZR-204 canonical emission — error_type 'fatal', retryable
-        false), which filing-fetch maps to fatal (fail-closed).  Pinned
-        mapping documented here."""
-        rc, out, err = self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "AMD",
-                "market": "US",
-                "document_kind": "annual_report",
-                "as_of_date": "2026-07-31",
-            }
-        )
-        self.assertEqual(rc, 2, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "fatal")
-        self.assertEqual(payload["error_code"], "fatal")
-        self.assertFalse(payload["retryable"])
-        # The canonical taxonomy emission still pins the mapping to `fatal`
-        # (fail-closed).  FF-S3: the stderr body is consumed for classification
-        # but never echoed - it routinely carries absolute paths and provider
-        # credentials - so the envelope names the failing stage instead.
-        self.assertIn("exited 1", payload["error"])
-        self.assertNotIn("no security-master snapshots", payload["error"])
-
-
-class TestCatalogLockContention(MutatingE2E):
-    def _fetch_existing_cn_annual(self, timeout: float) -> tuple[int, str, str]:
-        # ensure --allow-download on an existing filing: resolution REUSED,
-        # then the acquisition journal record takes the catalog lock.
-        return self.wiki.run_fetch(
-            {
-                "schema_version": "1.1",
-                "company_query": "宁德时代",
-                "market": "CN",
-                "document_kind": "annual_report",
-                "fiscal_year": 2024,
-                "as_of_date": "2026-07-31",
-                "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
+def test_e2e_reuse_does_not_call_busy_catalog_write_operations(tmp_path):
+    wiki = IsolatedWiki(tmp_path)
+    wiki.seed_market("CN")
+    wiki.scan()
+    launcher = tmp_path / "busy-catalog.py"
+    launcher.write_text(BUSY_CATALOG, encoding="utf-8")
+    log = tmp_path / "catalog-argv.jsonl"
+    catalog = [sys.executable, "-B", str(launcher), str(log), "--config", str(wiki.config_path)]
+    denied = run_quiet([*catalog, "scan"], cwd=wiki.root, env=isolated_environment(wiki.root, wiki.src))
+    assert denied.returncode == 1
+    assert json.loads(denied.stderr)["error_type"] == "catalog_locked"
+    root_config = {
+        "schema_version": "1.0",
+        "connection": {
+            "cwd": str(wiki.root),
+            "commands": {
+                "catalog": catalog,
+                "query": [sys.executable, "-B", "-m", "company_wiki.source_catalog.source_query_cli",
+                          "--config", str(wiki.config_path)],
             },
-            allow_download=True,
-            timeout=timeout,
-        )
-
-    def test_e2e_catalog_lock_retry_then_success(self) -> None:
-        """Lock held ~7s: read-only reuse no longer contends on the catalog
-        lock (the acquisition journal uses a per-file mutex, not the global
-        operation lock), so the fetch succeeds immediately."""
-        self.wiki.seed_market("CN")
-        self.wiki.scan()
-        acquired = threading.Event()
-        # resolve takes no lock and the journal no longer takes the global
-        # operation lock (ADR-008 lock decoupling), so holding it must not
-        # delay a reuse fetch at all.
-        thread = _hold_lock_for(self.wiki.catalog_dir, 7.0, acquired)
-        try:
-            self.assertTrue(acquired.wait(10), "test thread never acquired the lock")
-            started = time.monotonic()
-            rc, out, err = self._fetch_existing_cn_annual(timeout=30)
-        finally:
-            thread.join(10)
-        elapsed = time.monotonic() - started
-        self.assertEqual(rc, 0, out + err)
-        self.assertEqual(json.loads(out)["status"], "capture_ready")
-        self.assertNotIn("blocked by a running catalog operation", err)
-        # No lock contention at all: the old retry path would have needed
-        # >= 15s (5s + 10s backoff rounds); allow machine variance (PowerShell
-        # worker-status inventory) under that bound.
-        self.assertLess(elapsed, 12.0)
-
-    def test_e2e_catalog_lock_until_deadline(self) -> None:
-        """Lock held past any deadline: read-only reuse is unaffected (the
-        journal no longer takes the global operation lock), so the fetch
-        succeeds instead of erroring or hanging."""
-        self.wiki.seed_market("CN")
-        self.wiki.scan()
-        release = threading.Event()
-        acquired = threading.Event()
-        thread = _hold_lock_until_release(self.wiki.catalog_dir, release, acquired)
-        try:
-            self.assertTrue(acquired.wait(10), "test thread never acquired the lock")
-            rc, out, err = self._fetch_existing_cn_annual(timeout=15)
-        finally:
-            release.set()
-            thread.join(10)
-        self.assertEqual(rc, 0, out + err)
-        self.assertEqual(json.loads(out)["status"], "capture_ready")
+        },
+    }
+    (wiki.root / "company_wiki.json").write_text(json.dumps(root_config), encoding="utf-8")
+    before = originals(wiki)
+    assert_reused(wiki, call(wiki, request()), "CN")
+    assert originals(wiki) == before
+    launches = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    assert len(launches) == 2 and "identify" in launches[1]
 
 
-class TestWorkerPaused(MutatingE2E):
-    def test_e2e_paused_worker_no_longer_blocks_download_by_default(self) -> None:
-        """Default path: a worker paused by the user is respected and never
-        resumed, and the request resolves MISSING -> not_found with no network
-        traffic (no-op adapters prove nothing was downloaded)."""
-        self.wiki.seed_market("CN")
-        self.wiki.set_worker_state("paused")
-        self.wiki.scan()
-        request = {
-            "schema_version": "1.1",
-            "company_query": "宁德时代",
-            "market": "CN",
-            "document_kind": "quarterly_report",
-            "as_of_date": "2026-07-31",
-                "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
-        }
-        rc, out, err = self.wiki.run_fetch(request, allow_download=True, timeout=30)
-        self.assertEqual(rc, 2, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "not_found")
-        self.assertFalse(payload["retryable"])
-        # the user pause is respected: still paused after the fetch
-        control = json.loads(
-            (self.wiki.catalog_dir / "worker_control.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        self.assertEqual(control["desired_state"], "paused")
-
-    def test_e2e_no_pause_worker_is_retired_upstream(self) -> None:
-        """company-wiki retired the background worker routes (73de6be): an
-        explicit download never consults legacy worker state, so neither the
-        default pause-around nor the old ``--no-pause-worker`` escape hatch can
-        produce ``worker_paused`` any more.  The flag still parses for existing
-        callers and the request fails closed as an ordinary missing filing."""
-        self.wiki.seed_market("CN")
-        self.wiki.set_worker_state("paused")
-        self.wiki.scan()
-        request = {
-            "schema_version": "1.1",
-            "company_query": "宁德时代",
-            "market": "CN",
-            "document_kind": "quarterly_report",
-            "as_of_date": "2026-07-31",
-                "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
-        }
-        rc, out, err = self.wiki.run_fetch(
-            request, allow_download=True, timeout=30, extra_args=["--no-pause-worker"]
-        )
-        self.assertEqual(rc, 2, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "not_found")
-        self.assertFalse(payload["retryable"])
-
-    def test_e2e_worker_enabled_download_resolves_missing(self) -> None:
-        """Worker enabled + default: resolves MISSING -> not_found (no adapters
-        in the isolated wiki; no network traffic)."""
-        self.wiki.seed_market("CN")
-        self.wiki.set_worker_state("enabled")
-        self.wiki.scan()
-        request = {
-            "schema_version": "1.1",
-            "company_query": "宁德时代",
-            "market": "CN",
-            "document_kind": "quarterly_report",
-            "as_of_date": "2026-07-31",
-                "acquisition_limits": {"max_bytes": 5_000_000, "timeout_seconds": 30, "max_cost_usd": "0"},
-        }
-        rc, out, err = self.wiki.run_fetch(request, allow_download=True, timeout=30)
-        self.assertEqual(rc, 2, out + err)
-        payload = json.loads(out)
-        self.assertEqual(payload["status"], "not_found")
-        self.assertFalse(payload["retryable"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.parametrize(("state", "extra"), [
+    ("paused", None), ("paused", ["--no-pause-worker"]), ("enabled", None),
+], ids=["paused", "legacy-flag", "enabled"])
+def test_e2e_legacy_worker_state_does_not_gate_bounded_request(tmp_path, state, extra):
+    wiki = IsolatedWiki(tmp_path)
+    wiki.set_worker_state(state)
+    wiki.scan()
+    control = wiki.catalog_dir / "worker_control.json"
+    before = control.read_bytes()
+    code, value = call(wiki, request(
+        document_kind="quarterly_report", filing_intent="fetch_if_missing",
+        acquisition_limits={"max_bytes": 50_000, "timeout_seconds": 20, "max_cost_usd": "0"},
+    ), extra_args=extra)
+    assert code != 0
+    assert value["status"] == "not_found", value
+    assert value["filing"]["retryable"] is False
+    assert control.read_bytes() == before

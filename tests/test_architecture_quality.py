@@ -277,7 +277,7 @@ def test_portable_hook_executes_existing_check_module_in_active_path(tmp_path):
         )
         shell = next((str(path) for path in candidates if path.is_file()), None)
     if shell is None:
-        pytest.skip("POSIX shell is unavailable for the portable Git hook replay")
+        pytest.fail("Install Git for this replay, including its sh on Windows")
     executable = tmp_path / "python"
     executable.write_text(
         '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$FF_HOOK_ARGV"\nexit 7\n', encoding="utf-8"
@@ -298,6 +298,8 @@ def test_portable_hook_executes_existing_check_module_in_active_path(tmp_path):
         text=True,
         encoding="utf-8",
         timeout=10,
+        stdin=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert result.returncode == 7, result.stderr
     arguments = log.read_text(encoding="utf-8").splitlines()

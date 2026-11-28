@@ -17,6 +17,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import pytest
+
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
@@ -51,12 +53,16 @@ def _wiki_available() -> bool:
     return completed.returncode == 0
 
 
-@unittest.skipUnless(_wiki_available(), "production company-wiki not available")
+pytestmark = pytest.mark.live
+
+
 class LiveConformanceTests(unittest.TestCase):
     """The upstream contract filing-fetch depends on, verified live."""
 
     @classmethod
     def setUpClass(cls) -> None:
+        if not _wiki_available():
+            raise unittest.SkipTest("production company-wiki not available")
         cls.root = load_company_wiki_root()
         cls.config = cls.root / "config" / "source_catalog.yaml"
 

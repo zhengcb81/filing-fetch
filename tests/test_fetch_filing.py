@@ -2019,44 +2019,31 @@ class FilingFetchTests(unittest.TestCase):
     # --- Phase 16.4: stdin accepts UTF-8 Chinese queries ---
 
     def test_cli_stdin_accepts_utf8_chinese_query(self):
-        """A UTF-8 Chinese company query piped via stdin must reach the
-        identity resolver intact: Windows pipes are decoded with the locale
-        codepage (GBK) by default, corrupting the query (Phase 16.4).
+        """Decode explicitly UTF-8 stdin even without PYTHONUTF8."""
+        from e2e_support.cwp_runtime import isolated_environment, run_quiet
+        from e2e_support.isolated_wiki import IsolatedWiki
 
-        Live-dependency guard: this runs against the production wiki (the
-        紫金矿业 FY2024 filing must be indexed); CI clones a clean company-wiki
-        with no production companies/, so it skips there."""
-        from e2e_support.isolated_wiki import PRODUCTION_WIKI
-
-        security_master = PRODUCTION_WIKI / "config" / ".source_catalog" / "security_master"
-        if not security_master.is_dir() or not any(security_master.iterdir()):
-            self.skipTest("production security-master snapshots not present")
-        script = SKILL_ROOT / "scripts" / "fetch_filing.py"
-        request = json.dumps(
-            {
-                "schema_version": "1.1",
-                "company_query": "紫金矿业",
-                "market": "CN",
-                "document_kind": "annual_report",
-                "fiscal_year": 2024,
-                "as_of_date": "2026-07-31",
-            },
-            ensure_ascii=False,
-        )
-        env = dict(os.environ)
-        env.pop("PYTHONUTF8", None)
-        proc = subprocess.run(
-            [sys.executable, str(script), "--timeout-seconds", "180"],
-            input=request.encode("utf-8"),
-            capture_output=True,
-            cwd=str(SKILL_ROOT / "scripts"),
-            env=env,
-            timeout=240,
-        )
-        payload = json.loads(proc.stdout.decode("utf-8"))
-        # FY2024 was downloaded in Phase 15.6: reuse-first must be capture_ready.
-        # A GBK-corrupted query fails earlier with an identity error.
-        assert payload["status"] == "capture_ready", payload.get("error")
+        with TemporaryDirectory(prefix="ff-utf8-") as temporary:
+            wiki = IsolatedWiki(Path(temporary))
+            wiki.seed_market("CN")
+            wiki.scan()
+            environment = isolated_environment(wiki.root, wiki.src)
+            environment.pop("PYTHONUTF8")
+            reply = run_quiet(
+                [sys.executable, "-B", str(SKILL_ROOT / "scripts/fetch_filing.py"),
+                 "--config", str(wiki.root / "company_wiki.json"), "--jobs-dir",
+                 str(wiki.root / "ff-jobs")],
+                cwd=wiki.root, env=environment,
+                input=json.dumps({
+                    "schema_version": "2.0", "company_query": "宁德时代", "market": "CN",
+                    "document_kind": "annual_report", "fiscal_year": 2024,
+                    "as_of_date": "2026-07-31", "filing_intent": "reuse_only",
+                }, ensure_ascii=False).encode("utf-8"),
+            )
+            result = json.loads(reply.stdout)
+            assert reply.returncode == 0, result
+            assert result["status"] == "source_candidate"
+            assert result["downloads"] == 0
 
     # --- Phase 15.2: catalog lock contention is retryable ---
 

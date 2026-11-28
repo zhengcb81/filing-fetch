@@ -22,6 +22,8 @@ import os
 import sys
 import unittest
 from pathlib import Path
+
+import pytest
 from tempfile import TemporaryDirectory
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +59,9 @@ _T3_DOWNLOAD_LIMITS = {
     "timeout_seconds": _T3_TIMEOUT_SECONDS,
     "max_cost_usd": "0",
 }
+
+
+pytestmark = pytest.mark.live
 
 
 @unittest.skipUnless(_DOWNLOAD_GATE, "set FILING_FETCH_E2E_DOWNLOAD=1 to run real downloads")

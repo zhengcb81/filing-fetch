@@ -11,6 +11,8 @@ import tempfile
 
 import pytest
 
+from e2e_support.directory_links import make_directory_link as _directory_link
+
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "tools"))
 import sync_installs_b3 as installer  # noqa: E402
@@ -78,25 +80,6 @@ def _snapshot(root: Path) -> dict[str, tuple[bytes, int]]:
         for path in root.rglob("*")
         if path.is_file()
     }
-
-
-def _directory_link(link: Path, target: Path) -> None:
-    try:
-        link.symlink_to(target, target_is_directory=True)
-    except OSError as error:
-        if os.name != "nt":
-            pytest.skip(f"directory links unavailable on this filesystem: {error}")
-        # Junction creation needs no symlink privilege. This creates a link
-        # between two test-owned paths; no shell deletion/move is involved.
-        result = subprocess.run(
-            ["cmd", "/d", "/c", "mklink", "/J", str(link), str(target)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            timeout=5,
-            check=False,
-        )
-        if result.returncode != 0:
-            pytest.skip(f"directory links unavailable on this filesystem: {result.stderr!r}")
 
 
 def _remove_directory_link(link: Path) -> None:
