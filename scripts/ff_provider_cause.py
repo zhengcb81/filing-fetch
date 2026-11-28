@@ -446,8 +446,8 @@ def condition_cause(
     """
     try:
         ff_code, started, usage = _PRODUCER_CONDITIONS[condition]
-    except KeyError:
-        raise ValueError(f"unknown producer condition: {condition!r}") from None
+    except KeyError as error:
+        raise ValueError("unknown producer condition") from error
     cause = build_cause(
         operation,
         condition,

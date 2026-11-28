@@ -10,7 +10,6 @@ errors exit 2 with an error envelope; unexpected failures exit 1.
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import math
@@ -19,14 +18,17 @@ from pathlib import Path
 
 from ff_financial_statements import fetch_statements
 from ff_run_input import read_request_bytes, replay_input
+from ff_runtime_feedback import OwnerArgumentParser, cli_exit, observed_cli
+from ff_runtime_log import redact_text
 from ff_statement_feedback import begin_statement_run, publish_statement_response
 from ff_errors import FilingFetchError
 
 STATEMENTS_RESPONSE_SCHEMA_VERSION = "financial-statements-response/1"
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
+@observed_cli("fetch-statements")
+def main(argv: list[str] | None = None, *, diagnostics) -> int:
+    parser = OwnerArgumentParser(
         prog="fetch-statements",
         description=(
             "Fetch or reuse A-share historical financial statements through "
@@ -50,10 +52,11 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
     except SystemExit as exc:
         if exc.code:
-            publish_statement_response(begin_statement_run(), "argument_error", exc.code, error=exc)
+            diagnostics.note(exc)
+            publish_statement_response(begin_statement_run(diagnostics=diagnostics), "argument_error", exc.code, error=exc)
         raise
 
-    run = begin_statement_run()
+    run = begin_statement_run(diagnostics=diagnostics)
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
         publish_statement_response(run, "invalid_timeout", 2)
         print("error: timeout-seconds must be positive and finite", file=sys.stderr)
@@ -78,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "schema_version": STATEMENTS_RESPONSE_SCHEMA_VERSION,
                 "status": "request_error",
-                "error": f"invalid request: {exc}",
+                "error": redact_text(f"invalid request: {exc}"),
             },
             sys.stdout,
             ensure_ascii=False,
@@ -100,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         error_envelope = {
             "schema_version": STATEMENTS_RESPONSE_SCHEMA_VERSION,
             "status": exc.code,
-            "error": str(exc),
+            "error": redact_text(str(exc)),
             "retryable": exc.retryable,
         }
         if exc.producer_exit_code is not None:
@@ -119,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "schema_version": STATEMENTS_RESPONSE_SCHEMA_VERSION,
                 "status": "fatal",
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": redact_text(f"{type(exc).__name__}: {exc}"),
                 "retryable": False,
             },
             sys.stdout,
@@ -138,4 +141,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(cli_exit(main))

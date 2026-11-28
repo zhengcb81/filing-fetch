@@ -15,6 +15,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import ff_scheduled_windows as launcher  # noqa: E402
+from ff_runtime_log import child_failure_details  # noqa: E402
 
 
 def test_unhandled_custom_exception_retains_last_frame_and_ignores_multiline_body(tmp_path):
@@ -32,7 +33,7 @@ def test_unhandled_custom_exception_retains_last_frame_and_ignores_multiline_bod
         [sys.executable, "-B", str(entry)], stdin=subprocess.DEVNULL,
         capture_output=True, timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
-    facts = launcher._tick_failure(result.returncode, result.stderr)
+    facts = child_failure_details(result.returncode, result.stderr)
     assert facts == {
         "exit_code": 1,
         "stderr_form": "python_traceback",
@@ -112,7 +113,10 @@ def test_windows_failure_is_data_minimal_and_cold_readable(tmp_path, monkeypatch
         detail = json.loads(cold.stdout)
         assert detail["child_process"] == logged["diagnostic"]["child_process"]
         assert detail["run_id"] == observation["run_id"]
-        assert detail["causes"] == []
+        cause, = detail["causes"]
+        assert cause["type"] == "ChildFailed"
+        assert any(frame["file"] == "ff_scheduled_windows.py" for frame in cause["frames"])
+        assert detail["child_process"]["exception_type"] == "RuntimeError"
         assert b"fake-" not in cold.stdout + cold.stderr
     assert calls.read_text(encoding="utf-8").splitlines() == ["called"]
     assert not (jobs_dir / "scheduled").exists()

@@ -52,10 +52,14 @@ def _version(surface: Surface) -> str:
 
 
 class DirectRun:
-    def __init__(self, surface: Surface, *, run_id=None, attempt_id=None, operation_id=None, jobs_dir=None):
-        operation = operation_id or uuid.uuid4().hex
+    def __init__(
+        self, surface: Surface, *, run_id=None, attempt_id=None, operation_id=None, jobs_dir=None,
+        diagnostics=None, labels=None,
+    ):
+        self._diagnostics = diagnostics
+        operation = operation_id or (diagnostics.occurrence if diagnostics else uuid.uuid4().hex)
         self.base = identity(run_id or operation, attempt_id or 1, f"{surface.step}/{operation}",
-                             surface.prefix + operation, _version(surface))
+                             surface.prefix + operation, _version(surface), labels=labels)
         self._jobs_dir = jobs_dir
         self._paths = [_receipt_root(root) / (operation + ".json") for root in observation_directories(jobs_dir)]
         self._record = {
@@ -63,6 +67,8 @@ class DirectRun:
             "pid": os.getpid(), "external_effect": "not_started", "cost_state": "not_applicable", "steps": [],
             "start": _start_row(self.base, surface),
         }
+        if diagnostics is not None:
+            self._record["diagnostic_execution"] = diagnostics.execution()
         self.mark("started")
 
     @property
@@ -83,6 +89,8 @@ class DirectRun:
 
     def mark(self, phase: str, **facts) -> None:
         self._record.update(facts)
+        if "request_sha256" in facts and "diagnostic_execution" in self._record:
+            self._record["diagnostic_execution"]["input_ref"] = facts["request_sha256"]
         self._record["steps"].append({"phase": phase, "at": now_iso()})
         last_error = None
         for path in self._paths:
@@ -92,19 +100,21 @@ class DirectRun:
             except (OSError, ValueError, TypeError) as exc:
                 last_error = exc
         if last_error is not None:
-            warn_diagnostic_unavailable(f"direct run {self.base['evidence_ref']}", last_error)
+            warn_diagnostic_unavailable(f"direct run {self.base['evidence_ref']}", last_error,
+                                        scope=self.base, diagnostics=self._diagnostics)
 
     def finish(self, *, outcome, effect, cost, rows, start, file=None, detail_for_all=False):
         delivery = {"rows": rows, "start": start, "detail_for_all": detail_for_all}
         self.mark("finished", external_effect=effect, cost_state=cost, outcome=outcome, delivery=delivery)
-        _offer(self._record, file=file, jobs_dir=self._jobs_dir)
+        _offer(self._record, file=file, jobs_dir=self._jobs_dir, diagnostics=self._diagnostics)
 
 
-def _offer(record: dict, *, jobs_dir=None, file=None) -> None:
+def _offer(record: dict, *, jobs_dir=None, file=None, diagnostics=None) -> None:
     delivery = record["delivery"]
     detail = record["outcome"].get("diagnostic")
     publish(delivery["rows"], file=file, jobs_dir=jobs_dir, context=delivery["start"], detail=detail,
-            recoverable=True, detail_for_all=delivery["detail_for_all"])
+            recoverable=True, detail_for_all=delivery["detail_for_all"],
+            diagnostics=diagnostics, execution=record.get("diagnostic_execution"))
 
 
 def _receipt_root(outbox: Path) -> Path:
@@ -176,7 +186,7 @@ def _bound(record: dict, observation: dict) -> bool:
 def _view(record: dict | None) -> dict:
     if record is None:
         return {"state": "unknown"}
-    result = {key: value for key, value in record.items() if key not in ("pid", "delivery", "start")}
+    result = {key: value for key, value in record.items() if key not in ("pid", "delivery", "start", "diagnostic_execution")}
     if "outcome" in result:
         state = "done"
     else:
@@ -267,4 +277,5 @@ def _reoffer(record: dict, jobs_dir: Path) -> bool | None:
     return publish([row for row in delivery["rows"] if row["step_id"] in missing],
                    jobs_dir=jobs_dir, context=delivery["start"],
                    detail=detail if record["step_id"] in missing else None,
-                   recoverable=True, detail_for_all=delivery["detail_for_all"])
+                   recoverable=True, detail_for_all=delivery["detail_for_all"],
+            execution=record.get("diagnostic_execution"))

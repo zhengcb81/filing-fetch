@@ -62,6 +62,9 @@ from ff_errors import FilingFetchError as FilingFetchError
 from ff_configuration import load_connection_root, validate_company_wiki_root
 from ff_company_wiki_connection import WikiConnection, WikiEndpoint, command_for, connection_cwd, connection_environment, acquisition_arguments
 from ff_request_context import RequestContext
+from ff_run_input import read_request_bytes
+from ff_runtime_feedback import OwnerArgumentParser, cli_exit, cli_failure, observed_cli
+from ff_runtime_log import redact_text
 from ff_pathless_payload import contains_physical_field as _contains_physical_field
 from ff_source_candidate import (
     CANDIDATE_DETAIL_FIELDS as _CANDIDATE_DETAIL_FIELDS,
@@ -430,8 +433,10 @@ def _run_company_wiki_json_retry(
                     ),
                 ) from exc
             print(
-                f"[filing-fetch] {action} blocked by a running catalog operation "
-                f"(attempt {attempt}); retrying in {wait:.1f}s: {exc}",
+                redact_text(
+                    f"[filing-fetch] {action} blocked by a running catalog operation "
+                    f"(attempt {attempt}); retrying in {wait:.1f}s: {exc}"
+                ),
                 file=sys.stderr,
             )
             time.sleep(wait)
@@ -1838,17 +1843,14 @@ def complete_filing_v2(
     return success_envelope(request, handle, transcript, stats)
 
 
-def main(argv: list[str] | None = None) -> int:
+@observed_cli("short-filing")
+def main(argv: list[str] | None = None, *, diagnostics) -> int:
     """CLI entry point for on-demand filing fetch.
 
     Exit codes: 0 = capture-ready filing found/reused, 1 = fatal error,
     2 = filing not reusable / not found (or config/identity problem).
     """
-    import argparse
-    from ff_runtime_feedback import cli_failure, parse_arguments
-    from ff_run_input import read_request_bytes
-
-    parser = argparse.ArgumentParser(
+    parser = OwnerArgumentParser(
         prog="filing-fetch",
         description="Resolve or download a company filing into company-wiki.",
     )
@@ -1904,7 +1906,7 @@ def main(argv: list[str] | None = None) -> int:
         help="return a pathless source reference for a later company-wiki read",
     )
     parser.add_argument("--jobs-dir", type=Path, help="owner directory for this request and its diagnostics")
-    args = parse_arguments(parser, argv, "short-filing")
+    args = parser.parse_args(argv)
     v2_response = False
     request: dict[str, Any] | None = None
     stats: dict[str, int] | None = None
@@ -1920,7 +1922,7 @@ def main(argv: list[str] | None = None) -> int:
         return exit_code
 
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
-        cli_failure("short-filing", "invalid_timeout", jobs_dir=args.jobs_dir, no_dispatch=True)
+        cli_failure("short-filing", "invalid_timeout", jobs_dir=args.jobs_dir, no_dispatch=True, diagnostics=diagnostics)
         print("error: timeout-seconds must be positive and finite", file=sys.stderr)
         return 2
 
@@ -1937,7 +1939,7 @@ def main(argv: list[str] | None = None) -> int:
         # launched, so one file keeps exactly one writer. A diagnostic failure
         # here must never change the business path.
         try:
-            observation = ff_short_feedback.begin_observation(jobs_dir=args.jobs_dir)
+            observation = ff_short_feedback.begin_observation(jobs_dir=args.jobs_dir, diagnostics=diagnostics)
         except Exception:  # noqa: BLE001 - the sidecar is never business-critical
             observation = None
         parsed: Any = None
@@ -2004,7 +2006,7 @@ def main(argv: list[str] | None = None) -> int:
 
             output = error_envelope(
                 exc.code,
-                str(exc),
+                redact_text(str(exc)),
                 retryable=exc.retryable,
                 stats=stats,
                 request=request,
@@ -2022,7 +2024,7 @@ def main(argv: list[str] | None = None) -> int:
         error_response: dict[str, Any] = {
             "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
             "status": exc.code,
-            "error": str(exc),
+            "error": redact_text(str(exc)),
             "error_code": exc.code,
             "retryable": exc.retryable,
         }
@@ -2065,7 +2067,7 @@ def main(argv: list[str] | None = None) -> int:
 
             output = error_envelope(
                 "fatal",
-                str(exc),
+                redact_text(str(exc)),
                 retryable=False,
                 stats=stats,
                 request=request,
@@ -2074,7 +2076,7 @@ def main(argv: list[str] | None = None) -> int:
         output = {
             "schema_version": FILING_RESPONSE_SCHEMA_VERSION,
             "status": "fatal",
-            "error": str(exc),
+            "error": redact_text(str(exc)),
             "error_code": "fatal",
             "retryable": False,
         }
@@ -2093,4 +2095,4 @@ __all__ = [
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(cli_exit(main))

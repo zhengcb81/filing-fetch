@@ -79,18 +79,19 @@ class ShortObservation:
 
     def __init__(
         self, path: Path | None, *, run_id: str, attempt_id: str, operation_id: str,
-        jobs_dir: Path | None = None,
+        jobs_dir: Path | None = None, diagnostics=None,
     ) -> None:
         self._path = path
         self._start_rows: list[dict] = []
         self._jobs_dir = jobs_dir
+        self._diagnostics = diagnostics
         self._run = DirectRun(SHORT, run_id=run_id, attempt_id=attempt_id,
-                              operation_id=operation_id, jobs_dir=jobs_dir)
+                              operation_id=operation_id, jobs_dir=jobs_dir, diagnostics=diagnostics, labels={})
 
     def started(self) -> None:
         """Write the start row before any business work runs."""
         self._start_rows = [self._run.start_row]
-        publish(self._start_rows, file=self._path, jobs_dir=self._jobs_dir)
+        publish(self._start_rows, file=self._path, jobs_dir=self._jobs_dir, diagnostics=self._diagnostics)
 
     def request_read(self, raw: bytes, request: Any, request_file: Path | None) -> None:
         self._run.mark("request_read", request_sha256=hashlib.sha256(raw).hexdigest(),
@@ -136,20 +137,18 @@ class ShortObservation:
     def _identity(self) -> dict[str, str]:
         return self._run.base
 
-def begin_observation(*, jobs_dir: Path | None = None) -> ShortObservation:
+def begin_observation(*, jobs_dir: Path | None = None, diagnostics=None) -> ShortObservation:
     """Claim the parent sidecar if supplied; standalone execution uses the native outbox."""
     path = os.environ.get(OUT_ENV)
     run_id = (os.environ.get(RUN_ENV) or "").strip()
     attempt_id = (os.environ.get(ATTEMPT_ENV) or "").strip()
-    for name in (OUT_ENV, RUN_ENV, ATTEMPT_ENV):
-        os.environ.pop(name, None)
-    operation_id = uuid.uuid4().hex
+    operation_id = diagnostics.occurrence if diagnostics else uuid.uuid4().hex
     observation = ShortObservation(
         Path(path) if path else None,
         run_id=run_id or operation_id,
         attempt_id=attempt_id or "1",
         operation_id=operation_id,
-        jobs_dir=jobs_dir,
+        jobs_dir=jobs_dir, diagnostics=diagnostics,
     )
     observation.started()
     return observation

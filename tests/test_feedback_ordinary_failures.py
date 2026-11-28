@@ -522,6 +522,7 @@ raise SystemExit(ff_job.main())
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     try:
         deadline = time.monotonic() + 15

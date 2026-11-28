@@ -42,10 +42,12 @@ from ff_job_contracts import (
     validate_action,
 )
 from ff_job_observation import append_job_diagnostic, load_observed_job, publish_job_observation
-from ff_runtime_feedback import RUN_ENV, ATTEMPT_ENV, cause_details
+from ff_runtime_feedback import RUN_ENV, ATTEMPT_ENV, cause_details, implementation_version
+from ff_runtime_log import redact_text, safe_identity
 from ff_job_store import JobStore, now_iso
 from ff_errors import FilingFetchError
 
+_RUNNER_VERSION = implementation_version(__file__, "ff-job/1")
 _MAX_ACTIONS = 50
 _MAX_EVENTS = 50
 _NO_PROVIDER = {"provider_started": False, "usage_complete": True}
@@ -129,8 +131,11 @@ def run_job(
         record["attempts"] = record.get("attempts", 0) + 1
         record.pop("failure_detail", None)
         record.pop("statement_feedback", None)
-        record["feedback_identity"] = {"run_id": os.environ.get(RUN_ENV) or owner_job_id,
-                                       "attempt_id": os.environ.get(ATTEMPT_ENV) or str(record["attempts"])}
+        record["diagnostic_execution"] = {
+            "surface": "ff-job", "code_version": _RUNNER_VERSION, "input_ref": record.get("request_hash"),
+        }
+        record["feedback_identity"] = {"run_id": safe_identity(os.environ.get(RUN_ENV) or owner_job_id),
+                                       "attempt_id": safe_identity(os.environ.get(ATTEMPT_ENV) or str(record["attempts"]))}
         record["feedback_delivery_tracked"] = True
         record["status"] = "running"
         record["status_known"] = True
@@ -192,7 +197,7 @@ def _execute(
         record["failure_detail"] = cause_details(exc, reason="fatal")
         error = {
             "code": "fatal",
-            "message": f"{type(exc).__name__}: {exc}",
+            "message": redact_text(f"{type(exc).__name__}: {exc}"),
             "owner": "filing-fetch",
             "retryable": False,
             "next_actions": ["reconcile"],

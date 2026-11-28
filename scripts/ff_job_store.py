@@ -6,7 +6,7 @@ Layout under ``--jobs-dir`` (default ``<skill_root>/.ff_jobs``):
     index/idem/<sha256(key)>.json   idempotency pointer {"owner_job_id", "request_hash"}
     index/idem/.submit.lock         OS lock for submission publication
     locks/<owner_job_id>.lock       OS lock for job mutation
-    logs/<owner_job_id>.log         optional append-only runner diagnostics
+    logs/<owner_job_id>.log         optional rotating runner diagnostics
 
 Cross-process discipline:
 
@@ -54,6 +54,9 @@ from ff_persistence import (
     now_iso as now_iso,
     owner_io_path,
 )
+
+from ff_runtime_log import append_locked_log
+
 
 _MAX_EVENTS = 50
 # Bound contention for the short owner-local submission transaction.
@@ -346,12 +349,7 @@ class JobStore:
     # -- audit log ----------------------------------------------------------
 
     def append_log(self, owner_job_id: str, entry: dict) -> None:
-        line = json.dumps({"at": now_iso(), **entry}, ensure_ascii=False)
-        path = self._log_path(owner_job_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8", newline="\n") as stream:
-            stream.write(line + "\n")
-            stream.flush()
+        append_locked_log(self._log_path(owner_job_id), {"at": now_iso(), **entry})
 
     def read_log(self, owner_job_id: str) -> list[str]:
         try:

@@ -139,18 +139,18 @@ def _spawn(command, input_bytes, cwd, env, discard_stdout=False):
             start_new_session=not windows,
             creationflags=subprocess.CREATE_NO_WINDOW if windows else 0,
         )
-    except OSError:
+    except OSError as error:
         # Only this pre-Popen boundary proves no target/provider could run.
         # Cleanup or pipe errors after this point must retain unknown usage.
-        raise ChildStartFailed("could not start owned process") from None
+        raise ChildStartFailed("could not start owned process") from error
     try:
         job = _assign_windows_job(proc) if windows else None
-    except BaseException:
+    except BaseException as error:
         # Bootstrap cannot create user children yet. Even assignment failures are reaped.
         proc.kill()
         proc.wait(timeout=_CLEANUP_GRACE_SECONDS)
         _close_pipes(proc)
-        raise TransportError("could not establish owned process tree") from None
+        raise TransportError("could not establish owned process tree") from error
     return proc, job
 
 

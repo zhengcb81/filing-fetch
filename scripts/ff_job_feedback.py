@@ -12,7 +12,8 @@ import tempfile
 from ff_job_observation import publish_job_observation as publish_job_observation
 from ff_persistence import owner_io_path, read_regular_bytes
 from ff_runtime_feedback import (
-    DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, observation_directories, parse_arguments, publish,
+    DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, OwnerArgumentParser, observation_directories,
+    cli_exit, observed_cli, publish,
     read_cli_failure, read_native_diagnostic, record_runtime_failure, start_was_offered, terminal_was_offered,
 )
 
@@ -43,7 +44,8 @@ def _refresh_summary(run, jobs_dir, file):
                                    for item in snapshots) and not usage.get("metadata_usage_incomplete"))
         rows.append(dict(base, check_id="refresh-usage", expected="accounted", actual="known" if known else "unknown",
                          disposition="expected" if known else "unknown"))
-    return publish(rows, jobs_dir=jobs_dir, file=file, recoverable=True, context=[_refresh_start_row(base)])
+    return publish(rows, jobs_dir=jobs_dir, file=file, recoverable=True, context=[_refresh_start_row(base)],
+                   execution=run.get("diagnostic_execution"))
 
 
 def _refresh_start_row(base):
@@ -62,7 +64,8 @@ def _refresh_item(run, key, failure, jobs_dir, file):
         row.update(disposition="expected", refusal_code=reason)
     # Historical receipts may carry only the actual stage, reason and reference.
     detail = {"schema_version": "ff-failure-detail/1", **failure}
-    return publish([row], jobs_dir=jobs_dir, file=file, detail=detail, recoverable=True)
+    return publish([row], jobs_dir=jobs_dir, file=file, detail=detail, recoverable=True,
+                   execution=run.get("diagnostic_execution"))
 
 
 def publish_refresh_failure(run, *, jobs_dir, reason, reference, stage, error=None):
@@ -557,8 +560,9 @@ def _flush_observations(roots, observations_dir=None):
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Filing-fetch owner feedback receipts")
+@observed_cli("feedback", local_only=True)
+def main(argv: list[str] | None = None, *, diagnostics) -> int:
+    parser = OwnerArgumentParser(description="Filing-fetch owner feedback receipts")
     parser.add_argument("--reports-dir", type=Path)
     sub = parser.add_subparsers(dest="command", required=True)
     diagnostic = sub.add_parser("get-diagnostic", help="read the original sanitized exception and source identity")
@@ -589,12 +593,12 @@ def main() -> int:
     lookup.add_argument("--observations-dir", type=Path, help="custom observation directory for the primary root")
     lookup.add_argument("--config", type=Path, help="accepted for legacy deployments; lookup reads receipts only")
     lookup.add_argument("--timeout-seconds", type=float, help="accepted for legacy deployments")
-    args = parse_arguments(parser, None, "feedback", local_only=True)
+    args = parser.parse_args(argv)
     if args.command == "flush-observations":
         try:
             reply = _flush_observations(_owner_roots(args.jobs_dir), args.observations_dir)
         except (OSError, ValueError, RecursionError) as error:
-            record_runtime_failure("feedback-flush", "observation_flush_failed", error)
+            record_runtime_failure("feedback-flush", "observation_flush_failed", error, diagnostics=diagnostics)
             print(json.dumps({"error": type(error).__name__}))
             return 1
         print(json.dumps(reply, ensure_ascii=True))
@@ -609,7 +613,8 @@ def main() -> int:
             store = JobStore(args.jobs_dir.expanduser().resolve(), initialize=False)
             load_observed_job(store, job_id, recover_terminal=True)
         except (FFJobError, OSError) as error:
-            record_runtime_failure("feedback-reoffer-job", "job_reoffer_failed", error, jobs_dir=args.jobs_dir)
+            record_runtime_failure("feedback-reoffer-job", "job_reoffer_failed", error, jobs_dir=args.jobs_dir,
+                                   diagnostics=diagnostics)
             print(json.dumps({"error": type(error).__name__}))
             return 1
         print(json.dumps({"owner_job_id": job_id}))
@@ -639,14 +644,16 @@ def main() -> int:
             print(json.dumps(value, ensure_ascii=True))
             return 0
         if error is not None:
-            record_runtime_failure("feedback-get-diagnostic", "diagnostic_unreadable", error, jobs_dir=args.jobs_dir)
+            record_runtime_failure("feedback-get-diagnostic", "diagnostic_unreadable", error, jobs_dir=args.jobs_dir,
+                                   diagnostics=diagnostics)
         print(json.dumps({"status": "unavailable"}))
         return 1
     if args.command == "reconcile":
         try:
             reply = _lookup(args, json.load(sys.stdin))
         except (OSError, ValueError, RecursionError) as error:
-            record_runtime_failure("feedback-reconcile", "reconcile_failed", error, jobs_dir=args.jobs_dir[0])
+            record_runtime_failure("feedback-reconcile", "reconcile_failed", error, jobs_dir=args.jobs_dir[0],
+                                   diagnostics=diagnostics)
             print(json.dumps({"error": type(error).__name__}))
             return 1
         print(json.dumps(reply, ensure_ascii=True))
@@ -657,7 +664,8 @@ def main() -> int:
         try:
             request = json.load(sys.stdin)
         except (OSError, ValueError, RecursionError) as error:
-            record_runtime_failure(f"feedback-{args.command}", f"invalid_{args.command}_request", error)
+            record_runtime_failure(f"feedback-{args.command}", f"invalid_{args.command}_request", error,
+                                   diagnostics=diagnostics)
             if args.command == "report":
                 raise
             print(json.dumps({"error": type(error).__name__}))
@@ -684,7 +692,7 @@ def main() -> int:
     except (OSError, ValueError, RecursionError) as error:
         if args.command not in {"get-report", "get-triage"} or not isinstance(error, FileNotFoundError):
             reason = "triage_io_failed" if args.command.endswith("triage") else "report_io_failed"
-            record_runtime_failure("feedback-" + args.command, reason, error)
+            record_runtime_failure("feedback-" + args.command, reason, error, diagnostics=diagnostics)
         print(json.dumps({"error": type(error).__name__}))
         return 1
     print(json.dumps(value, ensure_ascii=True))
@@ -692,4 +700,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(cli_exit(main))

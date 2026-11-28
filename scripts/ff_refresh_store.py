@@ -12,7 +12,8 @@ from pathlib import Path
 import re
 from zoneinfo import ZoneInfo
 
-from ff_runtime_feedback import ATTEMPT_ENV, RUN_ENV
+from ff_runtime_feedback import ATTEMPT_ENV, RUN_ENV, implementation_version
+from ff_runtime_log import safe_identity
 from ff_persistence import acquire_file_lock, atomic_write_json, owner_io_path
 from ff_refresh_policy import Slot, default_settings, slot_consumed, utc_text, work_scope
 
@@ -25,6 +26,7 @@ class RefreshStateError(RuntimeError):
     """The owner cannot safely read or update the original refresh state."""
 
 
+_RUNNER_VERSION = implementation_version(__file__, "ff-scheduled-refresh/1")
 COUNTS = ("candidates", "reused", "downloaded", "read", "summarized", "skipped", "pending", "failed")
 
 
@@ -112,9 +114,14 @@ class RefreshStore:
             stamp = slot.due_at.strftime("%Y%m%dT%H%M%SZ")
             digest = hashlib.sha256(f"{slot.slot_id}:{revision}".encode()).hexdigest()[:10]
             run_id = f"sr-{stamp}-{digest}"
+            source = json.dumps([slot.slot_id, revision, state["settings"]], ensure_ascii=True, sort_keys=True)
             state["current"] = {
-                "feedback_identity": {"run_id": os.environ.get(RUN_ENV) or run_id,
-                                      "attempt_id": os.environ.get(ATTEMPT_ENV) or "scheduled"},
+                "diagnostic_execution": {
+                    "surface": "scheduled-refresh", "code_version": _RUNNER_VERSION,
+                    "input_ref": hashlib.sha256(source.encode("ascii")).hexdigest(),
+                },
+                "feedback_identity": {"run_id": safe_identity(os.environ.get(RUN_ENV) or run_id),
+                                      "attempt_id": safe_identity(os.environ.get(ATTEMPT_ENV) or "scheduled")},
                 "run_id": run_id, "slot_id": slot.slot_id,
                 "due_at": utc_text(slot.due_at),
                 "as_of_date": now.astimezone(ZoneInfo(state["settings"]["cadence"]["time_zone"])).date().isoformat(),

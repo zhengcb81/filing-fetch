@@ -235,8 +235,8 @@ class EarningsTranscriptsTransport:
             if self._launch_config_cache and self._launch_config_cache[0] == selected:
                 return self._launch_config_cache[1]
             config = read_json_object(selected, label="ET launch config")
-        except (OSError, ValueError, FilingFetchError):
-            raise ValueError("provider_credentials_config_invalid") from None
+        except (OSError, ValueError, FilingFetchError) as error:
+            raise ValueError("provider_credentials_config_invalid") from error
         self._launch_config_cache = selected, config
         return config
 
@@ -244,8 +244,8 @@ class EarningsTranscriptsTransport:
         try:
             return expand_config_path(value, field="ET launch path",
                 skill_root=Path(__file__).resolve().parents[1], config_path=self.config_path)
-        except (FilingFetchError, OSError, ValueError):
-            raise ValueError("provider_credentials_config_invalid") from None
+        except (FilingFetchError, OSError, ValueError) as error:
+            raise ValueError("provider_credentials_config_invalid") from error
 
     def _credential_file(self) -> Path | None:
         """Explicit source wins; otherwise reuse the selected config's known file."""
@@ -276,14 +276,14 @@ class EarningsTranscriptsTransport:
             try:
                 with credential_file.open("rb") as stream:
                     raw = stream.read(4097)
-            except OSError:
-                raise ValueError("provider_credentials_file_unavailable") from None
+            except OSError as error:
+                raise ValueError("provider_credentials_file_unavailable") from error
             if len(raw) > 4096:
                 raise ValueError("provider_credentials_file_invalid")
             try:
                 value = raw.decode("utf-8-sig").strip()
-            except UnicodeError:
-                raise ValueError("provider_credentials_file_invalid") from None
+            except UnicodeError as error:
+                raise ValueError("provider_credentials_file_invalid") from error
             if not value:
                 raise ValueError("provider_credentials_file_empty")
             if any(not 33 <= ord(char) <= 126 for char in value):
@@ -379,7 +379,7 @@ class EarningsTranscriptsTransport:
         try:
             return validate_source_ref(value)
         except FilingFetchError as exc:
-            raise ValueError(str(exc)) from None
+            raise ValueError(str(exc)) from exc
 
     def _verified_open(self, ref: dict[str, Any]) -> dict[str, Any]:
         """Read verified bytes; return the public receipt that names their source."""

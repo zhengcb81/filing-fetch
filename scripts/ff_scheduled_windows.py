@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import builtins
 import csv
 from datetime import datetime, timedelta, timezone
-from io import BytesIO
 import json
 import math
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import sys
@@ -22,7 +19,7 @@ from xml.parsers.expat import errors as xml_errors
 from ff_process_transport import ChildFailed, ChildTimeout, run_bounded
 from ff_refresh_policy import utc_text
 from ff_refresh_store import RefreshStore
-from ff_runtime_feedback import cli_failure, parse_arguments
+from ff_runtime_feedback import OwnerArgumentParser, cli_exit, cli_failure, observed_cli
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -138,8 +135,9 @@ def _positive_seconds(value: str) -> float:
     return result
 
 
-def run(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+@observed_cli("windows-task")
+def run(argv=None, *, diagnostics) -> int:
+    parser = OwnerArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("preview", "install", "remove", "run"), default="preview", nargs="?")
     parser.add_argument("--config", type=Path, default=ROOT / "config/company_wiki.json")
     parser.add_argument("--refresh-config", type=Path)
@@ -150,71 +148,19 @@ def run(argv=None) -> int:
         "--tick-timeout-seconds", type=_positive_seconds, default=DEFAULT_TICK_TIMEOUT_SECONDS,
         help="Windows watchdog deadline for the complete tick process (default: %(default)s)",
     )
-    args = _normalized(parse_arguments(parser, argv, "windows-task"))
+    args = _normalized(parser.parse_args(argv))
     try:
-        return _run_action(parser, args)
+        return _run_action(parser, args, diagnostics=diagnostics)
     except SystemExit as exc:
         if exc.code:
-            cli_failure("windows-" + args.action, "task_control_failed", exc, jobs_dir=args.jobs_dir)
+            cli_failure("windows-" + args.action, "task_control_failed", exc, jobs_dir=args.jobs_dir, diagnostics=diagnostics)
         raise
     except Exception as exc:
-        cli_failure("windows-" + args.action, "task_launch_failed", exc, jobs_dir=args.jobs_dir)
+        cli_failure("windows-" + args.action, "task_launch_failed", exc, jobs_dir=args.jobs_dir, diagnostics=diagnostics)
         raise
 
 
-_TRACEBACK_HEADER = b"Traceback (most recent call last):"
-_TRACEBACK_FRAME = re.compile(rb'^  File "([^"]+)", line ([0-9]{1,8})(?:, in .*)?$')
-_EXCEPTION_LINE = re.compile(rb"^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?::(?=\s|$)|$)")
-_SAFE_FILENAME = re.compile(rb"[A-Za-z0-9_.-]{1,96}")
-_BUILTIN_EXCEPTIONS = frozenset(
-    name.encode("ascii")
-    for name, value in vars(builtins).items()
-    if isinstance(value, type) and value.__module__ == "builtins" and issubclass(value, BaseException)
-)
-
-
-def _tick_failure(returncode: int, stderr: bytes) -> dict:
-    """Project known diagnostic shapes without retaining any child stream text."""
-    if not stderr:
-        return {"exit_code": returncode, "stderr_form": "empty"}
-    if _TRACEBACK_HEADER in stderr:
-        facts = {"exit_code": returncode, "stderr_form": "python_traceback"}
-        last_frame = None
-        tracing = False
-        for raw in BytesIO(stderr):
-            line = raw.rstrip(b"\r\n")
-            if line == _TRACEBACK_HEADER:
-                last_frame = None
-                tracing = True
-                continue
-            if not tracing:
-                continue
-            frame = _TRACEBACK_FRAME.fullmatch(line)
-            if frame is not None:
-                filename, number = frame.groups()
-                basename = re.split(rb"[/\\]", filename)[-1]
-                last_frame = {"line": int(number)}
-                if _SAFE_FILENAME.fullmatch(basename):
-                    last_frame["file"] = basename.decode("ascii")
-                continue
-            name = _EXCEPTION_LINE.match(line)
-            if last_frame is None or name is None:
-                continue
-            tracing = False  # Continuation lines are exception text, not types.
-            if len(name[1]) > 96:
-                continue
-            facts["last_frame"] = last_frame
-            facts["exception_type"] = name[1].decode("ascii")
-            facts.pop("builtin_exception", None)
-            if name[1] in _BUILTIN_EXCEPTIONS:
-                facts["builtin_exception"] = facts["exception_type"]
-        return facts
-    if b": can't open file " in stderr or stderr.startswith(b"Fatal Python error:"):
-        return {"exit_code": returncode, "stderr_form": "python_startup_error"}
-    return {"exit_code": returncode, "stderr_form": "unclassified"}
-
-
-def _run_action(parser, args):
+def _run_action(parser, args, *, diagnostics=None):
     if os.name != "nt":
         parser.error("Windows Task Scheduler requires Windows")
     if args.action == "run":
@@ -227,14 +173,10 @@ def _run_action(parser, args):
                 command, timeout_seconds=args.tick_timeout_seconds, cwd=str(ROOT), discard_stdout=True,
             )
         except ChildTimeout as exc:
-            cli_failure("windows-tick", "tick_timeout", exc, jobs_dir=args.jobs_dir)
+            cli_failure("windows-tick", "tick_timeout", exc, jobs_dir=args.jobs_dir, diagnostics=diagnostics)
             return TICK_TIMEOUT_EXIT
         except ChildFailed as exc:
-            facts = _tick_failure(exc.returncode, exc.stderr)
-            cli_failure(
-                "windows-tick", "tick_exit_" + str(exc.returncode),
-                jobs_dir=args.jobs_dir, child_process=facts,
-            )
+            cli_failure("windows-tick", f"tick_exit_{exc.returncode}", exc, jobs_dir=args.jobs_dir, diagnostics=diagnostics)
             return exc.returncode
         return 0
     name, sid = _identity()
@@ -290,4 +232,4 @@ def _run_action(parser, args):
 
 
 if __name__ == "__main__":
-    raise SystemExit(run())
+    raise SystemExit(cli_exit(run))

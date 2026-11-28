@@ -10,7 +10,7 @@ import sys
 
 from ff_job_feedback import redeliver_refresh
 from ff_persistence import LockBusy
-from ff_runtime_feedback import DEFAULT_JOBS_DIR, cli_failure, parse_arguments
+from ff_runtime_feedback import DEFAULT_JOBS_DIR, OwnerArgumentParser, cli_exit, cli_failure, observed_cli
 from ff_refresh_policy import RUNS_SCHEMA, STATUS_SCHEMA, due_slot, parse_config_request, slot_consumed, utc_text
 from ff_refresh_store import ConfigConflict, RefreshStateError, RefreshStore, summarize_run
 
@@ -55,7 +55,7 @@ def _status(store: RefreshStore, deployment_path: Path, now: datetime) -> dict:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = OwnerArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=SKILL_ROOT / "config/company_wiki.json")
     parser.add_argument("--refresh-config", type=Path, help="default: scheduled_refresh.json next to --config")
     parser.add_argument("--jobs-dir", type=Path, default=DEFAULT_JOBS_DIR)
@@ -70,7 +70,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_command(args: argparse.Namespace) -> dict:
+def run_command(args: argparse.Namespace, *, diagnostics=None) -> dict:
     store = RefreshStore(args.jobs_dir.resolve())
     config_path = args.config.resolve()
     deployment = (args.refresh_config or config_path.with_name("scheduled_refresh.json")).resolve()
@@ -99,19 +99,21 @@ def run_command(args: argparse.Namespace) -> dict:
             }
     result = _status(store, deployment, clock)
     if args.command == "tick" and "schedule_deployment_missing" in result.get("reason_codes", ()):
-        cli_failure("refresh-tick", "schedule_deployment_missing", jobs_dir=args.jobs_dir, no_dispatch=True)
+        cli_failure("refresh-tick", "schedule_deployment_missing", jobs_dir=args.jobs_dir, no_dispatch=True,
+                    diagnostics=diagnostics)
     return result
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_arguments(_parser(), argv, "scheduled-refresh")
+@observed_cli("scheduled-refresh")
+def main(argv: list[str] | None = None, *, diagnostics) -> int:
+    args = _parser().parse_args(argv)
     if hasattr(sys.stdin, "reconfigure"):
         sys.stdin.reconfigure(encoding="utf-8")
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     code = 0
     try:
-        result = run_command(args)
+        result = run_command(args, diagnostics=diagnostics)
     except (ValueError, LockBusy, RefreshStateError, OSError) as exc:
         if isinstance(exc, ConfigConflict):
             reason = "config_conflict"
@@ -121,15 +123,15 @@ def main(argv: list[str] | None = None) -> int:
             reason = "schedule_state_unavailable"
         else:
             reason = "request_error"
-        cli_failure("refresh-" + args.command, reason, exc, jobs_dir=args.jobs_dir)
+        cli_failure("refresh-" + args.command, reason, exc, jobs_dir=args.jobs_dir, diagnostics=diagnostics)
         result = {"schema_version": STATUS_SCHEMA, "error": {"code": reason, "owner": "filing-fetch"}}
         code = 2
     except Exception as exc:
-        cli_failure("refresh-" + args.command, "fatal", exc, jobs_dir=args.jobs_dir)
+        cli_failure("refresh-" + args.command, "fatal", exc, jobs_dir=args.jobs_dir, diagnostics=diagnostics)
         raise
     print(json.dumps(result, ensure_ascii=False))
     return code
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(cli_exit(main))

@@ -16,6 +16,7 @@ import pytest
 
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 REQUEST = {
     "schema_version": "financial-statements-request/1",
     "company_query": "synthetic company",
@@ -92,7 +93,7 @@ class Case:
     def invoke(self, script, *args, body=None):
         return subprocess.run(
             self.argv(script, *args), input=json.dumps(body).encode("utf-8") if body is not None else None,
-            env=self.env, cwd=self.root, capture_output=True, timeout=15,
+            env=self.env, cwd=self.root, capture_output=True, timeout=15, creationflags=NO_WINDOW,
         )
 
     def job(self, *args, body=None):
@@ -214,7 +215,7 @@ def test_reconcile_state_is_durable_before_optional_log(tmp_path):
     args = ("--owner-job-id", jid, "--config", str(case.config), "--timeout-seconds", "10")
     child = subprocess.Popen(
         case.argv("ff_job.py", "--jobs-dir", str(case.jobs), "run", *args),
-        env=case.env, cwd=case.root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env=case.env, cwd=case.root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
     )
     try:
         case.wait_for_dispatch(child)
@@ -245,7 +246,7 @@ def test_statements_direct_cold_read_reaches_same_attempt_without_work(tmp_path,
     case.env.update(RESEARCH_FEEDBACK_RUN_ID="original-cli-run", RESEARCH_FEEDBACK_ATTEMPT_ID="original-attempt")
     argv = case.argv("fetch_statements.py", "--config", str(case.config), "--timeout-seconds", "10")
     child = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                             env=case.env, cwd=case.root)
+                             env=case.env, cwd=case.root, creationflags=NO_WINDOW)
     try:
         assert child.stdin
         request_bytes = json.dumps(REQUEST).encode("utf-8")
@@ -359,13 +360,15 @@ def test_short_filing_cold_run_has_original_input_and_version(tmp_path):
 
 
 def test_direct_statement_delivery_reoffered_from_receipt_without_repeat(tmp_path):
+    from ff_persistence import owner_io_path
+
     case = Case(tmp_path, "hold")
     # Scope the fallback native directory to this owner fixture.
     case.scripts = tmp_path / "scripts"
     shutil.copytree(SCRIPTS, case.scripts, ignore=shutil.ignore_patterns("__pycache__"))
     argv = case.argv("fetch_statements.py", "--config", str(case.config), "--timeout-seconds", "20")
     child = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                             env=case.env, cwd=tmp_path)
+                             env=case.env, cwd=tmp_path, creationflags=NO_WINDOW)
     try:
         assert child.stdin
         child.stdin.write(json.dumps(REQUEST).encode())
@@ -378,7 +381,7 @@ def test_direct_statement_delivery_reoffered_from_receipt_without_repeat(tmp_pat
         key = json.dumps([*[start[field] for field in keys], "complete"], separators=(",", ":"))
         packet = "feedback-" + uuid.uuid5(uuid.NAMESPACE_URL, key).hex
         blocked = [
-            root / (packet + ".cause.json")
+            owner_io_path(root / (packet + ".cause.json"))
             for root in (case.inbox, tmp_path / ".ff_jobs" / "observations")
         ]
         for path in blocked:
@@ -489,6 +492,7 @@ def test_flush_recovers_unoffered_start_after_hard_stop_without_inventing_outcom
     child = subprocess.Popen(
         case.argv("fetch_statements.py", "--config", str(case.config), "--timeout-seconds", "12"),
         stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=case.env, cwd=tmp_path,
+        creationflags=NO_WINDOW,
     )
     try:
         assert child.stdin is not None

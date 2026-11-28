@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime
@@ -19,7 +18,9 @@ import warnings
 
 from ff_persistence import acquire_file_lock, atomic_write_json, owner_io_path
 from ff_process_tree import pid_is_alive
-from ff_runtime_feedback import cause_details, parse_arguments, record_runtime_failure
+from ff_runtime_feedback import (
+    OwnerArgumentParser, cause_details, cli_exit, observed_cli, record_runtime_failure,
+)
 from ff_t3_native import T3_CASES, run_cases
 from ff_runtime_log import diagnostic_fields as _diagnostic_fields, diagnostic_view as _diagnostic_view
 
@@ -227,6 +228,7 @@ def get_latest_receipt(root: Path) -> dict:
 
 def _run_once(
     root: Path, run_id: str, execute: Callable[[CaseReporter], dict | None], *, mode: str = "offline",
+    diagnostics=None,
 ) -> dict:
     key = _key(run_id)
     # Reuse an existing claim, including an unreadable or interrupted one.
@@ -263,7 +265,7 @@ def _run_once(
             cases[case]["diagnostic"] = detail
         atomic_write_json(path, value)
         if mode == "live" and outcome != "passed":
-            record_runtime_failure("t3-" + case, reason or outcome, run_id=run_id, detail=detail)
+            record_runtime_failure("t3-" + case, reason or outcome, run_id=run_id, detail=detail, diagnostics=diagnostics)
 
     reason: str | None
     try:
@@ -285,7 +287,8 @@ def _run_once(
     value.update(state=state, reason=reason, completed_at=_now())
     atomic_write_json(path, value)
     if mode == "live" and state == "blocked" and reason != "case_execution_blocked":
-        record_runtime_failure("t3-run-live", reason, run_id=run_id, detail=value.get("diagnostic"))
+        record_runtime_failure("t3-run-live", reason, run_id=run_id, detail=value.get("diagnostic"),
+                               diagnostics=diagnostics)
     return _project(value)
 
 
@@ -325,8 +328,9 @@ def _live_exit(value: dict) -> int:
     return 2
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+@observed_cli("t3", local_only=True)
+def main(argv: list[str] | None = None, *, diagnostics) -> int:
+    parser = OwnerArgumentParser(description=__doc__)
     parser.add_argument("--receipts-dir", type=Path, default=DEFAULT_ROOT)
     commands = parser.add_subparsers(dest="command", required=True)
     get = commands.add_parser("get").add_mutually_exclusive_group(required=True)
@@ -335,22 +339,24 @@ def main(argv: list[str] | None = None) -> int:
     live = commands.add_parser("run-live")
     live.add_argument("--run-id", required=True)
     live.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    args = parse_arguments(parser, argv, "t3", local_only=True)
+    args = parser.parse_args(argv)
     try:
         if args.command == "get":
             value = (get_latest_receipt(args.receipts_dir) if args.latest
                      else get_receipt(args.receipts_dir, args.run_id))
         else:
             execute = partial(_execute_native_suite, config=args.config, run_id=args.run_id)
-            value = _run_once(args.receipts_dir, args.run_id, execute, mode="live")
+            value = _run_once(args.receipts_dir, args.run_id, execute, mode="live", diagnostics=diagnostics)
     except ValueError as error:
-        record_runtime_failure("t3-" + args.command, "invalid_run_id", error, run_id=args.run_id)
+        record_runtime_failure("t3-" + args.command, "invalid_run_id", error, run_id=args.run_id,
+                               diagnostics=diagnostics)
         print(json.dumps({"schema_version": SCHEMA, "state": "blocked", "reason": "invalid_run_id"}))
         return 2
     except OSError as error:
         reason = "receipt_io_failed"
         detail = cause_details(error, reason=reason)
-        record_runtime_failure("t3-" + args.command, reason, run_id=args.run_id, detail=detail)
+        record_runtime_failure("t3-" + args.command, reason, run_id=args.run_id, detail=detail,
+                               diagnostics=diagnostics)
         print(json.dumps({"schema_version": SCHEMA, "run_id": args.run_id,
                           "state": "unknown", "reason": reason,
                           "diagnostic": _diagnostic_view(detail)}))
@@ -363,4 +369,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(cli_exit(main))

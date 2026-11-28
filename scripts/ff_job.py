@@ -42,7 +42,8 @@ from ff_job_contracts import (
 )
 from ff_job_runner import act, run_job
 from ff_job_store import JobStore
-from ff_runtime_feedback import DEFAULT_JOBS_DIR, cli_failure, parse_arguments
+from ff_runtime_feedback import DEFAULT_JOBS_DIR, OwnerArgumentParser, cli_exit, cli_failure, observed_cli
+from ff_runtime_log import redact_text
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 
@@ -80,7 +81,7 @@ def _error_payload(command: str, exc: FFJobError) -> dict:
         "status": exc.code,
         "error": {
             "code": exc.code,
-            "message": str(exc),
+            "message": redact_text(str(exc)),
             "owner": "filing-fetch",
             "retryable": exc.retryable,
             "next_actions": ["fix_request_and_resubmit"] if exc.code == "request_error" else ["check_ff_config_registration"],
@@ -198,7 +199,7 @@ def _cmd_list_jobs(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = OwnerArgumentParser(
         prog="ff-job",
         description=(
             "Durable job façade over filing-fetch acquisition (protocol ff-job/1): "
@@ -287,29 +288,32 @@ def _add_list_parser(subparsers) -> None:
     listing.set_defaults(handler=_cmd_list_jobs, no_dispatch=True)
 
 
-def main(argv: list[str] | None = None) -> int:
+@observed_cli("ff-job")
+def main(argv: list[str] | None = None, *, diagnostics) -> int:
     parser = build_parser()
-    args = parse_arguments(parser, argv, "ff-job")
+    args = parser.parse_args(argv)
     if getattr(args, "timeout_seconds", None) is not None:
         if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
-            cli_failure(args.command, "invalid_timeout", jobs_dir=args.jobs_dir, no_dispatch=True)
+            cli_failure(args.command, "invalid_timeout", jobs_dir=args.jobs_dir, no_dispatch=True, diagnostics=diagnostics)
             print("error: timeout-seconds must be positive and finite", file=sys.stderr)
             return 2
     try:
         return args.handler(args)
     except FFJobError as exc:
-        cli_failure(args.command, exc.code, exc, jobs_dir=args.jobs_dir, no_dispatch=args.no_dispatch)
+        cli_failure(args.command, exc.code, exc, jobs_dir=args.jobs_dir, no_dispatch=args.no_dispatch,
+                    diagnostics=diagnostics)
         _emit(_error_payload(args.command, exc), pretty=args.pretty)
         return 2
     except Exception as exc:  # noqa: BLE001 - fatal exits 1 per house convention
-        cli_failure(args.command, "fatal", exc, jobs_dir=args.jobs_dir, no_dispatch=args.no_dispatch)
+        cli_failure(args.command, "fatal", exc, jobs_dir=args.jobs_dir, no_dispatch=args.no_dispatch,
+                    diagnostics=diagnostics)
         _emit({
             "schema_version": FF_JOB_SCHEMA_VERSION,
             "command": getattr(args, "command", "unknown"),
             "status": "fatal",
             "error": {
                 "code": "fatal",
-                "message": f"{type(exc).__name__}: {exc}",
+                "message": redact_text(f"{type(exc).__name__}: {exc}"),
                 "owner": "filing-fetch",
                 "retryable": False,
                 "next_actions": ["reconcile"],
@@ -320,4 +324,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(cli_exit(main))

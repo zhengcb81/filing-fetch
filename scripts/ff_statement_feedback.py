@@ -114,9 +114,9 @@ def statement_rows(base, snapshot, *, summarize):
     return rows
 
 
-def begin_statement_run() -> DirectRun:
-    run = DirectRun(STATEMENTS)
-    publish([run.start_row], file=os.environ.get(OUT_ENV))
+def begin_statement_run(*, diagnostics=None) -> DirectRun:
+    run = DirectRun(STATEMENTS, diagnostics=diagnostics)
+    publish([run.start_row], file=os.environ.get(OUT_ENV), diagnostics=diagnostics)
     return run
 
 
