@@ -401,7 +401,41 @@ def _observed_row(line):
     return row
 
 
-def _marker_matches(content, rows):
+def _declared_details_match(marker, packet, rows):
+    references = {row["details_ref"] for row in rows if "details_ref" in row}
+    declared = marker.get("details")
+    if type(declared) is not int or declared < len(references):
+        return False
+    if not declared and "details_sha256" not in marker:
+        return True
+
+    identities = set()
+    digest = hashlib.sha256()
+    sidecar = packet.with_name(packet.name + ".details.jsonl")
+    with sidecar.open("rb") as stream:
+        for line in stream:
+            if not line.endswith(b"\n"):
+                return False
+            detail = json.loads(line, object_pairs_hook=_unique_fields)
+            identity = detail.get("details_id") if isinstance(detail, dict) else None
+            if not isinstance(identity, str) or not identity or identity in identities:
+                return False
+            identities.add(identity)
+            digest.update(line)
+    return (len(identities) == declared and references <= identities
+            and ("details_sha256" not in marker or digest.hexdigest() == marker["details_sha256"]))
+
+
+def _declared_bundle_matches(marker, packet, body, rows):
+    """Check the declarations consumed by feedback-delivery-ready/1."""
+    return (marker.get("observations") == len(rows)
+            and marker.get("step_ids") == sorted({row["step_id"] for row in rows})
+            and ("observations_sha256" not in marker
+                 or hashlib.sha256(body).hexdigest() == marker["observations_sha256"])
+            and _declared_details_match(marker, packet, rows))
+
+
+def _marker_matches(content, packet, body, rows):
     marker = json.loads(content, object_pairs_hook=_unique_fields)
     if not isinstance(marker, dict):
         return False
@@ -414,13 +448,18 @@ def _marker_matches(content, rows):
                                       separators=(",", ":")).encode("ascii")).hexdigest()
             for row in rows
         }
-        return identities == {marker["occurrence_id"]} if isinstance(marker["occurrence_id"], str) else False
-    return True
+        occurrence = marker["occurrence_id"]
+        if not isinstance(occurrence, str) or identities != {occurrence}:
+            return False
+    # Legacy and consumed ready markers have no bundle declaration.
+    return (marker.get("schema_version") != "feedback-delivery-ready/1"
+            or _declared_bundle_matches(marker, packet, body, rows))
 
 
 def _read_packet(root, name):
     try:
-        body = owner_io_path(root / (name + ".jsonl")).read_bytes()
+        packet = owner_io_path(root / (name + ".jsonl"))
+        body = packet.read_bytes()
         if not body.endswith(b"\n"):
             return None
         rows = [_observed_row(line) for line in body.splitlines() if line.strip()]
@@ -435,12 +474,12 @@ def _read_packet(root, name):
             prior = observed.setdefault(occurrence, row)
             if row != prior:
                 return None
-        ready = owner_io_path(root / (name + ".ready"))
+        ready = packet.with_suffix(".ready")
         try:
             content = ready.read_bytes()
         except FileNotFoundError:
             content = b""
-        if content and not _marker_matches(content, rows):
+        if content and not _marker_matches(content, packet, body, list(observed.values())):
             return None
     except (OSError, ValueError, RecursionError):
         return None

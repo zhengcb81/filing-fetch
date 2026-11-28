@@ -382,6 +382,74 @@ def test_false_terminal_from_frozen_c72_can_be_reoffered_without_replacing_histo
     assert replay["job_offers"] == 0 and _snapshot(tmp_path) == after
 
 
+@pytest.mark.parametrize("fault", [
+    None, "duplicate-identical-row", "observation-count", "step-ids", "packet-digest",
+    "detail-count", "missing-declared-details", "wrong-detail-reference", "detail-digest",
+])
+def test_declared_ready_must_match_the_frozen_packet(tmp_path, fault):
+    historical = _restore(tmp_path, "job_unknown")
+    inbox = owner_io_path(tmp_path / "outbox")
+    original, = inbox.glob("*.jsonl")
+    ready = original.with_suffix(".ready")
+    details = original.with_name(original.name + ".details.jsonl")
+    packet_bytes = original.read_bytes()
+    rows = [json.loads(line) for line in packet_bytes.splitlines()]
+    refs = {row["details_ref"] for row in rows if "details_ref" in row}
+    assert refs
+    details_bytes = "".join(json.dumps({"details_id": ref}) + "\n" for ref in sorted(refs)).encode("ascii")
+    if fault == "duplicate-identical-row":
+        packet_bytes += packet_bytes.splitlines(keepends=True)[0]
+        original.write_bytes(packet_bytes)
+    manifest = {
+        **json.loads(ready.read_bytes()),
+        "schema_version": "feedback-delivery-ready/1",
+        "observations": len(rows),
+        "step_ids": sorted({row["step_id"] for row in rows}),
+        "observations_sha256": hashlib.sha256(packet_bytes).hexdigest(),
+        "details": len(refs),
+    }
+    if fault == "observation-count":
+        manifest["observations"] += 1
+    elif fault == "step-ids":
+        manifest["step_ids"] = ["unrelated-step"]
+    elif fault == "packet-digest":
+        manifest["observations_sha256"] = "0" * 64
+    elif fault == "detail-count":
+        manifest["details"] += 1
+    elif fault == "wrong-detail-reference":
+        details_bytes = b'{"details_id":"unrelated-reference"}\n'
+    if fault != "missing-declared-details":
+        details.write_bytes(details_bytes)
+        manifest["details_sha256"] = "0" * 64 if fault == "detail-digest" else hashlib.sha256(details_bytes).hexdigest()
+    ready.write_bytes(json.dumps(manifest).encode("ascii"))
+    before = _snapshot(tmp_path)
+    expected_offer = int(fault not in {None, "duplicate-identical-row"})
+    first = _subject(tmp_path, "flush-observations")
+    assert first["status"] == "ok" and first["job_offers"] == expected_offer, first
+    after = _snapshot(tmp_path)
+    for name, value in before.items():
+        if name == "outbox/logs/runtime-errors.jsonl":
+            # Delivery can append one diagnostic while retaining the frozen log.
+            assert after[name].startswith(value)
+            appended = after[name][len(value):]
+            assert RAW_RUN not in appended and RAW_ATTEMPT not in appended
+        else:
+            assert after[name] == value, name
+    assert all(after[name] == value for name, value in historical.items() if name.startswith("owner/"))
+    assert not (tmp_path / "calls").exists()
+    if expected_offer:
+        repaired, = (path for path in inbox.glob("feedback-*.jsonl") if path not in {original, details})
+        terminal, = (row for row in map(json.loads, repaired.read_bytes().splitlines()) if row["check_id"] == "job-outcome")
+        frozen, = (row for row in rows if row["check_id"] == "job-outcome")
+        assert terminal["evidence_ref"] == frozen["evidence_ref"]
+        assert terminal["actual"] == frozen["actual"] == "unknown"
+        assert terminal["run_id"] == _digest_alias(RAW_RUN)
+        assert terminal["attempt_id"] == _digest_alias(RAW_ATTEMPT)
+        assert _subject(tmp_path, "reconcile", body=_feedback_request(terminal)) == {"state": "unknown"}
+    assert _subject(tmp_path, "flush-observations")["job_offers"] == 0
+    assert _snapshot(tmp_path) == after
+
+
 def test_scheduled_usage_packet_cannot_acknowledge_the_frozen_slot(tmp_path):
     _restore(tmp_path, "slot")
     inbox = owner_io_path(tmp_path / "outbox")
