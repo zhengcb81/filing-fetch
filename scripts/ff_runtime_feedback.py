@@ -401,6 +401,23 @@ def _observed_row(line):
     return row
 
 
+def _marker_matches(content, rows):
+    marker = json.loads(content, object_pairs_hook=_unique_fields)
+    if not isinstance(marker, dict):
+        return False
+    identity_fields = ("owner", "origin_owner", "run_id", "attempt_id", "step_id", "check_id")
+    if any(marker.get(field, row[field]) != row[field] for row in rows for field in identity_fields):
+        return False
+    if "occurrence_id" in marker:
+        identities = {
+            hashlib.sha256(json.dumps([row[field] for field in identity_fields], ensure_ascii=True,
+                                      separators=(",", ":")).encode("ascii")).hexdigest()
+            for row in rows
+        }
+        return identities == {marker["occurrence_id"]} if isinstance(marker["occurrence_id"], str) else False
+    return True
+
+
 def _read_packet(root, name):
     try:
         body = owner_io_path(root / (name + ".jsonl")).read_bytes()
@@ -423,10 +440,8 @@ def _read_packet(root, name):
             content = ready.read_bytes()
         except FileNotFoundError:
             content = b""
-        if content.strip():
-            marker = json.loads(content.decode("utf-8"), object_pairs_hook=_unique_fields)
-            if not isinstance(marker, dict) or any(marker.get(key, item) != item for key, item in zip(_HEADER, header)):
-                return None
+        if content and not _marker_matches(content, rows):
+            return None
     except (OSError, ValueError, RecursionError):
         return None
     started = all(row["check_id"] == "action-started" for row in rows)
@@ -461,14 +476,22 @@ def _matches_phase(packet, source, *, started):
     )
 
 
-def _occupied(root, name):
-    for extension in (".jsonl", ".ready", ".pending", ".process", ".sent"):
+def _occupied(root, name, header):
+    for extension in (".jsonl", ".pending", ".process"):
         try:
             owner_io_path(root / (name + extension)).lstat()
         except FileNotFoundError:
             continue
         return True
-    return False
+    # A same-scope FF marker can survive loss of its packet. Reopen its
+    # original slot while leaving genuinely conflicting history untouched.
+    try:
+        marker = owner_io_path(root / (name + ".ready")).read_bytes()
+        return bool(marker) and json.loads(marker, object_pairs_hook=_unique_fields) != dict(zip(_HEADER, header))
+    except FileNotFoundError:
+        return False
+    except (OSError, ValueError, RecursionError):
+        return True
 
 
 def _packet_slot(root, header, source, *, started):
@@ -479,7 +502,7 @@ def _packet_slot(root, header, source, *, started):
         packet = _read_packet(root, name)
         if packet is not None and packet.header == header and _matches_phase(packet, source, started=started):
             return name, packet
-        if not _occupied(root, name):
+        if not _occupied(root, name, header):
             return name, None
         number += 1
 
@@ -554,9 +577,11 @@ def _save_detail(root, name, marker, detail):
     return original == value
 
 
-def _write_packet(
-    root, marker_key, marker, group, prefix, frozen, *, detail, detail_for_all, started, notice,
-):
+class _DetailUnavailable(OSError):
+    """A new terminal may retry a different diagnostics destination."""
+
+
+def _write_packet(root, marker_key, marker, group, prefix, frozen, *, detail, detail_for_all, started):
     root = owner_io_path(root)
     root.mkdir(parents=True, exist_ok=True)
     # The lock covers classification and the name choice. A corrupt file reserves
@@ -570,14 +595,19 @@ def _write_packet(
         packet = root / (name + ".jsonl")
         if detail is not None:
             try:
-                if _save_detail(root, name, marker, detail):
-                    group = _with_detail(group, name, detail_for_all=detail_for_all)
+                saved = _save_detail(root, name, marker, detail)
             except OSError as error:
-                notice.note("feedback detail", error)
+                raise _DetailUnavailable("native diagnostic could not be saved") from error
+            if not saved:
+                raise _DetailUnavailable("native diagnostic slot already contains history")
+            group = _with_detail(group, name, detail_for_all=detail_for_all)
         atomic_write_text(packet, _text([*prefix, *group]))
-        atomic_write_json(packet.with_suffix(".ready"), marker)
-        if frozen:
-            atomic_write_text(packet.with_suffix(".sent"), "")
+        ready = packet.with_suffix(".ready")
+        if not ready.exists():
+            atomic_write_json(ready, marker)
+        sent = packet.with_suffix(".sent")
+        if frozen and not sent.exists():
+            atomic_write_text(sent, "")
         if prefix:
             _, initial = _packet_slot(root, marker_key, prefix[0], started=True)
             if initial is not None:
@@ -639,6 +669,32 @@ def _write_runtime_issue(roots, rows, detail, *, execution, notice):
     notice.note("runtime log", append_runtime_issue(roots, rows, detail, execution=execution))
 
 
+def _publish_native(targets, marker_key, marker, group, prefix, frozen, *, detail, detail_for_all, started, notice):
+    failed = None
+    detail_failure = None
+    for root in targets:
+        try:
+            _write_packet(root, marker_key, marker, group, prefix, frozen, detail=detail,
+                          detail_for_all=detail_for_all, started=started)
+            return True
+        except _DetailUnavailable as error:
+            detail_failure = error.__cause__ or error
+        except LockBusy as error:
+            # A concurrent writer is already publishing to this same native destination.
+            notice.note("feedback publication", error)
+            return False
+        except OSError as error:
+            failed = error
+    if detail_failure is not None:
+        notice.note("feedback detail", detail_failure)
+        if not frozen:
+            return _publish_native(targets, marker_key, marker, group, prefix, frozen, detail=None,
+                                   detail_for_all=detail_for_all, started=started, notice=notice)
+    else:
+        notice.note("feedback publication", failed)
+    return False
+
+
 def publish(
     rows, *, jobs_dir=None, file=None, context=(), detail=None, recoverable=False,
     detail_for_all=False, diagnostics=None, execution=None,
@@ -692,39 +748,26 @@ def publish(
             )
             if file and not legacy_start:
                 explicit = group
+                diagnostic_available = not local_detail
                 if local_detail:
                     for root in targets:
                         try:
                             root = owner_io_path(root)
                             root.mkdir(parents=True, exist_ok=True)
                             with acquire_file_lock(root / ".delivery.lock", 0.7):
-                                if not _occupied(root, name) and _save_detail(root, name, marker, detail):
+                                if not _occupied(root, name, marker_key) and _save_detail(root, name, marker, detail):
                                     explicit = _with_detail(group, name, detail_for_all=detail_for_all)
+                                    diagnostic_available = True
                                     break
                         except (OSError, LockBusy) as error:
                             notice.note("feedback detail", error)
-                if _explicit(file, explicit):
+                if (diagnostic_available or not frozen) and _explicit(file, explicit):
                     continue
             if legacy_start:
                 prefix = []
-            failed = None
-            for root in targets:
-                try:
-                    _write_packet(root, marker_key, marker, group, prefix, frozen,
-                                  detail=detail if local_detail else None, detail_for_all=detail_for_all,
-                                  started=only_start, notice=notice)
-                    break
-                except LockBusy as error:
-                    # A healthy primary writer is already publishing. Keep the same pending
-                    # owner receipt, so maintenance retries that packet rather than cloning it.
-                    offered = False
-                    notice.note("feedback publication", error)
-                    break
-                except OSError as error:
-                    failed = error
-            else:
-                offered = False
-                notice.note("feedback publication", failed)
+            offered = _publish_native(targets, marker_key, marker, group, prefix, frozen,
+                                      detail=detail if local_detail else None, detail_for_all=detail_for_all,
+                                      started=only_start, notice=notice) and offered
         for notice in notices:
             notice.emit()
         return offered

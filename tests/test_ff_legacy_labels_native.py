@@ -319,7 +319,7 @@ def _stamp_packet_name(rows):
 
 
 @pytest.mark.parametrize("failure", ["receipt_without_outcome", "terminal_other_evidence",
-                                     "duplicate_outcome_field", "wrong_terminal"])
+                                     "duplicate_outcome_field", "wrong_terminal", "marker_other_origin"])
 @pytest.mark.parametrize("normalized", [False, True])
 def test_false_terminal_from_frozen_c72_can_be_reoffered_without_replacing_history(tmp_path, failure, normalized):
     _restore(tmp_path, "job_unknown")
@@ -350,6 +350,8 @@ def test_false_terminal_from_frozen_c72_can_be_reoffered_without_replacing_histo
             line = '{"actual":"started",' + line[1:]
         lines.append(line)
     original.write_text("\n".join(lines) + "\n", encoding="ascii", newline="\n")
+    if failure == "marker_other_origin":
+        original.with_suffix(".ready").write_text(json.dumps({"origin_owner": "another-owner"}), encoding="ascii")
     before = _snapshot(tmp_path)
     known = next(json.loads(body) for name, body in before.items() if name.startswith("owner/jobs/"))
     result = _subject(tmp_path, "flush-observations")
