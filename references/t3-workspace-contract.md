@@ -17,7 +17,7 @@ schema is `cwp-t3-workspace/1`. Every response echoes `operation`,
 |---|---|---|
 | `open` | | `status=opened`, opaque `workspace_id` and an isolated `connection` with absolute `cwd` and existing FF-compatible `commands`. The workspace uses the configured CWP provider code with independent mutable state. For `corrupt_original`, seed, index and corrupt one disposable source inside that workspace before binding the commands. No provider work on open. |
 | `observe` | `workspace_id`, `checkpoint` | `status=observed`, echoed workspace and checkpoint, and `facts`. At `first`, return verified `source_id`, `sha256`, `mtime_ns`, `downloaded_new`, `provenance_complete` and `no_residue`. Provenance covers matching issuer/filing type, source URL, filing date, captured byte hash and retrieval trace. At `reused`, return `source_id`, `sha256`, `mtime_ns`, `downloaded_new`, `reused_before_download` and `no_residue`. At `corrupt`, return `corrupt_original_unchanged`, `downloaded_new` and `no_residue`. CWP owns every fact involving bytes, paths, metadata or its acquisition journal. |
-| `close` | `workspace_id` | `status=closed` plus echoed workspace after cleanup. CWP needs a bounded, idempotent cleanup for a lost open response or abruptly terminated FF process, keyed by the original run and case. |
+| `close` | Optional `workspace_id` | `status=closed` plus echoed workspace after cleanup. CWP needs a bounded, idempotent cleanup for a lost open response or abruptly terminated FF process, keyed by the original run and case. |
 
 FF uses the same `fetch_filing.py` entrypoint against the returned isolated
 connection for the first and second requests. It compares source identity
@@ -26,7 +26,11 @@ and reuse against CWP's observations. Existing request budgets remain 50 MiB,
 original ID before dispatch. Reading or repeating that ID uses the original
 receipt. Only explicit `run-live` can start a probe.
 
-The FF transport contract has a local subprocess fixture. The deployed CWP
-sources currently expose catalog, source query, source open, and ingestion
-operations. The isolated workspace owner described here still needs a CWP
-implementation and deployed binding to enable live T3.
+FF closes the corresponding scope by run and case even if the open reply
+is lost before it learns the workspace ID. CWP supports a close without
+that ID and seals the original case. A repeated FF run ID still reads its
+existing receipt. Host termination can require an explicit cold close
+using the original run and case. It never authorizes another download.
+
+The CWP owner provides the isolated workspace command. Supply that command
+in a dedicated T3 connection configuration for the explicit live probe.

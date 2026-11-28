@@ -57,15 +57,26 @@ class WorkspaceClient:
             raise WorkspaceProtocolError("workspace response identity mismatch")
         return response
 
+    def _close(self, run: str, case: str, workspace_id: str | None) -> None:
+        fields = {} if workspace_id is None else {"workspace_id": workspace_id}
+        response = self._call("close", run, case, **fields)
+        closed_id = response.get("workspace_id")
+        if (response.get("status") != "closed" or not isinstance(closed_id, str)
+                or not closed_id or (workspace_id is not None and closed_id != workspace_id)):
+            raise WorkspaceProtocolError("workspace cleanup was not confirmed")
+
     @contextmanager
     def open(self, run: str, case: str) -> Iterator[Workspace]:
-        response = self._call("open", run, case)
-        workspace_id = response.get("workspace_id")
-        if response.get("status") != "opened" or not isinstance(workspace_id, str) or not workspace_id:
-            raise WorkspaceProtocolError("workspace was not opened")
-        workspace = Workspace(self, run, case, workspace_id)
-        # If both the case and cleanup fail, Python retains both errors as a chain.
+        workspace_id = None
+        # The owner may have created the scope even if its reply was lost.
+        # Cleanup is addressed by the original run and case when no ID came back.
         try:
+            response = self._call("open", run, case)
+            opened_id = response.get("workspace_id")
+            if response.get("status") != "opened" or not isinstance(opened_id, str) or not opened_id:
+                raise WorkspaceProtocolError("workspace was not opened")
+            workspace_id = opened_id
+            workspace = Workspace(self, run, case, workspace_id)
             connection = response.get("connection")
             if not isinstance(connection, dict) or set(connection) != {"cwd", "commands"}:
                 raise WorkspaceProtocolError("isolated public connection is missing")
@@ -75,7 +86,7 @@ class WorkspaceClient:
             workspace.connection = {"cwd": str(selected.workdir), "commands": dict(selected.commands)}
             yield workspace
         finally:
-            workspace.close()
+            self._close(run, case, workspace_id)
 
 
 class Workspace:
@@ -93,6 +104,4 @@ class Workspace:
         return response["facts"]
 
     def close(self) -> None:
-        response = self._client._call("close", self._run, self._case, workspace_id=self._id)
-        if response.get("workspace_id") != self._id or response.get("status") != "closed":
-            raise WorkspaceProtocolError("workspace cleanup was not confirmed")
+        self._client._close(self._run, self._case, self._id)

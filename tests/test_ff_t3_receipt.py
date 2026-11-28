@@ -273,6 +273,60 @@ print(json.dumps({"status": "capture_ready", "downloads": int(workspace.name not
     assert not (tmp_path / "tests").exists()
 
 
+def test_lost_open_reply_closes_original_scope_without_dispatch(tmp_path):
+    owner = tmp_path / "workspace_owner.py"
+    owner.write_text(r'''
+import json
+from pathlib import Path
+import sys
+
+request = json.load(sys.stdin)
+run, case, operation = (request[k] for k in ("run_id", "case_id", "operation"))
+root = Path(__file__).parent
+scope = root / (run + "-" + case)
+with (root / "actions.jsonl").open("a", encoding="utf-8") as trace:
+    trace.write(json.dumps([operation, run, case]) + "\n")
+if operation == "open":
+    scope.mkdir()
+    print("{")  # The provider opened the workspace, but FF lost the reply.
+elif operation == "close":
+    assert "workspace_id" not in request
+    scope.rmdir()
+    print(json.dumps({"schema_version": "cwp-t3-workspace/1", "operation": operation,
+                      "run_id": run, "case_id": case, "status": "closed",
+                      "workspace_id": "t3-" + "a" * 32}))
+else:
+    raise AssertionError("Unexpected dispatch after a lost open response")
+''', encoding="utf-8")
+    config = tmp_path / "connection.json"
+    config.write_text(json.dumps({"schema_version": "1.0", "connection": {
+        "cwd": str(tmp_path), "commands": {"t3_workspace": [sys.executable, "-B", str(owner)]},
+    }}), encoding="utf-8")
+    command = [
+        sys.executable, "-B", str(Path(receipt.__file__)), "--receipts-dir", str(tmp_path / "receipts"),
+    ]
+    options = ["run-live", "--run-id", "original", "--config", str(config)]
+
+    def invoke(*args):
+        return subprocess.run(
+            [*command, *args], cwd=tmp_path, stdin=subprocess.DEVNULL, capture_output=True,
+            timeout=35, check=False, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+
+    first = invoke(*options)
+    original = json.loads(first.stdout)
+    assert first.returncode != 0
+    assert set(original["cases"]) == set(receipt.T3_CASES)
+    assert all(row["outcome"] == "failed" for row in original["cases"].values())
+    assert original == json.loads(invoke("get", "--run-id", "original").stdout)
+    assert original == json.loads(invoke(*options).stdout)
+    expected = [[operation, "original", case] for case in receipt.T3_CASES
+                for operation in ("open", "close")]
+    observed = [json.loads(row) for row in (tmp_path / "actions.jsonl").read_text().splitlines()]
+    assert observed == expected
+    assert not list(tmp_path.glob("original-*"))
+
+
 def test_native_warnings_are_cold_readable_without_emitting_raw_streams(tmp_path, monkeypatch, capsys):
     import warnings
 
