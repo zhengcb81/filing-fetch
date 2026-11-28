@@ -47,6 +47,7 @@ def _invoke(jobs, observation, *config):
         [sys.executable, "-B", "-X", "utf8", str(ROOT / "scripts/ff_job_feedback.py"),
          "reconcile", "--jobs-dir", str(jobs), *map(str, config)],
         input=json.dumps(_request(observation)), capture_output=True, text=True, encoding="utf-8", check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert call.returncode == 0, (call.stdout, call.stderr)
     return json.loads(call.stdout)
@@ -82,6 +83,7 @@ def _triage_cli(reports, *args, request=None, lose_reply=False):
         [sys.executable, "-B", "-X", "utf8", *command, "--reports-dir", str(reports), *map(str, args)],
         input=None if request is None else json.dumps(request), capture_output=True, text=True,
         encoding="utf-8", check=False, timeout=20, env=os.environ.copy(),
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
 

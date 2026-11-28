@@ -53,15 +53,14 @@ def _refresh_start_row(base):
 
 def _refresh_item(run, key, failure, jobs_dir, file):
     base = _refresh_identity(run, f"{run['run_id']}/{key}")
-    if terminal_was_offered(base, jobs_dir, require_detail=True):
+    detail = {"schema_version": "ff-failure-detail/1", **failure}
+    if terminal_was_offered(base, jobs_dir, detail=detail):
         return True
     reason = failure["reason"]
     row = dict(base, check_id="refresh-item-outcome", expected="completed", actual=reason,
                issue_key=reason, disposition="deviation")
     if reason in RULE_CODES:
         row.update(disposition="expected", refusal_code=reason)
-    # Historical receipts may carry only the actual stage, reason and reference.
-    detail = {"schema_version": "ff-failure-detail/1", **failure}
     return publish([row], jobs_dir=jobs_dir, file=file, detail=detail, recoverable=True,
                    execution=run.get("diagnostic_execution"))
 

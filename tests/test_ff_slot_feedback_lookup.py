@@ -137,7 +137,7 @@ def _reconcile(root, observation, *, config=None):
          "--jobs-dir", str(root), "--timeout-seconds", "10",
          *(["--config", str(config)] if config else [])],
         input=json.dumps(_request(observation)), capture_output=True, text=True, encoding="utf-8",
-        check=False, timeout=30, env=clean,
+        check=False, timeout=30, env=clean, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert call.returncode == 0, (call.stdout, call.stderr)
     return json.loads(call.stdout)

@@ -292,9 +292,13 @@ def read_native_diagnostic(name, directories):
             if not isinstance(value, dict) or value.get("schema_version") != "ff-failure-detail/1":
                 raise ValueError("invalid diagnostic schema")
             key = tuple(value.get(field) for field in _HEADER)
-            if (key[0] != "filing-fetch" or not all(isinstance(part, str) and part for part in key)
-                    or name not in {_packet_name(key, "started"), _packet_name(key, "complete")}):
+            if key[0] != "filing-fetch" or not all(isinstance(part, str) and part for part in key):
                 raise ValueError("diagnostic occurrence does not match reference")
+            if name not in {_packet_name(key, "started"), _packet_name(key, "complete")}:
+                packet = _read_packet(root, name)
+                if (packet is None or packet.started or not _packet_links_detail(packet)
+                        or feedback_wire(dict(zip(_HEADER, packet.header))) != dict(zip(_HEADER, key))):
+                    raise ValueError("diagnostic occurrence does not match reference")
             return value, None
         except FileNotFoundError:
             continue
@@ -344,46 +348,86 @@ def _recorded_no_dispatch(root, name, observation):
     return pairs == {"provider-start": {"not_started"}, "provider-usage": {"not_applicable"}}
 
 
-def _was_offered(row, jobs_dir, *, started, require_detail=False):
-    # The old spelling determines the original packet filename. The current
-    # spelling can already have been offered by this release or another reader.
+@dataclass(frozen=True)
+class _DeliveredPacket:
+    root: Path
+    name: str
+    header: tuple
+    rows: list[dict]
+    started: bool
+
+
+def _read_packet(root, name):
+    try:
+        body = owner_io_path(root / (name + ".jsonl")).read_bytes()
+        if not body.endswith(b"\n"):
+            return None
+        rows = [json.loads(line) for line in body.splitlines()]
+    except (OSError, ValueError, RecursionError):
+        return None
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    header = tuple(rows[0].get(key) for key in _HEADER)
+    if header[0] != "filing-fetch" or not all(isinstance(part, str) and part for part in header):
+        return None
+    if not all(
+        isinstance(row, dict) and row.get("schema_version") == "feedback-observation/1"
+        and tuple(row.get(key) for key in _HEADER) == header
+        and all(isinstance(row.get(key), str) and row[key] for key in ("check_id", "expected", "actual"))
+        for row in rows
+    ):
+        return None
+    started = all(row["check_id"] == "action-started" for row in rows)
+    if name != _packet_name(header, "started" if started else "complete"):
+        return None
+    return _DeliveredPacket(root, name, header, rows, started)
+
+
+def _existing_packet(row, directories, *, started):
     original = tuple(row[key] for key in _HEADER)
     normalized = feedback_wire(row)
     current = tuple(normalized[key] for key in _HEADER)
-    directories = observation_directories(jobs_dir)
-    return any(_offered_packet(header, directories, started=started, require_detail=require_detail)
-               for header in dict.fromkeys((original, current)))
+    for header in dict.fromkeys((original, current)):
+        name = _packet_name(header, "started" if started else "complete")
+        for root in directories:
+            packet = _read_packet(root, name)
+            if packet is not None and packet.header == header and packet.started == started:
+                return packet
+    return None
 
 
-def _offered_packet(header, directories, *, started, require_detail):
-    name = _packet_name(header, "started" if started else "complete")
-    if require_detail and read_native_diagnostic(name, directories)[0] is None:
+def _packet_links_detail(packet):
+    return any(row.get("details_ref") == "ff-diagnostic/1/" + packet.name for row in packet.rows)
+
+
+def _restore_terminal_detail(packet, detail):
+    # A detail is optional. It can be restored at its existing locator, but
+    # neither an unavailable detail nor a failed repair reopens the event.
+    if not isinstance(detail, dict) or not _packet_links_detail(packet):
+        return
+    marker = feedback_wire(dict(zip(_HEADER, packet.header)))
+    root = owner_io_path(packet.root)
+    destination = root / (packet.name + ".cause.json")
+    try:
+        with acquire_file_lock(root / ".delivery.lock", 0.7):
+            try:
+                destination.lstat()
+            except FileNotFoundError:
+                atomic_write_json(destination, {**redact_diagnostic(detail), **marker})
+    except (OSError, ValueError, TypeError) as error:
+        warn_diagnostic_unavailable("feedback detail", error, scope=marker)
+
+
+def terminal_was_offered(row, jobs_dir, *, detail=None):
+    packet = _existing_packet(row, observation_directories(jobs_dir), started=False)
+    if packet is None:
         return False
-    for directory in directories:
-        try:
-            data = owner_io_path(directory / (name + ".jsonl")).read_bytes()
-            if not data.endswith(b"\n"):
-                continue
-            rows = [json.loads(line) for line in data.splitlines()]
-            if (rows and all(
-                isinstance(item, dict) and item.get("schema_version") == "feedback-observation/1"
-                and tuple(item.get(key) for key in _HEADER) == header
-                and all(isinstance(item.get(k), str) and item[k] for k in ("check_id", "expected", "actual"))
-                for item in rows
-            ) and all(item["check_id"] == "action-started" for item in rows) == started):
-                return True
-        except (OSError, ValueError, RecursionError):
-            continue
-    return False
-
-
-def terminal_was_offered(row, jobs_dir, *, require_detail=False):
-    return _was_offered(row, jobs_dir, started=False, require_detail=require_detail)
+    _restore_terminal_detail(packet, detail)
+    return True
 
 
 def start_was_offered(row, jobs_dir):
-    return _was_offered(row, jobs_dir, started=True)
-
+    return _existing_packet(row, observation_directories(jobs_dir), started=True) is not None
 
 def _write_packet(root, name, marker_key, marker, content, frozen, closes_start, *, started):
     root = owner_io_path(root)
@@ -392,9 +436,9 @@ def _write_packet(root, name, marker_key, marker, content, frozen, closes_start,
     sent = packet.with_suffix(".sent")
     # Serialize publication against the runner and maintenance inside each native outbox.
     with acquire_file_lock(root / ".delivery.lock", 0.7):
-        if started and (root / (_packet_name(marker_key, "complete") + ".jsonl")).is_file():
+        if started and _read_packet(root, _packet_name(marker_key, "complete")) is not None:
             return
-        if packet.is_file() and packet.read_text(encoding="utf-8") == content:
+        if _read_packet(root, name) is not None:
             return
         atomic_write_text(packet, content)
         atomic_write_json(packet.with_suffix(".ready"), marker)
@@ -475,19 +519,32 @@ def publish(
         groups = {}
         if diagnostics is not None and execution is None:
             execution = diagnostics.execution()
-        rows = [feedback_wire(row) for row in rows]
         context = [feedback_wire(row) for row in context]
         for row in rows:
             groups.setdefault(tuple(row[k] for k in _HEADER), []).append(row)
         directories = observation_directories(jobs_dir)
         runtime_roots = _runtime_roots(jobs_dir)
-        for marker_key, group in groups.items():
+        for original_key, original_group in groups.items():
+            local_detail = detail is not None and tuple(rows[0][key] for key in _HEADER) == original_key
+            only_start = all(row["check_id"] == "action-started" for row in original_group)
+            previous = _existing_packet(original_group[0], directories, started=False)
+            if previous is not None:
+                if not only_start and local_detail:
+                    _restore_terminal_detail(previous, detail)
+                continue
+            active = _existing_packet(original_group[0], directories, started=True)
+            if only_start and active is not None:
+                continue
+            group = [feedback_wire(row) for row in original_group]
+            marker_key = tuple(group[0][key] for key in _HEADER)
+            legacy_start = active is not None and active.header != marker_key
+            # The raw start must remain available for F4. Its terminal carries
+            # the same owner/evidence/step with safe caller coordinates.
+            targets = [active.root, *[root for root in directories if root != active.root]] if legacy_start else directories
             marker = dict(zip(_HEADER, marker_key))
             notice = _SinkNotice(marker, diagnostics)
             notices.append(notice)
-            only_start = all(row["check_id"] == "action-started" for row in group)
             name = _packet_name(marker_key, "started" if only_start else "complete")
-            local_detail = detail is not None and all(rows[0][key] == marker[key] for key in _HEADER)
             frozen = recoverable or (not only_start and any(r["check_id"] == "job-outcome" for r in group))
             _write_runtime_issue(
                 runtime_roots, group, detail if local_detail else None,
@@ -500,9 +557,9 @@ def publish(
             # Prefer a published native detail, and never point to a missing diagnostic.
             if local_detail:
                 failed = None
-                for root in directories:
+                for root in targets:
                     try:
-                        atomic_write_json(root / (name + ".cause.json"), {**marker, **detail})
+                        atomic_write_json(root / (name + ".cause.json"), {**redact_diagnostic(detail), **marker})
                         break
                     except OSError as error:
                         failed = error
@@ -515,12 +572,12 @@ def publish(
                         continue
                     for item in group:
                         item.pop("details_ref", None)
-            if file and _explicit(file, group):
+            if file and not legacy_start and _explicit(file, group):
                 continue
-            prefix = [r for r in context if all(r[k] == marker[k] for k in _HEADER)]
+            prefix = [] if legacy_start else [r for r in context if all(r[k] == marker[k] for k in _HEADER)]
             content = _text([*prefix, *group])
             failed = None
-            for root in directories:
+            for root in targets:
                 try:
                     _write_packet(root, name, marker_key, marker, content, frozen, bool(prefix), started=only_start)
                     break

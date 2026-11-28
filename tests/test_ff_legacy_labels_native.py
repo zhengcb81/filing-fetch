@@ -9,6 +9,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 from ff_persistence import owner_io_path
 from test_ff_runtime_lifecycle import Case, _feedback_request
 from test_scheduled_refresh import configure_body
@@ -43,10 +45,14 @@ def _packet_numbers(root):
 
 
 def _snapshot(root):
-    paths = ("owner/jobs", "owner/scheduled", "outbox")
+    paths = ("owner/jobs", "owner/scheduled", "outbox", "owner/observations", "calls")
     result = {}
     for path in paths:
-        for entry in owner_io_path(root / path).rglob("*"):
+        source = owner_io_path(root / path)
+        if source.is_file():
+            result[path] = source.read_bytes().decode("utf-8")
+            continue
+        for entry in source.rglob("*"):
             if entry.is_file() and not entry.name.endswith(".lock"):
                 name = Path(path) / entry.relative_to(owner_io_path(root / path))
                 result[name.as_posix()] = entry.read_bytes().decode("utf-8")
@@ -79,10 +85,10 @@ def _subject(root, command, *args, body=None):
                    environment={"RESEARCH_FEEDBACK_DIR": str(root / "outbox")})
 
 
-def _job_capture(root, scripts, *, invalid_config=False):
+def _job_capture(root, scripts, *, invalid_config=False, interrupted=False):
     """Use the released job CLI and its transport to capture one original attempt."""
     root.mkdir(parents=True, exist_ok=True)
-    case = Case(root, "ok")
+    case = Case(root, "park" if interrupted else "ok")
     case.scripts = scripts
     case.jobs = root / "owner"
     case.inbox = root / "outbox"
@@ -91,6 +97,21 @@ def _job_capture(root, scripts, *, invalid_config=False):
     if invalid_config:
         case.config.write_text("{", encoding="utf-8")
     job = case.submit()
+    if interrupted:
+        child = subprocess.Popen(
+            case.argv("ff_job.py", "--jobs-dir", str(case.jobs), "run", "--owner-job-id", job,
+                      "--config", str(case.config), "--timeout-seconds", "12"),
+            env=case.env, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        try:
+            case.wait_for_dispatch(child)
+            assert case.calls.read_text() == "park\n" and child.poll() is None
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.communicate(timeout=8)
+        return _snapshot(root)
     reply = case.run_job(job)
     assert reply.returncode == 0
     assert json.loads(reply.stdout)["job"]["status"] == ("unknown" if invalid_config else "succeeded")
@@ -140,12 +161,15 @@ def capture_release(scripts, target):
         "code_version": "c72c3a12995dec3b5acd462d805ab344f35f2712",
         "job": _job_capture(target / "job", scripts),
         "job_unknown": _job_capture(target / "job_unknown", scripts, invalid_config=True),
+        "job_interrupted": _job_capture(target / "job_interrupted", scripts, interrupted=True),
         "slot": _slot_capture(target / "slot", scripts),
     }
     for name, check in (("job", "job-outcome"), ("job_unknown", "job-outcome"), ("slot", "refresh-outcome")):
         row = _observe(target / name, check)
         assert (row["run_id"], row["attempt_id"]) == (RAW_RUN, RAW_ATTEMPT)
         assert len(list((target / name / "outbox").glob("*.jsonl"))) == 1
+    opened = _observe(target / "job_interrupted", "action-started")
+    assert (opened["run_id"], opened["attempt_id"]) == (RAW_RUN, RAW_ATTEMPT)
     (target / CAPTURE.name).write_bytes((json.dumps(captures, indent=1) + "\n").encode("utf-8"))
 
 
@@ -203,3 +227,77 @@ def test_modern_and_retained_slot_resolve_both_caller_coordinates(tmp_path):
         assert _snapshot(root) == before
         if current:
             assert len((root / "owner_fixture" / "calls.jsonl").read_bytes().splitlines()) == 2
+
+@pytest.mark.parametrize("detail_state", ["missing", "corrupt"])
+def test_frozen_legacy_event_stays_offered_independently_of_optional_detail(tmp_path, detail_state):
+    before = _restore(tmp_path, "job_unknown")
+    problem = _observe(tmp_path, "job-failure")
+    name = problem["details_ref"].rsplit("/", 1)[-1]
+    path = owner_io_path(tmp_path / "outbox" / (name + ".cause.json"))
+    diagnostic = before.pop(f"outbox/{path.name}")
+    assert RAW_RUN in diagnostic
+    if detail_state == "missing":
+        path.unlink()
+    else:
+        path.write_bytes(b"{invalid JSON")
+        before[f"outbox/{path.name}"] = "{invalid JSON"
+    for _ in range(2):
+        result = _subject(tmp_path, "flush-observations")
+        assert result["status"] == "ok" and result["job_offers"] == 0
+        assert _packet_numbers(tmp_path) == {name + ".jsonl"}
+        after = _snapshot(tmp_path)
+        assert all(after[key] == value for key, value in before.items())
+    if detail_state == "missing":
+        assert RAW_RUN.encode() not in path.read_bytes() and RAW_ATTEMPT.encode() not in path.read_bytes()
+        restored = _subject(tmp_path, "get-diagnostic", problem["details_ref"])
+        assert restored["causes"] == json.loads(diagnostic)["causes"]
+        assert restored["run_id"] == _digest_alias(RAW_RUN)
+
+
+@pytest.mark.parametrize("native_outbox", [False, True])
+def test_interrupted_c72_job_closes_its_actual_original_start(tmp_path, native_outbox):
+    original = _restore(tmp_path, "job_interrupted", with_outbox=not native_outbox)
+    if native_outbox:
+        archived = json.loads(CAPTURE.read_text(encoding="utf-8"))["job_interrupted"]
+        for filename, body in archived.items():
+            if filename.startswith("outbox/"):
+                path = owner_io_path(tmp_path / "owner" / "observations" / Path(filename).name)
+                path.parent.mkdir(exist_ok=True)
+                path.write_bytes(body.encode("utf-8"))
+    outbox = owner_io_path(tmp_path / ("owner/observations" if native_outbox else "outbox"))
+    start, = outbox.glob("*.jsonl")
+    original_start = {path.name: path.read_bytes() for path in outbox.iterdir()}
+    original_files = _snapshot(tmp_path)
+    start_row = json.loads(start.read_bytes().splitlines()[0])
+    assert (start_row["run_id"], start_row["attempt_id"], start_row["check_id"]) == (
+        RAW_RUN, RAW_ATTEMPT, "action-started",
+    )
+    jobs = {name: data for name, data in original.items() if name.startswith("owner/jobs/")}
+    assert len(jobs) == 1 and next(iter(map(json.loads, jobs.values())))["status"] == "running"
+    assert (tmp_path / "calls").read_text() == "park\n"
+    answer = _subject(tmp_path, "flush-observations")
+    assert answer["status"] == "ok" and answer["job_offers"] == 1
+    terminal_packets = [packet for packet in outbox.glob("*.jsonl") if packet != start]
+    assert len(terminal_packets) == 1
+    complete = terminal_packets[0]
+    assert all((outbox / name).read_bytes() == contents for name, contents in original_start.items())
+    final = [json.loads(line) for line in complete.read_bytes().splitlines()]
+    assert all(row["check_id"] != "action-started" for row in final)
+    for row in final:
+        assert row["run_id"] == _digest_alias(RAW_RUN)
+        assert row["attempt_id"] == _digest_alias(RAW_ATTEMPT)
+        assert all(row[key] == start_row[key] for key in ("owner", "step_id", "evidence_ref"))
+    for path in outbox.iterdir():
+        if path.is_file() and path.name not in original_start:
+            assert RAW_RUN.encode() not in path.read_bytes() and RAW_ATTEMPT.encode() not in path.read_bytes()
+    assert next(row for row in final if row["check_id"] == "job-outcome")["actual"] == "unknown"
+    assert next(row for row in final if row["check_id"] == "job-usage")["actual"] == "unknown"
+    assert (tmp_path / "calls").read_text() == "park\n"
+    stable = _snapshot(tmp_path)
+    assert all(stable[name] == data for name, data in jobs.items())
+    assert all(RAW_RUN not in contents and RAW_ATTEMPT not in contents
+               for name, contents in stable.items() if name not in original_files)
+    assert _subject(tmp_path, "flush-observations")["job_offers"] == 0
+    assert _snapshot(tmp_path) == stable
+    if native_outbox:
+        assert not _packet_numbers(tmp_path)

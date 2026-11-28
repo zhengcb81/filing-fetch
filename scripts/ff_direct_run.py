@@ -275,7 +275,7 @@ def _reoffer(record: dict, jobs_dir: Path) -> bool | None:
     scopes = {row["step_id"]: row for row in delivery["rows"]}
     missing = {
         step for step, row in scopes.items()
-        if not terminal_was_offered(row, jobs_dir, require_detail=step == record["step_id"] and detail is not None)
+        if not terminal_was_offered(row, jobs_dir, detail=detail if step == record["step_id"] else None)
     }
     if not missing:
         return None
