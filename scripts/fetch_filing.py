@@ -1903,6 +1903,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="return a pathless source reference for a later company-wiki read",
     )
+    parser.add_argument("--jobs-dir", type=Path, help="owner directory for this request and its diagnostics")
     args = parse_arguments(parser, argv, "short-filing")
     v2_response = False
     request: dict[str, Any] | None = None
@@ -1919,7 +1920,7 @@ def main(argv: list[str] | None = None) -> int:
         return exit_code
 
     if args.timeout_seconds <= 0 or not math.isfinite(args.timeout_seconds):
-        cli_failure("short-filing", "invalid_timeout", no_dispatch=True)
+        cli_failure("short-filing", "invalid_timeout", jobs_dir=args.jobs_dir, no_dispatch=True)
         print("error: timeout-seconds must be positive and finite", file=sys.stderr)
         return 2
 
@@ -1936,7 +1937,7 @@ def main(argv: list[str] | None = None) -> int:
         # launched, so one file keeps exactly one writer. A diagnostic failure
         # here must never change the business path.
         try:
-            observation = ff_short_feedback.begin_observation()
+            observation = ff_short_feedback.begin_observation(jobs_dir=args.jobs_dir)
         except Exception:  # noqa: BLE001 - the sidecar is never business-critical
             observation = None
         parsed: Any = None

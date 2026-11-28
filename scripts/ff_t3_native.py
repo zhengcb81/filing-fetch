@@ -36,6 +36,7 @@ def _require(condition: bool, reason: str) -> None:
 
 def _fetch(config: Path, request: dict, *, download: bool, expected_exit: int) -> dict:
     command = [sys.executable, "-B", str(FF_CLI), "--config", str(config),
+               "--jobs-dir", str(config.parent / "ff-state"),
                "--timeout-seconds", str(T3_TIMEOUT_SECONDS)]
     if download:
         command.append("--allow-download")

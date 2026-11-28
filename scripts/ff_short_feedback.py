@@ -77,15 +77,20 @@ class _Facts:
 class ShortObservation:
     """Append-only writer for one process-exclusive sidecar."""
 
-    def __init__(self, path: Path | None, *, run_id: str, attempt_id: str, operation_id: str) -> None:
+    def __init__(
+        self, path: Path | None, *, run_id: str, attempt_id: str, operation_id: str,
+        jobs_dir: Path | None = None,
+    ) -> None:
         self._path = path
         self._start_rows: list[dict] = []
-        self._run = DirectRun(SHORT, run_id=run_id, attempt_id=attempt_id, operation_id=operation_id)
+        self._jobs_dir = jobs_dir
+        self._run = DirectRun(SHORT, run_id=run_id, attempt_id=attempt_id,
+                              operation_id=operation_id, jobs_dir=jobs_dir)
 
     def started(self) -> None:
         """Write the start row before any business work runs."""
         self._start_rows = [self._run.start_row]
-        publish(self._start_rows, file=self._path)
+        publish(self._start_rows, file=self._path, jobs_dir=self._jobs_dir)
 
     def request_read(self, raw: bytes, request: Any, request_file: Path | None) -> None:
         self._run.mark("request_read", request_sha256=hashlib.sha256(raw).hexdigest(),
@@ -131,7 +136,7 @@ class ShortObservation:
     def _identity(self) -> dict[str, str]:
         return self._run.base
 
-def begin_observation() -> ShortObservation:
+def begin_observation(*, jobs_dir: Path | None = None) -> ShortObservation:
     """Claim the parent sidecar if supplied; standalone execution uses the native outbox."""
     path = os.environ.get(OUT_ENV)
     run_id = (os.environ.get(RUN_ENV) or "").strip()
@@ -144,6 +149,7 @@ def begin_observation() -> ShortObservation:
         run_id=run_id or operation_id,
         attempt_id=attempt_id or "1",
         operation_id=operation_id,
+        jobs_dir=jobs_dir,
     )
     observation.started()
     return observation

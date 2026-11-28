@@ -54,16 +54,16 @@ def expand_config_path(
     """Expand only existing tokens, never cwd-based relative deployment paths."""
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         raise FilingFetchError(f"{field} must be non-empty trimmed text", code="config_error")
-    tokens = {
-        "SKILL_ROOT": str(skill_root),
-        "USER_PROFILE": os.environ.get("USERPROFILE") or str(Path.home()),
-    }
-
     def replace(match: re.Match[str]) -> str:
         token = match.group(1)
-        if token not in tokens:
-            raise FilingFetchError(f"unsupported token in {field}: {token}", code="config_error")
-        return tokens[token]
+        if token == "SKILL_ROOT":
+            return str(skill_root)
+        if token == "USER_PROFILE":
+            try:
+                return os.environ.get("USERPROFILE") or str(Path.home())
+            except RuntimeError as exc:
+                raise FilingFetchError(f"no user profile available for {field}", code="config_error") from exc
+        raise FilingFetchError(f"unsupported token in {field}: {token}", code="config_error")
 
     expanded = _TOKEN.sub(replace, value)
     if "${" in expanded:

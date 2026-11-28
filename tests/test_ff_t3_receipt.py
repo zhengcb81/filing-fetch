@@ -14,6 +14,7 @@ from threading import Event
 
 import pytest
 
+from ff_runtime_feedback import owner_child_environment
 import ff_t3_receipt as receipt
 
 
@@ -85,7 +86,6 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import ff_t3_native as native
 import ff_t3_receipt as receipt
-
 def execution(report):
     report("cn_annual", "passed", None)
     os._exit(29)
@@ -94,7 +94,8 @@ receipt._run_once(Path(sys.argv[2]), "lost", execution)
 """
     run = subprocess.run(
         [sys.executable, "-B", "-c", child, script_dir, str(tmp_path)],
-        capture_output=True, timeout=20, check=False,
+        stdin=subprocess.DEVNULL, capture_output=True, timeout=20, check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert run.returncode == 29, run.stderr.decode("utf-8", errors="replace")
     persisted, = tmp_path.glob("*.json")
@@ -107,7 +108,8 @@ receipt._run_once(Path(sys.argv[2]), "lost", execution)
     cold = subprocess.run(
         [sys.executable, "-B", str(Path(script_dir) / "ff_t3_receipt.py"),
          "--receipts-dir", str(tmp_path), "get", "--run-id", "lost"],
-        cwd=tmp_path, capture_output=True, timeout=20, check=False,
+        cwd=tmp_path, stdin=subprocess.DEVNULL, capture_output=True, timeout=20, check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert cold.returncode == 0 and json.loads(cold.stdout) == recovered
     assert persisted.read_bytes() == before
@@ -210,6 +212,7 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", type=Path, required=True)
+parser.add_argument("--jobs-dir", type=Path, required=True)
 parser.add_argument("--timeout-seconds", type=int, required=True)
 parser.add_argument("--allow-download", action="store_true")
 args = parser.parse_args()
@@ -218,6 +221,7 @@ workspace = Path(config["cwd"])
 assert workspace.is_dir() and "catalog" in config["commands"]
 request = json.load(sys.stdin)
 assert args.timeout_seconds == 180
+assert args.jobs_dir.parent == args.config.parent
 if args.allow_download:
     assert request["acquisition_limits"] == {
         "max_bytes": 52428800, "timeout_seconds": 180, "max_cost_usd": "0",
@@ -245,7 +249,7 @@ print(json.dumps({"status": "capture_ready", "downloads": int(workspace.name not
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     def invoke(*action):
         result = subprocess.run(
-            [*command, *action], cwd=tmp_path, capture_output=True,
+            [*command, *action], cwd=tmp_path, stdin=subprocess.DEVNULL, capture_output=True,
             timeout=48, check=False, creationflags=flags,
         )
         if result.returncode != 0:
@@ -311,7 +315,12 @@ def test_latest_io_error_includes_cause_without_path_or_new_receipt(tmp_path, mo
     assert not list(tmp_path.iterdir())
 
 
-def test_unconfigured_workspace_is_blocked_without_guessing_a_sibling(tmp_path, capsys):
+def test_unconfigured_workspace_is_blocked_without_guessing_a_sibling(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv("USERPROFILE", raising=False)
+    monkeypatch.setenv("RESEARCH_FEEDBACK_DIR", str(tmp_path / "feedback"))
+    def no_home():
+        raise RuntimeError("local account has no home directory")
+    monkeypatch.setattr(Path, "home", staticmethod(no_home))
     config = tmp_path / "old.json"
     config.write_text(json.dumps({"schema_version": "1.0", "company_wiki_root": str(tmp_path)}))
     prefix = ["--receipts-dir", str(tmp_path / "receipt")]
@@ -417,7 +426,8 @@ def test_public_case_evidence_contains_cold_sanitized_diagnostic(tmp_path):
     cold = subprocess.run(
         [sys.executable, "-B", str(Path(receipt.__file__).resolve()),
          "--receipts-dir", str(tmp_path), "get", "--run-id", "owner-cause"],
-        cwd=tmp_path, timeout=20, capture_output=True, check=False,
+        cwd=tmp_path, timeout=20, stdin=subprocess.DEVNULL, capture_output=True, check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert cold.returncode == 0 and json.loads(cold.stdout) == first
     case = json.loads(cold.stdout)["cases"]["cn_annual"]
@@ -451,3 +461,20 @@ def test_malformed_legacy_diagnostic_cannot_publish_paths_or_free_text(tmp_path)
         "frames": [{"function": "owner_stage", "line": 123}],
     }]
     assert "secret-" not in json.dumps(value)
+
+
+def test_native_short_probe_uses_explicit_jobs_dir(tmp_path):
+    shutil.copytree(Path(receipt.__file__).parent, tmp_path / "scripts")
+    entry = tmp_path / "scripts" / "fetch_filing.py"
+    root = tmp_path / "isolated-jobs"
+    completed = subprocess.run(
+        [sys.executable, "-B", str(entry), "--jobs-dir", str(root)],
+        input=b"invalid JSON", cwd=tmp_path, env=owner_child_environment(),
+        capture_output=True, timeout=20, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    assert completed.returncode == 2
+    assert json.loads(completed.stdout)["status"] == "request_error"
+    records = list((root / "observations-direct-runs").glob("*.json"))
+    assert len(records) == 1
+    assert json.loads(records[0].read_text(encoding="utf-8"))["outcome"]["exit_code"] == 2
+    assert not (tmp_path / ".ff_jobs").exists()

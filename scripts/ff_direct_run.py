@@ -52,11 +52,12 @@ def _version(surface: Surface) -> str:
 
 
 class DirectRun:
-    def __init__(self, surface: Surface, *, run_id=None, attempt_id=None, operation_id=None):
+    def __init__(self, surface: Surface, *, run_id=None, attempt_id=None, operation_id=None, jobs_dir=None):
         operation = operation_id or uuid.uuid4().hex
         self.base = identity(run_id or operation, attempt_id or 1, f"{surface.step}/{operation}",
                              surface.prefix + operation, _version(surface))
-        self._paths = [_receipt_root(root) / (operation + ".json") for root in observation_directories()]
+        self._jobs_dir = jobs_dir
+        self._paths = [_receipt_root(root) / (operation + ".json") for root in observation_directories(jobs_dir)]
         self._record = {
             **self.base, "schema_version": surface.schema, "implementation_version": self.base["version"],
             "pid": os.getpid(), "external_effect": "not_started", "cost_state": "not_applicable", "steps": [],
@@ -96,7 +97,7 @@ class DirectRun:
     def finish(self, *, outcome, effect, cost, rows, start, file=None, detail_for_all=False):
         delivery = {"rows": rows, "start": start, "detail_for_all": detail_for_all}
         self.mark("finished", external_effect=effect, cost_state=cost, outcome=outcome, delivery=delivery)
-        _offer(self._record, file=file)
+        _offer(self._record, file=file, jobs_dir=self._jobs_dir)
 
 
 def _offer(record: dict, *, jobs_dir=None, file=None) -> None:
