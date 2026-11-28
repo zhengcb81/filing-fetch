@@ -14,6 +14,7 @@ from threading import Event
 
 import pytest
 
+from ff_persistence import owner_io_path
 from ff_runtime_feedback import owner_child_environment
 import ff_t3_receipt as receipt
 
@@ -36,10 +37,10 @@ def test_offline_owner_run_retains_four_cases_and_never_restarts(tmp_path):
     assert set(first["cases"]) == set(receipt.T3_CASES)
     assert all(row["outcome"] == "passed" and row["evidence_ref"]
                for row in first["cases"].values())
-    before = {file.name: file.read_bytes() for file in tmp_path.iterdir()}
+    before = {file.name: file.read_bytes() for file in owner_io_path(tmp_path).iterdir()}
     assert receipt.get_receipt(tmp_path, "weekly-one") == first
     assert receipt._run_once(tmp_path, "weekly-one", execute) == first
-    assert {file.name: file.read_bytes() for file in tmp_path.iterdir()} == before
+    assert {file.name: file.read_bytes() for file in owner_io_path(tmp_path).iterdir()} == before
     assert calls == ["started"]
 
 
@@ -98,7 +99,7 @@ receipt._run_once(Path(sys.argv[2]), "lost", execution)
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert run.returncode == 29, run.stderr.decode("utf-8", errors="replace")
-    persisted, = tmp_path.glob("*.json")
+    persisted, = owner_io_path(tmp_path).glob("*.json")
     before = persisted.read_bytes()
     recovered = receipt.get_receipt(tmp_path, "lost")
     assert recovered["state"] == "unknown"
@@ -123,7 +124,7 @@ receipt._run_once(Path(sys.argv[2]), "lost", execution)
 
 def test_old_optional_diagnostics_are_safely_ignored(tmp_path):
     result = receipt._run_once(tmp_path, "old", _succeed)
-    path, = tmp_path.glob("*.json")
+    path, = owner_io_path(tmp_path).glob("*.json")
     stored = json.loads(path.read_bytes())
     stored["diagnostic"] = {"old": "sensitive-path-token"}
     stored["cases"]["cn_annual"]["trace"] = "sensitive-path-token"
@@ -135,7 +136,7 @@ def test_old_optional_diagnostics_are_safely_ignored(tmp_path):
 
 def test_damaged_receipt_never_reopens_a_claim(tmp_path):
     receipt._run_once(tmp_path, "damaged", _succeed)
-    stored, = tmp_path.glob("*.json")
+    stored, = owner_io_path(tmp_path).glob("*.json")
     stored.write_bytes(b"{")
 
     def never(_report):

@@ -532,8 +532,8 @@ def _resolved_source_identity(
                     "reason": payload.get("reason"),
                     "resolved": candidate,
                 }))
-            except FilingFetchError:
-                raise original_error
+            except FilingFetchError as candidate_error:
+                raise original_error from candidate_error
         link_ids = {item.get("issuer_link_id") for item in validated}
         names = {item["canonical_name"] for item in validated}
         exact_bases = {

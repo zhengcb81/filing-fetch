@@ -170,6 +170,7 @@ class Harness:
             cwd=str(self.empty_cwd),
             env=env,
             timeout=90,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
 
     def calls(self) -> list[dict]:

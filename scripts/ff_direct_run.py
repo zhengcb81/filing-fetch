@@ -12,6 +12,7 @@ import re
 import uuid
 
 from ff_persistence import atomic_write_json, now_iso, owner_io_path
+from ff_runtime_log import caller_coordinates
 from ff_process_tree import pid_is_alive
 from ff_runtime_feedback import (
     identity, observation_directories, publish, start_was_offered, terminal_was_offered, warn_diagnostic_unavailable,
@@ -173,7 +174,9 @@ def _original(reference: str, directories: list[Path], observation=None) -> dict
 
 
 def _bound(record: dict, observation: dict) -> bool:
-    if any(observation.get(key) != record[key] for key in ("run_id", "attempt_id")):
+    if caller_coordinates(observation.get("run_id"), observation.get("attempt_id")) != caller_coordinates(
+        record["run_id"], record["attempt_id"],
+    ):
         return False
     if observation.get("step_id") == record["step_id"]:
         return True
@@ -187,6 +190,7 @@ def _view(record: dict | None) -> dict:
     if record is None:
         return {"state": "unknown"}
     result = {key: value for key, value in record.items() if key not in ("pid", "delivery", "start", "diagnostic_execution")}
+    result["run_id"], result["attempt_id"] = caller_coordinates(record["run_id"], record["attempt_id"])
     if "outcome" in result:
         state = "done"
     else:
@@ -208,8 +212,9 @@ def lookup_direct_run(
         if surface is not None and not reference.startswith(surface.prefix):
             return {"state": "unknown"}
         return _view(_original(reference, directories))
+    coordinates = caller_coordinates(run_id, attempt_id)
     records = [record for record in _durable_runs(directories).values()
-               if record["run_id"] == run_id and record["attempt_id"] == attempt_id
+               if caller_coordinates(record["run_id"], record["attempt_id"]) == coordinates
                and (surface is None or record["schema_version"] == surface.schema)]
     if len(records) > 1:
         return {"state": "ambiguous", "references": sorted(item["evidence_ref"] for item in records)}

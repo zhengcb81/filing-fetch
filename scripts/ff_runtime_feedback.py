@@ -242,8 +242,8 @@ def _runtime_roots(jobs_dir):
 def record_runtime_failure(
     surface, reason, error=None, *, jobs_dir=None, run_id=None, detail=None, base=None,
     diagnostics=None, execution=None,
-):
-    """Record an owner CLI/control failure locally, without creating F4 work for itself."""
+) -> bool:
+    """Record locally without creating F4 work. Return whether the journal was written."""
     try:
         if diagnostics:
             diagnostics.note(error)
@@ -252,12 +252,16 @@ def record_runtime_failure(
             base = identity(run_id or occurrence, 1, f"{surface}/{occurrence}", f"ff-cli/1/{occurrence}", "ff-cli/1")
         row = dict(base, check_id="execution-outcome", expected="completed", actual=reason,
                    disposition="deviation", issue_key=reason)
-        failure = append_runtime_issue(_runtime_roots(jobs_dir), [row], detail or cause_details(error, reason=reason),
-                                       execution=diagnostics.execution() if diagnostics else execution)
-        if failure is not None:
-            warn_diagnostic_unavailable("runtime log", failure, scope=base, diagnostics=diagnostics)
+        notice = _SinkNotice(base, diagnostics)
+        _write_runtime_issue(
+            _runtime_roots(jobs_dir), [row], detail or cause_details(error, reason=reason),
+            execution=diagnostics.execution() if diagnostics else execution, notice=notice,
+        )
+        notice.emit()
+        return notice.failure is None
     except Exception as failure:
         warn_diagnostic_unavailable("runtime log", failure, scope=base, diagnostics=diagnostics)
+        return False
 
 
 def read_native_diagnostic(name, directories):
@@ -395,12 +399,35 @@ def warn_diagnostic_unavailable(
     if diagnostics:
         diagnostics.warned_steps.add(warning_scope)
     suffix = " " + " ".join(facts) if facts else ""
+    stream = sys.stderr  # pythonw.exe may have no attached diagnostic stream.
+    if stream is None:
+        return
     try:
-        if sys.stderr is not None:  # pythonw.exe has no stderr.
-            print(f"warning: filing-fetch {component} unavailable{suffix} ({error_type})", file=sys.stderr)
-    except Exception:
-        # The diagnostic stream can itself be unavailable or be a host adapter.
-        pass
+        stream.write(f"warning: filing-fetch {component} unavailable{suffix} ({error_type})\n")
+        stream.flush()
+    except (OSError, ValueError, TypeError, RuntimeError, AttributeError):
+        # An unavailable host diagnostic stream cannot change the business result.
+        return
+
+
+@dataclass
+class _SinkNotice:
+    scope: dict
+    diagnostics: CliDiagnostics | None
+    failure: tuple[str, Exception] | None = None
+
+    def note(self, component, error):
+        if error is not None:
+            self.failure = component, error
+
+    def emit(self):
+        if self.failure is not None:
+            component, error = self.failure
+            warn_diagnostic_unavailable(component, error, scope=self.scope, diagnostics=self.diagnostics)
+
+
+def _write_runtime_issue(roots, rows, detail, *, execution, notice):
+    notice.note("runtime log", append_runtime_issue(roots, rows, detail, execution=execution))
 
 
 def publish(
@@ -414,8 +441,8 @@ def publish(
     the registered owner state, even when an additional outbox path is unavailable.
     """
     try:
-        publication_error = None
-        detail_error = None
+        offered = True
+        notices = []
         groups = {}
         if diagnostics is not None and execution is None:
             execution = diagnostics.execution()
@@ -425,11 +452,16 @@ def publish(
         runtime_roots = _runtime_roots(jobs_dir)
         for marker_key, group in groups.items():
             marker = dict(zip(_HEADER, marker_key))
+            notice = _SinkNotice(marker, diagnostics)
+            notices.append(notice)
             only_start = all(row["check_id"] == "action-started" for row in group)
             name = _packet_name(marker_key, "started" if only_start else "complete")
             local_detail = detail is not None and all(rows[0][key] == marker[key] for key in _HEADER)
             frozen = recoverable or (not only_start and any(r["check_id"] == "job-outcome" for r in group))
-            append_runtime_issue(runtime_roots, group, detail if local_detail else None, execution=execution)
+            _write_runtime_issue(
+                runtime_roots, group, detail if local_detail else None,
+                execution=execution, notice=notice,
+            )
             if local_detail:
                 for item in group:
                     if detail_for_all or item.get("disposition") == "deviation" or "refusal_code" in item:
@@ -444,7 +476,8 @@ def publish(
                     except OSError as error:
                         failed = error
                 else:
-                    detail_error = failed
+                    offered = False
+                    notice.note("feedback detail", failed)
                     # The owner still has the diagnostic in its original receipt.
                     # Keep this packet for recovery without offering a weaker occurrence.
                     if frozen:
@@ -463,17 +496,17 @@ def publish(
                 except LockBusy as error:
                     # A healthy primary writer is already publishing. Keep the same pending
                     # owner receipt, so maintenance retries that packet rather than cloning it.
-                    publication_error = error
+                    offered = False
+                    notice.note("feedback publication", error)
                     break
                 except OSError as error:
                     failed = error
             else:
-                publication_error = failed
-        if publication_error is not None:
-            warn_diagnostic_unavailable("feedback publication", publication_error, scope=rows[0], diagnostics=diagnostics)
-        elif detail_error is not None:
-            warn_diagnostic_unavailable("feedback detail", detail_error, scope=rows[0], diagnostics=diagnostics)
-        return publication_error is None and detail_error is None
+                offered = False
+                notice.note("feedback publication", failed)
+        for notice in notices:
+            notice.emit()
+        return offered
     except Exception as error:
         # The owner result and fee record take precedence over optional diagnostics.
         warn_diagnostic_unavailable("feedback publication", error, diagnostics=diagnostics)

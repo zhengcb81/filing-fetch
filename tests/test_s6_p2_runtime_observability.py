@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from threading import Thread
+from threading import Event, Thread
 import time
 
 import pytest
@@ -319,3 +319,224 @@ def test_windows_locked_rotation_preserves_old_generation_and_falls_back(tmp_pat
         assert locked.read() == old and log.read_bytes() == current
     entry, = rows(fallback)
     assert entry["run_id"] == "locked-rotation"
+
+
+def test_native_log_loss_is_announced_even_while_outbox_is_writable(tmp_path):
+    outbox, jobs = (tmp_path / name for name in ("outbox", "jobs"))
+    for root in (outbox, jobs):
+        root.mkdir()
+        (root / "logs").write_bytes(b"occupied")
+    result = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "submit"], body="[]",
+                 RESEARCH_FEEDBACK_DIR=str(outbox), RESEARCH_FEEDBACK_RUN_ID="ordinary-log-loss",
+                 RESEARCH_FEEDBACK_ATTEMPT_ID="attempt-6")
+    assert result.returncode == 2 and json.loads(result.stdout)["status"] == "request_error"
+    assert len(list(outbox.glob("*.ready"))) == 1
+    notice, = result.stderr.splitlines()
+    assert "runtime log unavailable" in notice
+    assert "run_id=ordinary-log-loss" in notice and "attempt_id=attempt-6" in notice
+    assert str(tmp_path) not in notice
+    assert all((root / "logs").read_bytes() == b"occupied" for root in (outbox, jobs))
+
+
+@pytest.mark.parametrize("metadata", [
+    {"diagnostic_execution": "outdated"},
+    {"diagnostic_execution": {"owner": "fake-owner", "event": "fake-event", "input_ref": "sk-fixture-disk-label"}},
+    {"feedback_identity": "outdated"},
+])
+def test_corrupt_job_metadata_never_changes_durable_cancel(tmp_path, metadata):
+    from test_ff_job_cross_process import _submit_body
+
+    jobs = tmp_path / "jobs"
+    args = ["--jobs-dir", jobs]
+    root = tmp_path / "outbox"
+    environment = {"RESEARCH_FEEDBACK_DIR": str(root)}
+    submission = cli(tmp_path, "ff_job", [*args, "submit"], body=json.dumps(
+        _submit_body(key="native-metadata", command_id="metadata-fixture")
+    ), **environment)
+    assert submission.returncode == 0
+    jid = json.loads(submission.stdout)["owner_job_id"]
+    path = jobs / "jobs" / (jid + ".json")
+    before = json.loads(path.read_bytes())
+    path.write_text(json.dumps({**before, **metadata}), encoding="utf-8")
+    action = [*args, "act", "--owner-job-id", jid, "--action", "cancel", "--idempotency-key", "cancel-fixture"]
+    result = cli(tmp_path, "ff_job", action, **environment)
+    assert (result.returncode, result.stderr) == (0, "")
+    view = json.loads(result.stdout)
+    assert view["job"]["status"] == "cancelled"
+    latest = cli(tmp_path, "ff_job", [*args, "get_status", "--owner-job-id", jid], **environment)
+    assert latest.returncode == 0 and json.loads(latest.stdout)["job"] == view["job"]
+    replay = cli(tmp_path, "ff_job", action, **environment)
+    assert replay.returncode == 0 and json.loads(replay.stdout)["idempotent_replay"] is True
+    record = json.loads(path.read_bytes())
+    assert (record["attempts"], record["execution_count"]) == (0, 0)
+    audit, = rows(jobs, jid + ".log")
+    assert audit["run_id"] == jid and audit["event"] == "cancelled"
+    assert all(mark not in repr(audit) for mark in ("fake-owner", "fake-event", "sk-fixture-disk-label"))
+
+
+@pytest.mark.parametrize("legacy_unredacted", [False, True])
+def test_original_caller_coordinates_survive_public_identity_redaction(tmp_path, legacy_unredacted):
+    from test_ff_runtime_lifecycle import Case, REQUEST
+
+    run_id, attempt = "sk-fixture-run-label", "trial-one"
+    case = Case(tmp_path, "ok")
+    case.env.update(RESEARCH_FEEDBACK_RUN_ID=run_id, RESEARCH_FEEDBACK_ATTEMPT_ID=attempt)
+    completed = case.invoke("fetch_statements.py", "--config", str(case.config), body=REQUEST)
+    assert completed.returncode == 0
+    path, = (tmp_path / "in-direct-runs").glob("*.json")
+    original = json.loads(path.read_bytes())
+    opaque = original["run_id"]
+    assert opaque != run_id
+    if legacy_unredacted:
+        path.write_text(json.dumps({**original, "run_id": run_id}), encoding="utf-8")
+
+    args = ["--jobs-dir", str(case.jobs)]
+    by_reference = case.invoke("ff_job_feedback.py", "get-statement-run", original["evidence_ref"], *args)
+    for name in (run_id, opaque):
+        by_coordinates = case.invoke("ff_job_feedback.py", "get-statement-run", "--run-id", name,
+                                     "--attempt-id", attempt, *args)
+        assert (by_coordinates.returncode, by_coordinates.stderr) == (0, b"")
+        assert json.loads(by_coordinates.stdout) == json.loads(by_reference.stdout)
+        assert json.loads(by_coordinates.stdout)["result"]["run_id"] == opaque
+        assert run_id.encode() not in by_coordinates.stdout
+    assert case.count() == 1
+
+
+def test_fault_and_cold_read_support_literal_hash_percent_and_long_owner_path(tmp_path):
+    from ff_persistence import owner_io_path
+
+    root = tmp_path / "native#%path"
+    for segment in ("a", "b", "c", "d"):
+        root /= segment * 62
+    assert len(str(root)) > 260 and "#%" in str(root)
+    owner_io_path(root).mkdir(parents=True)
+    result = cli(tmp_path, "ff_job", ["--jobs-dir", root, "submit"], body="[]",
+                 RESEARCH_FEEDBACK_RUN_ID="literal-path-original", RESEARCH_FEEDBACK_ATTEMPT_ID="once")
+    assert (result.returncode, result.stderr) == (2, "")
+    assert json.loads(result.stdout)["status"] == "request_error"
+    marks = owner_io_path(root / "observations")
+    packet, = marks.glob("*.jsonl")
+    failure = next(row for row in map(json.loads, packet.read_bytes().splitlines())
+                   if row["check_id"] == "execution-outcome")
+    readback = cli(tmp_path, "ff_job_feedback", [
+        "get-diagnostic", failure["details_ref"], "--jobs-dir", root,
+    ])
+    assert readback.returncode == 0 and readback.stderr == ""
+    detail = json.loads(readback.stdout)
+    assert detail["run_id"] == failure["run_id"] == "literal-path-original"
+    assert detail["causes"][0]["type"] == "FFJobError"
+
+
+def test_short_filing_killed_after_loopback_dispatch_recovers_original_without_resend(tmp_path):
+    from test_feedback_observation import Harness, _v2_request
+    from test_ff_runtime_lifecycle import _feedback_request
+
+    accepted = Event()
+    release = Event()
+    calls = []
+
+    class Provider(BaseHTTPRequestHandler):
+        def do_POST(self):
+            calls.append(self.rfile.read(int(self.headers["Content-Length"])))
+            accepted.set()
+            release.wait(10)
+
+        def log_message(self, *_args):
+            return
+
+    provider = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
+    server = Thread(target=provider.serve_forever, daemon=True)
+    server.start()
+    harness = Harness(tmp_path, scenario="download")
+    wrapper = tmp_path / "fixture_provider.py"
+    wrapper.write_text(
+        "import runpy, sys, urllib.request\n"
+        "url = sys.argv.pop(1)\n"
+        "fixture = sys.argv.pop(1)\n"
+        "if 'ensure' in sys.argv and '--allow-download' in sys.argv:\n"
+        "    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))\n"
+        "    opener.open(urllib.request.Request(url, data=b'one-fixture-request'), timeout=8).read()\n"
+        "sys.argv[0] = fixture\n"
+        "runpy.run_path(fixture, run_name='__main__')\n",
+        encoding="utf-8",
+    )
+    config = json.loads(harness.config.read_bytes())
+    config["connection"]["commands"]["catalog"] = [
+        sys.executable, "-B", str(wrapper), f"http://127.0.0.1:{provider.server_port}/",
+        str(harness.service), "catalog",
+    ]
+    harness.config.write_text(json.dumps(config), encoding="utf-8")
+    root = Path(harness.env["RESEARCH_FEEDBACK_DIR"])
+    process = subprocess.Popen(
+        [sys.executable, "-B", "-X", "utf8", str(SCRIPTS / "fetch_filing.py"), "--config", str(harness.config)],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=harness.empty_cwd,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        env={**harness.env, "RESEARCH_FEEDBACK_RUN_ID": "filing-original", "RESEARCH_FEEDBACK_ATTEMPT_ID": "once"},
+    )
+    try:
+        assert process.stdin is not None
+        body = json.dumps(_v2_request("fetch_if_missing")).encode("utf-8")
+        process.stdin.write(body)
+        process.stdin.close()
+        process.stdin = None
+        assert accepted.wait(12), "the public CLI did not reach the loopback provider"
+        marker, = root.glob("*.ready")
+        start, = map(json.loads, marker.with_suffix(".jsonl").read_bytes().splitlines())
+        assert start["check_id"] == "action-started"
+        assert (start["run_id"], start["attempt_id"]) == ("filing-original", "once")
+        assert process.poll() is None
+        process.kill()
+        process.communicate(timeout=8)
+
+        for _ in range(2):
+            reply = cli(tmp_path, "ff_job_feedback", [
+                "reconcile", "--jobs-dir", tmp_path / "jobs", "--observations-dir", root,
+            ], body=json.dumps(_feedback_request(start)), RESEARCH_FEEDBACK_DIR=str(root))
+            assert (reply.returncode, reply.stderr) == (0, "")
+            outcome = json.loads(reply.stdout)["result"]
+            assert outcome["evidence_ref"] == start["evidence_ref"]
+            assert outcome["job_status"] == "interrupted" and outcome["cost_state"] == "unknown"
+            assert outcome["new_provider_requests"] == outcome["new_downloads"] == 0
+            assert outcome["new_cost_usd"] == "0.00"
+            assert outcome["trace"]["request_sha256"] == hashlib.sha256(body).hexdigest()
+            assert outcome["trace"]["external_effect"] == "possible"
+        assert calls == [b"one-fixture-request"]
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=8)
+        release.set()
+        provider.shutdown()
+        server.join(5)
+        provider.server_close()
+
+
+def test_original_job_reconcile_accepts_legacy_and_safe_coordinates_without_new_work(tmp_path):
+    from test_ff_runtime_lifecycle import Case, _feedback_request
+
+    raw = "sk-fixture-job-label"
+    case = Case(tmp_path, "ok")
+    case.env.update(RESEARCH_FEEDBACK_RUN_ID=raw, RESEARCH_FEEDBACK_ATTEMPT_ID="original-attempt")
+    jid = case.submit()
+    original = case.run_job(jid)
+    assert original.returncode == 0 and json.loads(original.stdout)["job"]["status"] == "succeeded"
+    path = case.jobs / "jobs" / (jid + ".json")
+    record = json.loads(path.read_bytes())
+    safe = record["feedback_identity"]["run_id"]
+    assert safe != raw
+    record["feedback_identity"]["run_id"] = raw
+    path.write_text(json.dumps(record), encoding="utf-8")
+    packets = [json.loads(line) for packet in case.inbox.glob("*.jsonl") for line in packet.read_bytes().splitlines()]
+    terminal = next(row for row in packets if row["check_id"] == "job-outcome")
+    answers = []
+    for label in (safe, raw):
+        result = case.invoke("ff_job_feedback.py", "reconcile", "--jobs-dir", str(case.jobs),
+                             body=_feedback_request(dict(terminal, run_id=label)))
+        assert (result.returncode, result.stderr) == (0, b"")
+        assert raw.encode() not in result.stdout
+        answers.append(json.loads(result.stdout))
+    assert answers[0] == answers[1] and answers[0]["state"] == "done"
+    result = answers[0]["result"]
+    assert result["owner_job_id"] == jid and result["native_attempt"] == 1
+    assert result["execution_count"] == 1 and result["new_provider_requests"] == result["new_downloads"] == 0
+    assert result["new_cost_usd"] == "0.00" and case.count() == 1

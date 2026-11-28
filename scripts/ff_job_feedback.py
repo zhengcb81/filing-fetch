@@ -11,6 +11,7 @@ import tempfile
 
 from ff_job_observation import publish_job_observation as publish_job_observation
 from ff_persistence import owner_io_path, read_regular_bytes
+from ff_runtime_log import caller_coordinates
 from ff_runtime_feedback import (
     DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, OwnerArgumentParser, observation_directories,
     cli_exit, observed_cli, publish,
@@ -199,9 +200,9 @@ def _lookup_job(args: argparse.Namespace, request: dict, *, observation=None) ->
         if type(attempt) is not int or attempt <= 0 or observation["step_id"] != f"{job_id}/{attempt}":
             return {"state": "unknown"}
         original = job.get("feedback_identity")
-        if isinstance(original, dict) and any(
-            observation[key] != original.get(key) for key in ("run_id", "attempt_id")
-        ):
+        if isinstance(original, dict) and caller_coordinates(
+            observation["run_id"], observation["attempt_id"],
+        ) != caller_coordinates(original.get("run_id"), original.get("attempt_id")):
             return {"state": "unknown"}
 
         lost = store.run_lost(job) is not None or job.get("status") == "unknown"

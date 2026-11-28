@@ -10,6 +10,7 @@ from ff_runtime_feedback import (
     OUT_ENV, RULE_CODES, identity, publish, record_runtime_failure, start_was_offered, terminal_was_offered,
     warn_diagnostic_unavailable,
 )
+from ff_runtime_log import execution_view, safe_identity
 
 
 OUTCOME = "job-outcome"
@@ -17,24 +18,28 @@ OUTCOME = "job-outcome"
 
 def _job_identity(record):
     jid, attempt = record["owner_job_id"], record["attempts"]
-    base = identity(jid, attempt, f"{jid}/{attempt}", f"ff-job/1/{jid}", "ff-job/1")
     # A cold reader can have independent host run/attempt environment variables.
-    base.update(run_id=jid, attempt_id=str(attempt))
-    base.update(record.get("feedback_identity", {}))
+    stored = record.get("feedback_identity")
+    base = identity(jid, attempt, f"{jid}/{attempt}", f"ff-job/1/{jid}", "ff-job/1", labels={})
+    if isinstance(stored, dict):
+        for name in ("run_id", "attempt_id"):
+            value = stored.get(name)
+            if isinstance(value, str) and value:
+                base[name] = safe_identity(value)
     return base
 
 
 def append_job_diagnostic(store: JobStore, record: dict, entry: dict) -> None:
     base = _job_identity(record)
-    execution = record.get("diagnostic_execution")
+    execution = execution_view(record.get("diagnostic_execution"))
     identity = {key: base[key] for key in ("run_id", "attempt_id", "step_id", "evidence_ref")}
     try:
         store.append_log(record["owner_job_id"], {**identity, **(execution or {}), **entry})
     except (OSError, ValueError) as error:
         base["step_id"] += "/job-log/" + entry["event"]
-        record_runtime_failure("job-log", "job_log_unavailable", error,
-                               jobs_dir=store.jobs_dir, base=base, execution=execution)
-        warn_diagnostic_unavailable(f"job log {record['owner_job_id']}", error, scope=base)
+        if record_runtime_failure("job-log", "job_log_unavailable", error,
+                                  jobs_dir=store.jobs_dir, base=base, execution=execution):
+            warn_diagnostic_unavailable(f"job log {record['owner_job_id']}", error, scope=base)
 
 
 def load_observed_job(store: JobStore, owner_job_id: str, *, recover_terminal: bool = False) -> dict:

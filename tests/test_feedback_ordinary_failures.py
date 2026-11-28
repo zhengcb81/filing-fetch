@@ -116,7 +116,9 @@ def test_unwritable_native_log_has_no_wire_effect(tmp_path):
 
     result = cli(tmp_path, "ff_job", ["--jobs-dir", jobs, "submit"], "[]")
 
-    assert (result.returncode, result.stdout, result.stderr) == (2, first.stdout, "")
+    assert (result.returncode, result.stdout) == (2, first.stdout)
+    notice, = result.stderr.splitlines()
+    assert "runtime log unavailable" in notice and str(tmp_path) not in notice
     assert blocked.read_bytes() == b"untouched"
     assert any(row["actual"] == "request_error" for row in packets(jobs / "observations"))
 

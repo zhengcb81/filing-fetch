@@ -340,6 +340,7 @@ def main(argv: list[str] | None = None, *, diagnostics) -> int:
     live.add_argument("--run-id", required=True)
     live.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     args = parser.parse_args(argv)
+    error_exit = None
     try:
         if args.command == "get":
             value = (get_latest_receipt(args.receipts_dir) if args.latest
@@ -350,19 +351,20 @@ def main(argv: list[str] | None = None, *, diagnostics) -> int:
     except ValueError as error:
         record_runtime_failure("t3-" + args.command, "invalid_run_id", error, run_id=args.run_id,
                                diagnostics=diagnostics)
-        print(json.dumps({"schema_version": SCHEMA, "state": "blocked", "reason": "invalid_run_id"}))
-        return 2
+        value = {"schema_version": SCHEMA, "state": "blocked", "reason": "invalid_run_id"}
+        error_exit = 2
     except OSError as error:
         reason = "receipt_io_failed"
         detail = cause_details(error, reason=reason)
         record_runtime_failure("t3-" + args.command, reason, run_id=args.run_id, detail=detail,
                                diagnostics=diagnostics)
-        print(json.dumps({"schema_version": SCHEMA, "run_id": args.run_id,
-                          "state": "unknown", "reason": reason,
-                          "diagnostic": _diagnostic_view(detail)}))
-        return 2 if args.command == "run-live" else 1
+        value = {"schema_version": SCHEMA, "run_id": args.run_id,
+                 "state": "unknown", "reason": reason, "diagnostic": _diagnostic_view(detail)}
+        error_exit = 2 if args.command == "run-live" else 1
 
     print(json.dumps(value, ensure_ascii=True))
+    if error_exit is not None:
+        return error_exit
     if args.command == "run-live":
         return _live_exit(value)
     return 2 if value["state"] == "missing" else 0

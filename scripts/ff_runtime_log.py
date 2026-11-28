@@ -61,6 +61,11 @@ def safe_identity(value: str) -> str:
     return "ref-" + hashlib.sha256(value.encode("utf-8", errors="surrogatepass")).hexdigest()
 
 
+def caller_coordinates(run_id, attempt_id):
+    """Compare raw historical labels and their opaque current form without leaking either input."""
+    return tuple(safe_identity(value) if isinstance(value, str) else None for value in (run_id, attempt_id))
+
+
 _TRACEBACK_HEADER = b"Traceback (most recent call last):"
 _TRACEBACK_FRAME = re.compile(rb'^  File "([^"]+)", line ([0-9]{1,8})(?:, in .*)?$')
 _EXCEPTION_LINE = re.compile(rb"^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?::(?=\s|$)|$)")
@@ -223,6 +228,25 @@ def append_locked_log(path: Path, event: dict) -> None:
             raise handler.failure
 
 
+def execution_view(value: object) -> dict:
+    """Project optional provenance without allowing an old record to supply scope or event fields."""
+    if not isinstance(value, dict):
+        return {}
+    projected = {}
+    surface = value.get("surface")
+    if isinstance(surface, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,63}", surface):
+        if safe_identity(surface) == surface:
+            projected["surface"] = surface
+    for key in ("code_version", "input_ref"):
+        token = value.get(key)
+        if isinstance(token, str) and re.fullmatch(r"[a-f0-9]{64}", token):
+            projected[key] = token
+    version = value.get("code_version")
+    if isinstance(version, str) and re.fullmatch(r"ff-[a-z0-9-]{1,48}/\d{1,4}", version):
+        projected["code_version"] = version
+    return projected
+
+
 def append_runtime_issue(
     roots: list[Path], rows: list[dict], detail: dict | None = None, *, execution: dict | None = None,
 ) -> Exception | None:
@@ -242,8 +266,7 @@ def append_runtime_issue(
                 for row in rows
             ],
         }
-        if execution:
-            record.update(_fields(execution, ("surface", "code_version", "input_ref")))
+        record.update(execution_view(execution))
         projected = diagnostic_view(detail)
         if projected is not None:
             record["diagnostic"] = projected

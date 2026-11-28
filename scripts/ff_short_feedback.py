@@ -14,7 +14,7 @@ from pathlib import Path
 import uuid
 from typing import Any
 
-from ff_runtime_feedback import ATTEMPT_ENV, OUT_ENV, RULE_CODES, RUN_ENV, cause_details, publish
+from ff_runtime_feedback import ATTEMPT_ENV, OUT_ENV, RULE_CODES, RUN_ENV, cause_details, publish, record_runtime_failure
 from ff_direct_run import DirectRun, SHORT
 from ff_run_input import replay_input
 from ff_local_preparation_observation import validated_local_preparation_observation
@@ -131,8 +131,11 @@ class ShortObservation:
                 outcome={"status": reason, "exit_code": exit_code, "diagnostic": detail, "checks": checks},
                 effect=effect, cost=cost, rows=rows, start=self._start_rows, file=self._path,
             )
-        except Exception:  # noqa: BLE001 - diagnostics must never change the result
-            return
+        except Exception as failure:  # noqa: BLE001 - diagnostics must never change the result
+            record_runtime_failure(
+                "short-filing", "terminal_observation_failed", failure, jobs_dir=self._jobs_dir,
+                base=self._identity(), diagnostics=self._diagnostics,
+            )
 
     def _identity(self) -> dict[str, str]:
         return self._run.base
