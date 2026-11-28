@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import hashlib
 import json
+import subprocess
 import sys
 
 import pytest
 
-from e2e_support.cwp_runtime import isolated_environment, run_quiet
+from e2e_support.cwp_runtime import WINDOW_FLAGS, isolated_environment, run_quiet
 from e2e_support.isolated_wiki import IsolatedWiki, SYNTHETIC_SEEDS
 
 
@@ -176,7 +179,57 @@ def test_e2e_cwp_origin_owner_rejects_corrupted_bytes_after_selection(tmp_path):
     assert source.read_bytes() == original[:-1] + b"!"
 
 
-BUSY_CATALOG = r"""
+LOCK_OWNER = r"""
+from pathlib import Path
+import sys
+
+from company_wiki.source_catalog import SourceCatalog, load_catalog_config
+
+catalog = SourceCatalog(load_catalog_config(Path(sys.argv[1])))
+try:
+    with catalog.operation_lock(operation="ff-integration-held-writer"):
+        sys.stdout.buffer.write(b"locked\n")
+        sys.stdout.buffer.flush()
+        # Only the test owns the write end. Closing it releases the lock,
+        # including when an assertion or the test process fails.
+        sys.stdin.buffer.read(1)
+finally:
+    catalog.close()
+"""
+
+
+@contextmanager
+def hold_catalog_lock(wiki):
+    with subprocess.Popen(
+        [sys.executable, "-B", "-c", LOCK_OWNER, str(wiki.config_path)],
+        cwd=wiki.root, env=isolated_environment(wiki.root, wiki.src),
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        creationflags=WINDOW_FLAGS,
+    ) as owner, ThreadPoolExecutor(max_workers=1) as waiter:
+        assert owner.stdout is not None and owner.stdin is not None
+        ready = waiter.submit(owner.stdout.readline)
+        try:
+            assert ready.result(timeout=40) == b"locked\n"
+            yield owner
+        finally:
+            if not ready.done():
+                owner.stdin.close()
+                try:
+                    owner.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    owner.kill()
+                    owner.wait(timeout=10)
+            else:
+                try:
+                    _, stderr = owner.communicate(input=b"", timeout=15)
+                except subprocess.TimeoutExpired:
+                    owner.kill()
+                    owner.communicate(timeout=10)
+                    raise
+                assert owner.returncode == 0, stderr.decode("utf-8", "replace")
+
+
+TRACE_CATALOG = r"""
 import json
 from pathlib import Path
 import subprocess
@@ -185,10 +238,6 @@ import sys
 argv = sys.argv[2:]
 with Path(sys.argv[1]).open("a", encoding="utf-8") as log:
     log.write(json.dumps(argv) + "\n")
-if any(word in {"scan", "close-gap", "ensure"} for word in argv):
-    sys.stderr.write(json.dumps({"schema_version": "1.0", "error_type": "catalog_locked",
-                                 "retryable": True, "error": "catalog operation active"}))
-    raise SystemExit(1)
 result = subprocess.run([sys.executable, "-B", "-m", "company_wiki.source_catalog.cli", *argv],
                         capture_output=True, stdin=subprocess.DEVNULL,
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), check=False)
@@ -200,15 +249,12 @@ raise SystemExit(result.returncode)
 
 def test_e2e_reuse_does_not_call_busy_catalog_write_operations(tmp_path):
     wiki = IsolatedWiki(tmp_path)
-    wiki.seed_market("CN")
+    original = wiki.seed_market("CN")
     wiki.scan()
-    launcher = tmp_path / "busy-catalog.py"
-    launcher.write_text(BUSY_CATALOG, encoding="utf-8")
+    launcher = tmp_path / "trace-catalog.py"
+    launcher.write_text(TRACE_CATALOG, encoding="utf-8")
     log = tmp_path / "catalog-argv.jsonl"
     catalog = [sys.executable, "-B", str(launcher), str(log), "--config", str(wiki.config_path)]
-    denied = run_quiet([*catalog, "scan"], cwd=wiki.root, env=isolated_environment(wiki.root, wiki.src))
-    assert denied.returncode == 1
-    assert json.loads(denied.stderr)["error_type"] == "catalog_locked"
     root_config = {
         "schema_version": "1.0",
         "connection": {
@@ -221,11 +267,24 @@ def test_e2e_reuse_does_not_call_busy_catalog_write_operations(tmp_path):
         },
     }
     (wiki.root / "company_wiki.json").write_text(json.dumps(root_config), encoding="utf-8")
+    writer = [sys.executable, "-B", "-m", "company_wiki.source_catalog.cli",
+              "--config", str(wiki.config_path), "scan", "--root-id", "company_raw"]
     before = originals(wiki)
-    assert_reused(wiki, call(wiki, request()), "CN")
+    with hold_catalog_lock(wiki) as owner:
+        denied = run_quiet(writer, cwd=wiki.root, env=isolated_environment(wiki.root, wiki.src))
+        assert denied.returncode == 1, (denied.stdout, denied.stderr)
+        reason = json.loads(denied.stderr)
+        assert reason["error_type"] == "catalog_locked" and reason["retryable"] is True
+        ref = assert_reused(wiki, call(wiki, request()), "CN")
+        code, content, receipt = wiki.read(ref)
+        assert code == 0, receipt
+        assert content == original.read_bytes()
+        assert owner.poll() is None  # The real writer was still holding the lease.
+    assert owner.returncode == 0
+    wiki.scan()  # An independent writer can proceed after the lease is released.
     assert originals(wiki) == before
     launches = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
-    assert len(launches) == 2 and "identify" in launches[1]
+    assert len(launches) == 1 and "identify" in launches[0]
 
 
 @pytest.mark.parametrize(("state", "extra"), [
