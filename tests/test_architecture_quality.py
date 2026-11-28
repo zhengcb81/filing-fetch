@@ -231,8 +231,7 @@ def test_doctor_uses_runtime_rejection_for_invalid_utf8_and_literals(tmp_path):
         json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}).encode(),
     ]:
         config.write_bytes(raw)
-        problems, notes = [], []
-        assert doctor._check_filing_config(config, problems, notes) is None
+        problems, notes = doctor.diagnose(config)
         assert len(problems) == 1
         assert notes == []
 

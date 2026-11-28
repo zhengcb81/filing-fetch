@@ -223,17 +223,19 @@ def test_config_doctor_and_runtime_accept_the_same_optional_source_field(tmp_pat
     spec.loader.exec_module(doctor)
     wiki = tmp_path / "wiki"
     (wiki / "config").mkdir(parents=True)
-    (wiki / "config" / "source_catalog.yaml").write_text("fixture", encoding="utf-8")
+    (wiki / "config" / "source_catalog.yaml").write_text(
+        "schema_version: '1.0'\nreusable_root_kinds: [company_raw]\nroots: []\n", encoding="utf-8",
+    )
     config = tmp_path / "company_wiki.json"
     payload = {"schema_version": "1.0", "company_wiki_root": str(wiki), "fmp_api_key_file": "keys/explicit.key"}
     config.write_text(json.dumps(payload), encoding="utf-8")
-    problems, notes = [], []
-    assert doctor._check_filing_config(config, problems, notes) == wiki
+    problems, notes = doctor.diagnose(config)
     assert problems == []
+    assert notes == []
     payload["fmp_api_key_file"] = {}
     config.write_text(json.dumps(payload), encoding="utf-8")
-    problems, notes = [], []
-    assert doctor._check_filing_config(config, problems, notes) is None
+    problems, notes = doctor.diagnose(config)
+    assert notes == []
     assert len(problems) == 1
     assert "fmp_api_key_file" in problems[0]
 
@@ -354,7 +356,9 @@ def test_real_child_unicode_error_code_cannot_escape_public_reason(tmp_path, mon
 def _persistent_launch_config(tmp_path, *, tool_value=None):
     wiki = tmp_path / "wiki"
     (wiki / "config").mkdir(parents=True)
-    (wiki / "config/source_catalog.yaml").write_text("schema_version: '1.0'\n", encoding="utf-8")
+    (wiki / "config/source_catalog.yaml").write_text(
+        "schema_version: '1.0'\nreusable_root_kinds: [company_raw]\nroots: []\n", encoding="utf-8",
+    )
     tool = tmp_path / "tools" / "et.py"
     tool.parent.mkdir()
     tool.write_text(
@@ -431,9 +435,9 @@ def test_public_loader_and_doctor_accept_persistent_tool_without_reading_key(tmp
         Path(__file__).resolve().parents[1]/"tools/config_doctor.py")
     doctor=importlib.util.module_from_spec(spec)
     spec.loader.exec_module(doctor)
-    problems, notes=[], []
-    assert doctor._check_filing_config(config, problems, notes) == wiki
+    problems, notes = doctor.diagnose(config)
     assert problems == []
+    assert notes == []
 
 
 @pytest.mark.parametrize("invalid", [None, {}, "", "  "])
