@@ -117,6 +117,21 @@ def test_filing_config_root_without_source_catalog_fails(tmp_path: Path) -> None
     assert any("source_catalog.yaml" in p for p in problems)
 
 
+def test_explicit_connection_does_not_inspect_producer_files(tmp_path: Path) -> None:
+    endpoint = tmp_path / "public-owner"
+    endpoint.mkdir()
+    config = _write_filing_config(tmp_path, {
+        "schema_version": "1.0",
+        "connection": {
+            "cwd": str(endpoint),
+            "commands": {"catalog": ["explicit-producer-command"]},
+        },
+    })
+    problems, notes = diagnose(filing_config=config)
+    assert not problems
+    assert any("company-wiki owner diagnostics" in note for note in notes)
+
+
 def test_wiki_yaml_missing_reusable_kinds_fails(tmp_path: Path) -> None:
     wiki = _write_wiki(
         tmp_path,

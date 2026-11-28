@@ -10,12 +10,13 @@ Checks:
 
 1. filing-fetch ``config/company_wiki.json``: required {schema_version,
    company_wiki_root}, optional fmp_api_key_file (location only, never contents);
-   the wiki root is absolute after token expansion and exists
-   and carries ``config/source_catalog.yaml``; must NOT carry
+   a legacy wiki root is absolute after token expansion and exists. Its local
+   policy is only inspected by this explicit doctor. The config must NOT carry
    ``allowed_handle_roots`` (FC-501 / CONFIG-DBX-03).
-2. company-wiki ``source_catalog.yaml``: schema_version present;
+2. Legacy local company-wiki ``source_catalog.yaml``: schema_version present;
    ``reusable_root_kinds`` is a non-empty list of non-empty strings;
-   ``roots`` is a list.  Structural only — no path lists duplicated.
+   ``roots`` is a list. For an explicit public connection, company-wiki owns
+   its separate provider-side diagnostics.
 3. revenue ``config/filing_fetch.json`` (when ``--revenue-root`` is given):
    exactly {schema_version, filing_fetch_root}; absolute after expansion;
    the root carries ``scripts/fetch_filing.py``.  An older revenue checkout
@@ -46,10 +47,11 @@ if SCRIPTS not in sys.path:
     sys.path.insert(0, SCRIPTS)
 from ff_configuration import expand_config_path, read_json_object  # noqa: E402
 from fetch_filing import load_company_wiki_root  # noqa: E402
+from ff_company_wiki_connection import WikiConnection, WikiEndpoint  # noqa: E402
 from filing_contracts import FilingFetchError  # noqa: E402
 
 
-def _check_filing_config(path: Path, problems: list[str], notes: list[str]) -> Path | None:
+def _check_filing_config(path: Path, problems: list[str]) -> WikiEndpoint | None:
     """Diagnostics use the exact runtime parser rather than a second schema."""
     if not path.is_file():
         problems.append(f"filing-fetch config missing: {path}")
@@ -65,7 +67,8 @@ def _check_wiki_policy(root: Path, problems: list[str]) -> None:
     """Structural checks on company-wiki's source_catalog.yaml."""
     catalog = root / "config" / "source_catalog.yaml"
     if not catalog.is_file():
-        return  # already reported by the filing-config check
+        problems.append("legacy wiki source_catalog.yaml is missing")
+        return
     raw = catalog.read_text(encoding="utf-8")
     if raw.lstrip().startswith("{") and "\n" not in raw.strip():
         problems.append(
@@ -168,10 +171,12 @@ def diagnose(
     problems: list[str] = []
     notes: list[str] = []
     wiki_root = _check_filing_config(
-        filing_config or DEFAULT_FILING_CONFIG, problems, notes
+        filing_config or DEFAULT_FILING_CONFIG, problems
     )
-    if wiki_root is not None:
+    if isinstance(wiki_root, Path):
         _check_wiki_policy(wiki_root, problems)
+    elif isinstance(wiki_root, WikiConnection):
+        notes.append("NOTE: use company-wiki owner diagnostics for configured public commands")
     if revenue_root is not None:
         _check_revenue_config(
             revenue_root,

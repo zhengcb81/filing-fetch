@@ -218,6 +218,8 @@ def _run_action(parser, args):
     if os.name != "nt":
         parser.error("Windows Task Scheduler requires Windows")
     if args.action == "run":
+        if not args.python.is_file():
+            raise FileNotFoundError("configured tick interpreter is not a file")
         # Use the shared process owner so a timed-out launcher also reaps descendants.
         command = [str(args.python), "-B", str(ENTRY), *_action_args(args), "tick"]
         try:

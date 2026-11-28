@@ -65,8 +65,12 @@ def probe_catalog(
                 for key in ("SystemRoot", "WINDIR", "COMSPEC", "PATH", "PATHEXT")
                 if key in os.environ
             }
-            owned_state = str(wiki_root.parent / "probe-home")
-            env.update(LOCALAPPDATA=owned_state, XDG_STATE_HOME=owned_state, PYTHONDONTWRITEBYTECODE="1")
+            owned_profile = str(wiki_root.parent / (wiki_root.name + "-probe-home"))
+            env.update(
+                HOME=owned_profile, USERPROFILE=owned_profile,
+                APPDATA=owned_profile, LOCALAPPDATA=owned_profile, XDG_STATE_HOME=owned_profile,
+                PYTHONDONTWRITEBYTECODE="1",
+            )
         child_env = {**env, "PYTHONUTF8": "1"}
         existing_path = child_env.get("PYTHONPATH")
         paths = [str(_short_path(Path(cwp_src))), *(existing_path or "").split(os.pathsep)]

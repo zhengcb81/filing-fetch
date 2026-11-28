@@ -203,5 +203,6 @@ def test_no_independent_allowlist_in_config_schema(tmp_path):
         }),
         encoding="utf-8",
     )
-    with pytest.raises(FilingFetchError, match="exactly schema_version"):
+    with pytest.raises(FilingFetchError, match="allowed_handle_roots") as failure:
         load_company_wiki_root(config_path=cfg)
+    assert failure.value.code == "config_error"

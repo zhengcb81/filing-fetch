@@ -50,6 +50,9 @@ def _configured_runtime(tmp_path):
 
 def test_hook_uses_fixed_local_smoke_and_ci_executes_the_complete_offline_suite():
     workflow = yaml.safe_load((ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8"))
+    events = workflow.get("on", workflow.get(True))
+    assert events["push"]["branches"] == ["main"]
+    assert {"pull_request", "workflow_dispatch"} <= set(events)
     jobs = workflow["jobs"]
     strategy = jobs["verify"]["strategy"]["matrix"]
     assert strategy["os"] == ["ubuntu-latest", "windows-latest"]

@@ -2,6 +2,7 @@ name: quality
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -43,7 +44,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install offline test dependencies
-        run: python -m pip install pytest pyyaml requests beautifulsoup4 lxml openai httpx python-dotenv pymupdf
+        run: python -m pip install -r references/scheduled-refresh-requirements.txt pytest pyyaml requests beautifulsoup4 lxml openai httpx python-dotenv pymupdf
       - name: Install native process support
         if: matrix.platform == 'windows'
         run: python -m pip install pywin32

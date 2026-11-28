@@ -21,6 +21,7 @@ def cli(tmp, script, args=(), body="", **env):
         text=True,
         encoding="utf-8",
         capture_output=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         cwd=tmp,
         timeout=20,
         env={**clean, **env},
@@ -552,12 +553,16 @@ raise SystemExit(ff_job.main())
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires the native Windows process or scheduler")
-def test_login_launcher_reports_missing_interpreter_without_registering_a_task(tmp_path):
+@pytest.mark.parametrize("use_directory", [False, True], ids=["missing", "directory"])
+def test_login_launcher_reports_missing_interpreter_without_registering_a_task(tmp_path, use_directory):
     jobs = tmp_path / "jobs"
+    interpreter = tmp_path / "invalid-interpreter.exe"
+    if use_directory:
+        interpreter.mkdir()
     result = cli(
         tmp_path,
         "ff_scheduled_windows",
-        ["run", "--jobs-dir", jobs, "--python", tmp_path / "missing-python.exe"],
+        ["run", "--jobs-dir", jobs, "--python", interpreter],
     )
     assert result.returncode != 0
     rows = packets(jobs / "observations")

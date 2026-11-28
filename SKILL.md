@@ -367,6 +367,12 @@ point-in-time evidence for backtests.
 
 ## Installing this skill
 
+For Windows scheduled refresh, use the same configured Python interpreter for
+the task and dependency setup. Run `python -m pip install -r
+references/scheduled-refresh-requirements.txt` with that interpreter so the
+configured IANA time zone and daylight-saving transitions are available. The
+skill installer copies this manifest and does not install Python packages.
+
 Run the installer from the canonical filing-fetch repository; `tools/` is
 repository engineering code and is not copied into skill installations.
 Choose exactly one action. A repeated `--file` selects only those package

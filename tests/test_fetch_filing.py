@@ -130,13 +130,13 @@ class FilingFetchTests(unittest.TestCase):
                 json.dumps({"schema_version": "1.0", "company_wiki_root": str(first)}),
                 encoding="utf-8",
             )
-            self.assertEqual(load_company_wiki_root(config_path=config_path), first)
+            self.assertTrue(load_company_wiki_root(config_path=config_path).samefile(first))
 
             config_path.write_text(
                 json.dumps({"schema_version": "1.0", "company_wiki_root": str(second)}),
                 encoding="utf-8",
             )
-            self.assertEqual(load_company_wiki_root(config_path=config_path), second)
+            self.assertTrue(load_company_wiki_root(config_path=config_path).samefile(second))
 
     def test_relative_company_wiki_root_is_rejected(self) -> None:
         # FC-1202: a relative root resolved against the config file's parent
@@ -193,9 +193,9 @@ class FilingFetchTests(unittest.TestCase):
 
             self.assertEqual(run.call_count, 2)
             source_command = run.call_args_list[1].args[0]
-            self.assertEqual(Path(run.call_args_list[1].kwargs["cwd"]), root)
+            self.assertTrue(Path(run.call_args_list[1].kwargs["cwd"]).samefile(root))
             supplied_config = Path(source_command[source_command.index("--config") + 1])
-            self.assertEqual(supplied_config, root / "config" / "source_catalog.yaml")
+            self.assertTrue(supplied_config.samefile(root / "config" / "source_catalog.yaml"))
             self.assertEqual(handle["request_id"], source_response["request_id"])
 
     def test_company_query_is_identified_before_read_only_resolve(self) -> None:
@@ -1588,7 +1588,7 @@ class FilingFetchTests(unittest.TestCase):
                 json.dumps({"schema_version": "1.0", "company_wiki_root": str(tmp / "empty")}),
                 encoding="utf-8",
             )
-            self.assertEqual(load_company_wiki_root(config_path=config), tmp / "empty")
+            self.assertTrue(load_company_wiki_root(config_path=config).samefile(tmp / "empty"))
 
     def test_config_empty_root_is_rejected(self) -> None:
         with TemporaryDirectory() as temporary:
@@ -2419,7 +2419,7 @@ class FilingFetchTests(unittest.TestCase):
                 json.dumps({"schema_version": "1.0", "company_wiki_root": str(empty)}),
                 encoding="utf-8",
             )
-            self.assertEqual(load_company_wiki_root(config_path=no_catalog), empty)
+            self.assertTrue(load_company_wiki_root(config_path=no_catalog).samefile(empty))
             not_dir = tmp / "not-a-dir"
             not_dir.write_text("x", encoding="utf-8")
             not_dir_cfg = tmp / "not-dir.json"

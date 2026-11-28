@@ -344,8 +344,7 @@ def test_real_cli_keeps_unknown_on_unstructured_traceback(tmp_path: Path) -> Non
 def test_real_cli_config_error_has_no_upstream_cause(tmp_path: Path) -> None:
     # A config failure happens before any producer operation: no operation,
     # no cause — the field is genuinely optional, not always-on.
-    root = tmp_path / "company-wiki"
-    (root / "config").mkdir(parents=True)
+    root = tmp_path / "missing-connection-root"
     (tmp_path / "ff-config.json").write_text(
         json.dumps({"schema_version": "1.0", "company_wiki_root": str(root)}), encoding="utf-8"
     )
@@ -355,12 +354,16 @@ def test_real_cli_config_error_has_no_upstream_cause(tmp_path: Path) -> None:
         [
             sys.executable,
             str(SKILL_ROOT / "scripts" / "fetch_filing.py"),
+            "--jobs-dir",
+            str(tmp_path / "jobs"),
             "--request-file",
             str(request_file),
             "--config",
             str(tmp_path / "ff-config.json"),
         ],
         capture_output=True,
+        stdin=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         text=True,
         encoding="utf-8",
         cwd=str(tmp_path),

@@ -1,0 +1,2 @@
+# CPython Windows uses this IANA database for scheduled wall-clock and DST handling.
+tzdata; sys_platform == "win32"

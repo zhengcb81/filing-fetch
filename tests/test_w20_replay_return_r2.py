@@ -17,10 +17,11 @@ assertions BEFORE the fix:
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
+
+from e2e_support.cwp_runtime import cwp_checkout, isolated_environment, run_quiet
 
 TESTS = Path(__file__).resolve().parent
 ROOT = TESTS.parent
@@ -33,15 +34,13 @@ import case_specs  # noqa: E402
 import w20_case_specs  # noqa: E402
 
 
-def _scan(wiki_root: Path) -> None:
-    """Index the seeded originals into the real catalog (one CLI scan)."""
-    import subprocess as sp
-    proc = sp.run(
-        [sys.executable, "-m", "company_wiki.source_catalog.cli",
+def _scan(wiki_root: Path, cwp_src: Path) -> None:
+    """Index fixture originals through the explicitly pinned owner's CLI."""
+    proc = run_quiet(
+        [sys.executable, "-B", "-m", "company_wiki.source_catalog.cli",
          "--config", str(wiki_root / "config/source_catalog.yaml"), "scan"],
-        capture_output=True, cwd=wiki_root,
-        env={**os.environ, "PYTHONPATH": str(ROOT / ".w20-deps" / "cwp" / "src"),
-             "PYTHONUTF8": "1"}, timeout=120)
+        cwd=wiki_root, env=isolated_environment(wiki_root, cwp_src), timeout=120,
+    )
     assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")[-300:]
 
 
@@ -133,25 +132,29 @@ def test_lost_reply_accepts_only_intercepted_same_acquisition() -> None:
 # ── FF-R2-2: probe isolation and explicit result states ────────────────────
 
 
-def test_probe_reports_three_explicit_states_not_none(tmp_path: Path) -> None:
+def test_probe_distinguishes_unavailable_catalog_from_authoritative_miss(tmp_path: Path) -> None:
     from fixture_builder import ScratchEnvironment
     from w20_fault_cases import probe_catalog
 
-    # not_found: an empty owned wiki, explicit state, no exception guessing.
+    owner_src = cwp_checkout() / "src"
     env = ScratchEnvironment(tmp_path / "empty-wiki",
                              adapter_script=MATRIX / "fixture_provider_adapter.py",
                              et_proxy=MATRIX / "et_transcript_proxy.py")
-    result = probe_catalog(wiki_root=env.wiki, identity_request={
+    lookup = {
         "entity": "Apple Inc.", "document_kind": "investor_call_transcript",
         "as_of_date": "2026-12-31", "market": "US", "security_id": "AAPL",
         "form_type": None, "fiscal_year": 2036, "fiscal_period": "Q1",
         "language": None, "provider": "fmp", "provider_document_id": None,
         "mode": "exact", "allow_download": False, "schema_version": "1.0",
-    }, content_sha="0" * 64, cwp_src=str(ROOT / ".w20-deps" / "cwp" / "src"))
-    # A wiki without a catalog is a probe ERROR (the public query service is
-    # unavailable), never a fake "not durable" negative.
-    assert result["state"] == "probe_error", result
-    assert "catalog_unavailable" in (result.get("error") or "")
+    }
+    arguments = dict(wiki_root=env.wiki, identity_request=lookup,
+                     content_sha="0" * 64, cwp_src=str(owner_src))
+    unavailable = probe_catalog(**arguments)
+    assert unavailable["state"] == "probe_error", unavailable
+    assert "catalog_unavailable" in (unavailable.get("error") or "")
+    _scan(env.wiki, owner_src)
+    empty = probe_catalog(**arguments)
+    assert empty["state"] == "not_found" and empty["ref"] is None, empty
 
 
 def test_probe_error_is_never_confirmed_nor_not_found(tmp_path: Path) -> None:
@@ -159,7 +162,7 @@ def test_probe_error_is_never_confirmed_nor_not_found(tmp_path: Path) -> None:
 
     result = probe_catalog(wiki_root=tmp_path / "does-not-exist", identity_request={},
                            content_sha="0" * 64,
-                           cwp_src=str(ROOT / ".w20-deps" / "cwp" / "src"))
+                           cwp_src=str(tmp_path / "unused-owner-source"))
     assert result["state"] == "probe_error", result
     assert result.get("error"), "a probe error must carry its own reason"
 
@@ -171,7 +174,7 @@ def test_probe_leaves_parent_process_stdio_untouched(tmp_path: Path) -> None:
     try:
         probe_catalog(wiki_root=tmp_path / "missing", identity_request={},
                       content_sha="0" * 64,
-                      cwp_src=str(ROOT / ".w20-deps" / "cwp" / "src"))
+                      cwp_src=str(tmp_path / "unused-owner-source"))
         assert sys.stdin is saved_in, "the probe must not swap the parent's stdin"
         assert sys.stdout is saved_out, "the probe must not swap the parent's stdout"
     finally:
@@ -186,6 +189,7 @@ def test_concurrent_probes_for_two_companies_do_not_cross(tmp_path: Path) -> Non
     from dataclasses import replace
     from fixture_builder import CN, HK, ScratchEnvironment
 
+    owner_src = cwp_checkout() / "src"
     roots = {}
     for market, ident in (("cn", CN), ("hk", HK)):
         env = ScratchEnvironment(tmp_path / f"wiki-{market}",
@@ -197,7 +201,7 @@ def test_concurrent_probes_for_two_companies_do_not_cross(tmp_path: Path) -> Non
                           fiscal_year=2036, fiscal_period="Q1", form_type=None,
                           published_date="2026-01-05", content=content,
                           mime_type="text/plain", filename_hint=f"probe_{market}")
-        _scan(env.wiki)
+        _scan(env.wiki, owner_src)
         roots[market] = (env, ident, hashlib.sha256(content).hexdigest())
 
     def run_probe(market: str):
@@ -210,13 +214,13 @@ def test_concurrent_probes_for_two_companies_do_not_cross(tmp_path: Path) -> Non
             "fiscal_year": 2036, "fiscal_period": "Q1", "language": None,
             "provider": "fmp", "provider_document_id": None, "mode": "exact",
             "allow_download": False, "schema_version": "1.0",
-        }, content_sha=sha, cwp_src=str(ROOT / ".w20-deps" / "cwp" / "src"))
+        }, content_sha=sha, cwp_src=str(owner_src))
 
+    saved_in, saved_out = sys.stdin, sys.stdout
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = {market: pool.submit(run_probe, market) for market in roots}
         results = {market: future.result() for market, future in futures.items()}
 
-    saved_in, saved_out = sys.stdin, sys.stdout
     assert sys.stdin is saved_in and sys.stdout is saved_out
     for market, result in results.items():
         assert result["state"] == "confirmed", (market, result)
