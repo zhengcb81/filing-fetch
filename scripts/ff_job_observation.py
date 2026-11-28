@@ -7,7 +7,8 @@ import os
 from ff_job_contracts import FFJobError
 from ff_job_store import JobStore
 from ff_runtime_feedback import (
-    OUT_ENV, RULE_CODES, feedback_wire, publish, record_runtime_failure, retained_identity, start_was_offered,
+    OUT_ENV, RULE_CODES, FeedbackRouting, feedback_wire, publish, record_runtime_failure, retained_identity,
+    start_was_offered,
     terminal_was_offered,
     warn_diagnostic_unavailable,
 )
@@ -43,7 +44,9 @@ def load_observed_job(store: JobStore, owner_job_id: str, *, recover_terminal: b
     return record
 
 
-def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recover_only=False) -> bool | None:
+def publish_job_observation(
+    record: dict, *, started: bool, jobs_dir=None, recover_only=False, routing: FeedbackRouting | None = None,
+) -> bool | None:
     base = _job_identity(record)
     statements = record.get("statement_feedback")
     recoverable = (
@@ -55,9 +58,10 @@ def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recov
                   disposition="expected", terminal_check_id=OUTCOME)]
     file = None if recover_only else os.environ.get(OUT_ENV)
     if started:
-        if recover_only and (start_was_offered(start[0], jobs_dir) or terminal_was_offered(start[0], jobs_dir)):
+        if recover_only and (start_was_offered(start[0], jobs_dir, routing=routing)
+                             or terminal_was_offered(start[0], jobs_dir, routing=routing)):
             return None
-        return publish(start, file=file, jobs_dir=jobs_dir, recoverable=recover_only)
+        return publish(start, file=file, jobs_dir=jobs_dir, recoverable=recover_only, routing=routing)
     if recover_only and not recoverable:
         return None
     outcome = record["status"] if record["status_known"] else "unknown"
@@ -70,7 +74,7 @@ def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recov
     refusal = rule if rule in RULE_CODES else None
     disposition = "unknown" if outcome == "unknown" else "deviation" if outcome == "failed" else "expected"
     business = dict(base, check_id=OUTCOME, expected="terminal", actual=outcome, disposition=disposition)
-    if recover_only and terminal_was_offered(business, jobs_dir, detail=detail):
+    if recover_only and terminal_was_offered(business, jobs_dir, detail=detail, routing=routing):
         return None
     rows = [business, dict(base, check_id="job-usage", expected="accounted", actual=cost,
                           disposition="unknown" if cost == "unknown" else "expected")]
@@ -91,10 +95,10 @@ def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recov
                          disposition="deviation", issue_key=result_status))
     return publish(rows, file=file, jobs_dir=jobs_dir, context=start, detail=detail,
                    recoverable=recoverable, detail_for_all=bool(statements),
-                   execution=record.get("diagnostic_execution"))
+                   execution=record.get("diagnostic_execution"), routing=routing)
 
 
-def flush_job_observations(store: JobStore) -> list[bool]:
+def flush_job_observations(store: JobStore, *, routing: FeedbackRouting | None = None) -> list[bool]:
     """Only inspect the existing attempt and reoffer its recorded feedback."""
     results = []
     for job_id in store.iter_job_ids():
@@ -103,11 +107,11 @@ def flush_job_observations(store: JobStore) -> list[bool]:
             if not record.get("attempts") or record["status"] in {"queued", "cancelled"}:
                 continue
             delivered = publish_job_observation(record, started=record["status"] == "running",
-                                                jobs_dir=store.jobs_dir, recover_only=True)
+                                                jobs_dir=store.jobs_dir, recover_only=True, routing=routing)
             if delivered is not None:
                 results.append(delivered)
         except (FFJobError, OSError, KeyError, TypeError, ValueError) as error:
             record_runtime_failure("feedback-flush-job", "job_receipt_unreadable", error,
-                                   jobs_dir=store.jobs_dir, run_id=job_id)
+                                   jobs_dir=store.jobs_dir, run_id=job_id, routing=routing)
             results.append(False)
     return results

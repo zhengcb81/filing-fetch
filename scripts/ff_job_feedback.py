@@ -13,7 +13,7 @@ from ff_job_observation import publish_job_observation as publish_job_observatio
 from ff_persistence import owner_io_path, read_regular_bytes
 from ff_runtime_log import caller_coordinates, safe_identity
 from ff_runtime_feedback import (
-    DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, OwnerArgumentParser, observation_directories,
+    DEFAULT_JOBS_DIR, OUT_ENV, RULE_CODES, FeedbackRouting, OwnerArgumentParser, observation_directories,
     cli_exit, feedback_wire, observed_cli, publish,
     read_cli_failure, read_native_diagnostic, record_runtime_failure, retained_identity, start_was_offered,
     terminal_was_offered,
@@ -26,13 +26,13 @@ def _refresh_identity(run, step):
                              stored=run.get("feedback_identity"))
 
 
-def _refresh_summary(run, jobs_dir, file):
+def _refresh_summary(run, jobs_dir, file, *, routing: FeedbackRouting | None = None):
     rid = run["run_id"]
     base = _refresh_identity(run, rid)
     outcome = run["state"]
     rows = [dict(base, check_id="refresh-outcome", expected="completed", actual=outcome,
                  disposition="deviation" if outcome == "partial" else "expected")]
-    if terminal_was_offered(rows[0], jobs_dir):
+    if terminal_was_offered(rows[0], jobs_dir, routing=routing):
         return True
     usage = run.get("usage", {})
     snapshots = [value for key in ("reading_runs", "acquisition_jobs")
@@ -43,7 +43,7 @@ def _refresh_summary(run, jobs_dir, file):
         rows.append(dict(base, check_id="refresh-usage", expected="accounted", actual="known" if known else "unknown",
                          disposition="expected" if known else "unknown"))
     return publish(rows, jobs_dir=jobs_dir, file=file, recoverable=True, context=[_refresh_start_row(base)],
-                   execution=run.get("diagnostic_execution"))
+                   execution=run.get("diagnostic_execution"), routing=routing)
 
 
 def _refresh_start_row(base):
@@ -51,7 +51,7 @@ def _refresh_start_row(base):
                 disposition="expected", terminal_check_id="refresh-outcome")
 
 
-def _refresh_item(run, key, failure, jobs_dir, file):
+def _refresh_item(run, key, failure, jobs_dir, file, *, routing: FeedbackRouting | None = None):
     base = _refresh_identity(run, f"{run['run_id']}/{key}")
     detail = {"schema_version": "ff-failure-detail/1", **failure}
     reason = failure["reason"]
@@ -59,10 +59,10 @@ def _refresh_item(run, key, failure, jobs_dir, file):
                issue_key=reason, disposition="deviation")
     if reason in RULE_CODES:
         row.update(disposition="expected", refusal_code=reason)
-    if terminal_was_offered(row, jobs_dir, detail=detail):
+    if terminal_was_offered(row, jobs_dir, detail=detail, routing=routing):
         return True
     return publish([row], jobs_dir=jobs_dir, file=file, detail=detail, recoverable=True,
-                   execution=run.get("diagnostic_execution"))
+                   execution=run.get("diagnostic_execution"), routing=routing)
 
 
 def publish_refresh_failure(run, *, jobs_dir, reason, reference, stage, error=None):
@@ -77,7 +77,9 @@ def publish_refresh_failure(run, *, jobs_dir, reason, reference, stage, error=No
     _refresh_item(run, key, failures[key], jobs_dir, os.environ.get(OUT_ENV))
 
 
-def redeliver_refresh(store, visible=(), *, active_run=None, include_retained=False):
+def redeliver_refresh(
+    store, visible=(), *, active_run=None, include_retained=False, routing: FeedbackRouting | None = None,
+):
     """Offer original native receipts; this path has no acquisition or reading port."""
     try:
         waiting, runs = store.feedback_receipts(visible, include_retained=include_retained)
@@ -85,18 +87,18 @@ def redeliver_refresh(store, visible=(), *, active_run=None, include_retained=Fa
         successful = True
         for rid, run in runs.items():
             file = os.environ.get(OUT_ENV) if rid == active_run else None
-            delivered = [_refresh_item(run, key, failure, store.root.parent, file)
+            delivered = [_refresh_item(run, key, failure, store.root.parent, file, routing=routing)
                          for key, failure in (run.get("failures") or {}).items()]
             if run.get("state") in {"partial", "completed", "superseded"}:
-                delivered.append(_refresh_summary(run, store.root.parent, file))
+                delivered.append(_refresh_summary(run, store.root.parent, file, routing=routing))
                 if all(delivered) and rid in waiting:
                     offered.add(rid)
             elif include_retained:
                 base = _refresh_identity(run, rid)
                 start = _refresh_start_row(base)
-                if not start_was_offered(start, store.root.parent):
+                if not start_was_offered(start, store.root.parent, routing=routing):
                     delivered.append(publish([start], jobs_dir=store.root.parent,
-                                             recoverable=True))
+                                             recoverable=True, routing=routing))
             successful &= all(delivered)
         if offered:
             store.acknowledge_feedback(offered)
@@ -104,7 +106,7 @@ def redeliver_refresh(store, visible=(), *, active_run=None, include_retained=Fa
     except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
         # Directory repair and later cold reads can resume. Diagnostics cannot change the slot.
         record_runtime_failure("feedback-flush-refresh", "schedule_receipt_unreadable", error,
-                               jobs_dir=store.root.parent)
+                               jobs_dir=store.root.parent, routing=routing)
         return False
 
 
@@ -534,23 +536,16 @@ def _flush_observations(roots, observations_dir=None):
     from ff_refresh_store import RefreshStore
 
     jobs, direct, slots = [], [], []
-    # The original per-process override belongs to the primary owner. Auxiliary
-    # installations have separate native queues and cannot borrow its receipt.
-    override = os.environ.get(DIR_ENV)
-    try:
-        if observations_dir is not None:
-            os.environ[DIR_ENV] = str(observations_dir.expanduser().resolve())
-        for position, root in enumerate(roots):
-            if position == 1:
-                os.environ.pop(DIR_ENV, None)
-            jobs.extend(flush_job_observations(JobStore(root, initialize=False)))
-            direct.extend(flush_direct_observations(root))
-            slots.append(redeliver_refresh(RefreshStore(root), include_retained=True))
-    finally:
-        if override is None:
-            os.environ.pop(DIR_ENV, None)
-        else:
-            os.environ[DIR_ENV] = override
+    # Each auxiliary installation keeps its own native queue. The primary
+    # owner can use its configured override for this invocation.
+    primary = (FeedbackRouting.from_process() if observations_dir is None
+               else FeedbackRouting(observations_dir.expanduser().resolve()))
+    native = FeedbackRouting()
+    for position, root in enumerate(roots):
+        routing = primary if position == 0 else native
+        jobs.extend(flush_job_observations(JobStore(root, initialize=False), routing=routing))
+        direct.extend(flush_direct_observations(root, routing=routing))
+        slots.append(redeliver_refresh(RefreshStore(root), include_retained=True, routing=routing))
     deferred = jobs.count(False) + direct.count(False) + slots.count(False)
     return {
         "schema_version": "ff-observation-flush/1", "status": "partial" if deferred else "ok",

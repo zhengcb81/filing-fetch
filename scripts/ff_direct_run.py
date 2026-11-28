@@ -15,7 +15,8 @@ from ff_persistence import atomic_write_json, now_iso, owner_io_path
 from ff_runtime_log import caller_coordinates
 from ff_process_tree import pid_is_alive
 from ff_runtime_feedback import (
-    identity, observation_directories, publish, start_was_offered, terminal_was_offered, warn_diagnostic_unavailable,
+    FeedbackRouting, identity, observation_directories, publish, start_was_offered, terminal_was_offered,
+    warn_diagnostic_unavailable,
 )
 
 
@@ -255,23 +256,25 @@ def reconcile_direct_run(reference: str, directories: list[Path], observation: d
     }}
 
 
-def flush_direct_observations(jobs_dir: Path) -> list[bool]:
+def flush_direct_observations(jobs_dir: Path, *, routing: FeedbackRouting | None = None) -> list[bool]:
     """Publish only recorded owner starts and outcomes. This module has no acquisition port."""
     results = []
-    for record in _durable_runs(observation_directories(jobs_dir)).values():
+    for record in _durable_runs(observation_directories(jobs_dir, routing=routing)).values():
         if isinstance(record.get("delivery"), dict) and isinstance(record.get("outcome"), dict):
-            result = _reoffer(record, jobs_dir)
+            result = _reoffer(record, jobs_dir, routing=routing)
             if result is not None:
                 results.append(result)
         else:
             surface = next(item for item in _SURFACES if item.schema == record["schema_version"])
             start = _start_row(record, surface)
-            if not start_was_offered(start, jobs_dir) and not terminal_was_offered(start, jobs_dir):
-                results.append(publish([start], jobs_dir=jobs_dir, recoverable=True))
+            if not start_was_offered(start, jobs_dir, routing=routing) and not terminal_was_offered(
+                start, jobs_dir, routing=routing,
+            ):
+                results.append(publish([start], jobs_dir=jobs_dir, recoverable=True, routing=routing))
     return results
 
 
-def _reoffer(record: dict, jobs_dir: Path) -> bool | None:
+def _reoffer(record: dict, jobs_dir: Path, *, routing: FeedbackRouting | None = None) -> bool | None:
     delivery = record["delivery"]
     detail = record["outcome"].get("diagnostic")
     scopes: dict[str, dict] = {}
@@ -279,7 +282,8 @@ def _reoffer(record: dict, jobs_dir: Path) -> bool | None:
         scopes.setdefault(row["step_id"], row)
     missing = {
         step for step, row in scopes.items()
-        if not terminal_was_offered(row, jobs_dir, detail=detail if step == record["step_id"] else None)
+        if not terminal_was_offered(row, jobs_dir, detail=detail if step == record["step_id"] else None,
+                                    routing=routing)
     }
     if not missing:
         return None
@@ -287,4 +291,4 @@ def _reoffer(record: dict, jobs_dir: Path) -> bool | None:
                    jobs_dir=jobs_dir, context=delivery["start"],
                    detail=detail if record["step_id"] in missing else None,
                    recoverable=True, detail_for_all=delivery["detail_for_all"],
-            execution=record.get("diagnostic_execution"))
+                   execution=record.get("diagnostic_execution"), routing=routing)

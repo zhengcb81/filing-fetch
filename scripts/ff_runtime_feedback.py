@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import sys
+from typing import Any
 import uuid
 
 from ff_persistence import (
@@ -245,22 +246,29 @@ def owner_child_environment():
     }
 
 
-def _feedback_targets(default):
-    override = os.environ.get(DIR_ENV)
-    return list(dict.fromkeys([Path(override), default] if override else [default]))
+@dataclass(frozen=True)
+class FeedbackRouting:
+    """An invocation's optional inbox ahead of the native owner's directory."""
+
+    override: Path | None = None
+
+    @classmethod
+    def from_process(cls) -> FeedbackRouting:
+        override = os.environ.get(DIR_ENV)
+        return cls(Path(override) if override else None)
+
+    def targets(self, native: Path) -> list[Path]:
+        return list(dict.fromkeys([self.override, native])) if self.override else [native]
 
 
-def observation_directories(jobs_dir=None):
-    return _feedback_targets(Path(jobs_dir or DEFAULT_JOBS_DIR) / "observations")
-
-
-def _runtime_roots(jobs_dir):
-    return _feedback_targets(Path(jobs_dir or DEFAULT_JOBS_DIR))
+def observation_directories(jobs_dir=None, *, routing: FeedbackRouting | None = None):
+    targets = routing if routing is not None else FeedbackRouting.from_process()
+    return targets.targets(Path(jobs_dir or DEFAULT_JOBS_DIR) / "observations")
 
 
 def record_runtime_failure(
     surface, reason, error=None, *, jobs_dir=None, run_id=None, detail=None, base=None,
-    diagnostics=None, execution=None,
+    diagnostics=None, execution=None, routing: FeedbackRouting | None = None,
 ) -> bool:
     """Record locally without creating F4 work. Return whether the journal was written."""
     try:
@@ -272,8 +280,9 @@ def record_runtime_failure(
         row = dict(base, check_id="execution-outcome", expected="completed", actual=reason,
                    disposition="deviation", issue_key=reason)
         notice = _SinkNotice(base, diagnostics)
+        targets = routing if routing is not None else FeedbackRouting.from_process()
         _write_runtime_issue(
-            _runtime_roots(jobs_dir), [row], detail or cause_details(error, reason=reason),
+            targets.targets(Path(jobs_dir or DEFAULT_JOBS_DIR)), [row], detail or cause_details(error, reason=reason),
             execution=diagnostics.execution() if diagnostics else execution, notice=notice,
         )
         notice.emit()
@@ -583,16 +592,16 @@ def _restore_terminal_detail(packet, detail):
         warn_diagnostic_unavailable("feedback detail", error, scope=marker)
 
 
-def terminal_was_offered(row, jobs_dir, *, detail=None):
-    packet = _existing_packet(row, observation_directories(jobs_dir), started=False)
+def terminal_was_offered(row, jobs_dir, *, detail=None, routing: FeedbackRouting | None = None):
+    packet = _existing_packet(row, observation_directories(jobs_dir, routing=routing), started=False)
     if packet is None:
         return False
     _restore_terminal_detail(packet, detail)
     return True
 
 
-def start_was_offered(row, jobs_dir):
-    return _existing_packet(row, observation_directories(jobs_dir), started=True) is not None
+def start_was_offered(row, jobs_dir, *, routing: FeedbackRouting | None = None):
+    return _existing_packet(row, observation_directories(jobs_dir, routing=routing), started=True) is not None
 
 
 def _with_detail(rows, name, *, detail_for_all):
@@ -736,7 +745,7 @@ def _publish_native(targets, marker_key, marker, group, prefix, frozen, *, detai
 
 def publish(
     rows, *, jobs_dir=None, file=None, context=(), detail=None, recoverable=False,
-    detail_for_all=False, diagnostics=None, execution=None,
+    detail_for_all=False, diagnostics=None, execution=None, routing: FeedbackRouting | None = None,
 ):
     """Explicit sidecars keep append semantics. Native packets use one immutable occurrence identity.
 
@@ -747,14 +756,15 @@ def publish(
     try:
         offered = True
         notices = []
-        groups = {}
+        groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
         if diagnostics is not None and execution is None:
             execution = diagnostics.execution()
         context = [feedback_wire(row) for row in context]
         for row in rows:
             groups.setdefault(tuple(row[k] for k in _HEADER), []).append(row)
-        directories = observation_directories(jobs_dir)
-        runtime_roots = _runtime_roots(jobs_dir)
+        route = routing if routing is not None else FeedbackRouting.from_process()
+        directories = observation_directories(jobs_dir, routing=route)
+        runtime_roots = route.targets(Path(jobs_dir or DEFAULT_JOBS_DIR))
         for original_key, original_group in groups.items():
             local_detail = detail is not None and tuple(rows[0][key] for key in _HEADER) == original_key
             only_start = all(row["check_id"] == "action-started" for row in original_group)
@@ -772,10 +782,10 @@ def publish(
             active = _existing_packet(native_start, directories, started=True) if native_start else None
             if only_start and active is not None:
                 continue
-            legacy_start = active is not None and active.header != marker_key
+            legacy_root = active.root if active is not None and active.header != marker_key else None
             # The raw start must remain available for F4. Its terminal carries
             # the same owner/evidence/step with safe caller coordinates.
-            targets = [active.root, *[root for root in directories if root != active.root]] if legacy_start else directories
+            targets = list(dict.fromkeys([legacy_root, *directories])) if legacy_root is not None else directories
             marker = dict(zip(_HEADER, marker_key))
             notice = _SinkNotice(marker, diagnostics)
             notices.append(notice)
@@ -785,7 +795,7 @@ def publish(
                 runtime_roots, group, detail if local_detail else None,
                 execution=execution, notice=notice,
             )
-            if file and not legacy_start:
+            if file and legacy_root is None:
                 explicit = group
                 diagnostic_available = not local_detail
                 if local_detail:
@@ -802,7 +812,7 @@ def publish(
                             notice.note("feedback detail", error)
                 if (diagnostic_available or not frozen) and _explicit(file, explicit):
                     continue
-            if legacy_start:
+            if legacy_root is not None:
                 prefix = []
             offered = _publish_native(targets, marker_key, marker, group, prefix, frozen,
                                       detail=detail if local_detail else None, detail_for_all=detail_for_all,
