@@ -11,22 +11,19 @@ import tempfile
 
 from ff_job_observation import publish_job_observation as publish_job_observation
 from ff_persistence import owner_io_path, read_regular_bytes
-from ff_runtime_log import caller_coordinates
+from ff_runtime_log import caller_coordinates, safe_identity
 from ff_runtime_feedback import (
     DEFAULT_JOBS_DIR, DIR_ENV, OUT_ENV, RULE_CODES, OwnerArgumentParser, observation_directories,
-    cli_exit, observed_cli, publish,
-    read_cli_failure, read_native_diagnostic, record_runtime_failure, start_was_offered, terminal_was_offered,
+    cli_exit, feedback_wire, observed_cli, publish,
+    read_cli_failure, read_native_diagnostic, record_runtime_failure, retained_identity, start_was_offered,
+    terminal_was_offered,
 )
 
 
 def _refresh_identity(run, step):
     rid = run["run_id"]
-    original = run.get("feedback_identity") or {}
-    return {
-        "schema_version": "feedback-observation/1", "owner": "filing-fetch",
-        "run_id": original.get("run_id", rid), "attempt_id": original.get("attempt_id", "scheduled"),
-        "step_id": step, "evidence_ref": f"ff-scheduled-refresh/1/{rid}", "version": "ff-scheduled-refresh/1",
-    }
+    return retained_identity(rid, "scheduled", step, f"ff-scheduled-refresh/1/{rid}", "ff-scheduled-refresh/1",
+                             stored=run.get("feedback_identity"))
 
 
 def _refresh_summary(run, jobs_dir, file):
@@ -239,10 +236,10 @@ _ACCOUNTED = {"settled", "known", "not_applicable"}
 
 def _slot_binding(run: dict, observation: dict) -> str | None:
     """Return "" for the slot, a recorded failure key for one sub-item, or None for any other original."""
-    identity = run.get("feedback_identity")
-    original = identity if isinstance(identity, dict) else {}
-    if (observation["run_id"] != original.get("run_id", run["run_id"])
-            or observation["attempt_id"] != original.get("attempt_id", "scheduled")):
+    original = _refresh_identity(run, run["run_id"])
+    if caller_coordinates(observation["run_id"], observation["attempt_id"]) != caller_coordinates(
+        original["run_id"], original["attempt_id"],
+    ):
         return None
     step = observation["step_id"]
     if step == run["run_id"]:
@@ -395,7 +392,7 @@ def _lookup_refresh(args: argparse.Namespace, observation: dict) -> dict:
             "status": "known" if known else "cost_unknown", "job_status": outcome,
             "cost_state": ("not_applicable" if all(row["cost_state"] == "not_applicable" for row in items)
                            else "known") if known else "unknown",
-            "evidence_ref": observation["evidence_ref"], "native_attempt": observation["attempt_id"],
+            "evidence_ref": observation["evidence_ref"], "native_attempt": safe_identity(observation["attempt_id"]),
             "native_status": run["state"], "counts": counts, "items": items,
             "reason_codes": [code for code in codes if isinstance(code, str)] if isinstance(codes, list) else [],
         }
@@ -642,7 +639,7 @@ def main(argv: list[str] | None = None, *, diagnostics) -> int:
             parser.error("invalid diagnostic reference")
         value, error = read_native_diagnostic(match[1], directories)
         if value is not None:
-            print(json.dumps(value, ensure_ascii=True))
+            print(json.dumps(feedback_wire(value), ensure_ascii=True))
             return 0
         if error is not None:
             record_runtime_failure("feedback-get-diagnostic", "diagnostic_unreadable", error, jobs_dir=args.jobs_dir,

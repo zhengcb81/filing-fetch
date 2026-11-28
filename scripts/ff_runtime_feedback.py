@@ -17,7 +17,9 @@ from ff_persistence import (
     LockBusy, acquire_file_lock, atomic_write_json, atomic_write_text, owner_io_path, separate_partial_line,
 )
 from ff_process_transport import ChildFailed, process_cleanup_facts
-from ff_runtime_log import append_runtime_issue, child_failure_details, redact_diagnostic, redact_text, safe_identity
+from ff_runtime_log import (
+    append_runtime_issue, caller_coordinates, child_failure_details, redact_diagnostic, redact_text, safe_identity,
+)
 
 DEFAULT_JOBS_DIR = Path(__file__).resolve().parents[1] / ".ff_jobs"
 OUT_ENV = "RESEARCH_FEEDBACK_OUT"
@@ -136,6 +138,23 @@ def identity(run_id, attempt, step, reference, version, *, labels=None):
         "evidence_ref": reference,
         "version": version,
     }
+
+
+def retained_identity(run_id, attempt, step, reference, version, *, stored):
+    """Read the original owner's coordinates, including spelling from an earlier release."""
+    base = identity(run_id, attempt, step, reference, version, labels={})
+    if isinstance(stored, dict):
+        for name in ("run_id", "attempt_id"):
+            value = stored.get(name)
+            if isinstance(value, str) and value:
+                base[name] = value
+    return base
+
+
+def feedback_wire(row):
+    """Project safe coordinates for newly emitted evidence or a public diagnostic reply."""
+    run_id, attempt_id = caller_coordinates(row["run_id"], row["attempt_id"])
+    return dict(row, run_id=run_id, attempt_id=attempt_id)
 
 
 def cause_details(error, *, reason):
@@ -326,8 +345,18 @@ def _recorded_no_dispatch(root, name, observation):
 
 
 def _was_offered(row, jobs_dir, *, started, require_detail=False):
-    name = _packet_name(tuple(row[k] for k in _HEADER), "started" if started else "complete")
+    # The old spelling determines the original packet filename. The current
+    # spelling can already have been offered by this release or another reader.
+    original = tuple(row[key] for key in _HEADER)
+    normalized = feedback_wire(row)
+    current = tuple(normalized[key] for key in _HEADER)
     directories = observation_directories(jobs_dir)
+    return any(_offered_packet(header, directories, started=started, require_detail=require_detail)
+               for header in dict.fromkeys((original, current)))
+
+
+def _offered_packet(header, directories, *, started, require_detail):
+    name = _packet_name(header, "started" if started else "complete")
     if require_detail and read_native_diagnostic(name, directories)[0] is None:
         return False
     for directory in directories:
@@ -338,7 +367,7 @@ def _was_offered(row, jobs_dir, *, started, require_detail=False):
             rows = [json.loads(line) for line in data.splitlines()]
             if (rows and all(
                 isinstance(item, dict) and item.get("schema_version") == "feedback-observation/1"
-                and all(item.get(k) == row[k] for k in _HEADER)
+                and tuple(item.get(key) for key in _HEADER) == header
                 and all(isinstance(item.get(k), str) and item[k] for k in ("check_id", "expected", "actual"))
                 for item in rows
             ) and all(item["check_id"] == "action-started" for item in rows) == started):
@@ -446,8 +475,10 @@ def publish(
         groups = {}
         if diagnostics is not None and execution is None:
             execution = diagnostics.execution()
+        rows = [feedback_wire(row) for row in rows]
+        context = [feedback_wire(row) for row in context]
         for row in rows:
-            groups.setdefault(tuple(row[k] for k in _HEADER), []).append(dict(row))
+            groups.setdefault(tuple(row[k] for k in _HEADER), []).append(row)
         directories = observation_directories(jobs_dir)
         runtime_roots = _runtime_roots(jobs_dir)
         for marker_key, group in groups.items():

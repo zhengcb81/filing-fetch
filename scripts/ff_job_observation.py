@@ -7,10 +7,11 @@ import os
 from ff_job_contracts import FFJobError
 from ff_job_store import JobStore
 from ff_runtime_feedback import (
-    OUT_ENV, RULE_CODES, identity, publish, record_runtime_failure, start_was_offered, terminal_was_offered,
+    OUT_ENV, RULE_CODES, feedback_wire, publish, record_runtime_failure, retained_identity, start_was_offered,
+    terminal_was_offered,
     warn_diagnostic_unavailable,
 )
-from ff_runtime_log import execution_view, safe_identity
+from ff_runtime_log import execution_view
 
 
 OUTCOME = "job-outcome"
@@ -18,19 +19,12 @@ OUTCOME = "job-outcome"
 
 def _job_identity(record):
     jid, attempt = record["owner_job_id"], record["attempts"]
-    # A cold reader can have independent host run/attempt environment variables.
-    stored = record.get("feedback_identity")
-    base = identity(jid, attempt, f"{jid}/{attempt}", f"ff-job/1/{jid}", "ff-job/1", labels={})
-    if isinstance(stored, dict):
-        for name in ("run_id", "attempt_id"):
-            value = stored.get(name)
-            if isinstance(value, str) and value:
-                base[name] = safe_identity(value)
-    return base
+    return retained_identity(jid, attempt, f"{jid}/{attempt}", f"ff-job/1/{jid}", "ff-job/1",
+                             stored=record.get("feedback_identity"))
 
 
 def append_job_diagnostic(store: JobStore, record: dict, entry: dict) -> None:
-    base = _job_identity(record)
+    base = feedback_wire(_job_identity(record))
     execution = execution_view(record.get("diagnostic_execution"))
     identity = {key: base[key] for key in ("run_id", "attempt_id", "step_id", "evidence_ref")}
     try:

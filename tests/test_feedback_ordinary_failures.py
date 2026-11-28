@@ -495,7 +495,8 @@ sys.path.insert(0,sys.argv.pop(1))
 marker=pathlib.Path(sys.argv.pop(1))
 import ff_job, ff_job_runner
 def parked(*args, **kwargs):
-    marker.write_text("1", encoding="ascii")
+    from ff_persistence import atomic_write_text
+    atomic_write_text(marker, "1")
     sys.stdin.buffer.read(1)
     raise RuntimeError("test process should have terminated first")
 ff_job_runner._run_filing_engine = parked
