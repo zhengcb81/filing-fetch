@@ -313,11 +313,17 @@ def read_cli_failure(observation, directories):
     if (not invocation or observation.get("evidence_ref") != f"ff-cli/1/{invocation}"
             or observation.get("check_id") != "execution-outcome"):
         return None
-    name = _packet_name(tuple(observation[field] for field in _HEADER), "complete")
-    reference = f"ff-diagnostic/1/{name}"
-    if observation.get("details_ref") != reference:
+    header = tuple(observation[field] for field in _HEADER)
+    canonical = _packet_name(header, "complete")
+    reference = observation.get("details_ref")
+    if not isinstance(reference, str) or not re.fullmatch(r"ff-diagnostic/1/feedback-[a-f0-9]{32}", reference):
         return None
+    name = reference.rsplit("/", 1)[-1]
     for root in directories:
+        if name != canonical:
+            packet = _read_packet(root, name)
+            if (packet is None or packet.header != header or not _matches_phase(packet, observation, started=False)):
+                continue
         detail, _ = read_native_diagnostic(name, [root])
         if detail is None or detail.get("reason") != observation.get("actual"):
             continue
@@ -334,17 +340,13 @@ def read_cli_failure(observation, directories):
 def _recorded_no_dispatch(root, name, observation):
     pairs = {"provider-start": set(), "provider-usage": set()}
     scope = (*_HEADER, "evidence_ref")
-    try:
-        packet = owner_io_path(root / (name + ".jsonl"))
-        for line in packet.read_bytes().splitlines():
-            row = json.loads(line)
-            if (isinstance(row, dict) and row.get("schema_version") == "feedback-observation/1"
-                    and all(row.get(field) == observation[field] for field in scope)):
-                check, actual = row.get("check_id"), row.get("actual")
-                if isinstance(check, str) and check in pairs and isinstance(actual, str):
-                    pairs[check].add(actual)
-    except (OSError, ValueError, RecursionError):
+    packet = _read_packet(root, name)
+    if packet is None or not _matches_phase(packet, observation, started=False):
         return False
+    for row in packet.rows:
+        check = row["check_id"]
+        if check in pairs and all(row.get(field) == observation[field] for field in scope):
+            pairs[check].add(row["actual"])
     return pairs == {"provider-start": {"not_started"}, "provider-usage": {"not_applicable"}}
 
 
@@ -357,30 +359,129 @@ class _DeliveredPacket:
     started: bool
 
 
+_OBSERVATION_REQUIRED = (*_HEADER, "check_id", "expected", "actual")
+_OBSERVATION_OPTIONAL = (
+    "origin_owner", "issue_key", "version", "evidence_ref", "details_ref", "parent_step_id",
+    "disposition", "original_occurrence_id", "terminal_check_id",
+)
+_DISPOSITIONS = {"expected", "unknown", "deviation"}
+_REFUSAL_CODE = re.compile(r"[a-z][a-z0-9_-]{0,80}")
+
+
+def _unique_fields(pairs):
+    result = {}
+    for name, value in pairs:
+        if name in result:
+            raise ValueError("duplicate observation field")
+        result[name] = value
+    return result
+
+
+def _observed_row(line):
+    value = json.loads(line.decode("utf-8"), object_pairs_hook=_unique_fields)
+    if not isinstance(value, dict) or value.get("schema_version") != "feedback-observation/1":
+        raise ValueError("unsupported observation")
+    row = {}
+    for key in (*_OBSERVATION_REQUIRED, *_OBSERVATION_OPTIONAL):
+        item = value.get(key)
+        if key in _OBSERVATION_OPTIONAL and item is None:
+            continue
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError("invalid observation field")
+        row[key] = item
+    row.setdefault("origin_owner", row["owner"])
+    if "disposition" not in row:
+        row["disposition"] = ("unknown" if "unknown" in (row["expected"], row["actual"]) else
+                              "expected" if row["expected"] == row["actual"] else "deviation")
+    if row["disposition"] not in _DISPOSITIONS:
+        raise ValueError("invalid observation disposition")
+    code = value.get("refusal_code")
+    if isinstance(code, str) and _REFUSAL_CODE.fullmatch(code):
+        row["refusal_code"] = code
+    return row
+
+
 def _read_packet(root, name):
     try:
         body = owner_io_path(root / (name + ".jsonl")).read_bytes()
         if not body.endswith(b"\n"):
             return None
-        rows = [json.loads(line) for line in body.splitlines()]
+        rows = [_observed_row(line) for line in body.splitlines() if line.strip()]
+        if not rows or rows[0]["owner"] != "filing-fetch":
+            return None
+        header = tuple(rows[0][key] for key in _HEADER)
+        observed = {}
+        for row in rows:
+            if tuple(row[key] for key in _HEADER) != header:
+                return None
+            occurrence = row["origin_owner"], row["check_id"]
+            prior = observed.setdefault(occurrence, row)
+            if row != prior:
+                return None
+        ready = owner_io_path(root / (name + ".ready"))
+        try:
+            content = ready.read_bytes()
+        except FileNotFoundError:
+            content = b""
+        if content.strip():
+            marker = json.loads(content.decode("utf-8"), object_pairs_hook=_unique_fields)
+            if not isinstance(marker, dict) or any(marker.get(key, item) != item for key, item in zip(_HEADER, header)):
+                return None
     except (OSError, ValueError, RecursionError):
         return None
-    if not rows or not isinstance(rows[0], dict):
-        return None
-    header = tuple(rows[0].get(key) for key in _HEADER)
-    if header[0] != "filing-fetch" or not all(isinstance(part, str) and part for part in header):
-        return None
-    if not all(
-        isinstance(row, dict) and row.get("schema_version") == "feedback-observation/1"
-        and tuple(row.get(key) for key in _HEADER) == header
-        and all(isinstance(row.get(key), str) and row[key] for key in ("check_id", "expected", "actual"))
-        for row in rows
-    ):
-        return None
     started = all(row["check_id"] == "action-started" for row in rows)
-    if name != _packet_name(header, "started" if started else "complete"):
-        return None
     return _DeliveredPacket(root, name, header, rows, started)
+
+
+def _matches_phase(packet, source, *, started):
+    if packet is None or packet.started != started:
+        return False
+    evidence = source.get("evidence_ref")
+    origin = source.get("origin_owner", source["owner"])
+    if not evidence or any(row.get("evidence_ref") != evidence or row["origin_owner"] != origin for row in packet.rows):
+        return False
+    check_id = source["check_id"]
+    if started:
+        return any(
+            row["check_id"] == "action-started" and row["expected"] == row["actual"] == "started"
+            and row["disposition"] == "expected" and "refusal_code" not in row
+            and row.get("terminal_check_id") == source.get("terminal_check_id")
+            for row in packet.rows
+        )
+    if check_id == "action-started":
+        return any(
+            row["check_id"] == source.get("terminal_check_id") and row["expected"] in {"completed", "terminal"}
+            and row["actual"] not in {"started", "pending", "running", "unconfirmed"}
+            for row in packet.rows
+        )
+    return any(
+        (row["check_id"], row["expected"], row["actual"]) ==
+        (check_id, source["expected"], source["actual"])
+        for row in packet.rows
+    )
+
+
+def _occupied(root, name):
+    for extension in (".jsonl", ".ready", ".pending", ".process", ".sent"):
+        try:
+            owner_io_path(root / (name + extension)).lstat()
+        except FileNotFoundError:
+            continue
+        return True
+    return False
+
+
+def _packet_slot(root, header, source, *, started):
+    phase = "started" if started else "complete"
+    number = 0
+    while True:
+        name = _packet_name(header, phase if not number else f"{phase}/recovery/{number}")
+        packet = _read_packet(root, name)
+        if packet is not None and packet.header == header and _matches_phase(packet, source, started=started):
+            return name, packet
+        if not _occupied(root, name):
+            return name, None
+        number += 1
 
 
 def _existing_packet(row, directories, *, started):
@@ -388,10 +489,12 @@ def _existing_packet(row, directories, *, started):
     normalized = feedback_wire(row)
     current = tuple(normalized[key] for key in _HEADER)
     for header in dict.fromkeys((original, current)):
-        name = _packet_name(header, "started" if started else "complete")
         for root in directories:
-            packet = _read_packet(root, name)
-            if packet is not None and packet.header == header and packet.started == started:
+            try:
+                _, packet = _packet_slot(root, header, row, started=started)
+            except OSError:
+                continue
+            if packet is not None:
                 return packet
     return None
 
@@ -429,25 +532,58 @@ def terminal_was_offered(row, jobs_dir, *, detail=None):
 def start_was_offered(row, jobs_dir):
     return _existing_packet(row, observation_directories(jobs_dir), started=True) is not None
 
-def _write_packet(root, name, marker_key, marker, content, frozen, closes_start, *, started):
+
+def _with_detail(rows, name, *, detail_for_all):
+    return [
+        dict(row, details_ref="ff-diagnostic/1/" + name)
+        if detail_for_all or row.get("disposition") == "deviation" or "refusal_code" in row else row
+        for row in rows
+    ]
+
+
+def _save_detail(root, name, marker, detail):
+    destination = owner_io_path(root / (name + ".cause.json"))
+    value = {**redact_diagnostic(detail), **marker}
+    try:
+        original = json.loads(destination.read_bytes(), object_pairs_hook=_unique_fields)
+    except FileNotFoundError:
+        atomic_write_json(destination, value)
+        return True
+    except (ValueError, RecursionError):
+        return False
+    return original == value
+
+
+def _write_packet(
+    root, marker_key, marker, group, prefix, frozen, *, detail, detail_for_all, started, notice,
+):
     root = owner_io_path(root)
     root.mkdir(parents=True, exist_ok=True)
-    packet = root / (name + ".jsonl")
-    sent = packet.with_suffix(".sent")
-    # Serialize publication against the runner and maintenance inside each native outbox.
+    # The lock covers classification and the name choice. A corrupt file reserves
+    # its historical name but cannot acknowledge a different phase or outcome.
     with acquire_file_lock(root / ".delivery.lock", 0.7):
-        if started and _read_packet(root, _packet_name(marker_key, "complete")) is not None:
+        if started and _packet_slot(root, marker_key, group[0], started=False)[1] is not None:
             return
-        if _read_packet(root, name) is not None:
+        name, previous = _packet_slot(root, marker_key, group[0], started=started)
+        if previous is not None:
             return
-        atomic_write_text(packet, content)
+        packet = root / (name + ".jsonl")
+        if detail is not None:
+            try:
+                if _save_detail(root, name, marker, detail):
+                    group = _with_detail(group, name, detail_for_all=detail_for_all)
+            except OSError as error:
+                notice.note("feedback detail", error)
+        atomic_write_text(packet, _text([*prefix, *group]))
         atomic_write_json(packet.with_suffix(".ready"), marker)
         if frozen:
-            atomic_write_text(sent, "")
-        if closes_start:
-            initial = root / (_packet_name(marker_key, "started") + ".ready")
-            initial.unlink(missing_ok=True)
-            initial.with_suffix(".jsonl").unlink(missing_ok=True)
+            atomic_write_text(packet.with_suffix(".sent"), "")
+        if prefix:
+            _, initial = _packet_slot(root, marker_key, prefix[0], started=True)
+            if initial is not None:
+                start = root / initial.name
+                start.with_suffix(".ready").unlink(missing_ok=True)
+                start.with_suffix(".jsonl").unlink(missing_ok=True)
 
 
 def warn_diagnostic_unavailable(
@@ -532,11 +668,15 @@ def publish(
                 if not only_start and local_detail:
                     _restore_terminal_detail(previous, detail)
                 continue
-            active = _existing_packet(original_group[0], directories, started=True)
-            if only_start and active is not None:
-                continue
             group = [feedback_wire(row) for row in original_group]
             marker_key = tuple(group[0][key] for key in _HEADER)
+            prefix = [r for r in context if tuple(r[key] for key in _HEADER) == marker_key]
+            native_start = original_group[0] if only_start else (
+                dict(prefix[0], **dict(zip(_HEADER, original_key))) if prefix else None
+            )
+            active = _existing_packet(native_start, directories, started=True) if native_start else None
+            if only_start and active is not None:
+                continue
             legacy_start = active is not None and active.header != marker_key
             # The raw start must remain available for F4. Its terminal carries
             # the same owner/evidence/step with safe caller coordinates.
@@ -550,36 +690,29 @@ def publish(
                 runtime_roots, group, detail if local_detail else None,
                 execution=execution, notice=notice,
             )
-            if local_detail:
-                for item in group:
-                    if detail_for_all or item.get("disposition") == "deviation" or "refusal_code" in item:
-                        item["details_ref"] = "ff-diagnostic/1/" + name
-            # Prefer a published native detail, and never point to a missing diagnostic.
-            if local_detail:
-                failed = None
-                for root in targets:
-                    try:
-                        atomic_write_json(root / (name + ".cause.json"), {**redact_diagnostic(detail), **marker})
-                        break
-                    except OSError as error:
-                        failed = error
-                else:
-                    offered = False
-                    notice.note("feedback detail", failed)
-                    # The owner still has the diagnostic in its original receipt.
-                    # Keep this packet for recovery without offering a weaker occurrence.
-                    if frozen:
-                        continue
-                    for item in group:
-                        item.pop("details_ref", None)
-            if file and not legacy_start and _explicit(file, group):
-                continue
-            prefix = [] if legacy_start else [r for r in context if all(r[k] == marker[k] for k in _HEADER)]
-            content = _text([*prefix, *group])
+            if file and not legacy_start:
+                explicit = group
+                if local_detail:
+                    for root in targets:
+                        try:
+                            root = owner_io_path(root)
+                            root.mkdir(parents=True, exist_ok=True)
+                            with acquire_file_lock(root / ".delivery.lock", 0.7):
+                                if not _occupied(root, name) and _save_detail(root, name, marker, detail):
+                                    explicit = _with_detail(group, name, detail_for_all=detail_for_all)
+                                    break
+                        except (OSError, LockBusy) as error:
+                            notice.note("feedback detail", error)
+                if _explicit(file, explicit):
+                    continue
+            if legacy_start:
+                prefix = []
             failed = None
             for root in targets:
                 try:
-                    _write_packet(root, name, marker_key, marker, content, frozen, bool(prefix), started=only_start)
+                    _write_packet(root, marker_key, marker, group, prefix, frozen,
+                                  detail=detail if local_detail else None, detail_for_all=detail_for_all,
+                                  started=only_start, notice=notice)
                     break
                 except LockBusy as error:
                     # A healthy primary writer is already publishing. Keep the same pending

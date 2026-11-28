@@ -55,10 +55,10 @@ def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recov
                   disposition="expected", terminal_check_id=OUTCOME)]
     file = None if recover_only else os.environ.get(OUT_ENV)
     if started:
-        if recover_only and (start_was_offered(base, jobs_dir) or terminal_was_offered(base, jobs_dir)):
+        if recover_only and (start_was_offered(start[0], jobs_dir) or terminal_was_offered(start[0], jobs_dir)):
             return None
         return publish(start, file=file, jobs_dir=jobs_dir, recoverable=recover_only)
-    if recover_only and (not recoverable or terminal_was_offered(base, jobs_dir, detail=detail)):
+    if recover_only and not recoverable:
         return None
     outcome = record["status"] if record["status_known"] else "unknown"
     cost = record["cost_state"]
@@ -70,6 +70,8 @@ def publish_job_observation(record: dict, *, started: bool, jobs_dir=None, recov
     refusal = rule if rule in RULE_CODES else None
     disposition = "unknown" if outcome == "unknown" else "deviation" if outcome == "failed" else "expected"
     business = dict(base, check_id=OUTCOME, expected="terminal", actual=outcome, disposition=disposition)
+    if recover_only and terminal_was_offered(business, jobs_dir, detail=detail):
+        return None
     rows = [business, dict(base, check_id="job-usage", expected="accounted", actual=cost,
                           disposition="unknown" if cost == "unknown" else "expected")]
     if code:

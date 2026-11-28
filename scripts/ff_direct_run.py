@@ -263,16 +263,20 @@ def flush_direct_observations(jobs_dir: Path) -> list[bool]:
             result = _reoffer(record, jobs_dir)
             if result is not None:
                 results.append(result)
-        elif not start_was_offered(record, jobs_dir) and not terminal_was_offered(record, jobs_dir):
+        else:
             surface = next(item for item in _SURFACES if item.schema == record["schema_version"])
-            results.append(publish([_start_row(record, surface)], jobs_dir=jobs_dir, recoverable=True))
+            start = _start_row(record, surface)
+            if not start_was_offered(start, jobs_dir) and not terminal_was_offered(start, jobs_dir):
+                results.append(publish([start], jobs_dir=jobs_dir, recoverable=True))
     return results
 
 
 def _reoffer(record: dict, jobs_dir: Path) -> bool | None:
     delivery = record["delivery"]
     detail = record["outcome"].get("diagnostic")
-    scopes = {row["step_id"]: row for row in delivery["rows"]}
+    scopes: dict[str, dict] = {}
+    for row in delivery["rows"]:
+        scopes.setdefault(row["step_id"], row)
     missing = {
         step for step, row in scopes.items()
         if not terminal_was_offered(row, jobs_dir, detail=detail if step == record["step_id"] else None)

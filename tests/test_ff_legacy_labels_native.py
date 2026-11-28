@@ -301,3 +301,127 @@ def test_interrupted_c72_job_closes_its_actual_original_start(tmp_path, native_o
     assert _snapshot(tmp_path) == stable
     if native_outbox:
         assert not _packet_numbers(tmp_path)
+
+
+def _unique_json_fields(pairs):
+    fields = dict(pairs)
+    if len(fields) != len(pairs):
+        raise ValueError("duplicate field")
+    return fields
+
+
+def _stamp_packet_name(rows):
+    from uuid import NAMESPACE_URL, uuid5
+
+    key = json.dumps([*(rows[0][field] for field in ("owner", "run_id", "attempt_id", "step_id")),
+                      "complete"], ensure_ascii=True, separators=(",", ":"))
+    return "feedback-" + uuid5(NAMESPACE_URL, key).hex
+
+
+@pytest.mark.parametrize("failure", ["receipt_without_outcome", "terminal_other_evidence",
+                                     "duplicate_outcome_field", "wrong_terminal"])
+@pytest.mark.parametrize("normalized", [False, True])
+def test_false_terminal_from_frozen_c72_can_be_reoffered_without_replacing_history(tmp_path, failure, normalized):
+    _restore(tmp_path, "job_unknown")
+    inbox = owner_io_path(tmp_path / "outbox")
+    original, = inbox.glob("*.jsonl")
+    decoded = [json.loads(line) for line in original.read_bytes().splitlines()]
+    terminal, = [row for row in decoded if row["check_id"] == "job-outcome"]
+    assert terminal["actual"] == "unknown"
+    if normalized:
+        for row in decoded:
+            for field, label in (("run_id", RAW_RUN), ("attempt_id", RAW_ATTEMPT)):
+                row[field] = _digest_alias(label)
+        name = _stamp_packet_name(decoded)
+        original = original.rename(inbox / (name + ".jsonl"))
+    if failure == "receipt_without_outcome":
+        selected = [row for row in decoded if row["check_id"] in {"action-started", "job-usage"}]
+    else:
+        selected = decoded
+    if failure == "terminal_other_evidence":
+        for row in selected:
+            row["evidence_ref"] = "ff-job/1/unrelated-owner-job"
+    if failure == "wrong_terminal":
+        terminal["actual"] = "succeeded"
+    lines = []
+    for row in selected:
+        line = json.dumps(row, ensure_ascii=True, sort_keys=True)
+        if failure == "duplicate_outcome_field" and row is terminal:
+            line = '{"actual":"started",' + line[1:]
+        lines.append(line)
+    original.write_text("\n".join(lines) + "\n", encoding="ascii", newline="\n")
+    before = _snapshot(tmp_path)
+    known = next(json.loads(body) for name, body in before.items() if name.startswith("owner/jobs/"))
+    result = _subject(tmp_path, "flush-observations")
+    assert result["status"] == "ok" and result["job_offers"] == 1
+    after = _snapshot(tmp_path)
+    for key, value in before.items():
+        if key == "outbox/logs/runtime-errors.jsonl":
+            assert after[key].startswith(value)
+            tail = after[key][len(value):]
+            assert RAW_RUN not in tail and RAW_ATTEMPT not in tail
+        else:
+            assert after[key] == value
+    published, = [path for path in inbox.glob("*.jsonl") if path != original]
+    observed = [json.loads(line, object_pairs_hook=_unique_json_fields)
+                for line in published.read_bytes().splitlines()]
+    restored, = [row for row in observed if row["check_id"] == "job-outcome"]
+    assert restored["evidence_ref"] == f"ff-job/1/{known['owner_job_id']}"
+    assert restored["actual"] == known["status"] == "unknown"
+    assert restored["run_id"] == _digest_alias(RAW_RUN)
+    assert restored["attempt_id"] == _digest_alias(RAW_ATTEMPT)
+    usage, = [row for row in observed if row["check_id"] == "job-usage"]
+    assert usage["actual"] == "unknown" and usage["disposition"] == "unknown"
+    assert not any(RAW_RUN in item or RAW_ATTEMPT in item for key, item in after.items() if key not in before)
+    cold = _subject(tmp_path, "reconcile", body=_feedback_request(restored))
+    assert cold == {"state": "unknown"}
+    assert not any(key.startswith("owner/") for key in after.keys() - before.keys())
+    replay = _subject(tmp_path, "flush-observations")
+    assert replay["job_offers"] == 0 and _snapshot(tmp_path) == after
+
+
+def test_scheduled_usage_packet_cannot_acknowledge_the_frozen_slot(tmp_path):
+    _restore(tmp_path, "slot")
+    inbox = owner_io_path(tmp_path / "outbox")
+    original, = inbox.glob("*.jsonl")
+    expected = _observe(tmp_path, "refresh-outcome")
+    usage = dict(expected, check_id="refresh-usage", expected="accounted", actual="known")
+    prior = (json.dumps(usage) + "\n").encode()
+    original.write_bytes(prior)
+    before = _snapshot(tmp_path)
+    result = _subject(tmp_path, "flush-observations")
+    assert result["status"] == "ok"
+    terminal = _observe(tmp_path, "refresh-outcome")
+    assert terminal["evidence_ref"] == expected["evidence_ref"]
+    assert terminal["actual"] == expected["actual"] == "completed"
+    assert original.read_bytes() == prior
+    after = _snapshot(tmp_path)
+    assert all(after[key] == item for key, item in before.items())
+    assert _subject(tmp_path, "flush-observations")["status"] == "ok"
+    assert _snapshot(tmp_path) == after
+
+
+def test_direct_statement_usage_packet_is_repaired_once_without_a_second_call(tmp_path):
+    from test_ff_runtime_lifecycle import REQUEST
+
+    case = Case(tmp_path, "ok")
+    result = case.invoke("fetch_statements.py", "--config", str(case.config), body=REQUEST)
+    assert result.returncode == 0 and case.count() == 1
+    old, = case.inbox.glob("*.jsonl")
+    rows = [json.loads(line) for line in old.read_bytes().splitlines()]
+    terminal, = [row for row in rows if row["check_id"] == "execution-outcome"]
+    prior = "".join(json.dumps(row) + "\n" for row in rows if row is not terminal).encode()
+    old.write_bytes(prior)
+    owner = ["--jobs-dir", str(case.jobs)]
+    result = case.invoke("ff_job_feedback.py", "flush-observations", *owner)
+    assert result.returncode == 0 and json.loads(result.stdout)["direct_offers"] == 1
+    repaired, = [path for path in case.inbox.glob("*.jsonl") if path != old]
+    recovered, = [row for row in map(json.loads, repaired.read_bytes().splitlines())
+                  if row["check_id"] == "execution-outcome"]
+    assert recovered["actual"] == terminal["actual"] and recovered["evidence_ref"] == terminal["evidence_ref"]
+    assert old.read_bytes() == prior
+    detail = case.invoke("ff_job_feedback.py", "get-diagnostic", recovered["details_ref"], *owner)
+    assert detail.returncode == 0 and json.loads(detail.stdout)["reason"]
+    repeated = case.invoke("ff_job_feedback.py", "flush-observations", *owner)
+    assert repeated.returncode == 0 and json.loads(repeated.stdout)["direct_offers"] == 0
+    assert old.read_bytes() == prior and case.count() == 1

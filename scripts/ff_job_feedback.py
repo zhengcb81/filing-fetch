@@ -29,11 +29,11 @@ def _refresh_identity(run, step):
 def _refresh_summary(run, jobs_dir, file):
     rid = run["run_id"]
     base = _refresh_identity(run, rid)
-    if terminal_was_offered(base, jobs_dir):
-        return True
     outcome = run["state"]
     rows = [dict(base, check_id="refresh-outcome", expected="completed", actual=outcome,
                  disposition="deviation" if outcome == "partial" else "expected")]
+    if terminal_was_offered(rows[0], jobs_dir):
+        return True
     usage = run.get("usage", {})
     snapshots = [value for key in ("reading_runs", "acquisition_jobs")
                  for value in usage.get(key, {}).values()]
@@ -54,13 +54,13 @@ def _refresh_start_row(base):
 def _refresh_item(run, key, failure, jobs_dir, file):
     base = _refresh_identity(run, f"{run['run_id']}/{key}")
     detail = {"schema_version": "ff-failure-detail/1", **failure}
-    if terminal_was_offered(base, jobs_dir, detail=detail):
-        return True
     reason = failure["reason"]
     row = dict(base, check_id="refresh-item-outcome", expected="completed", actual=reason,
                issue_key=reason, disposition="deviation")
     if reason in RULE_CODES:
         row.update(disposition="expected", refusal_code=reason)
+    if terminal_was_offered(row, jobs_dir, detail=detail):
+        return True
     return publish([row], jobs_dir=jobs_dir, file=file, detail=detail, recoverable=True,
                    execution=run.get("diagnostic_execution"))
 
@@ -93,8 +93,9 @@ def redeliver_refresh(store, visible=(), *, active_run=None, include_retained=Fa
                     offered.add(rid)
             elif include_retained:
                 base = _refresh_identity(run, rid)
-                if not start_was_offered(base, store.root.parent):
-                    delivered.append(publish([_refresh_start_row(base)], jobs_dir=store.root.parent,
+                start = _refresh_start_row(base)
+                if not start_was_offered(start, store.root.parent):
+                    delivered.append(publish([start], jobs_dir=store.root.parent,
                                              recoverable=True))
             successful &= all(delivered)
         if offered:
